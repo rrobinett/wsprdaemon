@@ -47,5 +47,5 @@ After installtion and configuration is completed, run:
 
 ~/wsprdaemon/wsprdaemon.sh -h          => Help menu
 
-Since I have no QA department installations, espcially on non-Pi systems, may encounter problems which I have not seen.
-However WD has been running for months at many top spotting sites and I hope you find it usefull, not frustrating
+Since I have no QA department,  installations, especially on non-Pi systems, may encounter problems which I have not seen.
+However WD has been running for months at many top spotting sites and I hope you find it useful, not frustrating
