@@ -12,7 +12,7 @@ the best SNR posted to wsprnet.org
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD
 and/or at http://graphs.wsprdaemon.org/
 
-WD can run on almost any Debian Linux system and is tested on Stetch and Buster for Raspberry Pi 3&4, and Ubuntu 18.04LTS on x86
+WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86
 A Pi 3b can decode 14+ bands, but 14 bands of noise level graphing requires a Pi 4 or x86 server.
 
 
