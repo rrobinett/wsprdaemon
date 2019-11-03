@@ -101,7 +101,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                    ### 3) one can configure to only measure noise and log it, only publish graphs to graphs.wsprdaemon.org, only publish graphs to localhost running Apache, or publish to both
                                    ### 4) download and install only the SW packages required by the configuration (e.g. no apache2 if you aren't publishing locally)
                                    ### 5) publishing graphs to graphs.wsprdaemon.org  no longer requires one to set up ssh auto-login.
-                                   ### 6) added -Z, heck for and offer to kill zombies and add it to -z
+                                   ### 6) added -Z, check for and offer to kill zombies and add it to -z
 #declare -r VERSION=2.5             ### Release to public, same as 2.4j
 #declare -r VERSION=2.5a             ### Enhance checks for zombies.  Add support for installation of WSJT-x on x86 machines
 declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
