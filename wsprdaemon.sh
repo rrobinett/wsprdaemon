@@ -232,7 +232,7 @@ function check_for_kiwirecorder_cmd() {
         get_kiwirecorder="yes"
     else
         ## Check to see if kwr supports overload reporting
-        if ! ${KIWI_RECORD_COMMAND} --help | grep -q "ADC OV" ; then
+        if ! ${KIWI_RECORD_COMMAND} --help | grep "ADC OV" > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
