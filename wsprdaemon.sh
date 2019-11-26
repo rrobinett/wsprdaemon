@@ -104,16 +104,19 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                    ### 6) added -Z, check for and offer to kill zombies and add it to -z
 #declare -r VERSION=2.5             ### Release to public, same as 2.4j
 #declare -r VERSION=2.5a             ### Enhance checks for zombies.  Add support for installation of WSJT-x on x86 machines
-declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
+#declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Prompt user before installing new SW.  Graphs now -165 to -115
                                     ### Use /tmp/wsprdaemon/... and move all WD temp files there,
                                     ### Verify that the best SNR from the MERGED_RX are 
                                     ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
                                     ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
                                     ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
+declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
+                                    ### Fixed spurious sys.excepthook is missing error message
                                     ### TODO: use Python library to obtain sunrise/sunset times rather than web site
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
+                                    ### TODO: enhance noise database logging and add wpsrdaemon spots database
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
@@ -232,7 +235,7 @@ function check_for_kiwirecorder_cmd() {
         get_kiwirecorder="yes"
     else
         ## Check to see if kwr supports overload reporting
-        if ! ${KIWI_RECORD_COMMAND} --help | grep -q "ADC OV" ; then
+        if ! ${KIWI_RECORD_COMMAND} --help | grep "ADC OV" > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
