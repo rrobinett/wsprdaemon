@@ -111,8 +111,9 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
                                     ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
                                     ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
-declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
+#declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Fixed spurious sys.excepthook is missing error message
+declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
                                     ### TODO: use Python library to obtain sunrise/sunset times rather than web site
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
@@ -2301,6 +2302,50 @@ function band_center_mhz_from_spot_freq()
 }
 
 ############
+declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-200}           ### Limit of number of spots to upload in one curl MEPT upload transaction
+declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_ROOT_DIR}/upload_spot_file_list.txt
+
+### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
+function upload_create_spot_file_list_file()
+{
+    local wspr_spots_files="$@"
+    local wspr_spots_files_count=$(echo "${wspr_spots_files}" | wc -w)
+    local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
+    local wspr_spots_path=$(echo "${wspr_spots_files}" | head -1)
+    wspr_spots_path=${wspr_spots_path%/*}
+    [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() starting with list '${wspr_spots_files}'"
+    local cycles_list=$(echo "${wspr_spots_files}" | tr ' ' '\n' | sed 's;.*/;;' | cut -c 1-11 | sort -u )
+    local cycles_count=$(echo "${cycles_list}" | wc -l)
+    [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() in '${wspr_spots_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
+    local spots_file_list=""
+    local spots_file_list_count=0
+    local file_spots=""
+    local file_spots_count=0
+    for cycle in ${cycles_list} ; do
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() checking for spots in cycle ${cycle}"
+
+        local cycle_files=$( ls -1  ${wspr_spots_path}/${cycle}* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that.
+        [[ $verbosity -ge 2 ]] && printf "$(date): upload_create_spot_file_list_file() checking for number of spots in \n%s\n" "${cycle_files}"
+
+        local cycle_spots_count=$(cat ${cycle_files} | wc -l)
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() found ${cycle_spots_count} spots in cycle ${cycle}"
+
+        local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
+        if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload"
+            echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+            return
+        fi
+        spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
+        spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
+    done
+    [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
+    echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+}
+
+### Daemon which runs 10 seconds before the end of each 2 minute cycle.  
+### So each 2 minutes it creates a list of spot files with at most the oldest 200 spots, puts those spots into a tmp.txt file, and executes a 'curl MEPT' batch upload of those spots
+### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
 function uploading_daemon()
 {
     mkdir -p ${UPLOADS_SPOTS_DIR}
@@ -2315,10 +2360,12 @@ function uploading_daemon()
             local my_call_sign=${call_grid%_*}
             local my_grid=${call_grid#*_}
             shopt -s nullglob    ### * expands to NULL if there are no file matches
-            local wspr_spots_files=( ${call_grid_path}/* )
-            if [[ ${#wspr_spots_files[@]} -eq 0  ]] ; then
+			local all_spots_files=( $(echo ${call_grid_path}/*) )
+            if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found no ${my_call_sign}/${my_grid} files to upload"
             else
+				upload_create_spot_file_list_file ${all_spots_files[@]}
+				local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found ${my_call_sign}/${my_grid} files to upload: ${wspr_spots_files[@]}"
                 ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
                 cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TEMP_TXT_FILE}
