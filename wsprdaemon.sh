@@ -2311,7 +2311,7 @@ function upload_create_spot_file_list_file()
     local wspr_spots_files="$@"
     local wspr_spots_files_count=$(echo "${wspr_spots_files}" | wc -w)
     local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
-    local wspr_spots_path=$(echo "${wspr_spots_files}" | head -1)
+    local wspr_spots_path=$(echo "${wspr_spots_files}" | tr ' ' '\n' | head -1)
     wspr_spots_path=${wspr_spots_path%/*}
     [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() starting with list '${wspr_spots_files}'"
     local cycles_list=$(echo "${wspr_spots_files}" | tr ' ' '\n' | sed 's;.*/;;' | cut -c 1-11 | sort -u )
@@ -2322,9 +2322,11 @@ function upload_create_spot_file_list_file()
     local file_spots=""
     local file_spots_count=0
     for cycle in ${cycles_list} ; do
-        [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() checking for spots in cycle ${cycle}"
+        local cycle_root_name="${wspr_spots_path}"
+              cycle_root_name="${cycle_root_name}/${cycle}"
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
 
-        local cycle_files=$( ls -1  ${wspr_spots_path}/${cycle}* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that.
+        local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_path
         [[ $verbosity -ge 2 ]] && printf "$(date): upload_create_spot_file_list_file() checking for number of spots in \n%s\n" "${cycle_files}"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
@@ -2419,6 +2421,9 @@ function uploading_daemon()
                             if [[ ${xfer_success} == "yes" ]]; then
                                 if [[ ${verbosity} -ge 1 ]]; then
                                     echo "$(date): uploading_daemon() after $((${CURL_TRIES} - ${xfer_tries_left})) attempts, successful upload of spot '${spot_line}'"
+                                    ### When debugging, ensure this log file doesn't grow too large
+                                    tail -n 10000 ${UPLOADS_ROOT_DIR}/successful_spot_uploads.txt > ${UPLOADS_ROOT_DIR}/shrink_spot_uploads.txt
+                                    mv  ${UPLOADS_ROOT_DIR}/shrink_spot_uploads.tx ${UPLOADS_ROOT_DIR}/successful_spot_uploads.txt
                                     echo "${spot_line}" >> ${UPLOADS_ROOT_DIR}/successful_spot_uploads.txt
                                 fi
                             else
