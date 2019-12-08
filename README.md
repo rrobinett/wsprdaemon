@@ -12,25 +12,36 @@ In addition WD can be configured to, at the same time, create graphs of the back
 
 WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands, but 14 bands of noise level graphing requires a Pi 4 or x86 server.
 
-## Installation
+## Greenfield Installation
 
-I recommend that you create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and and auto sudo is needed if WDE is configured to display graphics on the server's own web page.
+I recommend that you create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page.
 
-Logged on as that user:
+While logged on as that user:
 
-Dowload `wsprdaemon.sh` from this site
+Download `wsprdaemon.sh` from this site
 
 ```bash
-chmod +x wsprdaemon.sh
-mkdir ~/wsprdaemon
-mv wsprdaemon.sh ~/wsprdaemon/
-cd ~/wsprdaemon/
-./wsprdaemon.sh
+cd ~
+git clone https://github.com/rrobinett/wsprdaemon.git
+cd wsprdaemon
+./wsprdaemon.sh -V
 ```
 
-This first run of WD will install many, many utilities and libraries, and for some you will be prompted to agree to the insallation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus are never prompted for a password, but you experience may vary.
+This first run of WD will install many, many utilities and libraries, and for some you will be prompted to agree to the insallation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus are never prompted for a password, but your experience may vary.
 
-At then end of a sucessful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration.
+At then end of a sucessful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once confgured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
+
+## Installation on a system with an existing copy of wsprdaemon not installed using 'git clone'
+
+Stop WD with:  './wsprdaemon.sh -z'
+Save away your exisiting wsprdaemon.conf file, e.g "mv ~/wsprdaemon ~/wsprdaemon.save"
+Follow the instructions for "Greenfield Installation", but don't start WD with './wsprdaemon.sh -a'
+Copy your saved wsprdaemon.conf file into the directory created by the clone, e.g "cp ~/wsprdaemon.save/wsprdaemon.conf ~/wsprdaemon/"
+Then start WD with './wsprdaemon.sh -a'
+
+## Upgrading WD in a cloned directory to the latest master version 
+
+Execute 'git pull'
 
 ## Usage
 
