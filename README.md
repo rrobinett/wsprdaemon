@@ -37,15 +37,15 @@ Stop WD with:
 ```bash
 './wsprdaemon.sh -z'
 ````
-Save away (i.e.rename) your exisiting wsprdaemon.conf file, e.g 
+Save away (i.e.rename) your exisiting ~/wsprdaemon directory, including its wsprdaemon.conf file:
 ```bash
 mv ~/wsprdaemon/ ~/wsprdaemon.save"
 ````
-Follow the instructions for "Greenfield Installation", but don't start WD with 
+Follow the instructions for "Greenfield Installation", but don't end by starting WD with 
 ```bash
 './wsprdaemon.sh -a'
 ````
-Copy your saved wsprdaemon.conf file into the directory created by the clone, e.g:
+Copy your saved wsprdaemon.conf file into the directory created by the clone:
 ```bash
 cp ~/wsprdaemon.save/wsprdaemon.conf ~/wsprdaemon/"
 ````
