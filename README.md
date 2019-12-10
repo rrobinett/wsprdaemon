@@ -33,12 +33,26 @@ At then end of a sucessful installation, WD creates a prototype configuration fi
 
 ## Installation on a system with an existing copy of wsprdaemon not installed using 'git clone'
 
-Stop WD with:  './wsprdaemon.sh -z'
-Save away your exisiting wsprdaemon.conf file, e.g "mv ~/wsprdaemon ~/wsprdaemon.save"
-Follow the instructions for "Greenfield Installation", but don't start WD with './wsprdaemon.sh -a'
-Copy your saved wsprdaemon.conf file into the directory created by the clone, e.g "cp ~/wsprdaemon.save/wsprdaemon.conf ~/wsprdaemon/"
-Then start WD with './wsprdaemon.sh -a'
-
+Stop WD with:  
+```bash
+'./wsprdaemon.sh -z'
+````
+Save away (i.e.rename) your exisiting wsprdaemon.conf file, e.g 
+```bash
+mv ~/wsprdaemon/ ~/wsprdaemon.save"
+````
+Follow the instructions for "Greenfield Installation", but don't start WD with 
+```bash
+'./wsprdaemon.sh -a'
+````
+Copy your saved wsprdaemon.conf file into the directory created by the clone, e.g:
+```bash
+cp ~/wsprdaemon.save/wsprdaemon.conf ~/wsprdaemon/"
+````
+Then start WD with 
+```bash
+./wsprdaemon.sh -a
+````
 ## Upgrading WD in a cloned directory to the latest master version 
 
 Execute 'git pull'
