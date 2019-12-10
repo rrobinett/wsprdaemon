@@ -213,7 +213,7 @@ function check_tmp_filesystem()
                 mkdir ${WSPRDAEMON_TMP_DIR}
                 if ! sudo mount -a ${WSPRDAEMON_TMP_DIR}; then
                     echo "ERROR: failed to mount ${WSPRDAEMON_TMP_DIR}"
-                    exit 2a
+                    exit
                 fi
                 echo "Your server has been configured so that '${WSPRDAEMON_TMP_DIR}' is a tmpfs (RAM disk)"
             fi
@@ -2439,7 +2439,7 @@ function uploading_daemon()
                     rm -f ${wspr_spots_files[@]}
                 else
                     ### This code uploads all the spots in one curl execution and it has proved reliable
-                    CURL_TRIES=2
+                    CURL_TRIES=1
                     local -i xfer_tries_left=${CURL_TRIES}
                     local    xfer_success="no"
                     while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
@@ -2453,14 +2453,12 @@ function uploading_daemon()
                         fi
                         curl -F allmept=@${UPLOADS_TEMP_TXT_FILE} -F call=${my_call_sign} -F grid=${my_grid} http://wsprnet.org/meptspots.php > ${UPLOAD_CURL_LOGFILE_PATH} 2>&1
                         local ret_code=$?
-                        set +x
                         if [[ $ret_code -ne 0 ]]; then
                             if [[ ${verbosity} -ge 1 ]]; then
                                 echo "$(date): uploading_daemon() ERROR: curl returned error code => ${ret_code}, so try again"
                                 cat ${UPLOAD_CURL_LOGFILE_PATH}
                             fi
                         else
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() curl returned and reported no error, so checking its output"
                             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOAD_CURL_LOGFILE_PATH} ) )
                             if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
                                 if [[ ${verbosity} -ge 1 ]] ; then
@@ -2470,32 +2468,24 @@ function uploading_daemon()
                             else
                                 local spots_xfered=${spot_xfer_counts[0]}
                                 local spots_offered=${spot_xfer_counts[1]}
+                                [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
                                 if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
                                     [[ ${verbosity} -ge 1 ]] && echo "$(date): uploading_daemon() UNEXPECTED ERROR: spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
                                 fi
-                                if [[ ${spots_xfered} -eq ${spots_offered} ]]; then
-                                    local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOAD_CURL_LOGFILE_PATH})
-                                    if [[ ${verbosity} -ge 1 ]]; then
-                                        echo "$(date): uploading_daemon() in ${curl_msecs} msecs successfully uploaded ${spots_xfered} spots for ${my_call_sign}/${my_grid}:"
-                                        cat ${UPLOADS_TEMP_TXT_FILE}
-                                    fi
-                                    xfer_success="yes"
+                                local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOAD_CURL_LOGFILE_PATH})
+                                if [[ ${spots_xfered} -eq 0 ]]; then
+                                    [[ ${verbosity} -ge 1 ]] && echo "$(date): uploading_daemon() the curl upload was sucessful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
                                 else
-                                    if [[ ${spots_xfered} -eq 0 ]]; then
-                                        [[ ${verbosity} -ge 1 ]] && echo "$(date): uploading_daemon() ERROR: spots_xfered reported by curl is '0', so sleep 10 and retry" && cat ${UPLOAD_CURL_LOGFILE_PATH}
-                                        sleep 10
-                                    else
-                                        if [[ ${verbosity} -ge 1 ]] ; then
-                                            echo "$(date): uploading_daemon() only '${spots_xfered}' of the offered ${spots_offered} spots were accepted by wsprnet.org. I believe there is no reason to retry, but wonder which of these spots was rejected:"
-                                            cat ${UPLOADS_TEMP_TXT_FILE}
-                                        fi
-                                        xfer_success="yes"
-                                    fi
+                                    ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
+                                    ### Assume we are done attempting to transfer those spots
+                                    [[ ${verbosity} -ge 1 ]] && echo "$(date): uploading_daemon() ${spots_xfered} of the offered ${spots_offered} spots were accepted by wsprnet.org."
                                 fi
-                            fi
-                        fi
+                                [[ ${verbosity} -ge 2 ]] && cat ${UPLOADS_TEMP_TXT_FILE}
+                                xfer_success="yes"
+                            fi  ## if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
+                        fi      ## if [[ $ret_code -ne 0 ]]; then
                         ((--xfer_tries_left))
-                    done
+                    done        ## while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
                     if [[ ${xfer_success} == "yes" ]]; then
                         [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() curl MEPT transfer succeeded after $((${CURL_TRIES} - ${xfer_tries_left})) tries"
                         [[ ${verbosity} -ge 1 ]] && cat ${UPLOADS_TEMP_TXT_FILE}  >> ${UPLOADS_ROOT_DIR}/successful_spot_uploads.txt
