@@ -113,7 +113,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
 #declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Fixed spurious sys.excepthook is missing error message
-declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
+#declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
+declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
                                     ### TODO: use Python library to obtain sunrise/sunset times rather than web site
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
@@ -245,8 +246,8 @@ function check_for_kiwirecorder_cmd() {
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
         if ! dpkg -l | grep -wq git  ; then
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install git
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+            sudo apt-get --yes install git
         fi
         git clone git://github.com/jks-prv/kiwiclient
         echo "Downloading the kiwirecorder SW from Github..." 
@@ -256,8 +257,8 @@ function check_for_kiwirecorder_cmd() {
             exit 1
         fi
         if ! dpkg -l | grep -wq python-numpy ; then
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt install python-numpy
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+            sudo apt --yes install python-numpy
         fi
     fi
 }
@@ -733,9 +734,9 @@ function check_for_needed_utilities()
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     if ! dpkg -l | grep -wq bc ; then
-        ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install bc 
+        # ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt-get install bc --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
             echo "FATAL ERROR: Failed to install 'bc' which is needed for "
@@ -750,26 +751,26 @@ function check_for_needed_utilities()
             echo "   You should consider increasing its size by editing /etc/fstab and remounting ${WSPRDAEMON_TMP_DIR}/"
         fi
         if ! dpkg -l | grep -wq sox  ; then
-            ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
+            # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install sox 
+            sudo apt-get install sox --assume-yes
         fi
         if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
             ### Get the Python packages needed to create the graphs.png
             if ! dpkg -l | grep -wq python3-matplotlib; then
-                ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
+                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-matplotlib
+                sudo apt-get install python3-matplotlib --assume-yes
             fi
             if ! dpkg -l | grep -wq python3-scipy; then
-                ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
+                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-scipy
+                sudo apt-get install python3-scipy --assume-yes
             fi
             if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
                 ## Ensure that Apache is installed and running
                 if ! dpkg -l | grep -wq apache2 ; then
-                    ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
+                    # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
                     [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
                     sudo apt-get install apache2 -y --fix-missing
                 fi
@@ -794,9 +795,9 @@ EOF
             fi
             if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
                 if ! dpkg -l | grep -wq sshpass ; then
-                    ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
+                    # ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
                     [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                    sudo apt-get install sshpass
+                    sudo apt-get install sshpass --assume-yes
                 fi
             fi
         fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
@@ -834,9 +835,9 @@ if [[ ! -x ${WSPRD_CMD} ]]; then
             exit 1
             ;;
     esac
-    ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
-    sudo apt update
-    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3 
+    # ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
+    sudo apt update --assume-yes
+    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
     wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
     sudo dpkg -i ${wsjtx_pkg}
     if [[ ! -x ${WSPRD_CMD} ]]; then
