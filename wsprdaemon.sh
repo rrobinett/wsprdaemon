@@ -115,9 +115,9 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Fixed spurious sys.excepthook is missing error message
 #declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
 declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
-                                    ### Limit size of ALL_WSPR.TXT and OV log files
                                     ### Use Python library to obtain sunrise/sunset times rather than web site
                                     ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
+                                    ### Limit size of ALL_WSPR.TXT and OV log files
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
@@ -1280,8 +1280,23 @@ function kiwi_recording_daemon()
                 printf " PRINTED" >> ov.log
             fi
 
-            [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
-            sleep ${WAV_FILE_POLL_SECONDS}
+            local ov_file_size=$( ${GET_FILE_SIZE_CMD} ov.log )
+            if [[ ${ov_file_size} -gt ${MAX_OV_FILE_SIZE-100000} ]]; then
+                ### Limit the ov.log file to less than 100 KB which is about 6500 10 minute reports
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() ov.log has grown too large (${ov_file_size} bytes), so truncate it"
+                tail -n 3000 ov.log > ov.tmp
+                mv ov.tmp ov.log
+            fi
+            local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
+            if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
+                ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() kiwi_recorder.log has grown too large (${ov_file_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
+                touch recording.stop
+            fi
+            if [[ ! -f recording.stop ]]; then
+                [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
+                sleep ${WAV_FILE_POLL_SECONDS}
+            fi
         fi
     done
     ### We have been signaled to stop recording 
@@ -1814,8 +1829,8 @@ function decoding_daemon()
             local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
             if [[ ${all_wspr_size} -gt ${MAX_ALL_WSPR_SIZE} ]]; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon() ALL_WSPR.TXT has grown too large, so truncating it"
-                rm -f ALL_WSPR.TXT
-                touch ALL_WSPR.TXT
+                tail -n 1000 ALL_WSPR.TXT > ALL_WSPR.tmp
+                mv ALL_WSPR.tmp ALL_WSPR.TXT
             fi
             refresh_local_hashtable  ## In case we are using a hashtable created by merging hashes from other bands
             ln ${wav_file_name} ${wsprd_input_wav_filename}
@@ -1848,6 +1863,18 @@ function decoding_daemon()
                 # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
                 nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
                 nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
+
+                ### Check to see if we are overflowing the /tmp/wsprdaemon file system
+                local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | grep tmpfs) )
+                local tmp_size=${df_report_fields[1]}
+                local tmp_used=${df_report_fields[2]}
+                local tmp_avail=${df_report_fields[3]}
+                local tmp_percent_used=${df_report_fields[4]::-1}
+
+                if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
+                fi
+                
                 rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
                 nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
                 rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
