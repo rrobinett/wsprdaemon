@@ -115,7 +115,9 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Fixed spurious sys.excepthook is missing error message
 #declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
 declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
-                                    ### TODO: use Python library to obtain sunrise/sunset times rather than web site
+                                    ### Limit size of ALL_WSPR.TXT and OV log files
+                                    ### Use Python library to obtain sunrise/sunset times rather than web site
+                                    ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
@@ -128,6 +130,17 @@ fi
 
 #############################################
 declare -i verbosity=${v:-0}         ### default to level 0, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
+
+function verbosity_increment() {
+    verbosity=$(( $verbosity + 1))
+    echo "$(date): verbosity_increment() verbosity now = ${verbosity}"
+}
+function verbosity_decrement() {
+    [[ ${verbosity} -gt 0 ]] && verbosity=$(( $verbosity - 1))
+    echo "$(date): verbosity_decrement() verbosity now = ${verbosity}"
+}
+trap verbosity_increment USR1
+trap verbosity_decrement USR2
 
 ###################### Check OS ###################
 declare -r PI_OS_MAJOR_VERION_MIN=4
@@ -511,18 +524,52 @@ function maidenhead_to_long_lat() {
         $((  $(( $(alpha_to_integer ${1:1:1}) * 10 )) + $(digit_to_integer ${1:3:1}) - 90))
 }
 
+declare ASTRAL_SUN_TIMES_SCRIPT=${WSPRDAEMON_TMP_DIR}/suntimes.py
+function get_astral_sun_times() {
+    local lat=$1
+    local lon=$2
+    local zone=$3
+
+    ## This is run only once every 24 hours, so recreate it to be sure it is from this version of WD
+    cat > ${ASTRAL_SUN_TIMES_SCRIPT} << EOF
+import datetime, sys
+from astral import Astral, Location
+from datetime import date
+lat=float(sys.argv[1])
+lon=float(sys.argv[2])
+zone=sys.argv[3]
+l = Location(('wsprep', 'local', lat, lon, zone, 0))
+l.sun()
+d = date.today()
+sun = l.sun(local=True, date=d)
+print( str(sun['sunrise'])[11:16] + " " + str(sun['sunset'])[11:16] )
+EOF
+    local sun_times=$(python ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone})
+    echo "${sun_times}"
+}
+
 function get_sunrise_sunset() {
     local maiden=$1
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
-    local querry_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
-    local query_lines=$( echo ${querry_results} | sed 's/[,{}]/\n/g' )
-    local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
-    local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
-    local sunrise_hm=$(date --date=$sunrise +%H:%M)
-    local sunset_hm=$(date --date=$sunset +%H:%M)
+    [[ $verbosity -gt 2 ]] && echo "$(date): get_sunrise_sunset() for maidenhead ${maiden} at long/lat  ${long_lat[@]}"
+
+    if [[ ${GET_SUNTIMES_FROM_ASTRAL-yes} == "yes" ]]; then
+        local long=${long_lat[0]}
+        local lat=${long_lat[1]}
+        local zone=$(timedatectl | awk '/Time/{print $3}')
+        local astral_times=($(get_astral_sun_times ${lat} ${long} ${zone}))
+        local sunrise_hm=${astral_times[0]}
+        local sunset_hm=${astral_times[1]}
+    else
+        local querry_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
+        local query_lines=$( echo ${querry_results} | sed 's/[,{}]/\n/g' )
+        local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
+        local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
+        local sunrise_hm=$(date --date=$sunrise +%H:%M)
+        local sunset_hm=$(date --date=$sunset +%H:%M)
+    fi
     echo "$sunrise_hm $sunset_hm"
 }
-
 
 function get_index_time() {   ## If sunrise or sunset is specified, Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
     local time_field=$1
@@ -802,6 +849,10 @@ EOF
             fi
         fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     fi  ## if [[ ${SIGNAL_LEVEL_STATS:-no} == "yes" ]]; then
+    if ! dpkg -l | grep -wq python-astral ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install python-astral --assume-yes
+    fi
 }
 
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
@@ -2952,6 +3003,7 @@ function update_suntimes_file() {
     if [[ -f ${SUNTIMES_FILE} ]] \
         && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
         && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
+        ## Only update once a day
         return
     fi
     rm -f ${SUNTIMES_FILE}
