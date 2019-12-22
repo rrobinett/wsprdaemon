@@ -118,6 +118,7 @@ declare -r VERSION=2.6c             ### Default package installation to "yes" so
                                     ### Use Python library to obtain sunrise/sunset times rather than web site
                                     ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
                                     ### Limit size of ALL_WSPR.TXT and OV log files
+                                    ### Now MERG... is enough to specify a MERGED_RX receiver
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
@@ -2235,7 +2236,7 @@ function spawn_posting_daemon() {
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     local real_receiver_list=""
 
-    if [[ "${receiver_name}" =~ ^MERGED_RX ]]; then
+    if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
         real_receiver_list="${receiver_address//,/ }"
         [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): creating merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}' => list '${real_receiver_list[@]}'"  
