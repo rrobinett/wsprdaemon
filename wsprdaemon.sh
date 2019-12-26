@@ -140,8 +140,11 @@ function verbosity_decrement() {
     [[ ${verbosity} -gt 0 ]] && verbosity=$(( $verbosity - 1))
     echo "$(date): verbosity_decrement() verbosity now = ${verbosity}"
 }
-trap verbosity_increment USR1
-trap verbosity_decrement USR2
+
+function setup_verbosity_traps() {
+    trap verbosity_increment SIGUSR1
+    trap verbosity_decrement SIGUSR2
+}
 
 ###################### Check OS ###################
 declare -r PI_OS_MAJOR_VERION_MIN=4
@@ -1114,6 +1117,8 @@ function rtl_daemon()
     local arg_rx_freq_hz=$(echo "scale=0; (${receiver_rx_freq_mhz} * 1000000) / 1" | bc)
     local capture_secs=${WAV_FILE_CAPTURE_SECONDS}
 
+    setup_verbosity_traps
+
     [[ $verbosity -ge 0 ]] && echo "$(date): INFO: starting a capture daemon from RTL-STR #${rtl_id} tuned to ${receiver_rx_freq_mhz}"
 
     source ${WSPRDAEMON_CONFIG_FILE}   ### Get RTL_BIAST_ON
@@ -1154,6 +1159,7 @@ function audio_recording_daemon()
 {
     local audio_id=$1                 ### For an audio input device this will have the format:  localhost:DEVICE,CHANNEL[,GAIN]   or remote_wspr_daemons_ip_address:DEVICE,CHANNEL[,GAIN]
     local audio_server=${audio_id%%:*}
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     if [[ -z "${audio_server}" ]] ; then
         [[ $verbosity -ge 1 ]] && echo "$(date): audio_recording_daemon() ERROR: AUDIO_x id field '${audio_id}' is invalidi. Expecting 'localhost:' or 'IP_ADDR:'" >&2
         return 1
@@ -1205,6 +1211,7 @@ function kiwi_recording_daemon()
     local receiver_rx_freq_khz=$2
     local my_receiver_password=$3
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() starting recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
     rm -f recording.stop
     local recorder_pid=""
@@ -1392,6 +1399,7 @@ function spawn_recording_daemon() {
     local my_receiver_password=${receiver_list_element[4]}
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${recording_dir}
     cd ${recording_dir}
     rm -f recording.stop
@@ -1726,6 +1734,7 @@ function decoding_daemon()
     local real_receiver_rx_band=${2}
     local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_rx_band})
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     SIGNAL_LEVEL_STATS=${SIGNAL_LEVEL_STATS-no}
     if [[ ${SIGNAL_LEVEL_STATS} == "yes" ]]; then
         local real_receiver_maidenhead=$(get_my_maidenhead)
@@ -2005,6 +2014,7 @@ function posting_daemon()
     local real_receiver_list=(${3})
     local real_receiver_count=${#real_receiver_list[@]}
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
     local my_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
@@ -2430,6 +2440,7 @@ function upload_create_spot_file_list_file()
 ### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
 function uploading_daemon()
 {
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_SPOTS_DIR}
     while true; do
         [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() checking for files to upload"
@@ -3638,6 +3649,7 @@ function disable_systemctl_deamon() {
 ### Wake of every odd minute  and verify that wsprdaemon.sh -w  daemons are running
 function watchdog_daemon() 
 {
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     printf "$(date): watchdog_daemon() starting as pid $$\n"
     while true; do
         [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
