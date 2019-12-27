@@ -1884,7 +1884,6 @@ function decoding_daemon()
                 if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
                 fi
-                
                 rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
                 nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
                 rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
