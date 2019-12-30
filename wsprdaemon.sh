@@ -107,7 +107,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Prompt user before installing new SW.  Graphs now -165 to -115
                                     ### Use /tmp/wsprdaemon/... and move all WD temp files there,
-                                    ### Verify that the best SNR from the MERGED_RX are 
+                                    ### Verify that the best SNR from the MERG are 
                                     ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
                                     ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
                                     ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
@@ -118,7 +118,7 @@ declare -r VERSION=2.6c             ### Default package installation to "yes" so
                                     ### Use Python library to obtain sunrise/sunset times rather than web site
                                     ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
                                     ### Limit size of ALL_WSPR.TXT and OV log files
-                                    ### Now MERG... is enough to specify a MERGED_RX receiver
+                                    ### Now MERG... is enough to specify a MERG receiver
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
@@ -304,7 +304,7 @@ cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 #CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
 ##############################################################
-### The RECEIVER_LIST() array defines the physical (KIWI_xxx,AUDIO_xxx,SDR_xxx) and logical (MERGED_RX...) receive devices available on this server
+### The RECEIVER_LIST() array defines the physical (KIWI_xxx,AUDIO_xxx,SDR_xxx) and logical (MERG...) receive devices available on this server
 ### Each element of RECEIVER_LIST is a string with 5 space-seperated fields:
 ###   " ID(no spaces)             IP:PORT or RTL:n    MyCall       MyGrid  KiwPassword    Optional SIGNAL_LEVEL_ADJUSTMENTS
 ###                                                                                       [[DEFAULT:ADJUST,]BAND_0:ADJUST[,BAND_N:ADJUST_N]...]
@@ -320,7 +320,7 @@ declare RECEIVER_LIST=(
         "AUDIO_1                     localhost:1,0     AI6VN         CM88mc  foobar"  
         "SDR_0                           RTL-SDR:0     AI6VN         CM88mc  foobar"               ### The id SDR_xxx   is special and defines a local RTL-SDR or other Soapy-suported device
         "SDR_1                           RTL-SDR:1     AI6VN         CM88mc  foobar"
-        "MERGED_RX_0    KIWI_1,KIWI2,AUDIO_1,SDR_1     AI6VN         CM88mc  foobar"
+        "MERG_0    KIWI_1,KIWI2,AUDIO_1,SDR_1     AI6VN         CM88mc  foobar"
 )
 
 ### This table defines a schedule of configurations which will be applied by '-j a,all' and thus by the watchdog daemon when it runs '-j a,all' ev ery odd two minutes
@@ -335,7 +335,7 @@ declare WSPR_SCHEDULE_simple=(
 )
 
 declare WSPR_SCHEDULE_merged=(
-    "00:00                       MERGED_RX_0,630 MERGED_RX_0,160"
+    "00:00                       MERG_0,630 MERG_0,160"
 )
 
 declare WSPR_SCHEDULE_complex=(
@@ -2155,7 +2155,7 @@ function posting_daemon()
         sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}
         ### Now ${wsprd_spots_all_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
-        if [[ ${verbosity} -ge 2 ]]; then
+        if [[ ${verbosity} -ge 1 ]]; then
             local source_file_count=${#newest_list[@]}
             local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
             local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
@@ -2278,7 +2278,7 @@ function kill_posting_daemon() {
         return 2
     fi
 
-    if [[ "${receiver_name}" =~ ^MERGED_RX ]]; then
+    if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
         [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
         real_receiver_list=(${receiver_address//,/ })
@@ -2452,12 +2452,12 @@ function uploading_daemon()
             local my_call_sign=${call_grid%_*}
             local my_grid=${call_grid#*_}
             shopt -s nullglob    ### * expands to NULL if there are no file matches
-			local all_spots_files=( $(echo ${call_grid_path}/*) )
+            local all_spots_files=( $(echo ${call_grid_path}/*) )
             if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found no ${my_call_sign}/${my_grid} files to upload"
             else
-				upload_create_spot_file_list_file ${all_spots_files[@]}
-				local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
+                upload_create_spot_file_list_file ${all_spots_files[@]}
+                local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found ${my_call_sign}/${my_grid} files to upload: ${wspr_spots_files[@]}"
                 ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
                 cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TEMP_TXT_FILE}
@@ -2737,7 +2737,7 @@ function check_for_zombies() {
         local receiver_band=${job_info[1]}
         local job_id=${receiver_name},${receiver_band}
              
-        if [[ ! "${receiver_name}" =~ ^MERGED ]]; then
+        if [[ ! "${receiver_name}" =~ ^MERG ]]; then
             ### This is a KIWI,AUDIO or SDR reciever
             if grep -wq ${job_id} <<< "${running_rx_list}" ; then
                 [[ ${verbosity} -ge 1 ]] && printf "$(date): check_for_zombies() real rx job ${job_id}' is already listed in '${running_rx_list}'\n"
@@ -2908,7 +2908,7 @@ function show_running_jobs() {
     for job_index in $(seq 0 $(( ${#RUNNING_JOBS[*]} - 1 )) ) ; do
         job_info=(${RUNNING_JOBS[job_index]/,/ } )
         receiver_band=${job_info[1]}
-        if [[ ${job_info[0]} =~ ^MERGED_RX ]]; then
+        if [[ ${job_info[0]} =~ ^MERG ]]; then
             ### For merged rx devices, there is only one posting pid, but one or more recording and decoding pids
             local merged_receiver_name=${job_info[0]}
             local receiver_address=$(get_receiver_ip_from_name ${merged_receiver_name})
@@ -3984,7 +3984,7 @@ function usage() {
      This program reads the configuration file wsprdaemon.conf which defines a schedule to capture and post WSPR signals from one or more KiwiSDRs 
      and/or AUDIO inputs and/or RTL-SDRs.
      Each KiwiSDR can be configured to run 8 separate bands, so 2 Kiwis can spot every 2 minute cycle from all 14 LF/MF/HF bands.
-     In addition, the operator can configure 'MERGED_RX_..' receivers which posts decodes from 2 or more 'real' receivers 
+     In addition, the operator can configure 'MERG_..' receivers which posts decodes from 2 or more 'real' receivers 
      but selects only the best SNR for each received callsign (i.e no double-posting)
 
      Each 2 minute WSPR cycle this script creates a separate .wav recording file on this host from the audio output of each configured [receiver,band]
