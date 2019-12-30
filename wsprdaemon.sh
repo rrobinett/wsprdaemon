@@ -107,14 +107,18 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Prompt user before installing new SW.  Graphs now -165 to -115
                                     ### Use /tmp/wsprdaemon/... and move all WD temp files there,
-                                    ### Verify that the best SNR from the MERGED_RX are 
+                                    ### Verify that the best SNR from the MERG are 
                                     ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
                                     ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
                                     ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
 #declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Fixed spurious sys.excepthook is missing error message
-declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
-                                    ### TODO: use Python library to obtain sunrise/sunset times rather than web site
+#declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
+declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
+                                    ### Use Python library to obtain sunrise/sunset times rather than web site
+                                    ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
+                                    ### Limit size of ALL_WSPR.TXT and OV log files
+                                    ### Now MERG... is enough to specify a MERG receiver
                                     ### TODO: fix dual USB audio input
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
@@ -127,6 +131,20 @@ fi
 
 #############################################
 declare -i verbosity=${v:-0}         ### default to level 0, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
+
+function verbosity_increment() {
+    verbosity=$(( $verbosity + 1))
+    echo "$(date): verbosity_increment() verbosity now = ${verbosity}"
+}
+function verbosity_decrement() {
+    [[ ${verbosity} -gt 0 ]] && verbosity=$(( $verbosity - 1))
+    echo "$(date): verbosity_decrement() verbosity now = ${verbosity}"
+}
+
+function setup_verbosity_traps() {
+    trap verbosity_increment SIGUSR1
+    trap verbosity_decrement SIGUSR2
+}
 
 ###################### Check OS ###################
 declare -r PI_OS_MAJOR_VERION_MIN=4
@@ -245,8 +263,8 @@ function check_for_kiwirecorder_cmd() {
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
         if ! dpkg -l | grep -wq git  ; then
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install git
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+            sudo apt-get --yes install git
         fi
         git clone git://github.com/jks-prv/kiwiclient
         echo "Downloading the kiwirecorder SW from Github..." 
@@ -256,8 +274,8 @@ function check_for_kiwirecorder_cmd() {
             exit 1
         fi
         if ! dpkg -l | grep -wq python-numpy ; then
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt install python-numpy
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+            sudo apt --yes install python-numpy
         fi
     fi
 }
@@ -286,7 +304,7 @@ cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 #CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
 ##############################################################
-### The RECEIVER_LIST() array defines the physical (KIWI_xxx,AUDIO_xxx,SDR_xxx) and logical (MERGED_RX...) receive devices available on this server
+### The RECEIVER_LIST() array defines the physical (KIWI_xxx,AUDIO_xxx,SDR_xxx) and logical (MERG...) receive devices available on this server
 ### Each element of RECEIVER_LIST is a string with 5 space-seperated fields:
 ###   " ID(no spaces)             IP:PORT or RTL:n    MyCall       MyGrid  KiwPassword    Optional SIGNAL_LEVEL_ADJUSTMENTS
 ###                                                                                       [[DEFAULT:ADJUST,]BAND_0:ADJUST[,BAND_N:ADJUST_N]...]
@@ -302,7 +320,7 @@ declare RECEIVER_LIST=(
         "AUDIO_1                     localhost:1,0     AI6VN         CM88mc  foobar"  
         "SDR_0                           RTL-SDR:0     AI6VN         CM88mc  foobar"               ### The id SDR_xxx   is special and defines a local RTL-SDR or other Soapy-suported device
         "SDR_1                           RTL-SDR:1     AI6VN         CM88mc  foobar"
-        "MERGED_RX_0    KIWI_1,KIWI2,AUDIO_1,SDR_1     AI6VN         CM88mc  foobar"
+        "MERG_0    KIWI_1,KIWI2,AUDIO_1,SDR_1     AI6VN         CM88mc  foobar"
 )
 
 ### This table defines a schedule of configurations which will be applied by '-j a,all' and thus by the watchdog daemon when it runs '-j a,all' ev ery odd two minutes
@@ -317,7 +335,7 @@ declare WSPR_SCHEDULE_simple=(
 )
 
 declare WSPR_SCHEDULE_merged=(
-    "00:00                       MERGED_RX_0,630 MERGED_RX_0,160"
+    "00:00                       MERG_0,630 MERG_0,160"
 )
 
 declare WSPR_SCHEDULE_complex=(
@@ -510,18 +528,52 @@ function maidenhead_to_long_lat() {
         $((  $(( $(alpha_to_integer ${1:1:1}) * 10 )) + $(digit_to_integer ${1:3:1}) - 90))
 }
 
+declare ASTRAL_SUN_TIMES_SCRIPT=${WSPRDAEMON_TMP_DIR}/suntimes.py
+function get_astral_sun_times() {
+    local lat=$1
+    local lon=$2
+    local zone=$3
+
+    ## This is run only once every 24 hours, so recreate it to be sure it is from this version of WD
+    cat > ${ASTRAL_SUN_TIMES_SCRIPT} << EOF
+import datetime, sys
+from astral import Astral, Location
+from datetime import date
+lat=float(sys.argv[1])
+lon=float(sys.argv[2])
+zone=sys.argv[3]
+l = Location(('wsprep', 'local', lat, lon, zone, 0))
+l.sun()
+d = date.today()
+sun = l.sun(local=True, date=d)
+print( str(sun['sunrise'])[11:16] + " " + str(sun['sunset'])[11:16] )
+EOF
+    local sun_times=$(python ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone})
+    echo "${sun_times}"
+}
+
 function get_sunrise_sunset() {
     local maiden=$1
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
-    local querry_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
-    local query_lines=$( echo ${querry_results} | sed 's/[,{}]/\n/g' )
-    local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
-    local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
-    local sunrise_hm=$(date --date=$sunrise +%H:%M)
-    local sunset_hm=$(date --date=$sunset +%H:%M)
+    [[ $verbosity -gt 2 ]] && echo "$(date): get_sunrise_sunset() for maidenhead ${maiden} at long/lat  ${long_lat[@]}"
+
+    if [[ ${GET_SUNTIMES_FROM_ASTRAL-yes} == "yes" ]]; then
+        local long=${long_lat[0]}
+        local lat=${long_lat[1]}
+        local zone=$(timedatectl | awk '/Time/{print $3}')
+        local astral_times=($(get_astral_sun_times ${lat} ${long} ${zone}))
+        local sunrise_hm=${astral_times[0]}
+        local sunset_hm=${astral_times[1]}
+    else
+        local querry_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
+        local query_lines=$( echo ${querry_results} | sed 's/[,{}]/\n/g' )
+        local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
+        local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
+        local sunrise_hm=$(date --date=$sunrise +%H:%M)
+        local sunset_hm=$(date --date=$sunset +%H:%M)
+    fi
     echo "$sunrise_hm $sunset_hm"
 }
-
 
 function get_index_time() {   ## If sunrise or sunset is specified, Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
     local time_field=$1
@@ -733,9 +785,9 @@ function check_for_needed_utilities()
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     if ! dpkg -l | grep -wq bc ; then
-        ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install bc 
+        # ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt-get install bc --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
             echo "FATAL ERROR: Failed to install 'bc' which is needed for "
@@ -750,26 +802,26 @@ function check_for_needed_utilities()
             echo "   You should consider increasing its size by editing /etc/fstab and remounting ${WSPRDAEMON_TMP_DIR}/"
         fi
         if ! dpkg -l | grep -wq sox  ; then
-            ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
+            # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install sox 
+            sudo apt-get install sox --assume-yes
         fi
         if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
             ### Get the Python packages needed to create the graphs.png
             if ! dpkg -l | grep -wq python3-matplotlib; then
-                ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
+                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-matplotlib
+                sudo apt-get install python3-matplotlib --assume-yes
             fi
             if ! dpkg -l | grep -wq python3-scipy; then
-                ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
+                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-scipy
+                sudo apt-get install python3-scipy --assume-yes
             fi
             if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
                 ## Ensure that Apache is installed and running
                 if ! dpkg -l | grep -wq apache2 ; then
-                    ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
+                    # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
                     [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
                     sudo apt-get install apache2 -y --fix-missing
                 fi
@@ -794,13 +846,17 @@ EOF
             fi
             if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
                 if ! dpkg -l | grep -wq sshpass ; then
-                    ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
+                    # ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
                     [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                    sudo apt-get install sshpass
+                    sudo apt-get install sshpass --assume-yes
                 fi
             fi
         fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     fi  ## if [[ ${SIGNAL_LEVEL_STATS:-no} == "yes" ]]; then
+    if ! dpkg -l | grep -wq python-astral ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install python-astral --assume-yes
+    fi
 }
 
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
@@ -834,9 +890,9 @@ if [[ ! -x ${WSPRD_CMD} ]]; then
             exit 1
             ;;
     esac
-    ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
-    sudo apt update
-    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3 
+    # ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
+    sudo apt update --assume-yes
+    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
     wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
     sudo dpkg -i ${wsjtx_pkg}
     if [[ ! -x ${WSPRD_CMD} ]]; then
@@ -1061,6 +1117,8 @@ function rtl_daemon()
     local arg_rx_freq_hz=$(echo "scale=0; (${receiver_rx_freq_mhz} * 1000000) / 1" | bc)
     local capture_secs=${WAV_FILE_CAPTURE_SECONDS}
 
+    setup_verbosity_traps
+
     [[ $verbosity -ge 0 ]] && echo "$(date): INFO: starting a capture daemon from RTL-STR #${rtl_id} tuned to ${receiver_rx_freq_mhz}"
 
     source ${WSPRDAEMON_CONFIG_FILE}   ### Get RTL_BIAST_ON
@@ -1101,6 +1159,7 @@ function audio_recording_daemon()
 {
     local audio_id=$1                 ### For an audio input device this will have the format:  localhost:DEVICE,CHANNEL[,GAIN]   or remote_wspr_daemons_ip_address:DEVICE,CHANNEL[,GAIN]
     local audio_server=${audio_id%%:*}
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     if [[ -z "${audio_server}" ]] ; then
         [[ $verbosity -ge 1 ]] && echo "$(date): audio_recording_daemon() ERROR: AUDIO_x id field '${audio_id}' is invalidi. Expecting 'localhost:' or 'IP_ADDR:'" >&2
         return 1
@@ -1152,6 +1211,7 @@ function kiwi_recording_daemon()
     local receiver_rx_freq_khz=$2
     local my_receiver_password=$3
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() starting recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
     rm -f recording.stop
     local recorder_pid=""
@@ -1228,8 +1288,23 @@ function kiwi_recording_daemon()
                 printf " PRINTED" >> ov.log
             fi
 
-            [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
-            sleep ${WAV_FILE_POLL_SECONDS}
+            local ov_file_size=$( ${GET_FILE_SIZE_CMD} ov.log )
+            if [[ ${ov_file_size} -gt ${MAX_OV_FILE_SIZE-100000} ]]; then
+                ### Limit the ov.log file to less than 100 KB which is about 6500 10 minute reports
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() ov.log has grown too large (${ov_file_size} bytes), so truncate it"
+                tail -n 3000 ov.log > ov.tmp
+                mv ov.tmp ov.log
+            fi
+            local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
+            if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
+                ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() kiwi_recorder.log has grown too large (${ov_file_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
+                touch recording.stop
+            fi
+            if [[ ! -f recording.stop ]]; then
+                [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
+                sleep ${WAV_FILE_POLL_SECONDS}
+            fi
         fi
     done
     ### We have been signaled to stop recording 
@@ -1324,6 +1399,7 @@ function spawn_recording_daemon() {
     local my_receiver_password=${receiver_list_element[4]}
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${recording_dir}
     cd ${recording_dir}
     rm -f recording.stop
@@ -1658,6 +1734,7 @@ function decoding_daemon()
     local real_receiver_rx_band=${2}
     local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_rx_band})
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     SIGNAL_LEVEL_STATS=${SIGNAL_LEVEL_STATS-no}
     if [[ ${SIGNAL_LEVEL_STATS} == "yes" ]]; then
         local real_receiver_maidenhead=$(get_my_maidenhead)
@@ -1762,8 +1839,8 @@ function decoding_daemon()
             local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
             if [[ ${all_wspr_size} -gt ${MAX_ALL_WSPR_SIZE} ]]; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon() ALL_WSPR.TXT has grown too large, so truncating it"
-                rm -f ALL_WSPR.TXT
-                touch ALL_WSPR.TXT
+                tail -n 1000 ALL_WSPR.TXT > ALL_WSPR.tmp
+                mv ALL_WSPR.tmp ALL_WSPR.TXT
             fi
             refresh_local_hashtable  ## In case we are using a hashtable created by merging hashes from other bands
             ln ${wav_file_name} ${wsprd_input_wav_filename}
@@ -1796,6 +1873,17 @@ function decoding_daemon()
                 # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
                 nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
                 nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
+
+                ### Check to see if we are overflowing the /tmp/wsprdaemon file system
+                local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | grep tmpfs) )
+                local tmp_size=${df_report_fields[1]}
+                local tmp_used=${df_report_fields[2]}
+                local tmp_avail=${df_report_fields[3]}
+                local tmp_percent_used=${df_report_fields[4]::-1}
+
+                if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
+                fi
                 rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
                 nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
                 rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
@@ -1925,6 +2013,7 @@ function posting_daemon()
     local real_receiver_list=(${3})
     local real_receiver_count=${#real_receiver_list[@]}
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
     local my_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
@@ -2066,7 +2155,7 @@ function posting_daemon()
         sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}
         ### Now ${wsprd_spots_all_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
-        if [[ ${verbosity} -ge 2 ]]; then
+        if [[ ${verbosity} -ge 1 ]]; then
             local source_file_count=${#newest_list[@]}
             local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
             local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
@@ -2156,7 +2245,7 @@ function spawn_posting_daemon() {
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     local real_receiver_list=""
 
-    if [[ "${receiver_name}" =~ ^MERGED_RX ]]; then
+    if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
         real_receiver_list="${receiver_address//,/ }"
         [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): creating merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}' => list '${real_receiver_list[@]}'"  
@@ -2189,7 +2278,7 @@ function kill_posting_daemon() {
         return 2
     fi
 
-    if [[ "${receiver_name}" =~ ^MERGED_RX ]]; then
+    if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
         [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
         real_receiver_list=(${receiver_address//,/ })
@@ -2350,6 +2439,7 @@ function upload_create_spot_file_list_file()
 ### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
 function uploading_daemon()
 {
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_SPOTS_DIR}
     while true; do
         [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() checking for files to upload"
@@ -2362,12 +2452,12 @@ function uploading_daemon()
             local my_call_sign=${call_grid%_*}
             local my_grid=${call_grid#*_}
             shopt -s nullglob    ### * expands to NULL if there are no file matches
-			local all_spots_files=( $(echo ${call_grid_path}/*) )
+            local all_spots_files=( $(echo ${call_grid_path}/*) )
             if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found no ${my_call_sign}/${my_grid} files to upload"
             else
-				upload_create_spot_file_list_file ${all_spots_files[@]}
-				local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
+                upload_create_spot_file_list_file ${all_spots_files[@]}
+                local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found ${my_call_sign}/${my_grid} files to upload: ${wspr_spots_files[@]}"
                 ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
                 cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TEMP_TXT_FILE}
@@ -2647,7 +2737,7 @@ function check_for_zombies() {
         local receiver_band=${job_info[1]}
         local job_id=${receiver_name},${receiver_band}
              
-        if [[ ! "${receiver_name}" =~ ^MERGED ]]; then
+        if [[ ! "${receiver_name}" =~ ^MERG ]]; then
             ### This is a KIWI,AUDIO or SDR reciever
             if grep -wq ${job_id} <<< "${running_rx_list}" ; then
                 [[ ${verbosity} -ge 1 ]] && printf "$(date): check_for_zombies() real rx job ${job_id}' is already listed in '${running_rx_list}'\n"
@@ -2818,7 +2908,7 @@ function show_running_jobs() {
     for job_index in $(seq 0 $(( ${#RUNNING_JOBS[*]} - 1 )) ) ; do
         job_info=(${RUNNING_JOBS[job_index]/,/ } )
         receiver_band=${job_info[1]}
-        if [[ ${job_info[0]} =~ ^MERGED_RX ]]; then
+        if [[ ${job_info[0]} =~ ^MERG ]]; then
             ### For merged rx devices, there is only one posting pid, but one or more recording and decoding pids
             local merged_receiver_name=${job_info[0]}
             local receiver_address=$(get_receiver_ip_from_name ${merged_receiver_name})
@@ -2951,6 +3041,7 @@ function update_suntimes_file() {
     if [[ -f ${SUNTIMES_FILE} ]] \
         && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
         && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
+        ## Only update once a day
         return
     fi
     rm -f ${SUNTIMES_FILE}
@@ -3557,6 +3648,7 @@ function disable_systemctl_deamon() {
 ### Wake of every odd minute  and verify that wsprdaemon.sh -w  daemons are running
 function watchdog_daemon() 
 {
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     printf "$(date): watchdog_daemon() starting as pid $$\n"
     while true; do
         [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
@@ -3892,7 +3984,7 @@ function usage() {
      This program reads the configuration file wsprdaemon.conf which defines a schedule to capture and post WSPR signals from one or more KiwiSDRs 
      and/or AUDIO inputs and/or RTL-SDRs.
      Each KiwiSDR can be configured to run 8 separate bands, so 2 Kiwis can spot every 2 minute cycle from all 14 LF/MF/HF bands.
-     In addition, the operator can configure 'MERGED_RX_..' receivers which posts decodes from 2 or more 'real' receivers 
+     In addition, the operator can configure 'MERG_..' receivers which posts decodes from 2 or more 'real' receivers 
      but selects only the best SNR for each received callsign (i.e no double-posting)
 
      Each 2 minute WSPR cycle this script creates a separate .wav recording file on this host from the audio output of each configured [receiver,band]
