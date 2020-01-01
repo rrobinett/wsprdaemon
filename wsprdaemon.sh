@@ -2734,14 +2734,14 @@ function check_for_zombies() {
         return
     fi
     ### First check if the watchdog is running
-    if [[ -f ${WSPRDAEMON_ROOT_DIR}/watchdog.pid ]]; then
-        local watchdog_pid=$(cat ${WSPRDAEMON_ROOT_DIR}/watchdog.pid)
+    if [[ -f ${PATH_WATCHDOG_PID} ]]; then
+        local watchdog_pid=$(cat ${PATH_WATCHDOG_PID})
         if ps ${watchdog_pid} > /dev/null ; then
             [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_zombies() watchdog pid ${watchdog_pid} is active"
             expected_and_running_pids="${expected_and_running_pids} ${watchdog_pid}"
         else
             [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_zombies() watchdog pid ${watchdog_pid} not active"
-            rm -f ${WSPRDAEMON_ROOT_DIR}/watchdog.pid
+            rm -f ${PATH_WATCHDOG_PID}
         fi
     fi
     ### Now check that the uploading daemon is running
@@ -2873,7 +2873,7 @@ function check_for_zombies() {
        if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
        else
-           if [[ $verbosity -ge 1 ]] ; then
+           if [[ $verbosity -ge 2 ]] ; then
                printf "$(date): check_for_zombies() WARNING: did not find running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
                grep -w ${running_pid} <<< "${ps_output_lines}"
            fi
@@ -2881,7 +2881,7 @@ function check_for_zombies() {
                [[ $verbosity -ge 1 ]] && printf "$(date): check_for_zombies() adding running  zombie '${running_pid}' to kill list\n"
                kill_pid_list="${kill_pid_list} ${running_pid}"
            else
-               [[ $verbosity -ge 1 ]] && printf "$(date): check_for_zombies()  zombie ${running_pid} is phantom which is no longer running\n"
+               [[ $verbosity -ge 2 ]] && printf "$(date): check_for_zombies()  zombie ${running_pid} is phantom which is no longer running\n"
            fi
        fi
     done
@@ -3602,10 +3602,8 @@ function jobs_cmd() {
 
 ###############################################################################################################
 ### Watchdog commands
-declare -r    PATH_WATCHDOG_PID=${WSPRDAEMON_ROOT_DIR}/watchdog.pid
-declare -r    PATH_WATCHDOG_LOG=${WSPRDAEMON_ROOT_DIR}/watchdog.log
-declare -r    PATH_WATCHDOG_BANDS=${WSPRDAEMON_ROOT_DIR}/watchdog.bands    ### Plan currently running in format of WSPR_SCHEDULE[]
-declare -r    PATH_WATCHDOG_TMP=/tmp/watchdog.log
+declare -r    PATH_WATCHDOG_PID=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.pid
+declare -r    PATH_WATCHDOG_LOG=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.log
 
 function seconds_until_next_even_minute() {
     local current_min_secs=$(date +%M:%S)
