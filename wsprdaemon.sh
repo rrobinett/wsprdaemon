@@ -2868,7 +2868,7 @@ function check_for_zombies() {
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     local kill_pid_list=""
     local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/{print $2}' <<< "${ps_output_lines}" )
+    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ {print $2}' <<< "${ps_output_lines}" )
     for running_pid in ${ps_running_list} ; do
        if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
