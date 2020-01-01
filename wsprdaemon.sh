@@ -121,6 +121,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Now MERG... is enough to specify a MERG receiver
                                     ### Tested dual USB audio input
 declare -r VERSION=2.6d             ### To test and install astral, use 'pip install astral'
+                                    ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
 
