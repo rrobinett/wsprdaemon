@@ -4047,6 +4047,9 @@ function usage() {
     -w l                          => Watch end of watchdog.log file by executing 'less +F watchdog.log'
 
     -v                            => Increase verbosity of diagnotic printouts 
+    -d                            => Signal all running processes as found in $PWD *.pid files to increment the logging verbosity
+                                     This permits changes to logging verbosity without restarting WD
+    -D                            => Signal all to decrement verbosity
 
     Examples:
      ${0##*/} -a                      => stArt the watchdog daemon which will in turn run '-j a,all' starting WSPR jobs defined in '${WSPRDAEMON_CONFIG_FILE}'
