@@ -4047,7 +4047,7 @@ function usage() {
     -w l                          => Watch end of watchdog.log file by executing 'less +F watchdog.log'
 
     -v                            => Increase verbosity of diagnotic printouts 
-    -d                            => Signal all running processes as found in $PWD *.pid files to increment the logging verbosity
+    -d                            => Signal all running processes as found in the *.pid files in the current directory to increment the logging verbosity
                                      This permits changes to logging verbosity without restarting WD
     -D                            => Signal all to decrement verbosity
 
