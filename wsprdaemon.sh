@@ -114,12 +114,14 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
                                     ### Fixed spurious sys.excepthook is missing error message
 #declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
-declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
+#declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
                                     ### Use Python library to obtain sunrise/sunset times rather than web site
                                     ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
                                     ### Limit size of ALL_WSPR.TXT and OV log files
                                     ### Now MERG... is enough to specify a MERG receiver
-                                    ### TODO: fix dual USB audio input
+                                    ### Tested dual USB audio input
+declare -r VERSION=2.6d             ### To test and install astral, use 'pip install astral'
+                                    ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
 
@@ -144,6 +146,35 @@ function verbosity_decrement() {
 function setup_verbosity_traps() {
     trap verbosity_increment SIGUSR1
     trap verbosity_decrement SIGUSR2
+}
+
+function signal_verbosity() {
+    local up_down=$1
+    local pid_files=$(shopt -s nullglob ; echo *.pid)
+
+    if [[ -z "${pid_files}" ]]; then
+        echo "No *.pid files in $PWD"
+        return
+    fi
+    local file
+    for file in ${pid_files} ; do
+        local debug_pid=$(cat ${file})
+        if ! ps ${debug_pid} > /dev/null ; then
+            echo "PID ${debug_pid} from ${file} is not running"
+        else
+            echo "Signaling verbosity change to PID ${debug_pid} from ${file}"
+            kill -SIGUSR${up_down} ${debug_pid}
+        fi
+    done
+}
+
+### executed by cmd line '-d'
+function increment_verbosity() {
+    signal_verbosity 1
+}
+### executed by cmd line '-D'
+function decrement_verbosity() {
+    signal_verbosity 2
 }
 
 ###################### Check OS ###################
@@ -853,9 +884,8 @@ EOF
             fi
         fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     fi  ## if [[ ${SIGNAL_LEVEL_STATS:-no} == "yes" ]]; then
-    if ! dpkg -l | grep -wq python-astral ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install python-astral --assume-yes
+    if ! python -c "import astral" 2> /dev/null ; then
+       pip install astral
     fi
 }
 
@@ -4055,7 +4085,7 @@ function usage() {
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZshij:pvVw: opt ; do
+while getopts :aAzZshij:pvVw:dD opt ; do
     case $opt in
         A)
             enable_systemctl_deamon
@@ -4098,6 +4128,12 @@ while getopts :aAzZshij:pvVw: opt ; do
             ;;
         V)
             echo "Version = ${VERSION}"
+            ;;
+        d)
+            increment_verbosity
+            ;;
+        D)
+            decrement_verbosity
             ;;
         \?)
             echo "Invalid option: -$OPTARG" 1>&2
