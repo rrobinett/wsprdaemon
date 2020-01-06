@@ -592,6 +592,9 @@ function get_sunrise_sunset() {
         local long=${long_lat[0]}
         local lat=${long_lat[1]}
         local zone=$(timedatectl | awk '/Time/{print $3}')
+        if [[ "${zone}" == "n/a" ]]; then
+            zone="UTC"
+        fi
         local astral_times=($(get_astral_sun_times ${lat} ${long} ${zone}))
         local sunrise_hm=${astral_times[0]}
         local sunset_hm=${astral_times[1]}
@@ -885,7 +888,17 @@ EOF
         fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     fi  ## if [[ ${SIGNAL_LEVEL_STATS:-no} == "yes" ]]; then
     if ! python -c "import astral" 2> /dev/null ; then
-       pip install astral
+        if ! sudo apt-get install python-astral; then
+            if !  pip install astral ; then
+                if ! sudo apt-get install python-pip; then
+                    echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip' needed to install the Python 'astral' library"
+                else
+                    if !  pip install astral ; then
+                        echo "$(date) check_for_needed_utilities() ERROR: pip can't install the Python 'astral' library used to calculate sunup/sunset times"
+                    fi
+                fi
+            fi
+        fi
     fi
 }
 
