@@ -1770,8 +1770,11 @@ function get_af_db() {
 ############## Decoding ################################################
 ### For each real receiver/band there is one decode daemon and one recording daemon
 ### Waits for a new wav file then decodes and posts it to all of the posting lcient
+
 declare -r POSTING_PROCESS_SUBDIR="posting_clients.d"       ### Each posting process will create its own subdir where the decode process will copy YYMMDD_HHMM_wspr_spots.txt
-declare MAX_ALL_WSPR_SIZE=200000         ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
+declare MAX_ALL_WSPR_SIZE=200000                            ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
+declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window.py
+
 function decoding_daemon() 
 {
     local real_receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1830,6 +1833,51 @@ function decoding_daemon()
             rms_adjust=${rms_adjust} comes from ${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}
             fft_adjust=${fft_adjust} comes from ${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}
             rms_adjust and fft_adjust will be ADDed to the raw dB levels"
+
+        cat > ${FFT_WINDOW_CMD} <<EOF
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Filename: wav_window_v1.py
+# January  2020  Gwyn Griffiths
+# Program to apply a Hann window to a wsprdaemon wav file for subsequent processing by sox stat -freq (initially at least)
+ 
+from __future__ import print_function
+import math
+import scipy
+import scipy.io.wavfile as wavfile
+import numpy as np
+import wave
+import sys
+
+WAV_INPUT_FILENAME=sys.argv[1]
+WAV_OUTPUT_FILENAME=sys.argv[2]
+
+# Set up the audio file parameters for windowing
+# fs_rate is passed to the output file
+fs_rate, signal = wavfile.read(WAV_INPUT_FILENAME)   # returns sample rate as int and data as numpy array
+# set some constants
+N_FFT=352                                   # this being the number expected
+N_FFT_POINTS=4096                           # number of input samples in each sox stat -freq FFT (fixed)
+                                            # so N_FFT * N_FFT_POINTS = 1441792 samples, which at 12000 samples per second is 120.15 seconds
+                                            # while we have only 120 seconds, so for now operate with N_FFT-1 to have all filled
+                                            # may decide all 352 are overkill anyway
+N=N_FFT*N_FFT_POINTS
+w=np.zeros(N_FFT_POINTS)
+
+output=np.zeros(N, dtype=np.int16)          # declaring as dtype=np.int16 is critical as the wav file needs to be 16 bit integers
+
+# create a N_FFT_POINTS array with the Hann weighting function
+for i in range (0, N_FFT_POINTS):
+  x=(math.pi*float(i))/float(N_FFT_POINTS)
+  w[i]=np.sin(x)**2
+
+for j in range (0, N_FFT-1):
+  offset=j*N_FFT_POINTS
+  for i in range (0, N_FFT_POINTS):
+     output[i+offset]=int(w[i]*signal[i+offset])
+wavfile.write(WAV_OUTPUT_FILENAME, fs_rate, output)
+EOF
+        chmod +x ${FFT_WINDOW_CMD}
     fi
 
     [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): starting daemon to record '${real_receiver_name},${real_receiver_rx_band}'"
@@ -1914,17 +1962,13 @@ function decoding_daemon()
                 done
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fixed post_tx_levels levels '${post_tx_levels[@]}'"
 
+                # Apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
+                local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
+                /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
+                mv ${windowed_wav_file} ${wsprd_input_wav_filename}
+
                 # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
-                # Get an FFT level from the wav file. One could perform many kinds of analysis of this data.
-                # TEST GG python prog to apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
-                declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window_v2.py
-                if [[ -x ${FFT_WINDOW_CMD} ]]; then
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
-                    local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
-                    /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
-                    # That prog outputs output.wav, copy to expected, leave output.wav for further analysis
-                    mv ${windowed_wav_file} ${wsprd_input_wav_filename}
-                fi
                 nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
                 nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
 
