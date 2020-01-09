@@ -3873,9 +3873,9 @@ function plot_noise() {
     mkdir -p ${noise_plot_dir}
     local noise_calibration_file=${noise_plot_dir}/noise_ca_vals.csv
 
-    if [[ -f ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE} ]] ; then
+    if [[ -f ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} ]] ; then
         local now_secs=$(date +%s)
-        local graph_secs=$(date -r ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE} +%s)
+        local graph_secs=$(date -r ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} +%s)
         local graph_age_secs=$(( ${now_secs} - ${graph_secs} ))
 
         if [[ ${verbosity} -eq 0 ]] && [[ ${graph_age_secs} -lt ${GRAPH_UPDATE_RATE-240} ]]; then
