@@ -7,7 +7,7 @@ noise_plot
 running.jobs
 signal_levels
 suntimes
-watchdog.log
-watchdog.pid
+wsprdaemon.log
+wsprdaemon.pid
 wsprdaemon.conf
 save

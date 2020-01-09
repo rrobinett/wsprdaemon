@@ -1914,6 +1914,16 @@ function decoding_daemon()
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fixed post_tx_levels levels '${post_tx_levels[@]}'"
 
                 # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
+                # Get an FFT level from the wav file. One could perform many kinds of analysis of this data.
+                # TEST GG python prog to apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
+                declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window_v2.py
+                if [[ -x ${FFT_WINDOW_CMD} ]]; then
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
+                    local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
+                    /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
+                    # That prog outputs output.wav, copy to expected, leave output.wav for further analysis
+                    mv ${windowed_wav_file} ${wsprd_input_wav_filename}
+                fi
                 nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
                 nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
 
@@ -1930,7 +1940,8 @@ function decoding_daemon()
                 rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
                 nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
                 rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
-                local fft_value=$(nice awk -v fft_adj=${fft_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj ) ; exit }'  sox_fft_sorted.txt)
+                local hann_adjust=6.0
+                local fft_value=$(nice awk -v fft_adj=${fft_adjust} -v hann_adjust=${hann_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj + hann_adjust) ; exit }'  sox_fft_sorted.txt)
                                                                                              # The 0.43429 is simply awk using natual log
                                                                                              #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
                 rm sox_fft_sorted.txt
