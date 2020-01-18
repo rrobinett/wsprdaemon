@@ -122,7 +122,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Tested dual USB audio input
 #declare -r VERSION=2.6d             ### To test and install astral, use 'pip install astral'
                                     ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
-declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
+#declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
+declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
                                     ### TODO: add VHF/UHF support using Soapy API
                                     ### TODO: enhance noise database logging and add wpsrdaemon spots database
 
@@ -2937,7 +2938,7 @@ function check_for_zombies() {
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     local kill_pid_list=""
     local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ {print $2}' <<< "${ps_output_lines}" )
+    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ {print $2}' <<< "${ps_output_lines}" )
     for running_pid in ${ps_running_list} ; do
        if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
