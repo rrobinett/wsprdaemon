@@ -2434,7 +2434,7 @@ function kill_posting_daemon() {
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
             echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: posting directory  ${real_receiver_posting_dir} does not exist"
         else 
-            rm ${real_receiver_posting_dir}  ### Just removeds the symlink file, not the real dir and its contents
+            rm -rf ${real_receiver_posting_dir}  ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
         fi
     done
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
