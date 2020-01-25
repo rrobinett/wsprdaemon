@@ -124,8 +124,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
 #declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
 #declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-declare -r VERSION=2.7a            
-                                    ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
+declare -r VERSION=2.7a             ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
                                     ### TODO: use Christoph's python code to obtain noise levels
                                     ### TODO: add VHF/UHF support using Soapy API
 
@@ -1089,12 +1088,21 @@ function list_bands() {
 
 #############################################################
 function get_recording_dir_path(){
-    local get_recording_dir_path_receiver_name=$1
-    local get_recording_dir_path_receiver_rx_band=$2
-    local get_recording_dir_path_receiver_recording_path="${WSPRDAEMON_TMP_DIR}/${get_recording_dir_path_receiver_name}/${get_recording_dir_path_receiver_rx_band}"
+    local receiver_name=$1
+    local receiver_rx_band=$2
+    local receiver_recording_path="${WSPRDAEMON_TMP_DIR}/recording.d/${receiver_name}/${receiver_rx_band}"
 
-    echo ${get_recording_dir_path_receiver_recording_path}
+    echo ${receiver_recording_path}
 }
+
+function get_posting_dir_path(){
+    local receiver_name=$1
+    local receiver_rx_band=$2
+    local receiver_posting_path="${WSPRDAEMON_TMP_DIR}/posting.d/${receiver_name}/${receiver_rx_band}"
+
+    echo ${receiver_posting_path}
+}
+
 
 #############################################################
 
@@ -1774,7 +1782,7 @@ function get_af_db() {
 ### For each real receiver/band there is one decode daemon and one recording daemon
 ### Waits for a new wav file then decodes and posts it to all of the posting lcient
 
-declare -r POSTING_PROCESS_SUBDIR="posting_clients.d"       ### Each posting process will create its own subdir where the decode process will copy YYMMDD_HHMM_wspr_spots.txt
+declare -r DECODING_CLIENTS_SUBDIR="decoding_clients.d"     ### Each decoding daemon will create its own subdir where it will copy YYMMDD_HHMM_wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                            ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window.py
 
@@ -1888,8 +1896,7 @@ EOF
     cd ${real_recording_dir}
     rm -f *.raw *.wav
     shopt -s nullglob
-    while [[  -n "$(ls -A ${POSTING_PROCESS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
+    while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon() checking recording process is running in $PWD"
         spawn_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon() checking for *.wav' files in $PWD"
@@ -1900,14 +1907,14 @@ EOF
             ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writting this 2 minutes of capture and has moved to the next wav_file_name
             local old_wav_file_size=0
             local new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
-            while [[ -n "$(ls -A ${POSTING_PROCESS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
+            while [[ -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
                 [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
                 old_wav_file_size=${new_wav_file_size}
                 sleep ${WAV_FILE_POLL_SECONDS}
                 new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
                 [[ ${verbosity} -ge 4 ]] && echo "$(date): decoding_daemon() old size ${old_wav_file_size}, new size ${new_wav_file_size}"
             done
-            if [[ -z "$(ls -A ${POSTING_PROCESS_SUBDIR})" ]]; then
+            if [[ -z "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() wav file size loop terminated due to no posting.d subdir"
                 break
             fi
@@ -1944,6 +1951,7 @@ EOF
                 wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
             fi
             nice ${WSPRD_CMD} ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
+
             ### If configured, extract signal level statistics to a log file
             if [[ ${SIGNAL_LEVEL_STATS} == "yes" ]]; then
                 # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
@@ -2041,10 +2049,10 @@ EOF
             ### Copy the renamed wspr_spots.txt to waiting posting daemons
             shopt -s nullglob    ### * expands to NULL if there are no .wav wav_file
             local dir
-            for dir in ${POSTING_PROCESS_SUBDIR}/* ; do
+            for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
                 ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() decode process is copying ${new_file} to ${dir}/ monitored by a posting process" 
-                ln -f ${new_file} ${dir}/
+                cp -p ${new_file} ${dir}/
             done
             rm ${new_file}
         done
@@ -2063,7 +2071,7 @@ function spawn_decode_daemon() {
 
     [[ $verbosity -ge 4 ]] && echo "$(date): spawn_decode_daemon(): starting decode of '${receiver_name},${receiver_rx_band}'"
 
-    mkdir -p ${capture_dir}/${POSTING_PROCESS_SUBDIR}     ### posting_daemon()s will create their subdirs
+    mkdir -p ${capture_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
     cd ${capture_dir}
     if [[ -f decode.pid ]] ; then
         local decode_pid=$(cat decode.pid)
@@ -2105,9 +2113,14 @@ function get_decoding_status() {
     return 0
 }
 
-################ Posting #############################################
+#############################################################
+################ Posting ####################################
+#############################################################
+
+declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting deamon directory which contains symlinks to the decoding deamon(s) subdirs where spots for this daemon are copied
+
 ### This daemon creates links from the posting dirs of all the $3 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
-### and post the results to wsprnet.org
+### and 
 function posting_daemon() 
 {
     local posting_receiver_name=${1}
@@ -2120,27 +2133,37 @@ function posting_daemon()
     local my_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
 
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() starting to capture '${posting_receiver_name},${posting_receiver_band}' and upload as ${my_call_sign}/${my_grid} from real_rx(s) '${real_receiver_list[@]}'"
+    ### Where to put the spots from the one or more real receivers for the upload daemon to find
+    local  upload_dir=${UPLOADS_WSPRNET_SPOTS_DIR}/${my_call_sign//\//=}_${my_grid}/${posting_receiver_name}/${posting_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+    mkdir -p ${upload_dir}
+
+    ### Create a /tmp/.. dir where this instance of the daemon will process and merge spotfiles.  Then it will copy them to the uploads.d directory in a persistent file system
+    local posting_receiver_dir_path=$PWD
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${real_receiver_list[@]}' to '${upload_dir}"
+
+    ### Link the real receivers to this dir
     local posting_source_dir_list=()
     local real_receiver_name
+    mkdir -p ${POSTING_SUPPLIERS_SUBDIR}
     for real_receiver_name in ${real_receiver_list[@]}; do
-        ### Create posting subdirs under each real receiver recording/decoding dir which will be feeding this capture dir
+        ### Create posting subdirs for each real recording/decoding receiver to copy spot files
+        ### If a schedule change disables this receiver, we will want to signal to the real receivers that we are no longer listening to their spots
+        ### To find those receivers, create a posting dir under each real reciever and make a sybolic link from our posting subdir to that real posting dir
+        ### Since both dirs are under /tmp, create a hard link between that new dir and a dir under the real receiver where it will copy its spots
         local real_receiver_dir_path=$(get_recording_dir_path ${real_receiver_name} ${posting_receiver_band})
-        local posting_dir=${real_receiver_dir_path}/${POSTING_PROCESS_SUBDIR}/${posting_receiver_name}
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() creating posting dir ${posting_dir}"
-        mkdir -p ${posting_dir}
-        rm -f ${posting_dir}/*
-        posting_source_dir_list+=(${posting_dir})
+        local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
+        ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
+        mkdir -p ${real_receiver_posting_dir_path}
+        ### Now create a symlink from under here to the directory where spots will apper
+        local this_rx_local_dir_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
+        [[ ! -f ${this_rx_local_dir_name} ]] && ln -s ${real_receiver_posting_dir_path} ${this_rx_local_dir_name}
+        posting_source_dir_list+=(${this_rx_local_dir_name})
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() created a symlink from ${this_rx_local_dir_name} to ${real_receiver_posting_dir_path}"
     done
-
-    posting_receiver_dir_path=$(get_recording_dir_path ${posting_receiver_name} ${posting_receiver_band})
-    mkdir -p ${posting_receiver_dir_path}
-    cd ${posting_receiver_dir_path}
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches
     local daemon_stop="no"
     while [[ ${daemon_stop} == "no" ]]; do
-        [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
         [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() starting check for all posting subdirs to have a YYMMDD_HHMM_wspr_spots.txt file in them"
         local newest_all_wspr_file_path=""
         local newest_all_wspr_file_name=""
@@ -2148,7 +2171,6 @@ function posting_daemon()
         ### Wait for all of the real receivers to decode 
         local waiting_for_decodes=yes
         while [[ ${waiting_for_decodes} == "yes" ]]; do
-            [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
             ### Start or keep alive decoding daemons for each real receiver
             local real_receiver_name
             for real_receiver_name in ${real_receiver_list[@]} ; do
@@ -2162,7 +2184,7 @@ function posting_daemon()
             newest_all_wspr_file_path=""
             local posting_dir
             for posting_dir in ${posting_source_dir_list[@]}; do
-                [[ ${verbosity} -ge 4 ]] && echo "$(date): posting_daemon() checking dir ${posting_dir} for wspr_spots.txt files"
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() checking dir ${posting_dir} for wspr_spots.txt files"
                 if [[ ! -d ${posting_dir} ]]; then
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() expected posting dir ${posting_dir} does not exist, so exiting inner for loop"
                     daemon_stop="yes"
@@ -2310,14 +2332,12 @@ function posting_daemon()
             continue
         fi
 
-        local  upload_dir=${UPLOADS_WSPRNET_SPOTS_DIR}/${my_call_sign//\//=}_${my_grid}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-        mkdir -p ${upload_dir}
-        ### Copy the wspr_sport.txt file we have just created to a uniquely names file in the uploading directory
+        ### Copy the wspr_spot.txt file we have just created to a uniquely names file in the uploading directory
         ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
         local recording_info=${newest_all_wspr_file_name/_wspr_spots.txt/}     ### extract the date_time_freq part of the file name
         local recording_freq_hz=${recording_info##*_}
         local recording_date_time=${recording_info%_*}
-        local  upload_file_path=${upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+        local upload_file_path=${upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
         cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
         [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_dir}"
         if [[ ${verbosity} -ge 8 ]]; then
@@ -2344,6 +2364,13 @@ function posting_daemon()
 function spawn_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
+
+    local daemon_status
+    
+    if daemon_status=$(get_posting_status $receiver_name $receiver_band) ; then
+        [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): daemon for '${receiver_name}','${receiver_band}' is already running"
+        return
+    fi
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     local real_receiver_list=""
 
@@ -2355,11 +2382,14 @@ function spawn_posting_daemon() {
         [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): creating real rx '${receiver_name}','${receiver_band}'"  
         real_receiver_list=${receiver_name} 
     fi
-    local receiver_posting_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+    local receiver_posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     mkdir -p ${receiver_posting_dir}
     cd ${receiver_posting_dir}
     posting_daemon ${receiver_name} ${receiver_band} "${real_receiver_list}" > posting.log 2>&1 &
-    echo $! > posting.pid
+    local posting_pid=$!
+    echo ${posting_pid} > posting.pid
+
+    [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): spawned posting daemon in '$PWD' with pid ${posting_pid}"
     cd - > /dev/null
 }
 
@@ -2395,14 +2425,16 @@ function kill_posting_daemon() {
     fi
     ### Signal all of the real receivers which are contributing ALL_WSPR files to this posting daemon to stop sending ALL_WSPRs by deleting the 
     ### associated subdir in the real receiver's posting.d subdir
+    ### That real_receiver_posting_dir is in the /tmp/ tree and is a symbolic link to the real ~/wsprdaemon/.../real_receiver_posting_dir
+    ### Leave ~/wsprdaemon/.../real_receiver_posting_dir alone so it retains any spot data for later uploads
     local real_receiver_name
     for real_receiver_name in ${real_receiver_list[@]} ; do
-        local real_receiver_posting_dir=$(get_recording_dir_path ${real_receiver_name} ${receiver_band})/${POSTING_PROCESS_SUBDIR}/${receiver_name}
+        local real_receiver_posting_dir=$(get_recording_dir_path ${real_receiver_name} ${receiver_band})/${DECODING_CLIENTS_SUBDIR}/${receiver_name}
         [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
             echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: posting directory  ${real_receiver_posting_dir} does not exist"
         else 
-            rm -rf ${real_receiver_posting_dir}
+            rm ${real_receiver_posting_dir}  ### Just removeds the symlink file, not the real dir and its contents
         fi
     done
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
@@ -2412,7 +2444,7 @@ function kill_posting_daemon() {
 function get_posting_status() {
     local get_posting_status_receiver_name=$1
     local get_posting_status_receiver_rx_band=$2
-    local get_posting_status_receiver_posting_dir=$(get_recording_dir_path ${get_posting_status_receiver_name} ${get_posting_status_receiver_rx_band})
+    local get_posting_status_receiver_posting_dir=$(get_posting_dir_path ${get_posting_status_receiver_name} ${get_posting_status_receiver_rx_band})
     local get_posting_status_receiver_posting_pid_file=${get_posting_status_receiver_posting_dir}/posting.pid
 
     if [[ ! -d ${get_posting_status_receiver_posting_dir} ]]; then
@@ -2514,7 +2546,7 @@ function uploading_controls(){
 
 ### The spot and noise data is saved in permanent file systems, while temp files are not saved 
 declare UPLOADS_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads.d           ### Put under here all the spot, noise and log files here so they will persist through a reboot/power cycle
-declare UPLOADS_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/uploads.d/       ### Put under here all files which can or should be flushed when the system is started
+declare UPLOADS_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/uploads.d        ### Put under here all files which can or should be flushed when the system is started
 
 ### spots.logs.wsprdaemon.org
 declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon_spots.d
@@ -2600,25 +2632,28 @@ declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_WSPRNET_ROOT_DIR}/upload_spot_file_
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_create_spot_file_list_file()
 {
-    local wspr_spots_files="$@"
-    local wspr_spots_files_count=$(echo "${wspr_spots_files}" | wc -w)
-    local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
-    local wspr_spots_path=$(echo "${wspr_spots_files}" | tr ' ' '\n' | head -1)
-    wspr_spots_path=${wspr_spots_path%/*}
+    local wspr_spots_files="$@"         ### i.e. a list of spot files in the format:  /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_BAND_wspr_spots.txt
     [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() starting with list '${wspr_spots_files}'"
+
+    local wspr_spots_files_count=$(wc -w <<< "${wspr_spots_files}")
+    local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
+    local wspr_spots_root_path=$(echo "${wspr_spots_files}" | tr ' ' '\n' | head -1)  ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_FREQ_wspr_spots.txt
+          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND
+          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI
+          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID
     local cycles_list=$(echo "${wspr_spots_files}" | tr ' ' '\n' | sed 's;.*/;;' | cut -c 1-11 | sort -u )
     local cycles_count=$(echo "${cycles_list}" | wc -l)
-    [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() in '${wspr_spots_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
+    [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() under '${wspr_spots_root_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
+
     local spots_file_list=""
     local spots_file_list_count=0
     local file_spots=""
     local file_spots_count=0
     for cycle in ${cycles_list} ; do
-        local cycle_root_name="${wspr_spots_path}"
-              cycle_root_name="${cycle_root_name}/${cycle}"
+        local cycle_root_name="${wspr_spots_root_path}/*/*/${cycle}"  ### e.g.: /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/*/*/YYMMDD_HHMM
         [[ $verbosity -ge 2 ]] && echo "$(date): upload_create_spot_file_list_file() checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
 
-        local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_path
+        local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_root_path
         [[ $verbosity -ge 2 ]] && printf "$(date): upload_create_spot_file_list_file() checking for number of spots in \n%s\n" "${cycle_files}"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
@@ -2645,20 +2680,22 @@ function uploading_daemon()
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_WSPRNET_SPOTS_DIR}
     while true; do
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() checking for files to upload"
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() checking for files to upload in '${UPLOADS_WSPRNET_SPOTS_DIR}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
         local call_grid_path
         for call_grid_path in ${UPLOADS_WSPRNET_SPOTS_DIR}/* ; do
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found call_grid_path '${call_grid_path}'" 
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() checking for spot files in call_grid_path directory '${call_grid_path}'" 
+            ### Spots from all recievers with the same call/grid are put into this one directory
             local call_grid=${call_grid_path##*/}
             call_grid=${call_grid/=/\/}         ### Restore the '/' in the reporter call sign
             local my_call_sign=${call_grid%_*}
             local my_grid=${call_grid#*_}
-            shopt -s nullglob    ### * expands to NULL if there are no file matches
-            local all_spots_files=( $(echo ${call_grid_path}/*) )
+            shopt -s nullglob    ### * expands to NULL if thereo are no file matches
+            local all_spots_files=( $(echo ${call_grid_path}/*/*/*wspr_spots.txt) )
             if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found no ${my_call_sign}/${my_grid} files to upload"
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found no spot files in '${my_call_sign}/${my_grid}'"
             else
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found spot files in '${my_call_sign}/${my_grid}': '${all_spots_files[@]}'"
                 upload_create_spot_file_list_file ${all_spots_files[@]}
                 local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() found ${my_call_sign}/${my_grid} files to upload: ${wspr_spots_files[@]}"
@@ -2702,7 +2739,6 @@ function uploading_daemon()
                             while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
                                 [[ ${verbosity} -ge 2 ]] && echo "$(date): uploading_daemon() starting curl transfer attempt #$((${CURL_TRIES} - ${xfer_tries_left} + 1))"
                                 declare SPOT_UPLOAD_URL="https://us-central1-iot-data-storage.cloudfunctions.net/wspr?"
-                                set -x
                                 curl "${SPOT_UPLOAD_URL}rcall=${my_call_sign}&rgrid=${my_grid}&rqrg=${recording_band_center_mhz}&date=${signal_date}&time=${signal_time}&sig=${signal_snr}&dt=${signal_dt}&drift=${signal_drift}&tqrg=${signal_freq}&tcall=${signal_call}&tgrid=${signal_grid}&dbm=${signal_pwr}&version=WD-${VERSION}&mode=2" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
 
                                 curl "http://wsprnet.org/post?function=wspr&rcall=${my_call_sign}&rgrid=${my_grid}&rqrg=${recording_band_center_mhz}&date=${signal_date}&time=${signal_time}&sig=${signal_snr}&dt=${signal_dt}&drift=${signal_drift}&tqrg=${signal_freq}&tcall=${signal_call}&tgrid=${signal_grid}&dbm=${signal_pwr}&version=WD-${VERSION}&mode=2" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
@@ -2750,7 +2786,6 @@ function uploading_daemon()
                             if [[ ${verbosity} -ge 3 ]]; then
                                 echo "$(date): uploading_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
                                 cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
-                                set -x
                             fi
                         fi
                         curl -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${my_call_sign} -F grid=${my_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
@@ -2813,7 +2848,7 @@ function uploading_daemon()
 function spawn_uploading_daemon()
 {
     local uploading_pid_file_path=${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}
-    mkdir -p ${UPLOADS_TMP_WSPRNET_PIDFILE_PATH%/*}
+    mkdir -p ${uploading_pid_file_path%/*}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -2824,6 +2859,7 @@ function spawn_uploading_daemon()
             rm -f ${uploading_pid_file_path}
         fi
     fi
+    mkdir -p ${UPLOADS_WSPRNET_LOGFILE_PATH%/*}
     uploading_daemon > ${UPLOADS_WSPRNET_LOGFILE_PATH} 2>&1 &
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 2 ]] && echo "$(date): spawn_uploading_daemon() Spawned new uploading job  with PID '$!'"
@@ -2927,15 +2963,17 @@ function check_for_zombies() {
         fi
     fi
     ### Now check that the uploading daemon is running
-    if [[ -f ${WSPRDAEMON_TMP_DIR}/uploads.d/uploading.pid ]]; then
-        local uploading_pid=$(cat ${WSPRDAEMON_TMP_DIR}/uploads.d/uploading.pid )
+    if [[ -f ${UPLOADS_TMP_WSPRNET_PIDFILE_PATH} ]]; then
+        local uploading_pid=$(cat ${UPLOADS_TMP_WSPRNET_PIDFILE_PATH} )
         if ps ${uploading_pid} > /dev/null; then
             [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_zombies() uploading pid ${uploading_pid} is active"
             expected_and_running_pids="${expected_and_running_pids} ${uploading_pid}"
         else
             [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_zombies() uploading pid ${uploading_pid} is not active"
-            rm -f ${WSPRDAEMON_TMP_DIR}/uploads.d/uploading.pid
+            rm -f ${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}
         fi
+    else
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_zombies() can't find pid file '${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}'"
     fi
 
     ### Next check that all of the pids associated with RUNNING_JOBS are active
@@ -2959,8 +2997,9 @@ function check_for_zombies() {
                 running_rx_list="${running_rx_list} ${job_id}"
                 ### Verify that pid files exist for it
                 local rx_dir_path=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+                local posting_dir_path=$(get_posting_dir_path ${receiver_name} ${receiver_band})
                 shopt -s nullglob
-                local rx_pid_files=$( ls ${rx_dir_path}/{kiwi_recorder,recording,decode,posting}.pid 2> /dev/null | tr '\n' ' ')
+                local rx_pid_files=$( ls ${rx_dir_path}/{kiwi_recorder,recording,decode}.pid ${posting_dir_path}/posting.pid 2> /dev/null | tr '\n' ' ')
                 shopt -u nullglob
                 local expected_pid_files=4
                 if [[ ${receiver_name} =~ ^AUDIO ]]; then
@@ -3444,7 +3483,7 @@ function check_kiwi_wspr_channels() {
         [[ $verbosity -ge 2 ]] && echo "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' not reporting users status or there are no active rx channels on it.  So nothing to do"
         return
     fi
-    [[ $verbosity -ge 4 ]] && printf "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' active listeners:\n${active_receivers_list}\n"
+    [[ $verbosity -ge 4 ]] && printf "$(date): check_kiwi_wspr_channels() Kiwi '%s' active listeners:\n%s\n" "${kiwi_name}" "${active_receivers_list}"
 
     if ! grep -q "wsprdaemon" <<< "${active_receivers_list}" ; then
         [[ $verbosity -ge 2 ]] && echo "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' has no active WD listeners"
@@ -3475,7 +3514,6 @@ function check_kiwi_rx_channels() {
     local kiwi_list=$(list_kiwis)
     [[ $verbosity -ge 2 ]] && echo "$(date): check_kiwi_rx_channels() starting a check of rx channel usage on all Kiwis"
 
-    # set -x
     for kiwi in ${kiwi_list} ; do
         [[ $verbosity -ge 4 ]] && echo "$(date): check_kiwi_rx_channels() check active users on KIWI '${kiwi}'"
         check_kiwi_wspr_channels ${kiwi}
@@ -3869,6 +3907,7 @@ function watchdog_daemon()
         [[ $verbosity -ge 2 ]] && echo "$(date): watchdog_daemon() is awake"
         validate_configuration_file
         update_master_hashtable
+        spawn_uploading_daemon
         check_for_zombies
         start_or_kill_jobs a all
         purge_stale_recordings
