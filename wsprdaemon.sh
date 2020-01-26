@@ -1959,7 +1959,7 @@ function decoding_daemon()
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon() checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
         for wav_file_name in *.wav; do
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() monitoring size of  wav file '${wav_file_name}'"
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): monitoring size of wav file '${wav_file_name}'"
 
             ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writting this 2 minutes of capture and has moved to the next wav_file_name
             local old_wav_file_size=0
@@ -1969,15 +1969,15 @@ function decoding_daemon()
                 old_wav_file_size=${new_wav_file_size}
                 sleep ${WAV_FILE_POLL_SECONDS}
                 new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
-                [[ ${verbosity} -ge 4 ]] && echo "$(date): decoding_daemon() old size ${old_wav_file_size}, new size ${new_wav_file_size}"
+                [[ ${verbosity} -ge 4 ]] && echo "$(date): decoding_daemon(): old size ${old_wav_file_size}, new size ${new_wav_file_size}"
             done
             if [[ -z "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() wav file size loop terminated due to no posting.d subdir"
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wav file size loop terminated due to no posting.d subdir"
                 break
             fi
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() wav file '${wav_file_name}' stabilized at size ${new_wav_file_size}."
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wav file '${wav_file_name}' stabilized at size ${new_wav_file_size}."
             if  [[ ${new_wav_file_size} -lt ${WSPRD_WAV_FILE_MIN_VALID_SIZE} ]]; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() wav file '${wav_file_name}' size ${new_wav_file_size} is too small to be processed by wsprd.  Delete this file and go to next wav file."
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wav file '${wav_file_name}' size ${new_wav_file_size} is too small to be processed by wsprd.  Delete this file and go to next wav file."
                 rm -f ${wav_file_name}
                 continue
             fi
@@ -1986,6 +1986,18 @@ function decoding_daemon()
             wspr_decode_capture_date=${wspr_decode_capture_date:2:8}      ## chop off the '20' from the front
             local wspr_decode_capture_time=${wav_file_name#*T}
             wspr_decode_capture_time=${wspr_decode_capture_time/Z*}
+            local wspr_decode_capture_sec=${wspr_decode_capture_time:4}
+            if [[ ${wspr_decode_capture_sec} != "00" ]]; then
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wav file '${wav_file_name}' size ${new_wav_file_size} shows that recording didn't start at second "00". Delete this file and go to next wav file."
+                rm -f ${wav_file_name}
+                continue
+            fi
+            local wspr_decode_capture_min=${wspr_decode_capture_time:2:2}
+            if [[ ! ${wspr_decode_capture_min:1} =~ [02468] ]]; then
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wav file '${wav_file_name}' size ${new_wav_file_size} shows that recording didn't start on an even minute. Delete this file and go to next wav file."
+                rm -f ${wav_file_name}
+                continue
+            fi
             wspr_decode_capture_time=${wspr_decode_capture_time:0:4}
             local wsprd_input_wav_filename=${wspr_decode_capture_date}_${wspr_decode_capture_time}.wav    ### wsprd prepends the date_time to each new decode in wspr_spots.txt
             local wspr_decode_capture_freq_hz=${wav_file_name#*_}
@@ -1994,10 +2006,13 @@ function decoding_daemon()
             local wspr_decode_capture_band_center_mhz=$( printf "%2.6f\n" $(bc <<< "scale = 5; (${wspr_decode_capture_freq_hz}+1500)/1000000.0" ) )
             ### 
 
+            local wspr_decode_capture_
+            minute=${wspr_decode_capture_time:2}
+
             [[ ! -s ALL_WSPR.TXT ]] && touch ALL_WSPR.TXT
             local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
             if [[ ${all_wspr_size} -gt ${MAX_ALL_WSPR_SIZE} ]]; then
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon() ALL_WSPR.TXT has grown too large, so truncating it"
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): ALL_WSPR.TXT has grown too large, so truncating it"
                 tail -n 1000 ALL_WSPR.TXT > ALL_WSPR.tmp
                 mv ALL_WSPR.tmp ALL_WSPR.TXT
             fi
@@ -2010,33 +2025,52 @@ function decoding_daemon()
             nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
 
             ### If configured, extract signal level statistics to a log file
-            if [[ ${SIGNAL_LEVEL_STATS} == "yes" ]]; then
+            if [[ ${SIGNAL_LEVEL_STATS-yes} == "yes" ]]; then
                 # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
-                local i
                 local pre_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): raw   pre_tx_levels levels '${pre_tx_levels[@]}'"
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): raw   pre_tx_levels  levels '${pre_tx_levels[@]}'"
+                local i
                 for i in $(seq 0 $(( ${#pre_tx_levels[@]} - 1 )) ); do
                     pre_tx_levels[${i}]=$(bc <<< "scale = 2; (${pre_tx_levels[${i}]} + ${rms_adjust})/1")           ### '/1' forces bc to use the scale = 2 setting
                 done
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fixed pre_tx_levels levels '${pre_tx_levels[@]}'"
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): fixed pre_tx_levels  levels '${pre_tx_levels[@]}'"
                 local tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_TX_SEC} ${SIGNAL_LEVEL_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
                 for i in $(seq 0 $(( ${#tx_levels[@]} - 1 )) ); do
                     tx_levels[${i}]=$(bc <<< "scale = 2; (${tx_levels[${i}]} + ${rms_adjust})/1")                   ### '/1' forces bc to use the scale = 2 setting
                 done
                 local post_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): raw   post_tx_levels levels '${post_tx_levels[@]}'"
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): raw   post_tx_levels levels '${post_tx_levels[@]}'"
                 for i in $(seq 0 $(( ${#post_tx_levels[@]} - 1 )) ); do
                     post_tx_levels[${i}]=$(bc <<< "scale = 2; (${post_tx_levels[${i}]} + ${rms_adjust})/1")         ### '/1' forces bc to use the scale = 2 setting
                 done
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fixed post_tx_levels levels '${post_tx_levels[@]}'"
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): fixed post_tx_levels levels '${post_tx_levels[@]}'"
 
-                if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then
+                ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
+                local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
+                /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
+                local c2_FFT_nl=$(cat c2_FFT.txt)
+                local c2_FFT_nl_cal=$(echo "scale=2;var=$c2_FFT_nl;var+=$c2_FFT_nl_adjust;var/=1;var" | bc)
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal}"
+
+                local rms_value=${pre_tx_levels[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
+                if [[  $(bc --mathlib <<< "${post_tx_levels[3]} < ${pre_tx_levels[3]}") -eq "1" ]]; then
+                    rms_value=${post_tx_levels[3]}
+                    [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_level is from post"
+                else
+                    [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_level is from pre"
+                fi
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
+
+                if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} != "yes" ]]; then
+                    local fft_value="NC"      ## i.e. "Not Calculated"
+                else
                     # Apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
                     local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
                     /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
                     mv ${windowed_wav_file} ${wsprd_input_wav_filename}
 
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): running 'sox FFT' on .wav file '${wsprd_input_wav_filename}'"
                     # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
                     nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
                     nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
@@ -2059,26 +2093,9 @@ function decoding_daemon()
                                                                                              # The 0.43429 is simply awk using natual log
                                                                                              #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
                     rm sox_fft_sorted.txt
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fft_value=${fft_value}"
-                else
-                    local fft_value="NC"
+                    [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): fft_value=${fft_value}"
                 fi ## end of 'if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then'
 
-                ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
-                local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
-                /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
-                local c2_FFT_nl=$(cat c2_FFT.txt)
-                local c2_FFT_nl_cal=$(echo "scale=2;var=$c2_FFT_nl;var+=$c2_FFT_nl_adjust;var/=1;var" | bc)
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal}"
-
-                local rms_value=${pre_tx_levels[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
-                if [[  $(bc --mathlib <<< "${post_tx_levels[3]} < ${pre_tx_levels[3]}") -eq "1" ]]; then
-                    rms_value=${post_tx_levels[3]}
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): rms_level is from post"
-                else
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): rms_level is from pre"
-                fi
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
                 ### Output a line output to signal_levels.log which contains 'DATE TIME + three sets of four space-seperated statistics':
                 ###                           Pre Tx                                                        Tx                                                   Post TX
@@ -2087,9 +2104,11 @@ function decoding_daemon()
                 echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
                 local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
                 echo "${signal_level_line}" > ${new_noise_file}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): noise was: '${signal_level_line}'"
             else
                 local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
                 echo "Not recorded" > ${new_noise_file}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): wqe are not configured to log  noise levels"
             fi  ### end of 'if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then...'
 
             rm -f ${wav_file_name} ${wsprd_input_wav_filename}  ### We have comleted processing the wav file, so delete both names for it
@@ -2107,7 +2126,7 @@ function decoding_daemon()
             local dir
             for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
                 ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() decode process is copying ${new_spots_file} and ${new_noise_file} to ${dir}/ monitored by a posting process" 
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): copying ${new_spots_file} and ${new_noise_file} to ${dir}/ monitored by a posting daemon" 
                 cp -p ${new_spots_file} ${new_noise_file} ${dir}/
             done
             rm ${new_spots_file} ${new_noise_file}
