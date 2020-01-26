@@ -1782,10 +1782,105 @@ function get_af_db() {
 ### For each real receiver/band there is one decode daemon and one recording daemon
 ### Waits for a new wav file then decodes and posts it to all of the posting lcient
 
+
 declare -r DECODING_CLIENTS_SUBDIR="decoding_clients.d"     ### Each decoding daemon will create its own subdir where it will copy YYMMDD_HHMM_wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                            ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window.py
 
+declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noisae levels
+declare C2_FFT_CMD=${WSPRDAEMON_TMP_DIR}/c2_noise.py
+
+function decode_create_c2_fft_cmd() {
+    cat > ${C2_FFT_CMD} <<EOF
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Filename: c2_noise.py
+# Program to extract the noise level from the 'wsprd -c' C2 format file
+## V1 by Christoph Mayer. This version V1.1 by Gwyn Griffiths to output a single value
+## being the total power (dB arbitary scale) in the lowest 30% of the Fourier coefficients
+## between 1369.5 and 1630.5 Hz where the passband is flat.
+
+import struct
+import sys
+import numpy as np
+
+fn = sys.argv[1] ## '000000_0001.c2'
+
+with open(fn, 'rb') as fp:
+     ## decode the header:
+     filename,wspr_type,wspr_freq = struct.unpack('<14sid', fp.read(14+4+8))
+
+     ## extract I/Q samples
+     samples = np.fromfile(fp, dtype=np.float32)
+     z = samples[0::2]+1j*samples[1::2]
+     #print(filename,wspr_type,wspr_freq,samples[:100], len(samples), z[:10])
+
+     ## z contains 45000 I/Q samples
+     ## we perform 180 FFTs, each 250 samples long
+     a     = z.reshape(180,250)
+     a    *= np.hanning(250)
+     freqs = np.arange(-125,125, dtype=np.float32)/250*375 ## was just np.abs, square to get power
+     w     = np.square(np.abs(np.fft.fftshift(np.fft.fft(a, axis=1), axes=1)))
+     ## these expressions first trim the frequency range to 1369.5 to 1630.5 Hz to ensure
+     ## a flat passband without bias from the shoulders of the bandpass filter
+     ## i.e. array indices 38:213
+     w_bandpass=w[0:179,38:213]
+     ## partitioning is done on the flattened array of coefficients
+     w_flat_sorted=np.partition(w_bandpass, 9345, axis=None)
+     noise_level_flat=10*np.log10(np.sum(w_flat_sorted[0:9344]))
+     print(' %6.2f' % (noise_level_flat))
+EOF
+    chmod +x ${C2_FFT_CMD}
+}
+
+
+function decode_create_hanning_window_cmd() {
+    cat > ${FFT_WINDOW_CMD} <<EOF
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Filename: wav_window_v1.py
+# January  2020  Gwyn Griffiths
+# Program to apply a Hann window to a wsprdaemon wav file for subsequent processing by sox stat -freq (initially at least)
+ 
+from __future__ import print_function
+import math
+import scipy
+import scipy.io.wavfile as wavfile
+import numpy as np
+import wave
+import sys
+
+WAV_INPUT_FILENAME=sys.argv[1]
+WAV_OUTPUT_FILENAME=sys.argv[2]
+
+# Set up the audio file parameters for windowing
+# fs_rate is passed to the output file
+fs_rate, signal = wavfile.read(WAV_INPUT_FILENAME)   # returns sample rate as int and data as numpy array
+# set some constants
+N_FFT=352                                   # this being the number expected
+N_FFT_POINTS=4096                           # number of input samples in each sox stat -freq FFT (fixed)
+                                            # so N_FFT * N_FFT_POINTS = 1441792 samples, which at 12000 samples per second is 120.15 seconds
+                                            # while we have only 120 seconds, so for now operate with N_FFT-1 to have all filled
+                                            # may decide all 352 are overkill anyway
+N=N_FFT*N_FFT_POINTS
+w=np.zeros(N_FFT_POINTS)
+
+output=np.zeros(N, dtype=np.int16)          # declaring as dtype=np.int16 is critical as the wav file needs to be 16 bit integers
+
+# create a N_FFT_POINTS array with the Hann weighting function
+for i in range (0, N_FFT_POINTS):
+  x=(math.pi*float(i))/float(N_FFT_POINTS)
+  w[i]=np.sin(x)**2
+
+for j in range (0, N_FFT-1):
+  offset=j*N_FFT_POINTS
+  for i in range (0, N_FFT_POINTS):
+     output[i+offset]=int(w[i]*signal[i+offset])
+wavfile.write(WAV_OUTPUT_FILENAME, fs_rate, output)
+EOF
+    chmod +x ${FFT_WINDOW_CMD}
+}
+ 
 function decoding_daemon() 
 {
     local real_receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1839,56 +1934,18 @@ function decoding_daemon()
         local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
         local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
         local fft_adjust=$(bc -l <<< "${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}" )  ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
-        [[ ${verbosity} -ge 1 ]] && echo "decoding_daemon() calculated the Kiwi to require a ${kiwi_amplitude_versus_frequency_correction} dB correction in this band
+        if [[ ${verbosity} -ge 1 ]]; then
+            echo "decoding_daemon() calculated the Kiwi to require a ${kiwi_amplitude_versus_frequency_correction} dB correction in this band
             Adding to that the antenna factor of ${antenna_factor_adjust} dB to results in a total correction of ${total_correction_db}
             rms_adjust=${rms_adjust} comes from ${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}
             fft_adjust=${fft_adjust} comes from ${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}
             rms_adjust and fft_adjust will be ADDed to the raw dB levels"
-
-        cat > ${FFT_WINDOW_CMD} <<EOF
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# Filename: wav_window_v1.py
-# January  2020  Gwyn Griffiths
-# Program to apply a Hann window to a wsprdaemon wav file for subsequent processing by sox stat -freq (initially at least)
- 
-from __future__ import print_function
-import math
-import scipy
-import scipy.io.wavfile as wavfile
-import numpy as np
-import wave
-import sys
-
-WAV_INPUT_FILENAME=sys.argv[1]
-WAV_OUTPUT_FILENAME=sys.argv[2]
-
-# Set up the audio file parameters for windowing
-# fs_rate is passed to the output file
-fs_rate, signal = wavfile.read(WAV_INPUT_FILENAME)   # returns sample rate as int and data as numpy array
-# set some constants
-N_FFT=352                                   # this being the number expected
-N_FFT_POINTS=4096                           # number of input samples in each sox stat -freq FFT (fixed)
-                                            # so N_FFT * N_FFT_POINTS = 1441792 samples, which at 12000 samples per second is 120.15 seconds
-                                            # while we have only 120 seconds, so for now operate with N_FFT-1 to have all filled
-                                            # may decide all 352 are overkill anyway
-N=N_FFT*N_FFT_POINTS
-w=np.zeros(N_FFT_POINTS)
-
-output=np.zeros(N, dtype=np.int16)          # declaring as dtype=np.int16 is critical as the wav file needs to be 16 bit integers
-
-# create a N_FFT_POINTS array with the Hann weighting function
-for i in range (0, N_FFT_POINTS):
-  x=(math.pi*float(i))/float(N_FFT_POINTS)
-  w[i]=np.sin(x)**2
-
-for j in range (0, N_FFT-1):
-  offset=j*N_FFT_POINTS
-  for i in range (0, N_FFT_POINTS):
-     output[i+offset]=int(w[i]*signal[i+offset])
-wavfile.write(WAV_OUTPUT_FILENAME, fs_rate, output)
-EOF
-        chmod +x ${FFT_WINDOW_CMD}
+        fi
+        ## G3ZIL implementation of algorithm using the c2 file by Christoph Mayer
+        local c2_FFT_nl_adjust=$(echo "var=-188.9;var+=$total_correction_db;var" | bc)   # value estimated
+        set +x
+        decode_create_c2_fft_cmd
+        decode_create_hanning_window_cmd
     fi
 
     [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): starting daemon to record '${real_receiver_name},${real_receiver_rx_band}'"
@@ -1950,7 +2007,7 @@ EOF
             if [[ ${real_receiver_rx_band} =~ 60 ]]; then
                 wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
             fi
-            nice ${WSPRD_CMD} ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
+            nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
 
             ### If configured, extract signal level statistics to a log file
             if [[ ${SIGNAL_LEVEL_STATS} == "yes" ]]; then
@@ -1973,41 +2030,46 @@ EOF
                 done
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fixed post_tx_levels levels '${post_tx_levels[@]}'"
 
-                # Apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
-                local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
-                /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
-                mv ${windowed_wav_file} ${wsprd_input_wav_filename}
+                if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then
+                    # Apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
+                    local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
+                    /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
+                    mv ${windowed_wav_file} ${wsprd_input_wav_filename}
 
-                # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
-                nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
-                nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
+                    # Get an FFT level from the wav file.  One could perform many kinds of analysis of this data.  We are simply averaging the levels of the 30% lowest levels
+                    nice sox ${wsprd_input_wav_filename} -n stat -freq 2> sox_fft.txt            # perform the fft
+                    nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
 
-                ### Check to see if we are overflowing the /tmp/wsprdaemon file system
-                local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | grep tmpfs) )
-                local tmp_size=${df_report_fields[1]}
-                local tmp_used=${df_report_fields[2]}
-                local tmp_avail=${df_report_fields[3]}
-                local tmp_percent_used=${df_report_fields[4]::-1}
+                    ### Check to see if we are overflowing the /tmp/wsprdaemon file system
+                    local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | grep tmpfs) )
+                    local tmp_size=${df_report_fields[1]}
+                    local tmp_used=${df_report_fields[2]}
+                    local tmp_avail=${df_report_fields[3]}
+                    local tmp_percent_used=${df_report_fields[4]::-1}
 
-                if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
-                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
-                fi
-                rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
-                nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
-                rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
-                local hann_adjust=6.0
-                local fft_value=$(nice awk -v fft_adj=${fft_adjust} -v hann_adjust=${hann_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj + hann_adjust) ; exit }'  sox_fft_sorted.txt)
+                    if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
+                        [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
+                    fi
+                    rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
+                    nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
+                    rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
+                    local hann_adjust=6.0
+                    local fft_value=$(nice awk -v fft_adj=${fft_adjust} -v hann_adjust=${hann_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj + hann_adjust) ; exit }'  sox_fft_sorted.txt)
                                                                                              # The 0.43429 is simply awk using natual log
                                                                                              #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
-                rm sox_fft_sorted.txt
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fft_value=${fft_value}"
+                    rm sox_fft_sorted.txt
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): fft_value=${fft_value}"
+                else
+                    local fft_value="NC"
+                fi ## end of 'if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then'
 
-                ### Output a line output to signal_levels.log which contains 'DATE TIME + three sets of four space-seperated statistics':
-                ###                           Pre Tx                                                        Tx                                                   Post TX
-                ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'
-                local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${fft_value}" 
-                echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
+                ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
+                local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
+                /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
+                local c2_FFT_nl=$(cat c2_FFT.txt)
+                local c2_FFT_nl_cal=$(echo "scale=2;var=$c2_FFT_nl;var+=$c2_FFT_nl_adjust;var/=1;var" | bc)
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal}"
 
                 local rms_value=${pre_tx_levels[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
                 if [[  $(bc --mathlib <<< "${post_tx_levels[3]} < ${pre_tx_levels[3]}") -eq "1" ]]; then
@@ -2018,43 +2080,37 @@ EOF
                 fi
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
-                local time_year=${wav_file_name:0:4}
-                local time_month=${wav_file_name:4:2}
-                local time_day=${wav_file_name:6:2}
-                local time_hour=${wav_file_name:9:2}
-                local time_minute=${wav_file_name:11:2}
-                local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
-                local timestamp_ms=$(( ${time_epoch} * 1000))
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): uploading signal levels $(( $(TZ=UTC date +%s) - ${time_epoch})) seconds after start of wav file recording"
+                ### Output a line output to signal_levels.log which contains 'DATE TIME + three sets of four space-seperated statistics':
+                ###                           Pre Tx                                                        Tx                                                   Post TX
+                ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'
+                local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${fft_value}    ${c2_FFT_nl_cal}"
+                echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
+                local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
+                echo "${signal_level_line}" > ${new_noise_file}
+            else
+                local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
+                echo "Not recorded" > ${new_noise_file}
+            fi  ### end of 'if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} == "yes" ]]; then...'
 
-                ## If it is enabled, upload to cloud
-                SIGNAL_LEVEL_UPLOAD_URL=${SIGNAL_LEVEL_UPLOAD_URL-https://logs.wsprdaemon.org}    ### Defaults to upload to our cloud server
-		if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
-                    timeout 10 curl --insecure ${SIGNAL_LEVEL_UPLOAD_URL}/upload_radio\?site\=${SIGNAL_LEVEL_UPLOAD_ID}\&receiver\=${real_receiver_name}\&maidenhead=${real_receiver_maidenhead}\&band\=${real_receiver_rx_band}\&fft_level\=${fft_value}\&rms_level\=${rms_value}\&timestamp_ms\=${timestamp_ms} > curl.log 2>&1
-		    local retcode=$?
-		    if [[ ${retcode} -ne 0 ]] && [[ ${verbosity} -ge 0 ]]; then
-			echo "$(date): decoding_daemon(): curl upload to signal data base failed or timed out.  curl.log:"
-			cat  curl.log 
-		     fi
-	        fi
-            fi
             rm -f ${wav_file_name} ${wsprd_input_wav_filename}  ### We have comleted processing the wav file, so delete both names for it
+
             ### 'wsprd' appends the new decodes to ALL_WSPR.TXT, but we are going to post only the new decodes which it puts in the file 'wspr_spots.txt'
             update_hashtable_archive ${real_receiver_name} ${real_receiver_rx_band}
-            ### We need to communicate the recording date_time_freqHz to the posting process
-            local new_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_spots.txt
+
+            ### Forward the recording's date_time_freqHz spot file to the posting daemon which is polling for it.  Do this here so that it is after the very slow sox FFT calcs are finished
+            local new_spots_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_spots.txt
             [[ ! -f wspr_spots.txt ]] && touch wspr_spots.txt  ### Just in case it wasn't created by 'wsprd'
-            cp -p wspr_spots.txt ${new_file}
+            cp -p wspr_spots.txt ${new_spots_file}
 
             ### Copy the renamed wspr_spots.txt to waiting posting daemons
             shopt -s nullglob    ### * expands to NULL if there are no .wav wav_file
             local dir
             for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
                 ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() decode process is copying ${new_file} to ${dir}/ monitored by a posting process" 
-                cp -p ${new_file} ${dir}/
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() decode process is copying ${new_spots_file} and ${new_noise_file} to ${dir}/ monitored by a posting process" 
+                cp -p ${new_spots_file} ${new_noise_file} ${dir}/
             done
-            rm ${new_file}
+            rm ${new_spots_file} ${new_noise_file}
         done
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): decoding_daemon() decoded and posted ALL_WSPR file."
         sleep 1   ###  No need for a long sleep, since recording daemon should be creating next wav file and this daemon will poll on the size of that wav file
@@ -2063,6 +2119,28 @@ EOF
     kill_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
 }
 
+function upload_wsprdaemon_noise() {
+    local time_year=${wav_file_name:0:4}
+    local time_month=${wav_file_name:4:2}
+    local time_day=${wav_file_name:6:2}
+    local time_hour=${wav_file_name:9:2}
+    local time_minute=${wav_file_name:11:2}
+    local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
+    local timestamp_ms=$(( ${time_epoch} * 1000))
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): uploading signal levels $(( $(TZ=UTC date +%s) - ${time_epoch})) seconds after start of wav file recording"
+
+    ## If it is enabled, upload to cloud
+    SIGNAL_LEVEL_UPLOAD_URL=${SIGNAL_LEVEL_UPLOAD_URL-https://logs.wsprdaemon.org}    ### Defaults to upload to our cloud server
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
+        timeout 10 curl --insecure ${SIGNAL_LEVEL_UPLOAD_URL}/upload_radio\?site\=${SIGNAL_LEVEL_UPLOAD_ID}\&receiver\=${real_receiver_name}\&maidenhead=${real_receiver_maidenhead}\&band\=${real_receiver_rx_band}\&fft_level\=${fft_value}\&rms_level\=${rms_value}\&timestamp_ms\=${timestamp_ms} > curl.log 2>&1
+        local retcode=$?
+        if [[ ${retcode} -ne 0 ]] && [[ ${verbosity} -ge 0 ]]; then
+            echo "$(date): decoding_daemon(): curl upload to signal data base failed or timed out.  curl.log:"
+            cat  curl.log 
+        fi
+    fi
+}
+ 
 ### 
 function spawn_decode_daemon() {
     local receiver_name=$1
