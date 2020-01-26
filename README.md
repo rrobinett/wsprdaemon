@@ -31,7 +31,7 @@ This first run of WD will install many, many utilities and libraries, and for so
 
 At then end of a sucessful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once confgured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
 
-## Installation on a system with an existing copy of wsprdaemon not installed using 'git clone'
+## Installation on a system running wsprdaemon that was not installed using 'git clone'
 
 Stop WD with:  
 ```bash
