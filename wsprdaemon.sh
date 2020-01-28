@@ -2061,11 +2061,12 @@ function decoding_daemon()
                 fi
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
-                if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-yes} != "yes" ]]; then
+                if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
                     local fft_value="NC"      ## i.e. "Not Calculated"
                 else
                     # Apply a Hann window to the wav file in 4096 sample blocks to match length of the FFT in sox stat -freq
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): applying windowing to .wav file '${wsprd_input_wav_filename}'"
+                    rm -f *.tmp    ### Flush zombie wav.tmp files, if any were left behind by a previous run of this daemon
                     local windowed_wav_file=${wsprd_input_wav_filename/.wav/.tmp}
                     /usr/bin/python3 ${FFT_WINDOW_CMD} ${wsprd_input_wav_filename} ${windowed_wav_file}
                     mv ${windowed_wav_file} ${wsprd_input_wav_filename}
@@ -2231,12 +2232,12 @@ function posting_daemon()
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
 
     ### Where to put the spots from the one or more real receivers for the upload daemon to find
-    local  upload_dir=${UPLOADS_WSPRNET_SPOTS_DIR}/${my_call_sign//\//=}_${my_grid}/${posting_receiver_name}/${posting_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-    mkdir -p ${upload_dir}
+    local  wsprnet_upload_dir=${UPLOADS_WSPRNET_SPOTS_DIR}/${my_call_sign//\//=}_${my_grid}/${posting_receiver_name}/${posting_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+    mkdir -p ${wsprnet_upload_dir}
 
     ### Create a /tmp/.. dir where this instance of the daemon will process and merge spotfiles.  Then it will copy them to the uploads.d directory in a persistent file system
     local posting_receiver_dir_path=$PWD
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${real_receiver_list[@]}' to '${upload_dir}"
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${real_receiver_list[@]}' to '${wsprnet_upload_dir}"
 
     ### Link the real receivers to this dir
     local posting_source_dir_list=()
@@ -2267,6 +2268,7 @@ function posting_daemon()
 
         ### Wait for all of the real receivers to decode 
         local waiting_for_decodes=yes
+        local printed_waiting=no   ### So we print out the 'waiting...' message only once at the start of each wait cycle
         while [[ ${waiting_for_decodes} == "yes" ]]; do
             ### Start or keep alive decoding daemons for each real receiver
             local real_receiver_name
@@ -2276,12 +2278,12 @@ function posting_daemon()
                 (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() checking for subdirs to have the same ALL_WSPR.TXT.NEW file in them"
+            [[ ${verbosity} -ge 3 ]] && [[ ${printed_waiting} == "no" ]] && printed_waiting=yes && echo "$(date): posting_daemon() checking for subdirs to have the same ALL_WSPR.TXT.NEW file in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
             for posting_dir in ${posting_source_dir_list[@]}; do
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() checking dir ${posting_dir} for wspr_spots.txt files"
+                [[ ${verbosity} -ge 4 ]] && echo "$(date): posting_daemon() checking dir ${posting_dir} for wspr_spots.txt files"
                 if [[ ! -d ${posting_dir} ]]; then
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() expected posting dir ${posting_dir} does not exist, so exiting inner for loop"
                     daemon_stop="yes"
@@ -2307,6 +2309,7 @@ function posting_daemon()
             if [[ -z "${newest_all_wspr_file_path}" ]]; then
                 [[ ${verbosity} -ge 4 ]] && echo "$(date): posting_daemon() found no wspr_spots.txt files"
             else
+                [[ ${verbosity} -ge 3 ]] && printed_waiting=no   ### We have found some spots.txt files, so signal to print 'waiting...' message at the start of the next wait cycle
                 newest_all_wspr_file_name=${newest_all_wspr_file_path##*/}
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found newest wspr_spots.txt == ${newest_all_wspr_file_path} => ${newest_all_wspr_file_name}"
                 ### Flush all *wspr_spots.txt files which don't match the name of this newest file
@@ -2314,7 +2317,7 @@ function posting_daemon()
                 for posting_dir in ${posting_source_dir_list[@]}; do
                     cd ${posting_dir}
                     local file
-                    for file in *; do
+                    for file in *_wspr_spots.txt; do
                         if [[ ${file} != ${newest_all_wspr_file_name} ]]; then
                             [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() is flushing file ${posting_dir}/${file} which doesn't match ${newest_all_wspr_file_name}"
                             rm -f ${file}
@@ -2376,7 +2379,7 @@ function posting_daemon()
         sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}
         ### Now ${wsprd_spots_all_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
-        if [[ ${verbosity} -ge 1 ]]; then
+        if [[ ${posting_receiver_name} =~ MERG.* ]] || [[ ${verbosity} -ge 1 ]]; then
             local source_file_count=${#newest_list[@]}
             local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
             local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
@@ -2411,14 +2414,19 @@ function posting_daemon()
 
         ### Clean out any older ALL_WSPR files
         [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() flushing old ALL_WSPR files"
-        local file
-        for file in ${posting_source_dir_list[@]/#/*} ; do
-            if [[ $file -ot ${newest_all_wspr_file_path} ]]; then
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() is flushing file ${file} which is older than the newest complete set of ALL_WSPR files"
-                rm $file
-            else
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() is preserving file ${file} which is newer than the newest complete set of ALL_WSPR files"
-            fi
+        local posting_source_dir
+        local postring_source_file
+        for posting_source_dir in ${posting_source_dir_list[@]} ; do
+            cd -P ${posting_source_dir}
+            for postring_source_file in *_wspr_spots.txt ; do
+                if [[ ${postring_source_file} -ot ${newest_all_wspr_file_path} ]]; then
+                    [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() is flushing file ${postring_source_file} which is older than the newest complete set of ALL_WSPR files"
+                    rm $postring_source_file
+                else
+                    [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() is preserving file ${postring_source_file} which is same or newer than the newest complete set of ALL_WSPR files"
+                fi
+            done
+            cd - > /dev/null
         done
         ### Clean out all the set of ALL_WSPR which we are about to post
         rm -f ${newest_list[@]}
@@ -2429,14 +2437,15 @@ function posting_daemon()
             continue
         fi
 
-        ### Copy the wspr_spot.txt file we have just created to a uniquely names file in the uploading directory
+        ### Copy the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
         ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
         local recording_info=${newest_all_wspr_file_name/_wspr_spots.txt/}     ### extract the date_time_freq part of the file name
         local recording_freq_hz=${recording_info##*_}
         local recording_date_time=${recording_info%_*}
-        local upload_file_path=${upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+        local upload_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
         cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_dir}"
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+
         if [[ ${verbosity} -ge 8 ]]; then
             echo "$(date): posting_daemon() done processing wav file '${wav_file_name}'"
             local save_filesystem_percent_used=$(df --output=pcent /tmp/wspr-recordings/ | grep -v Use | sed 's/%//')
@@ -2453,6 +2462,31 @@ function posting_daemon()
                 fi
             fi
         fi
+
+        ### Now copy all the noise files to the upload directories for the upload daemon to post to logs.wsprdaemon.org
+        local real_receiver_band=${PWD##*/}
+        for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
+            local real_receiver_name=${real_receiver_dir#*/}
+
+            ### For non-Merged, this should overwite the file copied above.  But for MERGED, we are copying spots from each real receiver in addition to copying MERGed rerceiver spots
+            local  upload_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+            mkdir -p ${upload_dir}
+            local upload_file_path=${upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+            cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+
+            ### Unlike the spot files of MERGed receivers, all the noise files are upoaded from all real receivers
+            local  upload_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+            mkdir -p ${upload_dir}
+
+            local noise_files=${real_receiver_dir}/*_wspr_noise.txt
+            if [[ -n "${noise_files}" ]]; then
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moving '${noise_files}' to '${upload_dir}'"
+                mv ${noise_files} ${upload_dir}
+            else
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found no noise files to copy to upload dir '${upload_dir}'"
+            fi
+        done
     done
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
@@ -2645,29 +2679,31 @@ function uploading_controls(){
 declare UPLOADS_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads.d           ### Put under here all the spot, noise and log files here so they will persist through a reboot/power cycle
 declare UPLOADS_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/uploads.d        ### Put under here all files which can or should be flushed when the system is started
 
+declare UPLOADS_WSPRDAEMON_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon.d
+declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d
+
 ### spots.logs.wsprdaemon.org
-declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon_spots.d
-declare UPLOADS_WSPRDAEMON_SPOTS_DIR=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/wspr_spots.d
+declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/spots.d
 declare UPLOADS_WSPRDAEMON_SPOTS_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_SPOTS_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/successful_spot_uploads.log
 
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprdaemon_spots.d
+declare UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/spots.d
 declare UPLOADS_TMP_WSPRDAEMON_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/wspr_spots.txt
 declare UPLOADS_TMP_WSPRDAEMON_SPOTS_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/curl.log
 declare UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/uploading.pid
 declare UPLOADS_TMP_WSPRDAEMON_SPOTS_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/successful_spot_uploads.log
 
 ### noise.logs.wsprdaemon.org
-declare UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon_noise.d
-declare UPLOADS_WSPRDAEMON_NOISE_DIR=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/wspr_noise.d
+declare UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/noise.d
 declare UPLOADS_WSPRDAEMON_NOISE_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_NOISE_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/successful_noise_uploads.log
 
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprdaemon_noise.d
+declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/noise.d
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_TXT_FILE=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/wspr_noises.txt
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/curl.log
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/uploading.pid
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/successful_noise_uploads.log
+
 
 ### wsprnet.org 
 declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet.d      
