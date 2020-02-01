@@ -332,7 +332,7 @@ cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 #SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name of the subdir to upload to on graphs.wsprdaemon.org
 #SIGNAL_LEVEL_UPLOAD_URL="us-central1-iot-data-storage.cloudfunctions.net"   ## use this until we get 'logs.wsprdaemon.org' working as a URL.
 #SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP the ${WSPRDAEMON_TMP_DIR}/noise_graphs.png graphs file to graphs.wsprdaemon.org
-#SIGNAL_LEVEL_LOCAL_GRAPHS=""    ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then ensure the local Apache server is running and 'ln -s ${WSPRDAEMON_TMP_DIR}/noise_graphs.png /var/www/html/'
+#SIGNAL_LEVEL_LOCAL_GRAPHS="no"    ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then ensure the local Apache server is running and 'ln -s ${WSPRDAEMON_TMP_DIR}/noise_graphs.png /var/www/html/'
 
 #CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
@@ -1934,16 +1934,15 @@ function decoding_daemon()
 
     if [[ -f ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv ]]; then
         local cal_vals=($(sed -n '/^[0-9]/s/,/ /gp' ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv))
-    else
-        local cal_vals=(320 246 -50.4 -41.0 -13.9 13.1 -188.9)         ### These are default values
     fi
-    local cal_nom_bw=${cal_vals[0]}        ### In this code I assume this is 320 hertz
-    local cal_ne_bw=${cal_vals[1]}
-    local cal_rms_offset=${cal_vals[2]}
-    local cal_fft_offset=${cal_vals[3]}
-    local cal_fft_band=${cal_vals[4]}
-    local cal_threshold=${cal_vals[5]}
-    local cal_c2_correction=${cal_vals[6]}
+    ### In each of these assignments, if cal_vals[] was not defined above from the file 'noise_ca_vals.csv', then use the default value.  e.g. cal_c2_correction will get the default value '-187.7
+    local cal_nom_bw=${cal_vals[0]-320}        ### In this code I assume this is 320 hertz
+    local cal_ne_bw=${cal_vals[1]-246}
+    local cal_rms_offset=${cal_vals[2]--50.4}
+    local cal_fft_offset=${cal_vals[3]--41.0}
+    local cal_fft_band=${cal_vals[4]-13.9}
+    local cal_threshold=${cal_vals[5]-13.1}
+    local cal_c2_correction=${cal_vals[6]--187.7}
 
     local kiwi_amplitude_versus_frequency_correction="$(bc <<< "scale = 10; -1 * ( (2.2474 * (10 ^ -7) * (${wspr_band_freq_mhz} ^ 6)) - (2.1079 * (10 ^ -5) * (${wspr_band_freq_mhz} ^ 5)) + \
                                                                                      (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
@@ -2429,35 +2428,42 @@ function posting_daemon()
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
-            ### For non-Merged, this should overwite the file copied above.  But for MERGED, we are copying spots from each real receiver in addition to copying MERGed rerceiver spots
-            local  upload_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-            mkdir -p ${upload_dir}
-            local upload_file_path=${upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-            cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+            if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+                ### If 'no', then don't copy spots.txt, but leave that file for the upload to wsprnet.org down below
+                ### For non-Merged, this should overwite the file copied above.  But for MERGED, we are copying spots from each real receiver in addition to copying MERGed rerceiver spots
+                local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+                mkdir -p ${upload_wsprdaemon_spots_dir}
+                local upload_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+                cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+            fi
 
             ### Unlike the spot files of MERGed receivers, all the noise files are upoaded from all real receivers
-            local  upload_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-            mkdir -p ${upload_dir}
+            local  upload_wsprdaemon_noise_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+            mkdir -p ${upload_wsprdaemon_noise_dir}
 
             local noise_files=${real_receiver_dir}/*_wspr_noise.txt
             if [[ -n "${noise_files}" ]]; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moving '${noise_files}' to '${upload_dir}'"
-                mv ${noise_files} ${upload_dir}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moving '${noise_files}' to '${upload_wsprdaemon_noise_dir}'"
+                if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+                    mv ${noise_files} ${upload_wsprdaemon_noise_dir}
+                else
+                    rm -f ${noise_files}
+                fi
             else
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found no noise files to copy to upload dir '${upload_dir}'"
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found no noise files to copy to upload dir '${upload_wsprdaemon_noise_dir}'"
             fi
         done
  
-        ### If there were spots, then copy the one spr_spot.tx.BEST file to the uploads
+        ### If there were spots, then copy the one wspr_spot.tx.BEST file to the wsprnet.org upload directory for the upload_daemon to handle
         if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
             [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found no signals to post in any of the ALL_WSPR files.  Sleeping..."
         else
             ### Copy the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
             ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
-           local upload_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-            cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+           local upload_wsprnet_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+            cp -p ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path}
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path}"
 
        fi
         sleep ${WAV_FILE_POLL_SECONDS}
