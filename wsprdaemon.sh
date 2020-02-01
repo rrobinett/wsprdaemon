@@ -2344,7 +2344,7 @@ function posting_daemon()
 
         local newest_list=(${posting_source_dir_list[@]/%/\/${newest_all_wspr_file_name}})
         cat ${newest_list[@]} > ${wsprd_spots_all_file_path}
-        if [[ ${verbosity} -ge 3 ]]; then
+        if [[ ${verbosity} -ge 3 ]] && [[ ${#newest_list[@]} -gt 0 ]]; then
             echo "$(date): posting_daemon() merging and sorting files '${newest_list[@]}' to ${wsprd_spots_all_file_path}" 
             echo "$(date): posting_daemon() cat ${newest_list[@]} > ${wsprd_spots_all_file_path}"
             grep . ${newest_list[@]}
@@ -2354,7 +2354,7 @@ function posting_daemon()
 
         ### Get a list of all calls found in all of the receiver's decodes
         local posting_call_list=$( cat ${wsprd_spots_all_file_path} | awk '{print $7}'| sort -u )
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found this set of unique calls: '${posting_call_list}'"
+        [[ ${verbosity} -ge 3 ]] && [[ -n "${posting_call_list}" ]] && echo "$(date): posting_daemon() found this set of unique calls: '${posting_call_list}'"
 
         # For each of those calls, get the decode line with the highest SNR
         rm -f best_snrs.tmp
@@ -2420,39 +2420,11 @@ function posting_daemon()
         ### Clean out all the set of ALL_WSPR which we are about to post
         rm -f ${newest_list[@]}
 
-        if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found no signals to post in any of the ALL_WSPR files.  Sleeping..."
-            sleep ${WAV_FILE_POLL_SECONDS}
-            continue
-        fi
-
-        ### Copy the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
-        ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
         local recording_info=${newest_all_wspr_file_name/_wspr_spots.txt/}     ### extract the date_time_freq part of the file name
         local recording_freq_hz=${recording_info##*_}
         local recording_date_time=${recording_info%_*}
-        local upload_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-        cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
-
-        if [[ ${verbosity} -ge 8 ]]; then
-            echo "$(date): posting_daemon() done processing wav file '${wav_file_name}'"
-            local save_filesystem_percent_used=$(df --output=pcent /tmp/wspr-recordings/ | grep -v Use | sed 's/%//')
-            if [[ -f ${wav_file_name} ]] && [[ -s curl.sh ]] ; then
-                local save_wav_path=~/save_wav.d
-                local save_filesystem_percent_used=$(df --output=pcent ${save_wav_path}  | grep -v Use | sed 's/%//')
-                local MAX_PERCENT_USE_OF_SAVE_WAV_FILE_SYSTEM=75    ## Stop from flooding the / file system when / is 75% full.
-                if [[ "${save_filesystem_percent_used}" -gt ${MAX_PERCENT_USE_OF_SAVE_WAV_FILE_SYSTEM} ]]; then
-                    mkdir -p ${save_wav_path}
-                    cp -p ${wav_file_name} ${save_wav_path}/
-                    printf "$(date): saved wav file because there were signals detected:\n$(cat curl.sh)\n"
-                else
-                    printf "$(date): WARNING: there were signals detected but ${save_wav_path} file system is too full\n"
-                fi
-            fi
-        fi
-
-        ### Now copy all the noise files to the upload directories for the upload daemon to post to logs.wsprdaemon.org
+ 
+        ###  In every 2 minute cycle copy all the noise files to the upload directories for the upload daemon to post to logs.wsprdaemon.org
         local real_receiver_band=${PWD##*/}
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
@@ -2476,6 +2448,19 @@ function posting_daemon()
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found no noise files to copy to upload dir '${upload_dir}'"
             fi
         done
+ 
+        ### If there were spots, then copy the one spr_spot.tx.BEST file to the uploads
+        if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
+            [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found no signals to post in any of the ALL_WSPR files.  Sleeping..."
+        else
+            ### Copy the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
+            ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
+           local upload_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+            cp -p ${wsprd_spots_best_file_path} ${upload_file_path}
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_file_path}"
+
+       fi
+        sleep ${WAV_FILE_POLL_SECONDS}
     done
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
@@ -3067,6 +3052,8 @@ function upload_line_to_wsprdaemon() {
     local file_path=$1
     local file_line="$2"
     local my_root_dir=$3
+    local my_tmp_root_dir=$4
+    local my_curl_log_file=${my_tmp_root_dir}/curl.log
     local file_type=${file_path##*_wspr_}
 
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
@@ -3142,17 +3129,16 @@ function upload_line_to_wsprdaemon() {
     esac
 
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() in $PWD starting 'curl --max-time ${UPLOAD_CURL_TIMEOUT} --insecure ${curl_args}'"
-    curl --max-time ${UPLOAD_CURL_TIMEOUT} --insecure "${curl_args}" > ${my_root_dir}/curl.log 2>&1
+    curl --max-time ${UPLOAD_CURL_TIMEOUT} --insecure "${curl_args}" > ${my_curl_log_file} 2>&1
     local retcode=$?
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() done"
     if [[ ${retcode} -eq 0 ]] ; then
         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() curl successful"
     else
-        if [[ ${verbosity} -ge 1 ]]; then
-            echo "$(date): upload_line_to_wsprdaemon(): curl upload to signal data base failed or timed out.  curl.log:"
-            cat  ${my_root_dir}/curl.log 
-        fi
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): curl upload to signal data base failed or timed out.  curl.log:"
     fi
+    [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_line_to_wsprdaemon() curl args '%s' => \ncurl log '${my_curl_log_file}':\n%s\n" "${curl_args}" "$(cat ${my_curl_log_file})"
+
     return ${retcode}
  }
  
@@ -3160,6 +3146,8 @@ function upload_line_to_wsprdaemon() {
 function upload_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     local source_root_dir=$1
+    local source_tmp_root_dir=$2
+
     mkdir -p ${source_root_dir}
     while true; do
         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
@@ -3188,7 +3176,7 @@ function upload_to_wsprdaemon_daemon() {
                     while read upload_line; do
                         ### Parse the spots.txt or noise.txt line to determine the curl URL and arg`
                         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting curl upload from '${upload_file}' of line ${upload_line}"
-                        upload_line_to_wsprdaemon ${upload_file} "${upload_line}" ${source_root_dir}
+                        upload_line_to_wsprdaemon ${upload_file} "${upload_line}" ${source_root_dir} ${source_tmp_root_dir}
                         local ret_code=$?
                         if [[ ${ret_code} -eq 0 ]]; then
                             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprdaemon_daemon() curl reports successful upload of line '${upload_line}'"
@@ -3217,8 +3205,9 @@ function upload_to_wsprdaemon_daemon() {
 
 function spawn_upload_to_wsprdaemon_daemon() {
     local uploading_root_dir=$1
-    local uploading_pid_file_path=$2
-    local uploading_log_file_path=$3
+    local uploading_tmp_root_dir=$2
+    local uploading_log_file_path=${uploading_tmp_root_dir}/uploads.log
+    local uploading_pid_file_path=${uploading_tmp_root_dir}/uploading.pid  ### Must match UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH or UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH
     mkdir -p ${uploading_pid_file_path%/*}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
@@ -3231,7 +3220,7 @@ function spawn_upload_to_wsprdaemon_daemon() {
         fi
     fi
     mkdir -p ${uploading_log_file_path%/*}
-    upload_to_wsprdaemon_daemon ${uploading_root_dir} > ${uploading_log_file_path} 2>&1 &
+    upload_to_wsprdaemon_daemon ${uploading_root_dir} ${uploading_tmp_root_dir} > ${uploading_log_file_path} 2>&1 &
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 2 ]] && echo "$(date): spawn_upload_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
 }
@@ -3286,8 +3275,8 @@ function upload_to_wsprdaemon_daemon_status()
 function spawn_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_daemons() start"
     spawn_upload_to_wsprnet_daemon
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_LOGFILE_PATH}
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_LOGFILE_PATH}
+    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
+    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
 }
 
 function kill_upload_daemons() {
