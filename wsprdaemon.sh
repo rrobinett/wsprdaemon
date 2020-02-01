@@ -2267,7 +2267,7 @@ function posting_daemon()
                 (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            [[ ${verbosity} -ge 3 ]] && [[ ${printed_waiting} == "no" ]] && printed_waiting=yes && echo "$(date): posting_daemon() checking for subdirs to have the same ALL_WSPR.TXT.NEW file in them" 
+            [[ ${verbosity} -ge 3 ]] && [[ ${printed_waiting} == "no" ]] && printed_waiting=yes && echo "$(date): posting_daemon() checking for subdirs to have the same *_wspr_spots.txt in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
@@ -2344,7 +2344,7 @@ function posting_daemon()
 
         local newest_list=(${posting_source_dir_list[@]/%/\/${newest_all_wspr_file_name}})
         cat ${newest_list[@]} > ${wsprd_spots_all_file_path}
-        if [[ ${verbosity} -ge 3 ]] && [[ ${#newest_list[@]} -gt 0 ]]; then
+        if [[ ${verbosity} -ge 4 ]] && [[ ${#newest_list[@]} -gt 0 ]]; then
             echo "$(date): posting_daemon() merging and sorting files '${newest_list[@]}' to ${wsprd_spots_all_file_path}" 
             echo "$(date): posting_daemon() cat ${newest_list[@]} > ${wsprd_spots_all_file_path}"
             grep . ${newest_list[@]}
