@@ -3028,7 +3028,7 @@ function upload_to_wsprnet_daemon_status()
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprnet uploading daemon with pid '${uploading_pid}' is running"
+                echo "Wsprnet    spots uploading daemon with pid '${uploading_pid}' is running"
             else
                 echo "$(date): upload_to_wsprnet_daemon_status() with pid ${uploading_pid} id running"
             fi
@@ -3042,7 +3042,7 @@ function upload_to_wsprnet_daemon_status()
         fi
     else
         if [[ $verbosity -eq 0 ]] ; then
-            echo "Wsprnet uploading daemon found no pid file"
+            echo "There is no Wsprnet spots uploading daemon pid file"
         else
             echo "$(date): upload_to_wsprnet_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
         fi
@@ -3251,11 +3251,16 @@ function kill_upload_to_wsprdaemon_daemon()
 function upload_to_wsprdaemon_daemon_status()
 {
     local uploading_pid_file_path=$1
+    if [[ ${uploading_pid_file_path} == ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH} ]] ; then
+        local data_type="noise"
+    else
+        local data_type="spots"
+    fi
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon uploading daemon pid file '${uploading_pid_file_path}' containing  pid '${uploading_pid}' is running"
+                echo "Wsprdaemon ${data_type} uploading daemon with pid '${uploading_pid}' is running"
             else
                 echo "$(date): upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
             fi
