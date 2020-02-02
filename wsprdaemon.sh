@@ -1940,7 +1940,7 @@ function decoding_daemon()
     local cal_ne_bw=${cal_vals[1]-246}
     local cal_rms_offset=${cal_vals[2]--50.4}
     local cal_fft_offset=${cal_vals[3]--41.0}
-    local cal_fft_band=${cal_vals[4]-13.9}
+    local cal_fft_band=${cal_vals[4]--13.9}
     local cal_threshold=${cal_vals[5]-13.1}
     local cal_c2_correction=${cal_vals[6]--187.7}
 
