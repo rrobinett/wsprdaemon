@@ -1131,7 +1131,7 @@ function sleep_until_next_even_minute() {
     local -i sleep_seconds=$(seconds_until_next_even_minute)
     local wakeup_time=$(date --utc --iso-8601=minutes --date="$((${sleep_seconds} + 10)) seconds")
     wakeup_time=${wakeup_time//[-:]/}
-    wakeup_time=${wakeup_time//+0000/Z}
+    wakeup_time=${wakeup_time//+0000/00Z}      ## echo  'HHMM00Z'
     echo ${wakeup_time}
     sleep ${sleep_seconds}
 }
