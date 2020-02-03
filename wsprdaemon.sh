@@ -2389,7 +2389,7 @@ function posting_daemon()
                 for file in ${newest_list[@]}; do
                     local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
                     if [[ -z "$rx_snr" ]]; then
-                        printf "%8s" ""
+                        printf "%8s" "*"
                     elif [[ $rx_snr == $posted_snr ]]; then
                         printf "%7s%1s" $rx_snr "p"
                     else
@@ -3106,7 +3106,7 @@ function upload_line_to_wsprdaemon() {
             local real_receiver_maidenhead=${my_grid}
             local real_receiver_rx_band=$(get_wspr_band_name_from_freq_hz ${file_name_elements[2]})
             [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() noise freq '${file_name_elements[2]}'  => band '${real_receiver_rx_band}'"
-            local fft_value=${line_array[12]}
+            local sox_fft_value=${line_array[12]}
             local pre_rms_level=${line_array[3]}
             local post_rms_level=${line_array[11]}
             if [[ $(bc <<< "${post_rms_level} < ${pre_rms_level}") -eq 1 ]] ; then
@@ -3116,7 +3116,7 @@ function upload_line_to_wsprdaemon() {
                 local rms_value=${pre_rms_level}
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() choosing pre_rms for rms_value=${pre_rms_level}. post=${post_rms_level}"
             fi
-            local c2_level=${line_array[13]}
+            local c2_fft_value=${line_array[13]}
             ### Time comes from the filen2me 
             local time_year=20${file_name_elements[0]:0:2}
             local time_month=${file_name_elements[0]:2:2}
@@ -3125,7 +3125,7 @@ function upload_line_to_wsprdaemon() {
             local time_minute=${file_name_elements[1]:2:2}
             local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
             local timestamp_ms=$(( ${time_epoch} * 1000))
-            curl_args="${UPLOADS_WSPRDAEMON_URL}/upload_radio?site=${SIGNAL_LEVEL_UPLOAD_ID}&receiver=${real_receiver_name}&maidenhead=${real_receiver_maidenhead}&band=${real_receiver_rx_band}&fft_level=${fft_value}&rms_level=${rms_value}&c2_level=${c2_level}&timestamp_ms=${timestamp_ms}"
+            curl_args="${UPLOADS_WSPRDAEMON_URL}/upload_radio?site=${SIGNAL_LEVEL_UPLOAD_ID}&receiver=${real_receiver_name}&maidenhead=${real_receiver_maidenhead}&band=${real_receiver_rx_band}&fft_level=${sox_fft_value}&rms_level=${rms_value}&c2_level=${c2_fft_value}&timestamp_ms=${timestamp_ms}"
             true
             ;;
         *)
@@ -4615,8 +4615,8 @@ for csv_file_path in csv_file_path_list:
     ax1.xaxis.set_major_locator(loc)
 
     #   set y axes lower and upper limits
-    y_dB_lo=-165
-    y_dB_hi=-115
+    y_dB_lo=-175
+    y_dB_hi=-105
     y_K_lo=10**((y_dB_lo-30)/10.)*1e23/1.38
     y_K_hi=10**((y_dB_hi-30)/10.)*1e23/1.38
     ax1.set_ylim([y_dB_lo, y_dB_hi])
