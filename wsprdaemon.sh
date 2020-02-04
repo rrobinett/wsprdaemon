@@ -861,27 +861,28 @@ function check_for_needed_utilities()
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
             sudo apt-get install sox --assume-yes
         fi
-        if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
-            ### Get the Python packages needed to create the graphs.png
-            if ! dpkg -l | grep -wq python3-matplotlib; then
-                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
+    fi
+    if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
+        ### Get the Python packages needed to create the graphs.png
+        if ! dpkg -l | grep -wq python3-matplotlib; then
+            # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+            sudo apt-get install python3-matplotlib --assume-yes
+        fi
+        if ! dpkg -l | grep -wq python3-scipy; then
+            # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+            sudo apt-get install python3-scipy --assume-yes
+        fi
+        if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
+            ## Ensure that Apache is installed and running
+            if ! dpkg -l | grep -wq apache2 ; then
+                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-matplotlib --assume-yes
+                sudo apt-get install apache2 -y --fix-missing
             fi
-            if ! dpkg -l | grep -wq python3-scipy; then
-                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
-                [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install python3-scipy --assume-yes
-            fi
-            if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
-                ## Ensure that Apache is installed and running
-                if ! dpkg -l | grep -wq apache2 ; then
-                    # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
-                    [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                    sudo apt-get install apache2 -y --fix-missing
-                fi
-                local index_tmp_file=${WSPRDAEMON_TMP_DIR}/index.html
-                cat > ${index_tmp_file} <<EOF
+            local index_tmp_file=${WSPRDAEMON_TMP_DIR}/index.html
+            cat > ${index_tmp_file} <<EOF
 <html>
 <header><title>This is title</title></header>
 <body>
@@ -889,25 +890,24 @@ function check_for_needed_utilities()
 </body>
 </html>
 EOF
-                if ! diff ${index_tmp_file} ${SIGNAL_LEVELS_WWW_INDEX_FILE} > /dev/null; then
-                    sudo cp -p  ${SIGNAL_LEVELS_WWW_INDEX_FILE} ${SIGNAL_LEVELS_WWW_INDEX_FILE}.orig
-                    sudo mv     ${index_tmp_file}               ${SIGNAL_LEVELS_WWW_INDEX_FILE}
-                fi
-                if [[ ! -f ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE} ]]; then
-                    ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
-                    touch        ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
-                    sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
-                fi
+            if ! diff ${index_tmp_file} ${SIGNAL_LEVELS_WWW_INDEX_FILE} > /dev/null; then
+                sudo cp -p  ${SIGNAL_LEVELS_WWW_INDEX_FILE} ${SIGNAL_LEVELS_WWW_INDEX_FILE}.orig
+                sudo mv     ${index_tmp_file}               ${SIGNAL_LEVELS_WWW_INDEX_FILE}
             fi
-            if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
-                if ! dpkg -l | grep -wq sshpass ; then
-                    # ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
-                    [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                    sudo apt-get install sshpass --assume-yes
-                fi
+            if [[ ! -f ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE} ]]; then
+                ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
+                touch        ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
+                sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
             fi
-        fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
-    fi  ## if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS:-no} == "yes" ]]; then
+        fi
+        if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
+            if ! dpkg -l | grep -wq sshpass ; then
+                # ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
+                [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+                sudo apt-get install sshpass --assume-yes
+            fi
+        fi
+    fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     if ! python -c "import astral" 2> /dev/null ; then
         if ! sudo apt-get install python-astral; then
             if !  pip install astral ; then
@@ -4584,11 +4584,11 @@ for csv_file_path in csv_file_path_list:
     timestamp  = genfromtxt(csv_file_path, delimiter=',', usecols=0, dtype=str)
     noise_vals = genfromtxt(csv_file_path, delimiter=',')[:,1:]  
 
-    n_recs=int((noise_vals.size)/14)              # there are 13 comma separated fields in each row, all in one dimensional array as read
+    n_recs=int((noise_vals.size)/14)              # there are 14 comma separated fields in each row, all in one dimensional array as read
     noise_vals=noise_vals.reshape(n_recs,14)      # reshape to 2D array with n_recs rows and 13 columns
 
     # now  extract the freq method data and calibrate
-    freq_noise_vals=noise_vals[:,12]  ### +freq_offset+10*np.log10(1/freq_ne_bw)+fft_band+threshold
+    freq_noise_vals=noise_vals[:,13]  ### +freq_offset+10*np.log10(1/freq_ne_bw)+fft_band+threshold
     rms_trough_start=noise_vals[:,3]
     rms_trough_end=noise_vals[:,11]
     rms_noise_vals=np.minimum(rms_trough_start, rms_trough_end)
