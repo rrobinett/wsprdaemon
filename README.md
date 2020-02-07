@@ -1,4 +1,12 @@
-# wsprdaemon (WD) Latest version is v2.6f 
+# wsprdaemon (WD) Latest version is v2.7a 
+
+To upgrade from 2.6*:
+
+1) cd ~/wsprdaemon
+2) stop WD with 'wd -z'
+3) execute 'git pull'
+4) free disk space with 'rm -rf /tmp/wsprdaemon/*'
+5) start WD with 'wd -a'
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
