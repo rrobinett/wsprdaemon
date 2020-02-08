@@ -3,10 +3,11 @@
 To upgrade from 2.6*:
 
 1) cd ~/wsprdaemon
-2) stop WD with 'wd -z'
+2) stop WD with '~/wsprdaemon/wsprdaemon.sh -z'
 3) execute 'git pull'
 4) free disk space with 'rm -rf /tmp/wsprdaemon/*'
-5) start WD with 'wd -a'
+5) clean out legacy noise data with 'rm -rf /home/pi/wsprdaemon/signal_levels/*'
+6) start WD with '~/wsprdaemon/wsprdaemon.sh -a'
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
