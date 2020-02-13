@@ -124,8 +124,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
 #declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
 #declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-declare -r VERSION=2.7a             ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
-                                    ### TODO: use Christoph's python code to obtain noise levels
+#declare -r VERSION=2.7a             ### Cache noise and spot databases
+                                    ### Use Christoph's python code to obtain noise levels
+declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
+                                    ### TODO: Upload noise and enhanced spots to wsprdaemon.org InfluxDBs
                                     ### TODO: add VHF/UHF support using Soapy API
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
@@ -4494,12 +4496,20 @@ function plot_noise() {
         fi
         if [[ "${SIGNAL_LEVEL_UPLOAD_GRAPHS-no}" == "yes" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
             ### The user must configure this system to autologin to the wsprdaemon account on this cloud server for this to work
-            local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
-            local graphs_server_password=${SIGNAL_LEVEL_UPLOAD_GRAPHS_PASSWORD-wsprdaemon-noise}
-            sshpass -p ${graphs_server_password} ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -p ${LOG_SERVER_PORT-22} wsprdaemon@${graphs_server_address} "mkdir -p ${SIGNAL_LEVEL_UPLOAD_ID}" 2>/dev/null
-            sshpass -p ${graphs_server_password} scp -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -P ${LOG_SERVER_PORT-22} ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} \
-                wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/} > /dev/null 2>&1
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() configured to upload  web page graphs, so 'scp ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/}'"
+            if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS_FTP_MODE:-yes} == yes ]]; then
+                local upload_file_name=${SIGNAL_LEVEL_UPLOAD_ID}-$(date -u +"%y-%m-%d-%H-%M")-noise_graph.png
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() starting ftp upload of ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} to ftp://${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}"
+                curl -s -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}:${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}\
+                    ftp://${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() ftp upload is complete"
+            else
+                local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
+                local graphs_server_password=${SIGNAL_LEVEL_UPLOAD_GRAPHS_PASSWORD-wsprdaemon-noise}
+                sshpass -p ${graphs_server_password} ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -p ${LOG_SERVER_PORT-22} wsprdaemon@${graphs_server_address} "mkdir -p ${SIGNAL_LEVEL_UPLOAD_ID}" 2>/dev/null
+                sshpass -p ${graphs_server_password} scp -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -P ${LOG_SERVER_PORT-22} ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} \
+                    wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/} > /dev/null 2>&1
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() configured to upload  web page graphs, so 'scp ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/}'"
+            fi
         fi
     fi
 }
