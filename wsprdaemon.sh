@@ -124,12 +124,14 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
 #declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
 #declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-declare -r VERSION=2.7a             ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
+#declare -r VERSION=2.7a             
+declare -r VERSION=2.7b             ### FIX: always install 'sox'
+                                    ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
                                     ### TODO: use Christoph's python code to obtain noise levels
                                     ### TODO: add VHF/UHF support using Soapy API
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
-if [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
+if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
@@ -845,7 +847,17 @@ function check_for_needed_utilities()
         sudo apt-get install bc --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'bc' which is needed for "
+            echo "FATAL ERROR: Failed to install 'bc' which is needed for floating point frequency calculations"
+            exit 1
+        fi
+    fi
+    if ! dpkg -l | grep -wq sox  ; then
+        # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install sox --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
             exit 1
         fi
     fi
@@ -855,11 +867,6 @@ function check_for_needed_utilities()
             echo " WARNING: the ${WSPRDAEMON_TMP_DIR}/ file system is ${tmp_wspr_captures__file_system_size_1k_blocks} in size"
             echo "   which is less than the 307200 size needed for an all-WSPR band system"
             echo "   You should consider increasing its size by editing /etc/fstab and remounting ${WSPRDAEMON_TMP_DIR}/"
-        fi
-        if ! dpkg -l | grep -wq sox  ; then
-            # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install sox --assume-yes
         fi
     fi
     if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
@@ -909,9 +916,9 @@ EOF
         fi
     fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     if ! python -c "import astral" 2> /dev/null ; then
-        if ! sudo apt-get install python-astral; then
+        if ! sudo apt-get install python-astral -y ; then
             if !  pip install astral ; then
-                if ! sudo apt-get install python-pip; then
+                if ! sudo apt-get install python-pip -y ; then
                     echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip' needed to install the Python 'astral' library"
                 else
                     if !  pip install astral ; then
