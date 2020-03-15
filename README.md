@@ -1,4 +1,5 @@
-# wsprdaemon (WD) Latest version is v2.7a 
+# wsprdaemon (WD) Latest version is v2.7b
+(fixed intallation problem on virgin Raspberry Pis)
 
 To upgrade from 2.6*:
 
