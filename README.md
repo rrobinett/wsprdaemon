@@ -1,15 +1,6 @@
 # wsprdaemon (WD) Latest version is v2.7b
 (fixed intallation problem on virgin Raspberry Pis)
 
-To upgrade from 2.6*:
-
-1) cd ~/wsprdaemon
-2) stop WD with '~/wsprdaemon/wsprdaemon.sh -z'
-3) execute 'git pull'
-4) free disk space with 'rm -rf /tmp/wsprdaemon/*'
-5) clean out legacy noise data with 'rm -rf /home/pi/wsprdaemon/signal_levels/*'
-6) start WD with '~/wsprdaemon/wsprdaemon.sh -a'
-
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
 This is a large bash script which utilizes [kiwirecorder.py](https://github.com/jks-prv/kiwiclient) and other library and utility commands to record WSPR spots from one or more [Kiwis](http://kiwisdr.com), audio adapters and (for VHF/UHF) [RTL-SDRs](https://www.rtl-sdr.com/about-rtl-sdr/) and *reliably* post them to [wsprnet.org](http://wsprnet.org).
@@ -20,7 +11,7 @@ Signals obtained from multiple receievers on the same band ( e.g a 40M vertical 
 
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
 
-WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands, but 14 bands of noise level graphing requires a Pi 4 or x86 server.
+WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands and 30+ rx sources on a Pi 4 or x86 server.
 
 ## Greenfield Installation
 
@@ -40,6 +31,15 @@ cd wsprdaemon
 This first run of WD will install many, many utilities and libraries, and for some you will be prompted to agree to the insallation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus are never prompted for a password, but your experience may vary.
 
 At then end of a sucessful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once confgured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
+
+## To upgrade from 2.6*:
+
+1) cd ~/wsprdaemon
+2) stop WD with '~/wsprdaemon/wsprdaemon.sh -z'
+3) execute 'git pull'
+4) free disk space with 'rm -rf /tmp/wsprdaemon/*'
+5) clean out legacy noise data with 'rm -rf /home/pi/wsprdaemon/signal_levels/*'
+6) start WD with '~/wsprdaemon/wsprdaemon.sh -a'
 
 ## Installation on a system running wsprdaemon that was not installed using 'git clone'
 
