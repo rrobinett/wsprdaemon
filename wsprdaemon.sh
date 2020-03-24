@@ -126,12 +126,20 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
 #declare -r VERSION=2.7a             ### Cache noise and spot databases
                                     ### Use Christoph's python code to obtain noise levels
+#declare -r VERSION=2.7b             ### FIX: always install 'sox'
 declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
+                                    ### Don't allow it to run as user 'root'
+                                    ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
                                     ### TODO: Upload noise and enhanced spots to wsprdaemon.org InfluxDBs
                                     ### TODO: add VHF/UHF support using Soapy API
 
+if [[ $USER == "root" ]]; then
+    echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
+    exit 1
+fi
+
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
-if [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
+if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
@@ -665,7 +673,7 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
             fi
             echo "${grid} ${suntimes[@]}" >> ${SUNTIMES_FILE}
         done
-        echo "$(date): Got today's sunrise and sunset times from https://sunrise-sunset.org/"  1>&2
+        echo "$(date): Got today's sunrise and sunset times"  1>&2
     fi
     if [[ ${time_field} =~ sunrise ]] ; then
         index_time=$(awk "/${receiver_grid}/{print \$2}" ${SUNTIMES_FILE} )
@@ -847,7 +855,17 @@ function check_for_needed_utilities()
         sudo apt-get install bc --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'bc' which is needed for "
+            echo "FATAL ERROR: Failed to install 'bc' which is needed for floating point frequency calculations"
+            exit 1
+        fi
+    fi
+    if ! dpkg -l | grep -wq sox  ; then
+        # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install sox --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
             exit 1
         fi
     fi
@@ -857,11 +875,6 @@ function check_for_needed_utilities()
             echo " WARNING: the ${WSPRDAEMON_TMP_DIR}/ file system is ${tmp_wspr_captures__file_system_size_1k_blocks} in size"
             echo "   which is less than the 307200 size needed for an all-WSPR band system"
             echo "   You should consider increasing its size by editing /etc/fstab and remounting ${WSPRDAEMON_TMP_DIR}/"
-        fi
-        if ! dpkg -l | grep -wq sox  ; then
-            # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install sox --assume-yes
         fi
     fi
     if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
@@ -911,9 +924,9 @@ EOF
         fi
     fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
     if ! python -c "import astral" 2> /dev/null ; then
-        if ! sudo apt-get install python-astral; then
+        if ! sudo apt-get install python-astral -y ; then
             if !  pip install astral ; then
-                if ! sudo apt-get install python-pip; then
+                if ! sudo apt-get install python-pip -y ; then
                     echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip' needed to install the Python 'astral' library"
                 else
                     if !  pip install astral ; then
@@ -976,6 +989,24 @@ else
 fi
 
 ##############################################################
+function truncate_file() {
+    local file_path=$1       ### Must be a text format file
+    local file_max_size=$2   ### In bytes
+    local file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
+
+    [[ $verbosity -ge 2 ]] && echo "$(date): truncate_file() '${file_path}' of size ${file_size} bytes to max size of ${file_max_size} bytes"
+    
+    if [[ ${file_size} -gt ${file_max_size} ]]; then 
+        local file_lines=$( cat ${file_path} | wc -l )
+        local truncated_file_lines=$(( ${file_lines} / 2))
+        local tmp_file_path="${file_path%.*}.tmp"
+        tail -n ${truncated_file_lines} ${file_path} > ${tmp_file_path}
+        mv ${tmp_file_path} ${file_path}
+        local truncated_file_size=$( {GET_FILE_SIZE_CMD} ${file_path} )
+        [[ $verbosity -ge 1 ]] && echo "$(date): truncate_file() '${file_path}' of original size ${file_size} bytes / ${file_lines} lines now is ${truncated_file_size} bytes"
+    fi
+}
+
 function list_receivers() {
      local i
      for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
@@ -1363,13 +1394,8 @@ function kiwi_recording_daemon()
                 printf " PRINTED" >> ov.log
             fi
 
-            local ov_file_size=$( ${GET_FILE_SIZE_CMD} ov.log )
-            if [[ ${ov_file_size} -gt ${MAX_OV_FILE_SIZE-100000} ]]; then
-                ### Limit the ov.log file to less than 100 KB which is about 6500 10 minute reports
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() ov.log has grown too large (${ov_file_size} bytes), so truncate it"
-                tail -n 3000 ov.log > ov.tmp
-                mv ov.tmp ov.log
-            fi
+            truncate_file ov.log ${MAX_OV_FILE_SIZE-100000}
+
             local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
@@ -1392,6 +1418,7 @@ function kiwi_recording_daemon()
     rm -f recording.stop
     [[ $verbosity -ge 1 ]] && echo "$(date): kiwi_recording_daemon() done. terminating myself"
 }
+
 
 ###  Call this function from the watchdog daemon 
 ###  If verbosity > 0 it will print out any new OV report lines in the recording.log files
@@ -2369,37 +2396,11 @@ function posting_daemon()
         sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}
         ### Now ${wsprd_spots_all_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
-        if [[ ${posting_receiver_name} =~ MERG.* ]] || [[ ${verbosity} -ge 1 ]]; then
-            local source_file_count=${#newest_list[@]}
-            local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
-            local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
-            local sorted_call_list=( $(awk '{print $7}' ${wsprd_spots_best_file_path}) )   ## this list will be sorted by frequency
-            local date_string="$(date)"
-
-            printf "$date_string: %10s %8s %10s" "FREQUENCY" "CALL" "POSTED_SNR"
-            local receiver
-            for receiver in ${real_receiver_list[@]}; do
-                printf "%8s" ${receiver}
-            done
-            printf "       TOTAL=%2s, POSTED=%2s\n" ${source_line_count} ${sorted_line_count}
-            local call
-            for call in ${sorted_call_list[@]}; do
-                local posted_freq=$(grep " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
-                local posted_snr=$( grep " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
-                printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
-                local file
-                for file in ${newest_list[@]}; do
-                    local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
-                    if [[ -z "$rx_snr" ]]; then
-                        printf "%8s" "*"
-                    elif [[ $rx_snr == $posted_snr ]]; then
-                        printf "%7s%1s" $rx_snr "p"
-                    else
-                        printf "%7s%1s" $rx_snr " "
-                    fi
-                done
-                printf "\n"
-            done
+        ## Log MERGed SNR decsions
+        if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+            local merged_log_file="merged.log"
+            log_merged_snrs >> ${merged_log_file}
+            truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
         fi
 
         ### Clean out any older ALL_WSPR files
@@ -2473,6 +2474,47 @@ function posting_daemon()
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
 
+### WARNING: diag printouts would go into merged.logs file
+function log_merged_snrs() {
+    local source_file_count=${#newest_list[@]}
+    local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
+    local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
+    local sorted_call_list=( $(awk '{print $7}' ${wsprd_spots_best_file_path}) )   ## this list will be sorted by frequency
+    local sorted_call_list_count=${#sorted_call_list[@]}
+
+    if [[ ${sorted_call_list_count} -eq 0 ]] ;then
+        ## There are no spots recorded in this wspr cycle, so don't log
+        return
+    fi
+    local date_string="$(date)"
+
+    
+    printf "$date_string: %10s %8s %10s" "FREQUENCY" "CALL" "POSTED_SNR"
+    local receiver
+    for receiver in ${real_receiver_list[@]}; do
+        printf "%8s" ${receiver}
+    done
+    printf "       TOTAL=%2s, POSTED=%2s\n" ${source_line_count} ${sorted_line_count}
+    local call
+    for call in ${sorted_call_list[@]}; do
+        local posted_freq=$(grep " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
+        local posted_snr=$( grep " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
+        printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
+        local file
+        for file in ${newest_list[@]}; do
+            local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
+            if [[ -z "$rx_snr" ]]; then
+                printf "%8s" "*"
+            elif [[ $rx_snr == $posted_snr ]]; then
+                printf "%7s%1s" $rx_snr "p"
+            else
+                printf "%7s%1s" $rx_snr " "
+            fi
+        done
+        printf "\n"
+    done
+}
+ 
 ###
 function spawn_posting_daemon() {
     local receiver_name=$1
@@ -3374,9 +3416,9 @@ function check_for_zombies() {
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"
-            [[ ${verbosity} -ge 3 ]] && "$(date): check_for_zombies() is adding pid ${daemon_pid} of daemon '${pid_file_path}' to the expected pid list"
+            [[ ${verbosity} -ge 3 ]] && echo "$(date): check_for_zombies() is adding pid ${daemon_pid} of daemon '${pid_file_path}' to the expected pid list"
         else
-            [[ ${verbosity} -ge 2 ]] && "$(date): check_for_zombies() found no pid for daemon '${pid_file_path}'"
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_zombies() found no pid for daemon '${pid_file_path}'"
         fi
     done
 
@@ -4495,12 +4537,14 @@ function plot_noise() {
             sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
         fi
         if [[ "${SIGNAL_LEVEL_UPLOAD_GRAPHS-no}" == "yes" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
-            ### The user must configure this system to autologin to the wsprdaemon account on this cloud server for this to work
             if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS_FTP_MODE:-yes} == yes ]]; then
                 local upload_file_name=${SIGNAL_LEVEL_UPLOAD_ID}-$(date -u +"%y-%m-%d-%H-%M")-noise_graph.png
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() starting ftp upload of ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} to ftp://${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}"
-                curl -s -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}:${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}\
-                    ftp://${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}
+                local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}
+                local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
+                local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}
+
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() starting ftp upload of ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} to ftp://${upload_url}"
+                curl -s -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${upload_user}:${upload_password} ftp://${upload_url}
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() ftp upload is complete"
             else
                 local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
