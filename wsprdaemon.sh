@@ -130,8 +130,11 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
                                     ### Don't allow it to run as user 'root'
                                     ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
-                                    ### TODO: Upload noise and enhanced spots to wsprdaemon.org InfluxDBs
-                                    ### TODO: add VHF/UHF support using Soapy API
+                                    ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
+                                    ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
+                                    ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
+                                    ### TODO: Add upload of WD's enhanced spots to wsprdaemon.org database
+                                    ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
@@ -338,11 +341,10 @@ if [[ ! -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
 
 cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 
-#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload signal levels to the wsprdaemon cloud database
-#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name of the subdir to upload to on graphs.wsprdaemon.org
-#SIGNAL_LEVEL_UPLOAD_URL="us-central1-iot-data-storage.cloudfunctions.net"   ## use this until we get 'logs.wsprdaemon.org' working as a URL.
-#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP the ${WSPRDAEMON_TMP_DIR}/noise_graphs.png graphs file to graphs.wsprdaemon.org
-#SIGNAL_LEVEL_LOCAL_GRAPHS="no"    ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then ensure the local Apache server is running and 'ln -s ${WSPRDAEMON_TMP_DIR}/noise_graphs.png /var/www/html/'
+#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload extended spots and noise levels to http://logs.wsprdaemon.org:3000/
+#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name used to view spots and noise at http://graphs.wsprdaemon.org:3000/
+#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://graphs.wsprdaemon.org/SIGNAL_LEVEL_UPLOAD_ID
+#SIGNAL_LEVEL_LOCAL_GRAPHS="yes"    ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then make graphs visible at http://localhost/
 
 #CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
@@ -850,7 +852,6 @@ function check_for_needed_utilities()
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     if ! dpkg -l | grep -wq bc ; then
-        # ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
         sudo apt-get install bc --assume-yes
         local ret_code=$?
@@ -860,13 +861,26 @@ function check_for_needed_utilities()
         fi
     fi
     if ! dpkg -l | grep -wq sox  ; then
-        # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
         [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
         sudo apt-get install sox --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
             echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
             exit 1
+        fi
+    fi
+    if ! dpkg -l | grep -wq postgresql  ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install postgresql libpq-dev postgresql-client postgresql-client-common --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'postgresql' which is needed for logging spots and noise to wsprdaemon.org"
+            exit 1
+        fi
+    fi
+    if ! python3 -c "import psycopg2" 2> /dev/null ; then
+        if !  sudo pip3 install psycopg2 ; then
+            echo "FATAL ERROR: heck_for_needed_utilities() pip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
         fi
     fi
     if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS:-no} == "yes" ]]; then
@@ -2104,7 +2118,7 @@ function decoding_daemon()
             fi
             [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
-            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == no ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
                 ### Don't spend a lot of CPU time calculating a value which will not be uploaded
                 local fft_value="-999.9"      ## i.e. "Not Calculated"
             else
@@ -2431,7 +2445,7 @@ function posting_daemon()
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
-            if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
                 ### If 'no', then don't copy spots.txt, but leave that file for the upload to wsprnet.org down below
                 ### For non-Merged, this should overwite the file copied above.  But for MERGED, we are copying spots from each real receiver in addition to copying MERGed rerceiver spots
                 local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
@@ -2448,7 +2462,7 @@ function posting_daemon()
             local noise_files=${real_receiver_dir}/*_wspr_noise.txt
             if [[ -n "${noise_files}" ]]; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moving '${noise_files}' to '${upload_wsprdaemon_noise_dir}'"
-                if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+                if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
                     mv ${noise_files} ${upload_wsprdaemon_noise_dir}
                 else
                     rm -f ${noise_files}
@@ -3094,6 +3108,70 @@ function upload_to_wsprnet_daemon_status()
     return 0
 }
 
+##### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org ####
+# V1.0 March 2020
+declare NOISE_UPLOAD_PYTHON_CMD=/tmp/ts_noise_upload.py
+
+function noise_upload() {
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): noise upload() process "
+
+   create_noise_upload_python
+   python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
+   py_retcode=$?
+   return ${py_retcode}
+}
+
+#G3ZIL python script that gets copied into /tmp/ts_bath_upload.py and is run there
+function create_noise_upload_python() {
+    cat > ${NOISE_UPLOAD_PYTHON_CMD} <<EOF
+# -*- coding: utf-8 -*-
+#!/usr/bin/python
+# March  2020  Gwyn Griffiths
+# Derived from ts_noise_upload.py   a program to test noise data upload to a TimescaleDB
+
+import psycopg2                  # This is the main connection tool, believed to be written in C
+import sys                       # Needed for argv
+
+dateline=sys.argv[1]             # Date and time have been passed seperately
+timeline=sys.argv[2]
+site=sys.argv[3]
+receiver=sys.argv[4]
+rx_grid=sys.argv[5]
+band=sys.argv[6]
+rms_level=sys.argv[7]
+c2_level=sys.argv[8]
+
+timestamp="'"+str(dateline)+" "+str(timeline)+"'"    # Combine date and time into a string with single quotes to suit Timebase DB
+                                                     # To check for errors look at /var/log/postgresql/postgresql-11-main.log on the
+                                                     # wsprdaemon.org server
+
+# initially set the connection flag set to None
+conn=None
+
+# This is the SQL that's needed to insert, here on two lines with the ; as the terminator
+sql="""INSERT INTO noise (time, site, receiver, rx_grid, band, rms_level, c2_level)
+VALUES (%s, %s, %s, %s, %s, %s, %s);"""
+try:
+        # connect to the PostgreSQL database
+        conn = psycopg2.connect("dbname='tutorial' user='wdupload' host='wsprdaemon.org' password='Whisper2008'") # user wdupload has INSERT rights
+        # create a new cursor
+        cur = conn.cursor()
+        # execute the INSERT statement
+        cur.execute(sql,(timestamp, site, receiver, rx_grid, band, rms_level, c2_level))
+        # commit the changes to the database
+        conn.commit()
+        # close communication with the database
+        cur.close()
+except:
+        print ("Unable to connect to the database")
+        sys.exit[2]                                   # exit with error code 2 if can't connect
+finally:
+        if conn is not None:
+            conn.close()
+
+EOF
+}
+
 ################### wsprdaemon uploads ####################################
 declare UPLOADS_WSPRDAEMON_URL="https://us-central1-iot-data-storage.cloudfunctions.net/"
 declare UPLOAD_CURL_TIMEOUT=10    ### Wait no more than 10 seconds for the wsprdaemon.org database to respond to curl
@@ -3176,7 +3254,14 @@ function upload_line_to_wsprdaemon() {
             local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
             local timestamp_ms=$(( ${time_epoch} * 1000))
             curl_args="${UPLOADS_WSPRDAEMON_URL}/upload_radio?site=${SIGNAL_LEVEL_UPLOAD_ID}&receiver=${real_receiver_name}&maidenhead=${real_receiver_maidenhead}&band=${real_receiver_rx_band}&fft_level=${sox_fft_value}&rms_level=${rms_value}&c2_level=${c2_fft_value}&timestamp_ms=${timestamp_ms}"
-            true
+
+            # G3ZIL added function to write to Timescale DB. And format the timestamp to suit Timescale DB.
+            local datestamp_ts="${time_year}-${time_month}-${time_day}"
+            local timestamp_ts="${time_hour}:${time_minute}"
+            noise_upload  ${datestamp_ts} ${timestamp_ts} ${SIGNAL_LEVEL_UPLOAD_ID} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
+            local py_retcode=$?
+            [[ ${verbosity} -ge 2 ]] && [[ ${py_retcode} -eq 0 ]] && echo "$(date): noise_upload_to_timescale() completed"
+            [[ ${verbosity} -ge 1 ]] && [[ ${py_retcode} -eq 2 ]] && echo "$(date): noise_upload_to_timescale() failed"
             ;;
         *)
             [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() ERROR file_type '${file_type}' is invalid"
@@ -4541,10 +4626,12 @@ function plot_noise() {
                 local upload_file_name=${SIGNAL_LEVEL_UPLOAD_ID}-$(date -u +"%y-%m-%d-%H-%M")-noise_graph.png
                 local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}
                 local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
-                local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}
+                declare SIGNAL_LEVEL_FTP_PASSWORD_DEFAULT="xahFie6g"  ## Hopefully this never needs to change 
+                local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-${SIGNAL_LEVEL_FTP_PASSWORD_DEFAULT}}
+                local upload_rate_limit=$(( ${SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS-1000000} / 8 ))        ## SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS can be declared in .conf. It is in bits per second.
 
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() starting ftp upload of ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} to ftp://${upload_url}"
-                curl -s -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${upload_user}:${upload_password} ftp://${upload_url}
+                curl -s --limit-rate ${upload_rate_limit} -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${upload_user}:${upload_password} ftp://${upload_url}
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() ftp upload is complete"
             else
                 local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
@@ -4573,6 +4660,8 @@ function create_noise_graph() {
 }
 
 function create_noise_python_script() {
+    source ${WSPRDAEMON_CONFIG_FILE}      ### To read NOISE_GRAPHS_* parameters, if they are defined
+
     cat > ${NOISE_PLOT_CMD} << EOF
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
@@ -4620,9 +4709,9 @@ if nom_bw==500:
 else:
     freq_ne_bw=ne_bw
 
-x_pixel=40
-y_pixel=30
-my_dpi=50    # set dpi and size for plot - these values are largest I can get on Pi window, resolution is good
+x_pixel=${NOISE_GRAPHS_X_PIXEL-40}
+y_pixel=${NOISE_GRAPHS_Y_PIXEL-30}
+my_dpi=${NOISE_GRAPHS_DPI-50}         # set dpi and size for plot - these values are largest I can get on Pi window, resolution is good
 fig = plt.figure(figsize=(x_pixel, y_pixel), dpi=my_dpi)
 fig.subplots_adjust(hspace=0.4, wspace=0.4)
 plt.rcParams.update({'font.size': 18})
@@ -4675,8 +4764,8 @@ for csv_file_path in csv_file_path_list:
     ax1.xaxis.set_major_locator(loc)
 
     #   set y axes lower and upper limits
-    y_dB_lo=-175
-    y_dB_hi=-105
+    y_dB_lo=${NOISE_GRAPHS_Y_MIN--175}
+    y_dB_hi=${NOISE_GRAPHS_Y_MAX--105}
     y_K_lo=10**((y_dB_lo-30)/10.)*1e23/1.38
     y_K_hi=10**((y_dB_hi-30)/10.)*1e23/1.38
     ax1.set_ylim([y_dB_lo, y_dB_hi])
