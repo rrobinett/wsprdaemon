@@ -880,7 +880,17 @@ function check_for_needed_utilities()
     fi
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
         if !  sudo pip3 install psycopg2 ; then
-            echo "FATAL ERROR: heck_for_needed_utilities() pip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+            sudo apt-get install python3-pip --assume-yes
+            local ret_code=$?
+            if [[ $ret_code -ne 0 ]]; then
+                echo "FATAL ERROR: Failed to install 'pip3' which is needed for logging spots and noise to wsprdaemon.org"
+                exit 1
+            fi
+            if !  sudo pip3 install psycopg2 ; then
+                echo "FATAL ERROR: ip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
+                exit 1
+            fi
         fi
     fi
     if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS:-no} == "yes" ]]; then
@@ -3385,6 +3395,10 @@ function kill_upload_to_wsprdaemon_daemon()
 
 function upload_to_wsprdaemon_daemon_status()
 {
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]]; then
+        ## wsprdaemon uploading is not enabled
+        return
+    fi
     local uploading_pid_file_path=$1
     if [[ ${uploading_pid_file_path} == ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH} ]] ; then
         local data_type="noise"
@@ -3421,8 +3435,10 @@ function upload_to_wsprdaemon_daemon_status()
 function spawn_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_daemons() start"
     spawn_upload_to_wsprnet_daemon
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
+        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
+        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+    fi
 }
 
 function kill_upload_daemons() {
