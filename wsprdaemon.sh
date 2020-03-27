@@ -3831,7 +3831,7 @@ function update_suntimes_file() {
     for grid in ${maidenhead_list[@]} ; do
         echo "${grid} $(get_sunrise_sunset ${grid} )" >> ${SUNTIMES_FILE}
     done
-    echo "$(date): Got today's sunrise and sunset times from https://sunrise-sunset.org/"
+    [[ $verbosity -ge 2 ]] && echo "$(date): Got today's sunrise and sunset times"
 }
 
 ### reads wsprdaemon.conf and if there are sunrise/sunset job times it gets the current sunrise/sunset times
