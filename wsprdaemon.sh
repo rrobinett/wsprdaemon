@@ -124,11 +124,22 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
 #declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
 #declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-#declare -r VERSION=2.7a             
-declare -r VERSION=2.7b             ### FIX: always install 'sox'
-                                    ### TODO: Cache noise database logging and add uploads to wpsrdaemon spots database
-                                    ### TODO: use Christoph's python code to obtain noise levels
-                                    ### TODO: add VHF/UHF support using Soapy API
+#declare -r VERSION=2.7a             ### Cache noise and spot databases
+                                    ### Use Christoph's python code to obtain noise levels
+#declare -r VERSION=2.7b             ### FIX: always install 'sox'
+declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
+                                    ### Don't allow it to run as user 'root'
+                                    ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
+                                    ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
+                                    ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
+                                    ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
+                                    ### TODO: Add upload of WD's enhanced spots to wsprdaemon.org database
+                                    ### TODO: Add VHF/UHF support using Soapy API
+
+if [[ $USER == "root" ]]; then
+    echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
+    exit 1
+fi
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
@@ -330,11 +341,10 @@ if [[ ! -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
 
 cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 
-#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload signal levels to the wsprdaemon cloud database
-#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name of the subdir to upload to on graphs.wsprdaemon.org
-#SIGNAL_LEVEL_UPLOAD_URL="us-central1-iot-data-storage.cloudfunctions.net"   ## use this until we get 'logs.wsprdaemon.org' working as a URL.
-#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP the ${WSPRDAEMON_TMP_DIR}/noise_graphs.png graphs file to graphs.wsprdaemon.org
-#SIGNAL_LEVEL_LOCAL_GRAPHS="no"    ### If this variable is defined AND SIGNAL_LEVEL_UPLOAD_ID is defined, then ensure the local Apache server is running and 'ln -s ${WSPRDAEMON_TMP_DIR}/noise_graphs.png /var/www/html/'
+#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload extended spots and noise levels to http://logs.wsprdaemon.org:3000/
+#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name used to view spots and noise at http://graphs.wsprdaemon.org:3000/
+#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://graphs.wsprdaemon.org/SIGNAL_LEVEL_UPLOAD_ID
+#SIGNAL_LEVEL_LOCAL_GRAPHS="yes"    ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then make graphs visible at http://localhost/
 
 #CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
@@ -665,7 +675,7 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
             fi
             echo "${grid} ${suntimes[@]}" >> ${SUNTIMES_FILE}
         done
-        echo "$(date): Got today's sunrise and sunset times from https://sunrise-sunset.org/"  1>&2
+        echo "$(date): Got today's sunrise and sunset times"  1>&2
     fi
     if [[ ${time_field} =~ sunrise ]] ; then
         index_time=$(awk "/${receiver_grid}/{print \$2}" ${SUNTIMES_FILE} )
@@ -842,7 +852,6 @@ function check_for_needed_utilities()
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     if ! dpkg -l | grep -wq bc ; then
-        # ask_user_to_install_sw "The binary calculator 'bc' is not installed" "bc"
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
         sudo apt-get install bc --assume-yes
         local ret_code=$?
@@ -852,13 +861,36 @@ function check_for_needed_utilities()
         fi
     fi
     if ! dpkg -l | grep -wq sox  ; then
-        # ask_user_to_install_sw "SIGNAL_LEVEL_STATS=yes requires that the 'sox' sound processing utility be installed on this server"
         [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
         sudo apt-get install sox --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
             echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
             exit 1
+        fi
+    fi
+    if ! dpkg -l | grep -wq postgresql  ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install postgresql libpq-dev postgresql-client postgresql-client-common --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'postgresql' which is needed for logging spots and noise to wsprdaemon.org"
+            exit 1
+        fi
+    fi
+    if ! python3 -c "import psycopg2" 2> /dev/null ; then
+        if !  sudo pip3 install psycopg2 ; then
+            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+            sudo apt-get install python3-pip --assume-yes
+            local ret_code=$?
+            if [[ $ret_code -ne 0 ]]; then
+                echo "FATAL ERROR: Failed to install 'pip3' which is needed for logging spots and noise to wsprdaemon.org"
+                exit 1
+            fi
+            if !  sudo pip3 install psycopg2 ; then
+                echo "FATAL ERROR: ip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
+                exit 1
+            fi
         fi
     fi
     if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS:-no} == "yes" ]]; then
@@ -981,6 +1013,24 @@ else
 fi
 
 ##############################################################
+function truncate_file() {
+    local file_path=$1       ### Must be a text format file
+    local file_max_size=$2   ### In bytes
+    local file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
+
+    [[ $verbosity -ge 2 ]] && echo "$(date): truncate_file() '${file_path}' of size ${file_size} bytes to max size of ${file_max_size} bytes"
+    
+    if [[ ${file_size} -gt ${file_max_size} ]]; then 
+        local file_lines=$( cat ${file_path} | wc -l )
+        local truncated_file_lines=$(( ${file_lines} / 2))
+        local tmp_file_path="${file_path%.*}.tmp"
+        tail -n ${truncated_file_lines} ${file_path} > ${tmp_file_path}
+        mv ${tmp_file_path} ${file_path}
+        local truncated_file_size=$( {GET_FILE_SIZE_CMD} ${file_path} )
+        [[ $verbosity -ge 1 ]] && echo "$(date): truncate_file() '${file_path}' of original size ${file_size} bytes / ${file_lines} lines now is ${truncated_file_size} bytes"
+    fi
+}
+
 function list_receivers() {
      local i
      for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
@@ -1368,13 +1418,8 @@ function kiwi_recording_daemon()
                 printf " PRINTED" >> ov.log
             fi
 
-            local ov_file_size=$( ${GET_FILE_SIZE_CMD} ov.log )
-            if [[ ${ov_file_size} -gt ${MAX_OV_FILE_SIZE-100000} ]]; then
-                ### Limit the ov.log file to less than 100 KB which is about 6500 10 minute reports
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() ov.log has grown too large (${ov_file_size} bytes), so truncate it"
-                tail -n 3000 ov.log > ov.tmp
-                mv ov.tmp ov.log
-            fi
+            truncate_file ov.log ${MAX_OV_FILE_SIZE-100000}
+
             local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
@@ -1397,6 +1442,7 @@ function kiwi_recording_daemon()
     rm -f recording.stop
     [[ $verbosity -ge 1 ]] && echo "$(date): kiwi_recording_daemon() done. terminating myself"
 }
+
 
 ###  Call this function from the watchdog daemon 
 ###  If verbosity > 0 it will print out any new OV report lines in the recording.log files
@@ -2082,7 +2128,7 @@ function decoding_daemon()
             fi
             [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
-            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == no ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
                 ### Don't spend a lot of CPU time calculating a value which will not be uploaded
                 local fft_value="-999.9"      ## i.e. "Not Calculated"
             else
@@ -2374,37 +2420,11 @@ function posting_daemon()
         sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}
         ### Now ${wsprd_spots_all_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
-        if [[ ${posting_receiver_name} =~ MERG.* ]] || [[ ${verbosity} -ge 1 ]]; then
-            local source_file_count=${#newest_list[@]}
-            local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
-            local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
-            local sorted_call_list=( $(awk '{print $7}' ${wsprd_spots_best_file_path}) )   ## this list will be sorted by frequency
-            local date_string="$(date)"
-
-            printf "$date_string: %10s %8s %10s" "FREQUENCY" "CALL" "POSTED_SNR"
-            local receiver
-            for receiver in ${real_receiver_list[@]}; do
-                printf "%8s" ${receiver}
-            done
-            printf "       TOTAL=%2s, POSTED=%2s\n" ${source_line_count} ${sorted_line_count}
-            local call
-            for call in ${sorted_call_list[@]}; do
-                local posted_freq=$(grep " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
-                local posted_snr=$( grep " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
-                printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
-                local file
-                for file in ${newest_list[@]}; do
-                    local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
-                    if [[ -z "$rx_snr" ]]; then
-                        printf "%8s" "*"
-                    elif [[ $rx_snr == $posted_snr ]]; then
-                        printf "%7s%1s" $rx_snr "p"
-                    else
-                        printf "%7s%1s" $rx_snr " "
-                    fi
-                done
-                printf "\n"
-            done
+        ## Log MERGed SNR decsions
+        if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+            local merged_log_file="merged.log"
+            log_merged_snrs >> ${merged_log_file}
+            truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
         fi
 
         ### Clean out any older ALL_WSPR files
@@ -2435,7 +2455,7 @@ function posting_daemon()
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
-            if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
                 ### If 'no', then don't copy spots.txt, but leave that file for the upload to wsprnet.org down below
                 ### For non-Merged, this should overwite the file copied above.  But for MERGED, we are copying spots from each real receiver in addition to copying MERGed rerceiver spots
                 local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
@@ -2452,7 +2472,7 @@ function posting_daemon()
             local noise_files=${real_receiver_dir}/*_wspr_noise.txt
             if [[ -n "${noise_files}" ]]; then
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moving '${noise_files}' to '${upload_wsprdaemon_noise_dir}'"
-                if [[ ${SIGNAL_LEVEL_UPLOAD} == yes ]]; then
+                if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
                     mv ${noise_files} ${upload_wsprdaemon_noise_dir}
                 else
                     rm -f ${noise_files}
@@ -2478,6 +2498,47 @@ function posting_daemon()
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
 
+### WARNING: diag printouts would go into merged.logs file
+function log_merged_snrs() {
+    local source_file_count=${#newest_list[@]}
+    local source_line_count=$(cat ${wsprd_spots_all_file_path} | wc -l)
+    local sorted_line_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
+    local sorted_call_list=( $(awk '{print $7}' ${wsprd_spots_best_file_path}) )   ## this list will be sorted by frequency
+    local sorted_call_list_count=${#sorted_call_list[@]}
+
+    if [[ ${sorted_call_list_count} -eq 0 ]] ;then
+        ## There are no spots recorded in this wspr cycle, so don't log
+        return
+    fi
+    local date_string="$(date)"
+
+    
+    printf "$date_string: %10s %8s %10s" "FREQUENCY" "CALL" "POSTED_SNR"
+    local receiver
+    for receiver in ${real_receiver_list[@]}; do
+        printf "%8s" ${receiver}
+    done
+    printf "       TOTAL=%2s, POSTED=%2s\n" ${source_line_count} ${sorted_line_count}
+    local call
+    for call in ${sorted_call_list[@]}; do
+        local posted_freq=$(grep " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
+        local posted_snr=$( grep " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
+        printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
+        local file
+        for file in ${newest_list[@]}; do
+            local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
+            if [[ -z "$rx_snr" ]]; then
+                printf "%8s" "*"
+            elif [[ $rx_snr == $posted_snr ]]; then
+                printf "%7s%1s" $rx_snr "p"
+            else
+                printf "%7s%1s" $rx_snr " "
+            fi
+        done
+        printf "\n"
+    done
+}
+ 
 ###
 function spawn_posting_daemon() {
     local receiver_name=$1
@@ -3057,6 +3118,70 @@ function upload_to_wsprnet_daemon_status()
     return 0
 }
 
+##### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org ####
+# V1.0 March 2020
+declare NOISE_UPLOAD_PYTHON_CMD=/tmp/ts_noise_upload.py
+
+function noise_upload() {
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): noise upload() process "
+
+   create_noise_upload_python
+   python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
+   py_retcode=$?
+   return ${py_retcode}
+}
+
+#G3ZIL python script that gets copied into /tmp/ts_bath_upload.py and is run there
+function create_noise_upload_python() {
+    cat > ${NOISE_UPLOAD_PYTHON_CMD} <<EOF
+# -*- coding: utf-8 -*-
+#!/usr/bin/python
+# March  2020  Gwyn Griffiths
+# Derived from ts_noise_upload.py   a program to test noise data upload to a TimescaleDB
+
+import psycopg2                  # This is the main connection tool, believed to be written in C
+import sys                       # Needed for argv
+
+dateline=sys.argv[1]             # Date and time have been passed seperately
+timeline=sys.argv[2]
+site=sys.argv[3]
+receiver=sys.argv[4]
+rx_grid=sys.argv[5]
+band=sys.argv[6]
+rms_level=sys.argv[7]
+c2_level=sys.argv[8]
+
+timestamp="'"+str(dateline)+" "+str(timeline)+"'"    # Combine date and time into a string with single quotes to suit Timebase DB
+                                                     # To check for errors look at /var/log/postgresql/postgresql-11-main.log on the
+                                                     # wsprdaemon.org server
+
+# initially set the connection flag set to None
+conn=None
+
+# This is the SQL that's needed to insert, here on two lines with the ; as the terminator
+sql="""INSERT INTO noise (time, site, receiver, rx_grid, band, rms_level, c2_level)
+VALUES (%s, %s, %s, %s, %s, %s, %s);"""
+try:
+        # connect to the PostgreSQL database
+        conn = psycopg2.connect("dbname='tutorial' user='wdupload' host='wsprdaemon.org' password='Whisper2008'") # user wdupload has INSERT rights
+        # create a new cursor
+        cur = conn.cursor()
+        # execute the INSERT statement
+        cur.execute(sql,(timestamp, site, receiver, rx_grid, band, rms_level, c2_level))
+        # commit the changes to the database
+        conn.commit()
+        # close communication with the database
+        cur.close()
+except:
+        print ("Unable to connect to the database")
+        sys.exit[2]                                   # exit with error code 2 if can't connect
+finally:
+        if conn is not None:
+            conn.close()
+
+EOF
+}
+
 ################### wsprdaemon uploads ####################################
 declare UPLOADS_WSPRDAEMON_URL="https://us-central1-iot-data-storage.cloudfunctions.net/"
 declare UPLOAD_CURL_TIMEOUT=10    ### Wait no more than 10 seconds for the wsprdaemon.org database to respond to curl
@@ -3139,7 +3264,14 @@ function upload_line_to_wsprdaemon() {
             local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
             local timestamp_ms=$(( ${time_epoch} * 1000))
             curl_args="${UPLOADS_WSPRDAEMON_URL}/upload_radio?site=${SIGNAL_LEVEL_UPLOAD_ID}&receiver=${real_receiver_name}&maidenhead=${real_receiver_maidenhead}&band=${real_receiver_rx_band}&fft_level=${sox_fft_value}&rms_level=${rms_value}&c2_level=${c2_fft_value}&timestamp_ms=${timestamp_ms}"
-            true
+
+            # G3ZIL added function to write to Timescale DB. And format the timestamp to suit Timescale DB.
+            local datestamp_ts="${time_year}-${time_month}-${time_day}"
+            local timestamp_ts="${time_hour}:${time_minute}"
+            noise_upload  ${datestamp_ts} ${timestamp_ts} ${SIGNAL_LEVEL_UPLOAD_ID} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
+            local py_retcode=$?
+            [[ ${verbosity} -ge 2 ]] && [[ ${py_retcode} -eq 0 ]] && echo "$(date): noise_upload_to_timescale() completed"
+            [[ ${verbosity} -ge 1 ]] && [[ ${py_retcode} -eq 2 ]] && echo "$(date): noise_upload_to_timescale() failed"
             ;;
         *)
             [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() ERROR file_type '${file_type}' is invalid"
@@ -3263,6 +3395,10 @@ function kill_upload_to_wsprdaemon_daemon()
 
 function upload_to_wsprdaemon_daemon_status()
 {
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]]; then
+        ## wsprdaemon uploading is not enabled
+        return
+    fi
     local uploading_pid_file_path=$1
     if [[ ${uploading_pid_file_path} == ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH} ]] ; then
         local data_type="noise"
@@ -3299,8 +3435,10 @@ function upload_to_wsprdaemon_daemon_status()
 function spawn_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_daemons() start"
     spawn_upload_to_wsprnet_daemon
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
-    spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
+        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
+        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+    fi
 }
 
 function kill_upload_daemons() {
@@ -3379,9 +3517,9 @@ function check_for_zombies() {
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"
-            [[ ${verbosity} -ge 3 ]] && "$(date): check_for_zombies() is adding pid ${daemon_pid} of daemon '${pid_file_path}' to the expected pid list"
+            [[ ${verbosity} -ge 3 ]] && echo "$(date): check_for_zombies() is adding pid ${daemon_pid} of daemon '${pid_file_path}' to the expected pid list"
         else
-            [[ ${verbosity} -ge 2 ]] && "$(date): check_for_zombies() found no pid for daemon '${pid_file_path}'"
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_zombies() found no pid for daemon '${pid_file_path}'"
         fi
     done
 
@@ -3709,7 +3847,7 @@ function update_suntimes_file() {
     for grid in ${maidenhead_list[@]} ; do
         echo "${grid} $(get_sunrise_sunset ${grid} )" >> ${SUNTIMES_FILE}
     done
-    echo "$(date): Got today's sunrise and sunset times from https://sunrise-sunset.org/"
+    [[ $verbosity -ge 2 ]] && echo "$(date): Got today's sunrise and sunset times"
 }
 
 ### reads wsprdaemon.conf and if there are sunrise/sunset job times it gets the current sunrise/sunset times
@@ -4500,13 +4638,25 @@ function plot_noise() {
             sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
         fi
         if [[ "${SIGNAL_LEVEL_UPLOAD_GRAPHS-no}" == "yes" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
-            ### The user must configure this system to autologin to the wsprdaemon account on this cloud server for this to work
-            local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
-            local graphs_server_password=${SIGNAL_LEVEL_UPLOAD_GRAPHS_PASSWORD-wsprdaemon-noise}
-            sshpass -p ${graphs_server_password} ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -p ${LOG_SERVER_PORT-22} wsprdaemon@${graphs_server_address} "mkdir -p ${SIGNAL_LEVEL_UPLOAD_ID}" 2>/dev/null
-            sshpass -p ${graphs_server_password} scp -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -P ${LOG_SERVER_PORT-22} ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} \
-                wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/} > /dev/null 2>&1
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() configured to upload  web page graphs, so 'scp ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/}'"
+            if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS_FTP_MODE:-yes} == yes ]]; then
+                local upload_file_name=${SIGNAL_LEVEL_UPLOAD_ID}-$(date -u +"%y-%m-%d-%H-%M")-noise_graph.png
+                local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${upload_file_name}
+                local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
+                declare SIGNAL_LEVEL_FTP_PASSWORD_DEFAULT="xahFie6g"  ## Hopefully this never needs to change 
+                local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-${SIGNAL_LEVEL_FTP_PASSWORD_DEFAULT}}
+                local upload_rate_limit=$(( ${SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS-1000000} / 8 ))        ## SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS can be declared in .conf. It is in bits per second.
+
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() starting ftp upload of ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} to ftp://${upload_url}"
+                curl -s --limit-rate ${upload_rate_limit} -T ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} --user ${upload_user}:${upload_password} ftp://${upload_url}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() ftp upload is complete"
+            else
+                local graphs_server_address=${GRAPHS_SERVER_ADDRESS:-graphs.wsprdaemon.org}
+                local graphs_server_password=${SIGNAL_LEVEL_UPLOAD_GRAPHS_PASSWORD-wsprdaemon-noise}
+                sshpass -p ${graphs_server_password} ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -p ${LOG_SERVER_PORT-22} wsprdaemon@${graphs_server_address} "mkdir -p ${SIGNAL_LEVEL_UPLOAD_ID}" 2>/dev/null
+                sshpass -p ${graphs_server_password} scp -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -P ${LOG_SERVER_PORT-22} ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} \
+                    wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/} > /dev/null 2>&1
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): plot_noise() configured to upload  web page graphs, so 'scp ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} wsprdaemon@${graphs_server_address}:${SIGNAL_LEVEL_UPLOAD_ID}/${SIGNAL_LEVELS_NOISE_GRAPH_FILE##*/}'"
+            fi
         fi
     fi
 }
@@ -4526,6 +4676,8 @@ function create_noise_graph() {
 }
 
 function create_noise_python_script() {
+    source ${WSPRDAEMON_CONFIG_FILE}      ### To read NOISE_GRAPHS_* parameters, if they are defined
+
     cat > ${NOISE_PLOT_CMD} << EOF
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
@@ -4573,9 +4725,9 @@ if nom_bw==500:
 else:
     freq_ne_bw=ne_bw
 
-x_pixel=40
-y_pixel=30
-my_dpi=50    # set dpi and size for plot - these values are largest I can get on Pi window, resolution is good
+x_pixel=${NOISE_GRAPHS_X_PIXEL-40}
+y_pixel=${NOISE_GRAPHS_Y_PIXEL-30}
+my_dpi=${NOISE_GRAPHS_DPI-50}         # set dpi and size for plot - these values are largest I can get on Pi window, resolution is good
 fig = plt.figure(figsize=(x_pixel, y_pixel), dpi=my_dpi)
 fig.subplots_adjust(hspace=0.4, wspace=0.4)
 plt.rcParams.update({'font.size': 18})
@@ -4628,8 +4780,8 @@ for csv_file_path in csv_file_path_list:
     ax1.xaxis.set_major_locator(loc)
 
     #   set y axes lower and upper limits
-    y_dB_lo=-175
-    y_dB_hi=-105
+    y_dB_lo=${NOISE_GRAPHS_Y_MIN--175}
+    y_dB_hi=${NOISE_GRAPHS_Y_MAX--105}
     y_K_lo=10**((y_dB_lo-30)/10.)*1e23/1.38
     y_K_hi=10**((y_dB_hi-30)/10.)*1e23/1.38
     ax1.set_ylim([y_dB_lo, y_dB_hi])
