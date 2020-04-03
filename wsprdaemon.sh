@@ -127,13 +127,13 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.7a             ### Cache noise and spot databases
                                     ### Use Christoph's python code to obtain noise levels
 #declare -r VERSION=2.7b             ### FIX: always install 'sox'
-declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
+#declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
                                     ### Don't allow it to run as user 'root'
                                     ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
                                     ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
                                     ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
                                     ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
-                                    ### TODO: Add upload of WD's enhanced spots to wsprdaemon.org database
+declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsprdaemon.org database
                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
@@ -2759,36 +2759,28 @@ declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d
 ### spots.logs.wsprdaemon.org
 declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/spots.d
 declare UPLOADS_WSPRDAEMON_SPOTS_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/uploads.log
-declare UPLOADS_WSPRDAEMON_SPOTS_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/successful_spot_uploads.log
+declare UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/uploads.pid
 
 declare UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/spots.d
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/wspr_spots.txt
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/curl.log
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/uploading.pid
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}/successful_spot_uploads.log
 
 ### noise.logs.wsprdaemon.org
 declare UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/noise.d
 declare UPLOADS_WSPRDAEMON_NOISE_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/uploads.log
-declare UPLOADS_WSPRDAEMON_NOISE_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/successful_noise_uploads.log
+declare UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/uploads.pid
 
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/noise.d
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_TXT_FILE=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/wspr_noises.txt
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/curl.log
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/uploading.pid
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}/successful_noise_uploads.log
 
 
 ### wsprnet.org 
 declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet.d      
-declare UPLOADS_WSPRNET_SPOTS_DIR=${UPLOADS_WSPRNET_ROOT_DIR}/wspr_spots.d
-declare UPLOADS_WSPRNET_LOGFILE_PATH=${UPLOADS_WSPRNET_ROOT_DIR}/uploads.log
-declare UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
+declare UPLOADS_WSPRNET_SPOTS_DIR=${UPLOADS_WSPRNET_ROOT_DIR}/spots.d
+declare UPLOADS_WSPRNET_PIDFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.pid
+declare UPLOADS_WSPRNET_LOGFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.log
+declare UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRNET_SPOTS_DIR}/successful_spot_uploads.log
 
 declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d   
 declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/wspr_spots.txt
 declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
-declare UPLOADS_TMP_WSPRNET_PIDFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/uploading.pid
 declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
 
 declare UPLOADS_MAX_LOG_LINES=100000    ### LImit our local spot log file size
@@ -2886,6 +2878,7 @@ function upload_to_wsprnet_daemon()
 {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_WSPRNET_SPOTS_DIR}
+    mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}             ### for curl.log file
     while true; do
         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for files to upload in '${UPLOADS_WSPRNET_SPOTS_DIR}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
@@ -3054,7 +3047,7 @@ function upload_to_wsprnet_daemon()
 
 function spawn_upload_to_wsprnet_daemon()
 {
-    local uploading_pid_file_path=${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}
+    local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     mkdir -p ${uploading_pid_file_path%/*}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
@@ -3074,7 +3067,7 @@ function spawn_upload_to_wsprnet_daemon()
 
 function kill_upload_to_wsprnet_daemon()
 {
-    local uploading_pid_file_path=${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}
+    local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -3091,7 +3084,7 @@ function kill_upload_to_wsprnet_daemon()
 
 function upload_to_wsprnet_daemon_status()
 {
-    local uploading_pid_file_path=${UPLOADS_TMP_WSPRNET_PIDFILE_PATH}
+    local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -3123,7 +3116,7 @@ function upload_to_wsprnet_daemon_status()
 declare NOISE_UPLOAD_PYTHON_CMD=/tmp/ts_noise_upload.py
 
 function noise_upload() {
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): noise upload() process "
+    [[ ${verbosity} -ge 3 ]] && echo "$(date): noise upload() starting '${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8' "
 
    create_noise_upload_python
    python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
@@ -3131,7 +3124,7 @@ function noise_upload() {
    return ${py_retcode}
 }
 
-#G3ZIL python script that gets copied into /tmp/ts_bath_upload.py and is run there
+#G3ZIL python script that gets copied into /tmp/ts_batch_upload.py and is run there
 function create_noise_upload_python() {
     cat > ${NOISE_UPLOAD_PYTHON_CMD} <<EOF
 # -*- coding: utf-8 -*-
@@ -3183,18 +3176,177 @@ EOF
 }
 
 ################### wsprdaemon uploads ####################################
-declare UPLOADS_WSPRDAEMON_URL="https://us-central1-iot-data-storage.cloudfunctions.net/"
-declare UPLOAD_CURL_TIMEOUT=10    ### Wait no more than 10 seconds for the wsprdaemon.org database to respond to curl
+# add tx and rx lat, lon, azimuths, distance and path vertex using python script. 
+# In the main program, call this function with a file path/name for the input file, the tx_locator, the rx_locator and the frequency
+# The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
+declare DERIVED_ADDED_FILE=/tmp/wsprdaemon/derived+azi.csv
+declare AZI_PYTHON_CMD=/tmp/wsprdaemon/derived_calc.py
+
+function add_derived() {
+    local signal_grid=$1
+    local my_grid=$2
+    local signal_freq=$3    
+    create_azi_python
+    python3 ${AZI_PYTHON_CMD} ${signal_grid} ${my_grid} ${signal_freq} 1>add_derived.txt 2 > add_derived.log
+}
+
+#G3ZIL python script that gets copied into /tmp/wsprdaemon/derived_calc.py and is run there
+function create_azi_python() {
+    cat > ${AZI_PYTHON_CMD} <<EOF
+# -*- coding: utf-8 -*-
+# April  2020  Gwyn Griffiths. Based on the add_azi used in the ts-wspr-scraper.sh script
+
+# Takes receiver and transmitter Maidenhead locators and calculates azimuths at tx and rx, lats and lons, distance and vertes lat and lon
+# Needs the two locators and frequency as arguments. If signal_grid="none" puts absent data in the calculated fields.
+# The operating band is derived from the frequency, 60 and 60eu and 80 and 80eu are reported as 60 and 80
+# Miles are not copied to the azi-appended file
+# In the script the following lines preceed this code and there's an EOF added at the end
+# G3ZIL python script that gets copied into /tmp/derived_calc.py and is run there
+
+import numpy as np
+from numpy import genfromtxt
+import sys
+import csv
+
+absent_data=-999.0
+
+# define function to convert 4 or 6 character Maidenhead locator to lat and lon in degrees
+def loc_to_lat_lon (locator):
+    locator=locator.strip()
+    decomp=list(locator)
+    lat=(((ord(decomp[1])-65)*10)+(ord(decomp[3])-48)+(1/2)-90)
+    lon=(((ord(decomp[0])-65)*20)+((ord(decomp[2])-48)*2)+(1)-180)
+    if len(locator)==6:
+        if (ord(decomp[4])) >88:    # check for case of the third pair, likely to  be lower case
+            ascii_base=96
+        else:
+            ascii_base=64
+        lat=lat-(1/2)+((ord(decomp[5])-ascii_base)/24)-(1/48)
+        lon=lon-(1)+((ord(decomp[4])-ascii_base)/12)-(1/24)
+    return(lat, lon)
+
+# get the rx_locator, tx_locator and frequency from the command line arguments
+tx_locator=sys.argv[1]
+print(tx_locator)
+rx_locator=sys.argv[2]
+print(rx_locator)
+frequency=sys.argv[3]
+
+print(tx_locator, rx_locator, frequency)
+
+# open file for output as a csv file, to which we will put the calculated values
+with open("${DERIVED_ADDED_FILE}", "w") as out_file:
+    out_writer=csv.writer(out_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    # loop to calculate  azimuths at tx and rx (wsprnet only does the tx azimuth)
+    if tx_locator!="none":
+        (tx_lat,tx_lon)=loc_to_lat_lon (tx_locator)    # call function to do conversion, then convert to radians
+        phi_tx_lat = np.radians(tx_lat)
+        lambda_tx_lon = np.radians(tx_lon)
+        (rx_lat,rx_lon)=loc_to_lat_lon (rx_locator)    # call function to do conversion, then convert to radians
+        phi_rx_lat = np.radians(rx_lat)
+        lambda_rx_lon = np.radians(rx_lon)
+        delta_phi = (phi_tx_lat - phi_rx_lat)
+        delta_lambda=(lambda_tx_lon-lambda_rx_lon)
+
+        # calculate azimuth at the rx
+        y = np.sin(delta_lambda) * np.cos(phi_tx_lat)
+        x = np.cos(phi_rx_lat)*np.sin(phi_tx_lat) - np.sin(phi_rx_lat)*np.cos(phi_tx_lat)*np.cos(delta_lambda)
+        rx_azi = (np.degrees(np.arctan2(y, x))) % 360
+
+        # calculate azimuth at the tx
+        p = np.sin(-delta_lambda) * np.cos(phi_rx_lat)
+        q = np.cos(phi_tx_lat)*np.sin(phi_rx_lat) - np.sin(phi_tx_lat)*np.cos(phi_rx_lat)*np.cos(-delta_lambda)
+        tx_azi = (np.degrees(np.arctan2(p, q))) % 360
+        # calculate the vertex, the lat lon at the point on the great circle path nearest the nearest pole, this is the highest latitude on the path
+        # no need to calculate special case of both transmitter and receiver on the equator, is handled OK
+        # Need special case for any meridian, where vertex longitude is the meridian longitude and the vertex latitude is the lat nearest the N or S pole
+        if tx_lon==rx_lon:
+            v_lon=tx_lon
+            v_lat=max([tx_lat, rx_lat], key=abs)
+        else:
+            v_lat=np.degrees(np.arccos(np.sin(np.radians(rx_azi))*np.cos(phi_rx_lat)))
+        if v_lat>90.0:
+            v_lat=180-v_lat
+        if rx_azi<180:
+            v_lon=((rx_lon+np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
+        else:
+            v_lon=((rx_lon-np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
+        if v_lon>180:
+            v_lon=-(360-v_lon)
+        # now test if vertex is not  on great circle track, if so, lat/lon nearest pole is used
+        if v_lon < min(tx_lon, rx_lon) or v_lon > max(tx_lon, rx_lon):
+        # this is the off track case
+            v_lat=max([tx_lat, rx_lat], key=abs)
+            if v_lat==tx_lat:
+                v_lon=tx_lon
+            else:
+                v_lon=rx_lon
+        # now calculate the short path great circle distance
+        a=np.sin(delta_phi/2)*np.sin(delta_phi/2)+np.cos(phi_rx_lat)*np.cos(phi_tx_lat)*np.sin(delta_lambda/2)*np.sin(delta_lambda/2)
+        c=2*np.arctan2(np.sqrt(a), np.sqrt(1-a))
+        km=6371*c
+    else: 
+        v_lon=absent_data
+        v_lat=absent_data
+        tx_lon=absent_data  
+        tx_lat=absent_data
+        rx_lon=absent_data
+        rx_lat=absent_data
+        rx_azi=absent_data
+        tx_azi=absent_data
+        km=absent_data
+        # end of list of absent data values for where tx_locator = "none"
+     
+      # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
+    freq=int(10*float(frequency))
+    if freq==1:
+        band=2200
+    if freq==4:
+        band=630
+    if freq==18:
+        band=160
+    if freq==35:
+        band=80
+    if freq==52 or freq==53:
+       band=60
+    if freq==70:
+        band=40
+    if freq==101:
+        band=30
+    if freq==140:
+        band=20
+    if freq==181:
+        band=17
+    if freq==210:
+        band=15
+    if freq==249:
+        band=12
+    if freq==281:
+        band=10
+    if freq==502:
+        band=6
+    if freq==700:
+        band=4
+    if freq==1444:
+        band=2
+    if freq==4323:
+        band=70
+    if freq==12965:
+        band=23
+    # output the original data, except for pwr in W and miles, and add lat lon at tx and rx, azi at tx and rx, vertex lat lon and the band
+    out_writer.writerow([band, "%.0f" % (km), "%.0f" % (rx_azi), "%.3f" % (rx_lat),  "%.3f" % (rx_lon), "%.0f" % (tx_azi),  "%.1f" % (tx_lat), "%.1f" % (tx_lon), "%.3f" % (v_lat), "%.3f" % (v_lon)])
+
+EOF
+}
 
 function upload_line_to_wsprdaemon() {
     local file_path=$1
     local file_line="$2"
     local my_root_dir=$3
     local my_tmp_root_dir=$4
-    local my_curl_log_file=${my_tmp_root_dir}/curl.log
     local file_type=${file_path##*_wspr_}
 
-    [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
     local line_array=(${file_line})
     local path_array=( ${file_path//\// } ) 
     local path_array_count=${#path_array[@]}
@@ -3205,15 +3357,12 @@ function upload_line_to_wsprdaemon() {
     local file_name=${file_path##*/}
     local file_name_elements=( ${file_name//_/ } )
 
-    local curl_args=""
     case ${file_type} in
         spots.txt)
             local band_usb_freq_hz=${file_name_elements[2]}
             local recording_band_center_hz=$(( ${band_usb_freq_hz} + 1500 ))
             local recording_band_center_mhz=$(bc <<< "scale = 6; ${recording_band_center_hz} / 1000000")
-            ###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
-            ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  (in wspr_spots.txt line: Blocksize  Metric  OSD_Decode)
-            ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]  (                      [11/12]   [12/13   [13:14]   )]
+
             local signal_date=${line_array[0]}
             local signal_time=${line_array[1]}
             local signal_snr=${line_array[3]}
@@ -3226,19 +3375,42 @@ function upload_line_to_wsprdaemon() {
                 local signal_pwr=${line_array[8]}
                 local signal_drift=${line_array[9]}
             else
-                local signal_grid==""
+                local signal_grid="none"
                 local signal_pwr=${line_array[7]}
                 local signal_drift=${line_array[8]}
             fi
-            curl_args="${UPLOADS_WSPRDAEMON_URL}/wspr?rcall=${my_call_sign}&rgrid=${my_grid}&rqrg=${recording_band_center_mhz}&date=${signal_date}&time=${signal_time}&sig=${signal_snr}&dt=${signal_dt}&drift=${signal_drift}&tqrg=${signal_freq}&tcall=${signal_call}&tgrid=${signal_grid}&dbm=${signal_pwr}&version=WD-${VERSION}&mode=2" 
+            #:::::::::::::::::::::::::::::::::::::::::::  G3ZIL upload to wsprdaemon wd_spots table in the tutorial database   :::::::::::::::::::::::::
+            # April 2020 V1
+            local timestamp="${signal_date} ${signal_time}"
+            add_derived ${signal_grid} ${my_grid} ${signal_freq}
+            if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): spots.txt $INPUT file not found"
+                return 1
+            fi
+
+            OLDIFS=$IFS
+            IFS=','
+            while read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon; do
+                sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
+                sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, -999.0, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
+                PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h wsprdaemon.org -A -F, -c "$sql1$sql2" &> add_derived_psql.txt
+                [[ ${verbosity} -ge 2 ]] && echo "$sql2" >> sql2.txt
+            done < ${DERIVED_ADDED_FILE}
+            IFS=$OLDIFS
+            if ! grep -q "INSERT" add_derived_psql.txt ; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
+                 return 1
+            fi
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() uploaded spots file '${file_path}' containing line '${file_line}'"
+            return 0 
             ;;
         noise.txt)
             declare NOISE_LINE_EXPECTED_FIELD_COUNT=14     ## Each report line must include ( 3 * pre/sig/post ) + sox_fft + c2_fft = 14 fields
-             local line_field_count=${#line_array[@]}
-             if [[ ${line_field_count} -lt ${NOISE_LINE_EXPECTED_FIELD_COUNT} ]]; then
-                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() tossing corrupt noise.txt line '${file_line}'in '${file_path}'"
-                 return  1
-             fi
+            local line_field_count=${#line_array[@]}
+            if [[ ${line_field_count} -lt ${NOISE_LINE_EXPECTED_FIELD_COUNT} ]]; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() tossing corrupt noise.txt line '${file_line}'in '${file_path}'"
+                return  1
+            fi
             local real_receiver_name_index=$(( ${path_array_count} - 3 ))
             local real_receiver_name=${path_array[${real_receiver_name_index}]}
             local real_receiver_maidenhead=${my_grid}
@@ -3263,34 +3435,24 @@ function upload_line_to_wsprdaemon() {
             local time_minute=${file_name_elements[1]:2:2}
             local time_epoch=$(TZ=UTC date --date="${time_year}-${time_month}-${time_day} ${time_hour}:${time_minute}" +%s)
             local timestamp_ms=$(( ${time_epoch} * 1000))
-            curl_args="${UPLOADS_WSPRDAEMON_URL}/upload_radio?site=${SIGNAL_LEVEL_UPLOAD_ID}&receiver=${real_receiver_name}&maidenhead=${real_receiver_maidenhead}&band=${real_receiver_rx_band}&fft_level=${sox_fft_value}&rms_level=${rms_value}&c2_level=${c2_fft_value}&timestamp_ms=${timestamp_ms}"
 
             # G3ZIL added function to write to Timescale DB. And format the timestamp to suit Timescale DB.
             local datestamp_ts="${time_year}-${time_month}-${time_day}"
             local timestamp_ts="${time_hour}:${time_minute}"
             noise_upload  ${datestamp_ts} ${timestamp_ts} ${SIGNAL_LEVEL_UPLOAD_ID} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
             local py_retcode=$?
-            [[ ${verbosity} -ge 2 ]] && [[ ${py_retcode} -eq 0 ]] && echo "$(date): noise_upload_to_timescale() completed"
-            [[ ${verbosity} -ge 1 ]] && [[ ${py_retcode} -eq 2 ]] && echo "$(date): noise_upload_to_timescale() failed"
+            if [[ ${py_retcode} -ne 0 ]]; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload of noise from ${real_receiver_name}/${real_receiver_rx_band}  failed"
+                return ${py_retcode}
+            fi
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() upload of noise from ${real_receiver_name}/${real_receiver_rx_band} complete"
+            return 0
             ;;
         *)
             [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() ERROR file_type '${file_type}' is invalid"
             return 2
             ;;
     esac
-
-    [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() in $PWD starting 'curl --max-time ${UPLOAD_CURL_TIMEOUT} --insecure ${curl_args}'"
-    curl --max-time ${UPLOAD_CURL_TIMEOUT} --insecure "${curl_args}" > ${my_curl_log_file} 2>&1
-    local retcode=$?
-    [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() done"
-    if [[ ${retcode} -eq 0 ]] ; then
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_line_to_wsprdaemon() curl successful"
-    else
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): curl upload to signal data base failed or timed out.  curl.log:"
-    fi
-    [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_line_to_wsprdaemon() curl args '%s' => \ncurl log '${my_curl_log_file}':\n%s\n" "${curl_args}" "$(cat ${my_curl_log_file})"
-
-    return ${retcode}
  }
  
 ### Polls for wspr_spots.txt or wspr_noise.txt files and uploads them to wsprdaemon.org 
@@ -3300,6 +3462,8 @@ function upload_to_wsprdaemon_daemon() {
     local source_tmp_root_dir=$2
 
     mkdir -p ${source_root_dir}
+    cd ${source_root_dir}
+    rm -f sql2.txt        ## Diagnostic logging file is only filled at verbosity > 1
     while true; do
         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
@@ -3356,10 +3520,13 @@ function upload_to_wsprdaemon_daemon() {
 
 function spawn_upload_to_wsprdaemon_daemon() {
     local uploading_root_dir=$1
+    mkdir -p ${uploading_root_dir}
+    local uploading_log_file_path=${uploading_root_dir}/uploads.log
+    local uploading_pid_file_path=${uploading_root_dir}/uploads.pid  ### Must match UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH or UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH
+
     local uploading_tmp_root_dir=$2
-    local uploading_log_file_path=${uploading_tmp_root_dir}/uploads.log
-    local uploading_pid_file_path=${uploading_tmp_root_dir}/uploading.pid  ### Must match UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH or UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH
-    mkdir -p ${uploading_pid_file_path%/*}
+    mkdir -p ${uploading_tmp_root_dir}
+
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -3370,7 +3537,6 @@ function spawn_upload_to_wsprdaemon_daemon() {
             rm -f ${uploading_pid_file_path}
         fi
     fi
-    mkdir -p ${uploading_log_file_path%/*}
     upload_to_wsprdaemon_daemon ${uploading_root_dir} ${uploading_tmp_root_dir} > ${uploading_log_file_path} 2>&1 &
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 2 ]] && echo "$(date): spawn_upload_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
@@ -3400,7 +3566,7 @@ function upload_to_wsprdaemon_daemon_status()
         return
     fi
     local uploading_pid_file_path=$1
-    if [[ ${uploading_pid_file_path} == ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH} ]] ; then
+    if [[ ${uploading_pid_file_path} == ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} ]] ; then
         local data_type="noise"
     else
         local data_type="spots"
@@ -3444,15 +3610,15 @@ function spawn_upload_daemons() {
 function kill_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): kill_upload_daemons() start"
     kill_upload_to_wsprnet_daemon
-    kill_upload_to_wsprdaemon_daemon ${UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-    kill_upload_to_wsprdaemon_daemon ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH}
+    kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
+    kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
 }
 
 function upload_daemons_status(){
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_daemons_status() start"
     upload_to_wsprnet_daemon_status
-    upload_to_wsprdaemon_daemon_status ${UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-    upload_to_wsprdaemon_daemon_status ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH}
+    upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
+    upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
 }
 
 ##########################################################################################################################################################
@@ -3513,7 +3679,7 @@ function check_for_zombies() {
         return
     fi
     ### First check if the watchdog and the upload daemons are running
-    for pid_file_path in ${PATH_WATCHDOG_PID} ${UPLOADS_TMP_WSPRNET_PIDFILE_PATH} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_TMP_WSPRDAEMON_NOISE_PIDFILE_PATH}; do
+    for pid_file_path in ${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}; do
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"
@@ -3635,7 +3801,7 @@ function check_for_zombies() {
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     local kill_pid_list=""
     local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ {print $2}' <<< "${ps_output_lines}" )
+    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ {print $2}' <<< "${ps_output_lines}" )
     for running_pid in ${ps_running_list} ; do
        if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
