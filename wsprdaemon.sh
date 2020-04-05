@@ -2075,8 +2075,7 @@ function decoding_daemon()
             local wspr_decode_capture_band_center_mhz=$( printf "%2.6f\n" $(bc <<< "scale = 5; (${wspr_decode_capture_freq_hz}+1500)/1000000.0" ) )
             ### 
 
-            local wspr_decode_capture_
-            minute=${wspr_decode_capture_time:2}
+            local wspr_decode_capture_minute=${wspr_decode_capture_time:2}
 
             [[ ! -s ALL_WSPR.TXT ]] && touch ALL_WSPR.TXT
             local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
@@ -2182,7 +2181,7 @@ function decoding_daemon()
             ### Forward the recording's date_time_freqHz spot file to the posting daemon which is polling for it.  Do this here so that it is after the very slow sox FFT calcs are finished
             local new_spots_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_spots.txt
             [[ ! -f wspr_spots.txt ]] && touch wspr_spots.txt  ### Just in case it wasn't created by 'wsprd'
-            cp -p wspr_spots.txt ${new_spots_file}
+            cp -p wspr_spots.txt ${new_spots_file}  ### Add C2
 
             ### Copy the renamed wspr_spots.txt to waiting posting daemons
             shopt -s nullglob    ### * expands to NULL if there are no .wav wav_file
@@ -3801,7 +3800,8 @@ function check_for_zombies() {
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     local kill_pid_list=""
     local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ {print $2}' <<< "${ps_output_lines}" )
+    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ && !/derived_calc.py/ && !/curl/ {print $2}' <<< "${ps_output_lines}" )
+    [[ $verbosity -ge 3 ]] && echo "$(date): check_for_zombies() filtered 'ps usxf' output '${ps_output_lines}' to get list '${ps_running_list}"
     for running_pid in ${ps_running_list} ; do
        if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
