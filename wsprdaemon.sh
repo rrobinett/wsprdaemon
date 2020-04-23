@@ -134,10 +134,11 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
                                     ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
 declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsprdaemon.org database
-                                    ### TODO: Add noise levels to WD spots
-                                    ### TODO: Optimize azi calculations
-                                    ### TODO: Add VOCAP support
+                                    ### Add noise levels to WD spots
+                                    ### Optimize azi calculations
                                     ### TODO: handle failure of member of MERGed rx group
+                                    ### TODO: use FTP to upload spots and noise to wsprdaemon.org
+                                    ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
@@ -2171,7 +2172,7 @@ function decoding_daemon()
              ### Output a line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values:
              ###                           Pre Tx                                                        Tx                                                   Post TX
              ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'
-             local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${fft_value}    ${c2_FFT_nl_cal}"
+             local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${rms_value}    ${c2_FFT_nl_cal}"
              echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
              local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
              echo "${signal_level_line}" > ${new_noise_file}
@@ -2191,9 +2192,8 @@ function decoding_daemon()
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon():no spots were found.  Queuing zero length spot file"
             else
                 ###  Spot were found, and we want to add the noise level fields to the end of each spot
-                local enhanced_spot_line="$(cat wspr_spots.txt)"    ## TODO: , ${fft_value} ${c2_FFT_nl_cal}" 
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): queuing enhanced spot line = ${enhanced_spot_line}"
-                echo "${enhanced_spot_line}" >  ${new_spots_file}  ### add c2
+                sed "s/\$/,  ${rms_value}  ${c2_FFT_nl_cal}/" wspr_spots.txt > ${new_spots_file}  ### add c2
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): decoding_daemon(): queuing enhanced spot file:\n$(cat ${new_spots_file})\n"
             fi
 
             ### Copy the noise level file and the renamed wspr_spots.txt to waiting posting daemons' subdirs
@@ -2283,6 +2283,9 @@ function posting_daemon()
     source ${WSPRDAEMON_CONFIG_FILE}
     local my_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
+    
+    ### This Python command creates the enhanced azi infomation added to each spot
+    create_azi_python
 
     ### Where to put the spots from the one or more real receivers for the upload daemon to find
     local  wsprnet_upload_dir=${UPLOADS_WSPRNET_SPOTS_DIR}/${my_call_sign//\//=}_${my_grid}/${posting_receiver_name}/${posting_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
@@ -2458,7 +2461,7 @@ function posting_daemon()
                 cat this_calls_best_snr.tmp >> best_snrs.tmp
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
             done
-            sort -k 6,6n best_snrs.tmp > ${wsprd_spots_best_file_path}   ### Sort by ascending frequency
+            sed 's/,.*//' best_snrs.tmp | sort -k 6,6n > ${wsprd_spots_best_file_path}   ### Chop off the RMS and FFT fields, then sort by ascending frequency.  
             rm -f best_snrs.tmp this_calls_best_snr.tmp 
             ### Now ${wsprd_spots_best_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
 
@@ -2500,20 +2503,15 @@ function posting_daemon()
                     rm -f ${real_receiver_wspr_spots_file}
                 else
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() queue real rx spots file '${real_receiver_wspr_spots_file}' for upload to wsprdaemon.org"
+                    local real_receiver_enhanced_wspr_spots_file="enhanced_wspr_spots.txt"
+                    create_enhanced_spots_file ${real_receiver_wspr_spots_file} ${real_receiver_enhanced_wspr_spots_file} ${my_grid}
 
-                    #:::::::::::::::::::::::::::::::::::::::::::  G3ZIL upload to wsprdaemon wd_spots table in the tutorial database   :::::::::::::::::::::::::
-                    # April 2020 V1    add azi
-                    #add_derived ${signal_grid} ${my_grid} ${signal_freq}
-                    #local spot_line=( $(cat ${real_receiver_dir})  )
-                    #if false || [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
-                    #    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): spots.txt $INPUT file not found"
-                    #    return 1
-                    #fi
                     local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
                     mkdir -p ${upload_wsprdaemon_spots_dir}
                     local upload_wsprd_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-                    mv ${real_receiver_wspr_spots_file} ${upload_wsprd_file_path}
-                    [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() copied ${real_receiver_wspr_spots_file} to ${upload_wsprd_file_path} \nwhich contains spot(s):\n$( cat ${upload_wsprd_file_path})\n==============\n"
+                    mv ${real_receiver_enhanced_wspr_spots_file} ${upload_wsprd_file_path}
+                    rm -f ${real_receiver_wspr_spots_file}
+                    [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} \nwhich contains spot(s):\n$( cat ${upload_wsprd_file_path})\n==============\n"
                 fi
             fi
  
@@ -2521,7 +2519,7 @@ function posting_daemon()
             local noise_files_list=( ${real_receiver_dir}/*_wspr_noise.txt )
             local noise_files_list_count=${#noise_files_list[@]}
             if [[ ${noise_files_list_count} -lt 1 ]]; then
-                [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() INTERNAL ERROR: expected noise.tx file is missing\n"
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() INTERNAL ERROR: expected noise.txt file is missing\n"
             else
                 local  upload_wsprdaemon_noise_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
                 mkdir -p ${upload_wsprdaemon_noise_dir}
@@ -2530,7 +2528,6 @@ function posting_daemon()
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moved '${noise_files_list[@]}' to '${upload_wsprdaemon_noise_dir}'"
             fi
         done
-        set +x
         ### We have uploaded all the spot and noise files
  
         sleep ${WAV_FILE_POLL_SECONDS}
@@ -2538,6 +2535,219 @@ function posting_daemon()
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
 
+### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length  enhanced spot file with tx and rx azi vectors added
+###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
+###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  (in wspr_spots.txt line: Blocksize  Metric  OSD_Decode)
+###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]  (                      [11/12]   [12/13   [13:14]   )]
+### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=14   ### Lines with a GRID will have 12 + 2 fields, else 11 + 2 fields
+
+function create_enhanced_spots_file() {
+    local real_receiver_wspr_spots_file=$1
+    local real_receiver_enhanced_wspr_spots_file=$2
+    local my_grid=$3
+
+    rm -f ${real_receiver_enhanced_wspr_spots_file}
+    touch ${real_receiver_enhanced_wspr_spots_file}
+    local spot_line
+    while read spot_line ; do
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): create_enhanced_spots_file() enhance line '${spot_line}'"
+        local spot_line_list=(${spot_line/,/})          ### add c2
+        local spot_line_list_count=${#spot_line_list[@]}
+        local signal_date signal_time signal_sync_quality signal_snr signal_dt signal_freq signal_call other_fields
+        read  signal_date signal_time signal_sync_quality signal_snr signal_dt signal_freq signal_call other_fields <<< "${spot_line/,/}"
+        local signal_grid signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise
+        if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
+            read signal_grid signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise <<< "${other_fields}"
+        else
+            signal_grid="none"
+            read signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise <<< "${other_fields}"
+        fi
+        ### G3ZIL 
+        ### April 2020 V1    add azi
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file() 'add_derived ${signal_grid} ${my_grid} ${signal_freq}'"
+        add_derived ${signal_grid} ${my_grid} ${signal_freq}
+        if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file() spots.txt $INPUT file not found"
+            return 1
+        fi
+        local derived_fields=$(cat ${DERIVED_ADDED_FILE} | tr -d '\r')
+        derived_fields=${derived_fields//,/ }   ### Strip out the ,s
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): create_enhanced_spots_file() derived_fields='${derived_fields}'"
+
+        local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
+        read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
+
+        ### Output a space-seperated line of enhanced spot data
+        echo "${signal_date} ${signal_time} ${band} ${my_grid} ${my_call_sign} ${signal_call} ${signal_grid} ${signal_snr} ${signal_c2_noise} ${signal_drift} ${signal_freq} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${signal_pwr} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
+
+    done < ${real_receiver_wspr_spots_file}
+    [[ ${verbosity} -ge 2 ]] && printf "$(date): create_enhanced_spots_file() created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
+}
+
+################### wsprdaemon uploads ####################################
+### add tx and rx lat, lon, azimuths, distance and path vertex using python script. 
+### In the main program, call this function with a file path/name for the input file, the tx_locator, the rx_locator and the frequency
+### The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
+declare DERIVED_ADDED_FILE=derived_azi.csv
+declare AZI_PYTHON_CMD=derived_calc.py
+
+function add_derived() {
+    local signal_grid=$1
+    local my_grid=$2
+    local signal_freq=$3    
+
+    python3 ${AZI_PYTHON_CMD} ${signal_grid} ${my_grid} ${signal_freq} 1>add_derived.txt 2 > add_derived.log
+}
+
+### G3ZIL python script that gets copied into derived_calc.py and is run there
+function create_azi_python() {
+    cat > ${AZI_PYTHON_CMD} <<EOF
+# -*- coding: utf-8 -*-
+# April  2020  Gwyn Griffiths. Based on the add_azi used in the ts-wspr-scraper.sh script
+
+# Takes receiver and transmitter Maidenhead locators and calculates azimuths at tx and rx, lats and lons, distance and vertes lat and lon
+# Needs the two locators and frequency as arguments. If signal_grid="none" puts absent data in the calculated fields.
+# The operating band is derived from the frequency, 60 and 60eu and 80 and 80eu are reported as 60 and 80
+# Miles are not copied to the azi-appended file
+# In the script the following lines preceed this code and there's an EOF added at the end
+# G3ZIL python script that gets copied into /tmp/derived_calc.py and is run there
+
+import numpy as np
+from numpy import genfromtxt
+import sys
+import csv
+
+absent_data=-999.0
+
+# define function to convert 4 or 6 character Maidenhead locator to lat and lon in degrees
+def loc_to_lat_lon (locator):
+    locator=locator.strip()
+    decomp=list(locator)
+    lat=(((ord(decomp[1])-65)*10)+(ord(decomp[3])-48)+(1/2)-90)
+    lon=(((ord(decomp[0])-65)*20)+((ord(decomp[2])-48)*2)+(1)-180)
+    if len(locator)==6:
+        if (ord(decomp[4])) >88:    # check for case of the third pair, likely to  be lower case
+            ascii_base=96
+        else:
+            ascii_base=64
+        lat=lat-(1/2)+((ord(decomp[5])-ascii_base)/24)-(1/48)
+        lon=lon-(1)+((ord(decomp[4])-ascii_base)/12)-(1/24)
+    return(lat, lon)
+
+# get the rx_locator, tx_locator and frequency from the command line arguments
+tx_locator=sys.argv[1]
+print(tx_locator)
+rx_locator=sys.argv[2]
+print(rx_locator)
+frequency=sys.argv[3]
+
+print(tx_locator, rx_locator, frequency)
+
+# open file for output as a csv file, to which we will put the calculated values
+with open("${DERIVED_ADDED_FILE}", "w") as out_file:
+    out_writer=csv.writer(out_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    # loop to calculate  azimuths at tx and rx (wsprnet only does the tx azimuth)
+    if tx_locator!="none":
+        (tx_lat,tx_lon)=loc_to_lat_lon (tx_locator)    # call function to do conversion, then convert to radians
+        phi_tx_lat = np.radians(tx_lat)
+        lambda_tx_lon = np.radians(tx_lon)
+        (rx_lat,rx_lon)=loc_to_lat_lon (rx_locator)    # call function to do conversion, then convert to radians
+        phi_rx_lat = np.radians(rx_lat)
+        lambda_rx_lon = np.radians(rx_lon)
+        delta_phi = (phi_tx_lat - phi_rx_lat)
+        delta_lambda=(lambda_tx_lon-lambda_rx_lon)
+
+        # calculate azimuth at the rx
+        y = np.sin(delta_lambda) * np.cos(phi_tx_lat)
+        x = np.cos(phi_rx_lat)*np.sin(phi_tx_lat) - np.sin(phi_rx_lat)*np.cos(phi_tx_lat)*np.cos(delta_lambda)
+        rx_azi = (np.degrees(np.arctan2(y, x))) % 360
+
+        # calculate azimuth at the tx
+        p = np.sin(-delta_lambda) * np.cos(phi_rx_lat)
+        q = np.cos(phi_tx_lat)*np.sin(phi_rx_lat) - np.sin(phi_tx_lat)*np.cos(phi_rx_lat)*np.cos(-delta_lambda)
+        tx_azi = (np.degrees(np.arctan2(p, q))) % 360
+        # calculate the vertex, the lat lon at the point on the great circle path nearest the nearest pole, this is the highest latitude on the path
+        # no need to calculate special case of both transmitter and receiver on the equator, is handled OK
+        # Need special case for any meridian, where vertex longitude is the meridian longitude and the vertex latitude is the lat nearest the N or S pole
+        if tx_lon==rx_lon:
+            v_lon=tx_lon
+            v_lat=max([tx_lat, rx_lat], key=abs)
+        else:
+            v_lat=np.degrees(np.arccos(np.sin(np.radians(rx_azi))*np.cos(phi_rx_lat)))
+        if v_lat>90.0:
+            v_lat=180-v_lat
+        if rx_azi<180:
+            v_lon=((rx_lon+np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
+        else:
+            v_lon=((rx_lon-np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
+        if v_lon>180:
+            v_lon=-(360-v_lon)
+        # now test if vertex is not  on great circle track, if so, lat/lon nearest pole is used
+        if v_lon < min(tx_lon, rx_lon) or v_lon > max(tx_lon, rx_lon):
+        # this is the off track case
+            v_lat=max([tx_lat, rx_lat], key=abs)
+            if v_lat==tx_lat:
+                v_lon=tx_lon
+            else:
+                v_lon=rx_lon
+        # now calculate the short path great circle distance
+        a=np.sin(delta_phi/2)*np.sin(delta_phi/2)+np.cos(phi_rx_lat)*np.cos(phi_tx_lat)*np.sin(delta_lambda/2)*np.sin(delta_lambda/2)
+        c=2*np.arctan2(np.sqrt(a), np.sqrt(1-a))
+        km=6371*c
+    else: 
+        v_lon=absent_data
+        v_lat=absent_data
+        tx_lon=absent_data  
+        tx_lat=absent_data
+        rx_lon=absent_data
+        rx_lat=absent_data
+        rx_azi=absent_data
+        tx_azi=absent_data
+        km=absent_data
+        # end of list of absent data values for where tx_locator = "none"
+     
+      # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
+    freq=int(10*float(frequency))
+    if freq==1:
+        band=2200
+    if freq==4:
+        band=630
+    if freq==18:
+        band=160
+    if freq==35:
+        band=80
+    if freq==52 or freq==53:
+       band=60
+    if freq==70:
+        band=40
+    if freq==101:
+        band=30
+    if freq==140:
+        band=20
+    if freq==181:
+        band=17
+    if freq==210:
+        band=15
+    if freq==249:
+        band=12
+    if freq==281:
+        band=10
+    if freq==502:
+        band=6
+    if freq==700:
+        band=4
+    if freq==1444:
+        band=2
+    if freq==4323:
+        band=70
+    if freq==12965:
+        band=23
+    # output the original data, except for pwr in W and miles, and add lat lon at tx and rx, azi at tx and rx, vertex lat lon and the band
+    out_writer.writerow([band, "%.0f" % (km), "%.0f" % (rx_azi), "%.3f" % (rx_lat),  "%.3f" % (rx_lon), "%.0f" % (tx_azi),  "%.1f" % (tx_lat), "%.1f" % (tx_lon), "%.3f" % (v_lat), "%.3f" % (v_lon)])
+
+EOF
+}
 ### WARNING: diag printouts would go into merged.logs file
 function log_merged_snrs() {
     local source_file_count=${#newest_list[@]}
@@ -3215,178 +3425,16 @@ finally:
 EOF
 }
 
-################### wsprdaemon uploads ####################################
-# add tx and rx lat, lon, azimuths, distance and path vertex using python script. 
-# In the main program, call this function with a file path/name for the input file, the tx_locator, the rx_locator and the frequency
-# The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
-declare DERIVED_ADDED_FILE=/tmp/wsprdaemon/derived+azi.csv
-declare AZI_PYTHON_CMD=/tmp/wsprdaemon/derived_calc.py
 
-function add_derived() {
-    local signal_grid=$1
-    local my_grid=$2
-    local signal_freq=$3    
-    create_azi_python
-    python3 ${AZI_PYTHON_CMD} ${signal_grid} ${my_grid} ${signal_freq} 1>add_derived.txt 2 > add_derived.log
-}
-
-#G3ZIL python script that gets copied into /tmp/wsprdaemon/derived_calc.py and is run there
-function create_azi_python() {
-    cat > ${AZI_PYTHON_CMD} <<EOF
-# -*- coding: utf-8 -*-
-# April  2020  Gwyn Griffiths. Based on the add_azi used in the ts-wspr-scraper.sh script
-
-# Takes receiver and transmitter Maidenhead locators and calculates azimuths at tx and rx, lats and lons, distance and vertes lat and lon
-# Needs the two locators and frequency as arguments. If signal_grid="none" puts absent data in the calculated fields.
-# The operating band is derived from the frequency, 60 and 60eu and 80 and 80eu are reported as 60 and 80
-# Miles are not copied to the azi-appended file
-# In the script the following lines preceed this code and there's an EOF added at the end
-# G3ZIL python script that gets copied into /tmp/derived_calc.py and is run there
-
-import numpy as np
-from numpy import genfromtxt
-import sys
-import csv
-
-absent_data=-999.0
-
-# define function to convert 4 or 6 character Maidenhead locator to lat and lon in degrees
-def loc_to_lat_lon (locator):
-    locator=locator.strip()
-    decomp=list(locator)
-    lat=(((ord(decomp[1])-65)*10)+(ord(decomp[3])-48)+(1/2)-90)
-    lon=(((ord(decomp[0])-65)*20)+((ord(decomp[2])-48)*2)+(1)-180)
-    if len(locator)==6:
-        if (ord(decomp[4])) >88:    # check for case of the third pair, likely to  be lower case
-            ascii_base=96
-        else:
-            ascii_base=64
-        lat=lat-(1/2)+((ord(decomp[5])-ascii_base)/24)-(1/48)
-        lon=lon-(1)+((ord(decomp[4])-ascii_base)/12)-(1/24)
-    return(lat, lon)
-
-# get the rx_locator, tx_locator and frequency from the command line arguments
-tx_locator=sys.argv[1]
-print(tx_locator)
-rx_locator=sys.argv[2]
-print(rx_locator)
-frequency=sys.argv[3]
-
-print(tx_locator, rx_locator, frequency)
-
-# open file for output as a csv file, to which we will put the calculated values
-with open("${DERIVED_ADDED_FILE}", "w") as out_file:
-    out_writer=csv.writer(out_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    # loop to calculate  azimuths at tx and rx (wsprnet only does the tx azimuth)
-    if tx_locator!="none":
-        (tx_lat,tx_lon)=loc_to_lat_lon (tx_locator)    # call function to do conversion, then convert to radians
-        phi_tx_lat = np.radians(tx_lat)
-        lambda_tx_lon = np.radians(tx_lon)
-        (rx_lat,rx_lon)=loc_to_lat_lon (rx_locator)    # call function to do conversion, then convert to radians
-        phi_rx_lat = np.radians(rx_lat)
-        lambda_rx_lon = np.radians(rx_lon)
-        delta_phi = (phi_tx_lat - phi_rx_lat)
-        delta_lambda=(lambda_tx_lon-lambda_rx_lon)
-
-        # calculate azimuth at the rx
-        y = np.sin(delta_lambda) * np.cos(phi_tx_lat)
-        x = np.cos(phi_rx_lat)*np.sin(phi_tx_lat) - np.sin(phi_rx_lat)*np.cos(phi_tx_lat)*np.cos(delta_lambda)
-        rx_azi = (np.degrees(np.arctan2(y, x))) % 360
-
-        # calculate azimuth at the tx
-        p = np.sin(-delta_lambda) * np.cos(phi_rx_lat)
-        q = np.cos(phi_tx_lat)*np.sin(phi_rx_lat) - np.sin(phi_tx_lat)*np.cos(phi_rx_lat)*np.cos(-delta_lambda)
-        tx_azi = (np.degrees(np.arctan2(p, q))) % 360
-        # calculate the vertex, the lat lon at the point on the great circle path nearest the nearest pole, this is the highest latitude on the path
-        # no need to calculate special case of both transmitter and receiver on the equator, is handled OK
-        # Need special case for any meridian, where vertex longitude is the meridian longitude and the vertex latitude is the lat nearest the N or S pole
-        if tx_lon==rx_lon:
-            v_lon=tx_lon
-            v_lat=max([tx_lat, rx_lat], key=abs)
-        else:
-            v_lat=np.degrees(np.arccos(np.sin(np.radians(rx_azi))*np.cos(phi_rx_lat)))
-        if v_lat>90.0:
-            v_lat=180-v_lat
-        if rx_azi<180:
-            v_lon=((rx_lon+np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
-        else:
-            v_lon=((rx_lon-np.degrees(np.arccos(np.tan(phi_rx_lat)/np.tan(np.radians(v_lat)))))+360) % 360
-        if v_lon>180:
-            v_lon=-(360-v_lon)
-        # now test if vertex is not  on great circle track, if so, lat/lon nearest pole is used
-        if v_lon < min(tx_lon, rx_lon) or v_lon > max(tx_lon, rx_lon):
-        # this is the off track case
-            v_lat=max([tx_lat, rx_lat], key=abs)
-            if v_lat==tx_lat:
-                v_lon=tx_lon
-            else:
-                v_lon=rx_lon
-        # now calculate the short path great circle distance
-        a=np.sin(delta_phi/2)*np.sin(delta_phi/2)+np.cos(phi_rx_lat)*np.cos(phi_tx_lat)*np.sin(delta_lambda/2)*np.sin(delta_lambda/2)
-        c=2*np.arctan2(np.sqrt(a), np.sqrt(1-a))
-        km=6371*c
-    else: 
-        v_lon=absent_data
-        v_lat=absent_data
-        tx_lon=absent_data  
-        tx_lat=absent_data
-        rx_lon=absent_data
-        rx_lat=absent_data
-        rx_azi=absent_data
-        tx_azi=absent_data
-        km=absent_data
-        # end of list of absent data values for where tx_locator = "none"
-     
-      # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
-    freq=int(10*float(frequency))
-    if freq==1:
-        band=2200
-    if freq==4:
-        band=630
-    if freq==18:
-        band=160
-    if freq==35:
-        band=80
-    if freq==52 or freq==53:
-       band=60
-    if freq==70:
-        band=40
-    if freq==101:
-        band=30
-    if freq==140:
-        band=20
-    if freq==181:
-        band=17
-    if freq==210:
-        band=15
-    if freq==249:
-        band=12
-    if freq==281:
-        band=10
-    if freq==502:
-        band=6
-    if freq==700:
-        band=4
-    if freq==1444:
-        band=2
-    if freq==4323:
-        band=70
-    if freq==12965:
-        band=23
-    # output the original data, except for pwr in W and miles, and add lat lon at tx and rx, azi at tx and rx, vertex lat lon and the band
-    out_writer.writerow([band, "%.0f" % (km), "%.0f" % (rx_azi), "%.3f" % (rx_lat),  "%.3f" % (rx_lon), "%.0f" % (tx_azi),  "%.1f" % (tx_lat), "%.1f" % (tx_lon), "%.3f" % (v_lat), "%.3f" % (v_lon)])
-
-EOF
-}
 
 function upload_line_to_wsprdaemon() {
     local file_path=$1
-    local file_line="$2"
+    local file_line="${2/,/ }"   ## Remove the ',' from an enhanced spot report line
     local my_root_dir=$3
     local my_tmp_root_dir=$4
     local file_type=${file_path##*_wspr_}
 
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
+    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
     local line_array=(${file_line})
     local path_array=( ${file_path//\// } ) 
     local path_array_count=${#path_array[@]}
@@ -3399,6 +3447,21 @@ function upload_line_to_wsprdaemon() {
 
     case ${file_type} in
         spots.txt)
+            local signal_date signal_time band my_grid my_call_sign signal_call signal_grid signal_snr signal_c2_noise signal_drift signal_freq km rx_az rx_lat rx_lon tx_az signal_pwr tx_lat tx_lon v_lat v_lon
+            read  signal_date signal_time band my_grid my_call_sign signal_call signal_grid signal_snr signal_c2_noise signal_drift signal_freq km rx_az rx_lat rx_lon tx_az signal_pwr tx_lat tx_lon v_lat v_lon <<< "${file_line}"
+            local timestamp="${signal_date} ${signal_time}"
+            local sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
+            local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
+            PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h wsprdaemon.org -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
+             if ! grep -q "INSERT" add_derived_psql.txt ; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
+                 return 1
+            fi
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() uploaded spots file '${file_path}' containing line '${file_line}'"
+            return 0
+            ;;
+        old_spots.txt)
             local band_usb_freq_hz=${file_name_elements[2]}
             local recording_band_center_hz=$(( ${band_usb_freq_hz} + 1500 ))
             local recording_band_center_mhz=$(bc <<< "scale = 6; ${recording_band_center_hz} / 1000000")
@@ -3409,15 +3472,19 @@ function upload_line_to_wsprdaemon() {
             local signal_dt=${line_array[4]}
             local signal_freq=${line_array[5]}
             local signal_call=${line_array[6]}
-            local  FIELD_COUNT_DECODE_LINE_WITH_GRID=12   ### Lines with a GRID whill have 12 fields, else 11 fields
+            local  FIELD_COUNT_DECODE_LINE_WITH_GRID=14   ### Lines with a GRID whill have 12 fields, else 11 fields
             if [[ ${#line_array[@]} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
                 local signal_grid=${line_array[7]}
                 local signal_pwr=${line_array[8]}
                 local signal_drift=${line_array[9]}
+                local signal_rms_noise=${line_array[12]}
+                local signal_c2_noise=${line_array[13]}
             else
                 local signal_grid="none"
                 local signal_pwr=${line_array[7]}
                 local signal_drift=${line_array[8]}
+                local signal_rms_noise=${line_array[11]}
+                local signal_c2_noise=${line_array[12]}
             fi
             #:::::::::::::::::::::::::::::::::::::::::::  G3ZIL upload to wsprdaemon wd_spots table in the tutorial database   :::::::::::::::::::::::::
             # April 2020 V1
@@ -3427,14 +3494,15 @@ function upload_line_to_wsprdaemon() {
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): spots.txt $INPUT file not found"
                 return 1
             fi
+            [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_line_to_wsprdaemon(): added azi file contains:\n$(cat ${DERIVED_ADDED_FILE})\n"
 
             OLDIFS=$IFS
             IFS=','
             while read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon; do
                 sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
-                sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, -999.0, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
+                sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
                 PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h wsprdaemon.org -A -F, -c "$sql1$sql2" &> add_derived_psql.txt
-                [[ ${verbosity} -ge 2 ]] && echo "$sql2" >> sql2.txt
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"
             done < ${DERIVED_ADDED_FILE}
             IFS=$OLDIFS
             if ! grep -q "INSERT" add_derived_psql.txt ; then
