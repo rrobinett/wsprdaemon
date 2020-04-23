@@ -136,7 +136,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsprdaemon.org database
                                     ### Add noise levels to WD spots
                                     ### Optimize azi calculations
-                                    ### TODO: handle failure of member of MERGed rx group
+                                    ### Handle failure of member of MERGed rx group
                                     ### TODO: use FTP to upload spots and noise to wsprdaemon.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -339,7 +339,6 @@ fi
 
 ################  Check for the existence of a config file and that it differss from the  prototype conf file  ################
 declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
-declare -r DEBUG_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/debug.conf
 declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_TMP_DIR}/template.conf
 
 if [[ ! -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
@@ -1390,7 +1389,6 @@ function kiwi_recording_daemon()
             [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: awake after error detected and done"
             return
         else
-            [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
             [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking for stale wav files"
             flush_stale_wav_files   ## ### Ensure that the file system is not filled up with zombie wav files
 
@@ -1989,6 +1987,7 @@ function decoding_daemon()
     fi
     local wspr_band_freq_khz=$(get_wspr_band_freq ${real_receiver_rx_band})
     local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
+    local wspr_band_freq_hz=$(                     bc <<< "scale = 0; ${wspr_band_freq_khz}*1000.0/1" )
 
     if [[ -f ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv ]]; then
         local cal_vals=($(sed -n '/^[0-9]/s/,/ /gp' ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv))
@@ -2009,7 +2008,7 @@ function decoding_daemon()
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
     local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
     local fft_adjust=$(bc -l <<< "${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}" )  ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
-    if [[ ${verbosity} -ge 1 ]]; then
+    if [[ ${verbosity} -ge 2 ]]; then
             echo "decoding_daemon() calculated the Kiwi to require a ${kiwi_amplitude_versus_frequency_correction} dB correction in this band
             Adding to that the antenna factor of ${antenna_factor_adjust} dB to results in a total correction of ${total_correction_db}
             rms_adjust=${rms_adjust} comes from ${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}
@@ -2032,6 +2031,25 @@ function decoding_daemon()
         spawn_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon() checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
+        ### Wait for a wav file and synthisize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails
+        local -a wav_file_list
+        while wav_file_list=( *.wav) && [[ ${#wav_file_list[@]} -eq 0 ]]; do
+            ### recording daemon isn't outputing a wav file, so post a zero length spot file in order to signal the posting daemon to process other real receivers in a MERGed group 
+            local wspr_spots_filename
+            local wspr_decode_capture_date=$(date -u -d '2 minutes ago' +%g%m%d_%H%M)  ### Unlike the wav filenames used below, we can get DATE_TIME from 'date' in exactly the format we want
+            local new_spots_file="${wspr_decode_capture_date}_${wspr_band_freq_hz}_wspr_spots.txt"
+            rm -f ${new_spots_file}
+            touch ${new_spots_file}
+            local dir
+            for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
+                ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): timeout waiting for a wav file, so copy a zero length ${new_spots_file} to ${dir}/ monitored by a posting daemon"
+                cp -p ${new_spots_file} ${dir}/
+            done
+            rm ${new_spots_file} 
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() found no wav files. Sleeping until next even minute."
+            local next_start_time_string=$(sleep_until_next_even_minute)
+        done
         for wav_file_name in *.wav; do
             [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): monitoring size of wav file '${wav_file_name}'"
 
@@ -2039,7 +2057,6 @@ function decoding_daemon()
             local old_wav_file_size=0
             local new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
             while [[ -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
-                [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
                 old_wav_file_size=${new_wav_file_size}
                 sleep ${WAV_FILE_POLL_SECONDS}
                 new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
@@ -4722,7 +4739,6 @@ function watchdog_daemon()
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     printf "$(date): watchdog_daemon() starting as pid $$\n"
     while true; do
-        [[ -f ${DEBUG_CONFIG_FILE} ]] && source ${DEBUG_CONFIG_FILE}
         [[ $verbosity -ge 2 ]] && echo "$(date): watchdog_daemon() is awake"
         validate_configuration_file
         update_master_hashtable
