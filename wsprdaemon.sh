@@ -138,6 +138,7 @@ declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsp
                                     ### Optimize azi calculations
                                     ### Handle failure of member of MERGed rx group
                                     ### TODO: use FTP to upload spots and noise to wsprdaemon.org
+                                    ### TODO: Add '-u a/s/z' command which runs as the upload service on wsprdeamon.rg
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
@@ -3380,19 +3381,9 @@ function upload_to_wsprnet_daemon_status()
 
 ##### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org ####
 # V1.0 March 2020
-declare NOISE_UPLOAD_PYTHON_CMD=/tmp/ts_noise_upload.py
-
-function noise_upload() {
-    [[ ${verbosity} -ge 3 ]] && echo "$(date): noise upload() starting '${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8' "
-
-   create_noise_upload_python
-   python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
-   py_retcode=$?
-   return ${py_retcode}
-}
-
 #G3ZIL python script that gets copied into /tmp/ts_batch_upload.py and is run there
 function create_noise_upload_python() {
+    [[ ${verbosity} -ge 1 ]] && echo "$(date): create_noise_upload_python() is creating ${NOISE_UPLOAD_PYTHON_CMD}"
     cat > ${NOISE_UPLOAD_PYTHON_CMD} <<EOF
 # -*- coding: utf-8 -*-
 #!/usr/bin/python
@@ -3423,7 +3414,7 @@ sql="""INSERT INTO noise (time, site, receiver, rx_grid, band, rms_level, c2_lev
 VALUES (%s, %s, %s, %s, %s, %s, %s);"""
 try:
         # connect to the PostgreSQL database
-        conn = psycopg2.connect("dbname='tutorial' user='wdupload' host='wsprdaemon.org' password='Whisper2008'") # user wdupload has INSERT rights
+        conn = psycopg2.connect("dbname='tutorial' user='wdupload' host='${TS_HOSTNAME}' password='Whisper2008'") # user wdupload has INSERT rights
         # create a new cursor
         cur = conn.cursor()
         # execute the INSERT statement
@@ -3442,14 +3433,34 @@ finally:
 EOF
 }
 
+declare NOISE_UPLOAD_PYTHON_CMD=${WSPRDAEMON_TMP_DIR}/ts_noise_upload.py
+declare TS_HOSTNAME=logs.wsprdaemon.org
+declare TS_IP_ADDRESS=$(host ${TS_HOSTNAME})
+if [[ $? -eq 0 ]]; then
+    TS_IP_ADDRESS=$(awk '{print $NF}' <<< "${TS_IP_ADDRESS}")
+    declare MY_IP_ADDRESS=$(ifconfig eth0 | awk '/inet[^6]/{print $2}')
+    if [[ -n "${MY_IP_ADDRESS}" ]] && [[ "${MY_IP_ADDRESS}" == "${TS_IP_ADDRESS}" ]]; then
+        TS_HOSTNAME=localhost
+    fi
+fi
+if [[ ! -f ${NOISE_UPLOAD_PYTHON_CMD} ]]; then
+    create_noise_upload_python
+fi
 
+function noise_upload() {
+    [[ ${verbosity} -ge 1 ]] && echo "$(date): noise upload() starting '${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8' "
+
+   python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
+   py_retcode=$?
+   return ${py_retcode}
+}
 
 function upload_line_to_wsprdaemon() {
     local file_path=$1
-    local file_line="${2/,/ }"   ## Remove the ',' from an enhanced spot report line
-    local my_root_dir=$3
-    local my_tmp_root_dir=$4
     local file_type=${file_path##*_wspr_}
+    local file_line="${2/,/ }"   ## (probably no longer needed) Remove the ',' from an enhanced spot report line
+
+    local ts_server_url="${TS_HOSTNAME}"
 
     [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
     local line_array=(${file_line})
@@ -3469,7 +3480,7 @@ function upload_line_to_wsprdaemon() {
             local timestamp="${signal_date} ${signal_time}"
             local sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
             local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
-            PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h wsprdaemon.org -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
+            PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
             [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
              if ! grep -q "INSERT" add_derived_psql.txt ; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
@@ -3478,58 +3489,7 @@ function upload_line_to_wsprdaemon() {
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() uploaded spots file '${file_path}' containing line '${file_line}'"
             return 0
             ;;
-        old_spots.txt)
-            local band_usb_freq_hz=${file_name_elements[2]}
-            local recording_band_center_hz=$(( ${band_usb_freq_hz} + 1500 ))
-            local recording_band_center_mhz=$(bc <<< "scale = 6; ${recording_band_center_hz} / 1000000")
-
-            local signal_date=${line_array[0]}
-            local signal_time=${line_array[1]}
-            local signal_snr=${line_array[3]}
-            local signal_dt=${line_array[4]}
-            local signal_freq=${line_array[5]}
-            local signal_call=${line_array[6]}
-            local  FIELD_COUNT_DECODE_LINE_WITH_GRID=14   ### Lines with a GRID whill have 12 fields, else 11 fields
-            if [[ ${#line_array[@]} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                local signal_grid=${line_array[7]}
-                local signal_pwr=${line_array[8]}
-                local signal_drift=${line_array[9]}
-                local signal_rms_noise=${line_array[12]}
-                local signal_c2_noise=${line_array[13]}
-            else
-                local signal_grid="none"
-                local signal_pwr=${line_array[7]}
-                local signal_drift=${line_array[8]}
-                local signal_rms_noise=${line_array[11]}
-                local signal_c2_noise=${line_array[12]}
-            fi
-            #:::::::::::::::::::::::::::::::::::::::::::  G3ZIL upload to wsprdaemon wd_spots table in the tutorial database   :::::::::::::::::::::::::
-            # April 2020 V1
-            local timestamp="${signal_date} ${signal_time}"
-            add_derived ${signal_grid} ${my_grid} ${signal_freq}
-            if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): spots.txt $INPUT file not found"
-                return 1
-            fi
-            [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_line_to_wsprdaemon(): added azi file contains:\n$(cat ${DERIVED_ADDED_FILE})\n"
-
-            OLDIFS=$IFS
-            IFS=','
-            while read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon; do
-                sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
-                sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
-                PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h wsprdaemon.org -A -F, -c "$sql1$sql2" &> add_derived_psql.txt
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"
-            done < ${DERIVED_ADDED_FILE}
-            IFS=$OLDIFS
-            if ! grep -q "INSERT" add_derived_psql.txt ; then
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
-                 return 1
-            fi
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() uploaded spots file '${file_path}' containing line '${file_line}'"
-            return 0 
-            ;;
-        noise.txt)
+       noise.txt)
             declare NOISE_LINE_EXPECTED_FIELD_COUNT=14     ## Each report line must include ( 3 * pre/sig/post ) + sox_fft + c2_fft = 14 fields
             local line_field_count=${#line_array[@]}
             if [[ ${line_field_count} -lt ${NOISE_LINE_EXPECTED_FIELD_COUNT} ]]; then
@@ -3564,7 +3524,7 @@ function upload_line_to_wsprdaemon() {
             # G3ZIL added function to write to Timescale DB. And format the timestamp to suit Timescale DB.
             local datestamp_ts="${time_year}-${time_month}-${time_day}"
             local timestamp_ts="${time_hour}:${time_minute}"
-            noise_upload  ${datestamp_ts} ${timestamp_ts} ${SIGNAL_LEVEL_UPLOAD_ID} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
+            noise_upload  ${datestamp_ts} ${timestamp_ts} ${my_call_sign} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
             local py_retcode=$?
             if [[ ${py_retcode} -ne 0 ]]; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload of noise from ${real_receiver_name}/${real_receiver_rx_band}  failed"
@@ -3584,11 +3544,9 @@ function upload_line_to_wsprdaemon() {
 function upload_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     local source_root_dir=$1
-    local source_tmp_root_dir=$2
 
     mkdir -p ${source_root_dir}
     cd ${source_root_dir}
-    rm -f sql2.txt        ## Diagnostic logging file is only filled at verbosity > 1
     while true; do
         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
@@ -3616,7 +3574,7 @@ function upload_to_wsprdaemon_daemon() {
                     while read upload_line; do
                         ### Parse the spots.txt or noise.txt line to determine the curl URL and arg`
                         [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting curl upload from '${upload_file}' of line ${upload_line}"
-                        upload_line_to_wsprdaemon ${upload_file} "${upload_line}" ${source_root_dir} ${source_tmp_root_dir}
+                        upload_line_to_wsprdaemon ${upload_file} "${upload_line}" 
                         local ret_code=$?
                         if [[ ${ret_code} -eq 0 ]]; then
                             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprdaemon_daemon() curl reports successful upload of line '${upload_line}'"
@@ -3722,28 +3680,332 @@ function upload_to_wsprdaemon_daemon_status()
     return 0
 }
 
+### Upload using FTP mode
+### There is only one upload daemon in FTP mode
+declare UPLOADS_WSPRDAEMON_FTP_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}
+declare UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.log
+declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.pid
+
+##############
+#############
+### FTP upload mode functions
+declare UPLOADS_FTP_MODE_SECONDS=${UPLOADS_FTP_MODE_SECONDS-60}       ### Defaults to upload every 60 seconds
+declare UPLOADS_FTP_MODE_MAX_BPS=${UPLOADS_FTP_MODE_MAX_BPS-100000}   ### Defaults to upload at 100 kbps
+function ftp_upload_to_wsprdaemon_daemon() {
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    local source_root_dir=${UPLOADS_ROOT_DIR}
+
+    mkdir -p ${source_root_dir}
+    cd ${source_root_dir}
+    while true; do
+        ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
+        local -a file_list
+        while file_list=( $(find -name '*wspr*.txt' wsprdaemon.d/ ) ) && [[ ${#file_list[@]} -eq 0 ]]; do
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
+            sleep 10
+        done
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file"
+        if ! tar cfj ${tar_file_name} ${file_list}; then
+            local ret_code=$?
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() ERROR 'tar cfj ${tar_file_name} ${file_list}' => ret_code ${ret_code}"
+        else
+            if [[ ${verbosity} -ge 1 ]]; then
+                local raw_bytes=$(cat ${file_list} | wc -c)
+                local tar_bytes=$(cat  ${tar_file_name} | wc -c)
+                echo "$(date): ftp_upload_to_wsprdaemon_daemon() 'tar' compressed ${raw_bytes} file bytes down to ${tar_bytes} tar file bytes"
+            fi
+            local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
+            local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
+            local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M).tbz"
+            local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
+            curl -s --limit-rate ${upload_rate_limit} -T ${tar_file_name} --user ${upload_user}:${upload_password} ftp://${upload_url}
+            local ret_code=$?
+            if [[ ${ret_code} -eq  0 ]]; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload was sucessful, so delete local files that were in it"
+                rm -f ${file_list}
+            else
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload failed. ret_code = ${ret_code}"
+            fi
+            rm -f ${tar_file_name} ${file_list}
+        fi
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
+        sleep ${UPLOADS_FTP_MODE_SECONDS}
+    done
+}
+function spawn_ftp_upload_to_wsprdaemon_daemon() {
+    local uploading_root_dir=$1
+    mkdir -p ${uploading_root_dir}
+    local uploading_log_file_path=${uploading_root_dir}/uploads.log
+    local uploading_pid_file_path=${uploading_root_dir}/uploads.pid  ### Must match UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH
+
+    local uploading_tmp_root_dir=$2
+    mkdir -p ${uploading_tmp_root_dir}
+
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            [[ $verbosity -ge 3 ]] && echo "$(date): spawn_ftp_upload_to_wsprdaemon_daemon() INFO: uploading job for '${uploading_root_dir}' with pid ${uploading_pid} is already running"
+            return
+        else
+            echo "$(date): WARNING: spawn_ftp_upload_to_wsprdaemon_daemon() found a stale file '${uploading_pid_file_path}' with pid ${uploading_pid}, so deleting it"
+            rm -f ${uploading_pid_file_path}
+        fi
+    fi
+    ftp_upload_to_wsprdaemon_daemon ${uploading_root_dir} ${uploading_tmp_root_dir} > ${uploading_log_file_path} 2>&1 &
+    echo $! > ${uploading_pid_file_path}
+    [[ $verbosity -ge 2 ]] && echo "$(date): spawn_ftp_upload_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
+}
+
+function kill_ftp_upload_to_wsprdaemon_daemon()
+{
+    local uploading_pid_file_path=${1}
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            [[ $verbosity -ge 3 ]] && echo "$(date): kill_ftp_upload_to_wsprdaemon_daemon() killing active upload_to_wsprdaemon_daemon() with pid ${uploading_pid}"
+            kill ${uploading_pid}
+        else
+            [[ $verbosity -ge 1 ]] && echo "$(date): kill_ftp_upload_to_wsprdaemon_daemon() found a stale uploading.pid file with pid ${uploading_pid}"
+        fi
+        rm -f ${uploading_pid_file_path}
+    else
+        [[ $verbosity -ge 3 ]] && echo "$(date): ftp_kill_upload_to_wsprdaemon_daemon() found no uploading.pid file ${uploading_pid_file_path}"
+    fi
+}
+function ftp_upload_to_wsprdaemon_daemon_status()
+{
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]]; then
+        ## wsprdaemon uploading is not enabled
+        return
+    fi
+    local uploading_pid_file_path=$1
+    local data_type="FTP"
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            if [[ $verbosity -eq 0 ]] ; then
+                echo "Wsprdaemon ${data_type} uploading daemon with pid '${uploading_pid}' is running"
+            else
+                echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
+            fi
+        else
+            if [[ $verbosity -eq 0 ]] ; then
+                echo "Wsprdaemon ${data_type} uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
+            else
+                echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
+            fi
+            return 1
+        fi
+    else
+        if [[ $verbosity -eq 0 ]] ; then
+            echo "Wsprdaemon ${data_type} uploading daemon found no pid file '${uploading_pid_file_path}'"
+        else
+            echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
+        fi
+    fi
+    return 0
+}
+
 ############## Top level which spawns/kill/shows status of all of the upload daemons
 function spawn_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_daemons() start"
-    spawn_upload_to_wsprnet_daemon
+    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && spawn_upload_to_wsprnet_daemon
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
-        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
-        spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
+            spawn_upload_ftp_to_wsprdaemon_daemon 
+        else
+            spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
+            spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
+        fi
     fi
 }
 
 function kill_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): kill_upload_daemons() start"
-    kill_upload_to_wsprnet_daemon
-    kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-    kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
+    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && kill_upload_to_wsprnet_daemon
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
+        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
+            kill_upload_ftp_to_wsprdaemon_daemon
+        else
+            kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
+            kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
+        fi
+    fi
 }
 
 function upload_daemons_status(){
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_daemons_status() start"
-    upload_to_wsprnet_daemon_status
-    upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-    upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
+    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && upload_to_wsprnet_daemon_status
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
+        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
+            upload_to_ftp_wsprdaemon_daemon_status
+        else
+            upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
+            upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
+        fi
+    fi
+}
+
+############## Implents the '-u' cmd which runs only on wsprdaemon.org to process the tar .tbz files uploaded by WD sites
+declare UPLOAD_FTP_PATH=~/ftp/upload       ### Where the FTP server leaves tar.tbz files
+function upload_server_to_wsprdaemon_daemon() {
+    mkdir -p ${UPLOADS_ROOT_DIR}
+    cd ${UPLOADS_ROOT_DIR}
+    shopt -s nullglob
+    while true; do
+        local -a tar_file_list
+        while tar_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tar_file_list[@]} -eq 0 ]]; do
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
+            sleep 10
+        done
+        local valid_tbz_list=""
+        local tbz_file 
+        for tbz_file in ${tar_file_list[@]}; do
+            if tar tf ${tbz_file} &> /dev/null ; then
+                valid_tbz_list="${valid_tbz_list} ${tbz_file}"
+            else
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found invalid tar file ${tbz_file}"
+            fi
+        done
+        for tbz_file in ${valid_tbz_list}; do
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() untaring file '${tbz_file}'"
+            tar xf ${tbz_file}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then 
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() ERROR 'tar xf ${tbz_file}' => ${ret_code}"
+            fi
+            rm -f ${tbz_file}
+            ### load wsprdaemon spots and noise files into the TS database
+            local -a file_list=$( find wsprdaemon.d -name '*wspr_*.txt' )
+            local file
+            for file in ${file_list[@]} ; do
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() start loading '${file}'"
+                local line
+                while read line; do
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
+                    upload_line_to_wsprdaemon ${file} "${line}"
+                done < ${file}
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished loading '${file}'"
+            done
+            rm -f ${file}
+        done
+    done
+}
+
+function spawn_upload_server_to_wsprdaemon_daemon() {
+    local uploading_root_dir=$1
+    mkdir -p ${uploading_root_dir}
+    local uploading_log_file_path=${uploading_root_dir}/uploads.log
+    local uploading_pid_file_path=${uploading_root_dir}/uploads.pid  
+
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            [[ $verbosity -ge 3 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() INFO: uploading job for '${uploading_root_dir}' with pid ${uploading_pid} is already running"
+            return
+        else
+            echo "$(date): WARNING: spawn_upload_server_to_wsprdaemon_daemon() found a stale file '${uploading_pid_file_path}' with pid ${uploading_pid}, so deleting it"
+            rm -f ${uploading_pid_file_path}
+        fi
+    fi
+    upload_server_to_wsprdaemon_daemon ${uploading_root_dir} > ${uploading_log_file_path} 2>&1 &
+    echo $! > ${uploading_pid_file_path}
+    [[ $verbosity -ge 2 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
+}
+
+function kill_upload_server_to_wsprdaemon_daemon()
+{
+    local uploading_pid_file_path=${1}/uploads.pid
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            [[ $verbosity -ge 3 ]] && echo "$(date): kill_upload_server_to_wsprdaemon_daemon() killing active upload_server_to_wsprdaemon_daemon() with pid ${uploading_pid}"
+            kill ${uploading_pid}
+        else
+            [[ $verbosity -ge 1 ]] && echo "$(date): kill_upload_server_to_wsprdaemon_daemon() found a stale uploading.pid file with pid ${uploading_pid}"
+        fi
+        rm -f ${uploading_pid_file_path}
+    else
+        [[ $verbosity -ge 3 ]] && echo "$(date): kill_upload_server_to_wsprdaemon_daemon() found no uploading.pid file ${uploading_pid_file_path}"
+    fi
+}
+
+function upload_server_to_wsprdaemon_daemon_status()
+{
+    local uploading_pid_file_path=${1}/uploads.pid
+    if [[ -f ${uploading_pid_file_path} ]]; then
+        local uploading_pid=$(cat ${uploading_pid_file_path})
+        if ps ${uploading_pid} > /dev/null ; then
+            if [[ $verbosity -eq 0 ]] ; then
+                echo "Wsprdaemon uploading daemon with pid '${uploading_pid}' is running"
+            else
+                echo "$(date): upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
+            fi
+        else
+            if [[ $verbosity -eq 0 ]] ; then
+                echo "Wsprdaemon uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
+            else
+                echo "$(date): upload_to_wsprdaemon_daemon_status() found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
+            fi
+            return 1
+        fi
+    else
+        if [[ $verbosity -eq 0 ]] ; then
+            echo "Wsprdaemon uploading daemon found no pid file '${uploading_pid_file_path}'"
+        else
+            echo "$(date): upload_to_wsprdaemon_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
+        fi
+    fi
+    return 0
+}
+
+function spawn_upload_server_to_wsprnet_daemon() { 
+    true 
+}
+function kill_upload_server_to_wsprnet_daemon() { 
+    true
+}
+function upload_server_to_wsprnet_daemon_status() {
+    true
+}
+
+function spawn_upload_server_daemons() {
+    [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_server_daemons() start"
+    spawn_upload_server_to_wsprnet_daemon ${UPLOADS_ROOT_DIR}
+    spawn_upload_server_to_wsprdaemon_daemon ${UPLOADS_ROOT_DIR}
+}
+
+function kill_upload_server_daemons() {
+    [[ ${verbosity} -ge 3 ]] && echo "$(date): kill_upload_server_daemons() start"
+    kill_upload_server_to_wsprnet_daemon ${UPLOADS_ROOT_DIR}
+    kill_upload_server_to_wsprdaemon_daemon ${UPLOADS_ROOT_DIR}
+}
+
+function upload_server_daemons_status(){
+    [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_server_daemons_status() start"
+    upload_server_to_wsprnet_daemon_status ${UPLOADS_ROOT_DIR}
+    upload_server_to_wsprdaemon_daemon_status ${UPLOADS_ROOT_DIR}
+}
+
+function upload_server_daemon() {
+    local action=$1
+    
+    [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_daemon() process cmd '${action}'"
+    case ${action} in
+        a)
+            spawn_upload_server_daemons     ### Ensure there are upload daemons to consume the spots and noise data
+            ;;
+        z)
+            kill_upload_server_daemons
+            ;;
+        s)
+            upload_server_daemons_status
+            ;;
+        *)
+            echo "ERROR: start_stop_job() aargument action '${action}' is invalid"
+            exit 1
+            ;;
+    esac
 }
 
 ##########################################################################################################################################################
@@ -5137,6 +5399,7 @@ function usage() {
     -d                            => Signal all running processes as found in the *.pid files in the current directory to increment the logging verbosity
                                      This permits changes to logging verbosity without restarting WD
     -D                            => Signal all to decrement verbosity
+    -u CMD                        => Runs on wsprdaemon.org to process uploaded *.tbz files.  CMD: 'a' => start, s => 'status', 'z' => stop
 
     Examples:
      ${0##*/} -a                      => stArt the watchdog daemon which will in turn run '-j a,all' starting WSPR jobs defined in '${WSPRDAEMON_CONFIG_FILE}'
@@ -5173,9 +5436,9 @@ function usage() {
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZshij:pvVw:dDu: opt ; do
+while getopts :aAzZshij:pvVw:dDu:U: opt ; do
     case $opt in
-        u)
+        U)
             uploading_controls $OPTARG
             ;;
         A)
@@ -5212,6 +5475,9 @@ while getopts :aAzZshij:pvVw:dDu: opt ; do
             ;;
         h)
             usage
+            ;;
+        u)
+            upload_server_daemon $OPTARG
             ;;
         v)
             ((verbosity++))
