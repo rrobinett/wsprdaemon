@@ -135,10 +135,11 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
 declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsprdaemon.org database
                                     ### Add noise levels to WD spots
-                                    ### Optimize azi calculations
+                                    ### Optimize azi calculations by moving them to run as part of the decoding_daemons() and thus can run in parallel on multiple CPU systems
                                     ### Handle failure of member of MERGed rx group
-                                    ### TODO: use FTP to upload spots and noise to wsprdaemon.org
-                                    ### TODO: Add '-u a/s/z' command which runs as the upload service on wsprdeamon.rg
+                                    ### Use FTP to upload spots and noise to wsprdaemon.org
+                                    ### Add FTP server mode to run on wspdaemon.org and add '-u a/s/z' commands to start/status/stop it
+                                    ### Proxy upload of spots to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
@@ -3682,6 +3683,7 @@ function upload_to_wsprdaemon_daemon_status()
 
 ### Upload using FTP mode
 ### There is only one upload daemon in FTP mode
+declare UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP-yes}    ### Default to TS upload mode
 declare UPLOADS_WSPRDAEMON_FTP_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}
 declare UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.pid
@@ -3700,11 +3702,12 @@ function ftp_upload_to_wsprdaemon_daemon() {
     while true; do
         ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
         local -a file_list
-        while file_list=( $(find -name '*wspr*.txt' wsprdaemon.d/ ) ) && [[ ${#file_list[@]} -eq 0 ]]; do
-            [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
+        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt') ) && [[ ${#file_list[@]} -eq 0 ]]; do
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
             sleep 10
         done
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file"
+        local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M).tbz"
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file '${tar_file_name}'"
         if ! tar cfj ${tar_file_name} ${file_list}; then
             local ret_code=$?
             [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() ERROR 'tar cfj ${tar_file_name} ${file_list}' => ret_code ${ret_code}"
@@ -3712,13 +3715,12 @@ function ftp_upload_to_wsprdaemon_daemon() {
             if [[ ${verbosity} -ge 1 ]]; then
                 local raw_bytes=$(cat ${file_list} | wc -c)
                 local tar_bytes=$(cat  ${tar_file_name} | wc -c)
-                echo "$(date): ftp_upload_to_wsprdaemon_daemon() 'tar' compressed ${raw_bytes} file bytes down to ${tar_bytes} tar file bytes"
+                echo "$(date): ftp_upload_to_wsprdaemon_daemon() 'tar' input files contained ${raw_bytes}. The tar file size was ${tar_bytes} bytes"
             fi
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
-            local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M).tbz"
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
-            curl -s --limit-rate ${upload_rate_limit} -T ${tar_file_name} --user ${upload_user}:${upload_password} ftp://${upload_url}
+            curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_name} --user ${upload_user}:${upload_password} ftp://${upload_url}
             local ret_code=$?
             if [[ ${ret_code} -eq  0 ]]; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload was sucessful, so delete local files that were in it"
@@ -3726,20 +3728,17 @@ function ftp_upload_to_wsprdaemon_daemon() {
             else
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload failed. ret_code = ${ret_code}"
             fi
-            rm -f ${tar_file_name} ${file_list}
+            rm -f ${tar_file_name} 
         fi
         [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
         sleep ${UPLOADS_FTP_MODE_SECONDS}
     done
 }
 function spawn_ftp_upload_to_wsprdaemon_daemon() {
-    local uploading_root_dir=$1
+    local uploading_root_dir=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}
     mkdir -p ${uploading_root_dir}
     local uploading_log_file_path=${uploading_root_dir}/uploads.log
     local uploading_pid_file_path=${uploading_root_dir}/uploads.pid  ### Must match UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH
-
-    local uploading_tmp_root_dir=$2
-    mkdir -p ${uploading_tmp_root_dir}
 
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
@@ -3751,14 +3750,14 @@ function spawn_ftp_upload_to_wsprdaemon_daemon() {
             rm -f ${uploading_pid_file_path}
         fi
     fi
-    ftp_upload_to_wsprdaemon_daemon ${uploading_root_dir} ${uploading_tmp_root_dir} > ${uploading_log_file_path} 2>&1 &
+    ftp_upload_to_wsprdaemon_daemon > ${uploading_log_file_path} 2>&1 &
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 2 ]] && echo "$(date): spawn_ftp_upload_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
 }
 
 function kill_ftp_upload_to_wsprdaemon_daemon()
 {
-    local uploading_pid_file_path=${1}
+    local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -3774,11 +3773,7 @@ function kill_ftp_upload_to_wsprdaemon_daemon()
 }
 function ftp_upload_to_wsprdaemon_daemon_status()
 {
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]]; then
-        ## wsprdaemon uploading is not enabled
-        return
-    fi
-    local uploading_pid_file_path=$1
+    local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
     local data_type="FTP"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
@@ -3812,7 +3807,7 @@ function spawn_upload_daemons() {
     [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && spawn_upload_to_wsprnet_daemon
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
         if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            spawn_upload_ftp_to_wsprdaemon_daemon 
+            spawn_ftp_upload_to_wsprdaemon_daemon 
         else
             spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
             spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
@@ -3825,7 +3820,7 @@ function kill_upload_daemons() {
     [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && kill_upload_to_wsprnet_daemon
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
         if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            kill_upload_ftp_to_wsprdaemon_daemon
+            kill_ftp_upload_to_wsprdaemon_daemon
         else
             kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
             kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
@@ -3838,7 +3833,7 @@ function upload_daemons_status(){
     [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && upload_to_wsprnet_daemon_status
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
         if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            upload_to_ftp_wsprdaemon_daemon_status
+            ftp_upload_to_wsprdaemon_daemon_status
         else
             upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
             upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
