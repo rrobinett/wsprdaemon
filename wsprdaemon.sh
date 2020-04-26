@@ -3683,10 +3683,11 @@ function upload_to_wsprdaemon_daemon_status()
 
 ### Upload using FTP mode
 ### There is only one upload daemon in FTP mode
-declare UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP-yes}    ### Default to TS upload mode
+declare UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP-no}    ### Default to directy upload to wsprnet.org, not new TS upload mode
 declare UPLOADS_WSPRDAEMON_FTP_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}
 declare UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.pid
+declare UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads_config.txt  ## Communicates client FTP mode to FTP server
 
 ##############
 #############
@@ -3706,31 +3707,31 @@ function ftp_upload_to_wsprdaemon_daemon() {
             [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
             sleep 10
         done
+        echo "UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP}" > ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
         local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M).tbz"
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file '${tar_file_name}'"
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file '${tar_file_name}'"
         if ! tar cfj ${tar_file_name} ${file_list}; then
             local ret_code=$?
             [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() ERROR 'tar cfj ${tar_file_name} ${file_list}' => ret_code ${ret_code}"
         else
-            if [[ ${verbosity} -ge 1 ]]; then
-                local raw_bytes=$(cat ${file_list} | wc -c)
-                local tar_bytes=$(cat  ${tar_file_name} | wc -c)
-                echo "$(date): ftp_upload_to_wsprdaemon_daemon() 'tar' input files contained ${raw_bytes}. The tar file size was ${tar_bytes} bytes"
-            fi
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
             curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_name} --user ${upload_user}:${upload_password} ftp://${upload_url}
             local ret_code=$?
             if [[ ${ret_code} -eq  0 ]]; then
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload was sucessful, so delete local files that were in it"
+                if [[ ${verbosity} -ge 1 ]]; then
+                    local raw_bytes=$(cat ${file_list} | wc -c)
+                    local tar_bytes=$(cat  ${tar_file_name} | wc -c)
+                    echo "$(date): ftp_upload_to_wsprdaemon_daemon() FTP upload complete. 'tar' input files contained ${raw_bytes}. The tar file size was ${tar_bytes} bytes"
+                fi
                 rm -f ${file_list}
             else
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl upload failed. ret_code = ${ret_code}"
             fi
             rm -f ${tar_file_name} 
         fi
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
         sleep ${UPLOADS_FTP_MODE_SECONDS}
     done
 }
