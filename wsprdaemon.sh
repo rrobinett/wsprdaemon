@@ -3463,7 +3463,7 @@ function upload_line_to_wsprdaemon() {
 
     local ts_server_url="${TS_HOSTNAME}"
 
-    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() upload file '${file_path}' containing line '${file_line}'"
     local line_array=(${file_line})
     local path_array=( ${file_path//\// } ) 
     local path_array_count=${#path_array[@]}
@@ -3482,7 +3482,28 @@ function upload_line_to_wsprdaemon() {
             local sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
             local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
-            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
+
+            ### If running on a server and configured to do so, synthesize a wsprnet.org spot line
+            if [[ "${UPLOAD_TO_WSPRNET_FTP}" == "yes" ]]; then
+                if [[ "${signal_grid}" == "none" ]]; then
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() WD spot line has no grid to add to wsprnet.org spot line"
+                    signal_grid=""
+                fi
+                local signal_sync_quality=1
+                local signal_dt=0.0
+                local signal_pwr=23
+                local signal_decode_cycles=1
+                local signal_drift=0
+                local signal_decode_cycles=1
+                local signal_jitter=0
+                local wsprnet_spot_line="${signal_date} ${signal_time} ${signal_sync_quality} ${signal_snr} ${signal_dt} ${signal_freq} ${signal_call} ${signal_grid} ${signal_pwr} ${signal_drift} ${signal_decode_cycles} ${signal_jitter}"
+                echo "${wsprnet_spot_line}" >> ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() appended wsprnet_spot_line '${wsprnet_spot_line}' to ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}"
+            else
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() not configured to synthesize a wsprnet.org spot line"
+            fi
+
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
              if ! grep -q "INSERT" add_derived_psql.txt ; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
                  return 1
@@ -3688,6 +3709,7 @@ declare UPLOADS_WSPRDAEMON_FTP_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}
 declare UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.pid
 declare UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads_config.txt  ## Communicates client FTP mode to FTP server
+declare UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/wsprnet_spots.txt  ## On FTP server, TMP file synthesized from WD spots line
 
 ##############
 #############
@@ -3851,7 +3873,7 @@ function upload_server_to_wsprdaemon_daemon() {
     while true; do
         local -a tar_file_list
         while tar_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tar_file_list[@]} -eq 0 ]]; do
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
             sleep 10
         done
         local valid_tbz_list=""
@@ -3865,23 +3887,40 @@ function upload_server_to_wsprdaemon_daemon() {
         done
         for tbz_file in ${valid_tbz_list}; do
             [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() untaring file '${tbz_file}'"
+            rm -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
             tar xf ${tbz_file}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then 
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() ERROR 'tar xf ${tbz_file}' => ${ret_code}"
             fi
             rm -f ${tbz_file}
+            ### Get FTP proxy upload to wsprnet.org config
+            if [[ -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} ]]; then
+                ### If present, this communicates the FTP upload mode from the client
+                local ftp_mode_line=$(grep UPLOAD_TO_WSPRNET_FTP ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
+                exec ${ftp_mode_line}
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found '${ftp_mode_line}' in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+            else
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+            fi
             ### load wsprdaemon spots and noise files into the TS database
             local -a file_list=$( find wsprdaemon.d -name '*wspr_*.txt' )
             local file
             for file in ${file_list[@]} ; do
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() start loading '${file}'"
+                rm -f ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
                 local line
                 while read line; do
-                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
+                    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
                     upload_line_to_wsprdaemon ${file} "${line}"
                 done < ${file}
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished loading '${file}'"
+                if [[ -f ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} ]]; then
+                    local wsprnet_spots_file_path="${file/wsprdaemon.d/wsprnet.d}"
+                    mkdir -p "${wsprnet_spots_file_path%/*}"
+                    mv ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} ${wsprnet_spots_file_path}
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() moved ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} to ${wsprnet_spots_file_path}"
+                fi
             done
             rm -f ${file}
         done
