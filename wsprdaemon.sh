@@ -3737,8 +3737,8 @@ function ftp_upload_to_wsprdaemon_daemon() {
 function spawn_ftp_upload_to_wsprdaemon_daemon() {
     local uploading_root_dir=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}
     mkdir -p ${uploading_root_dir}
-    local uploading_log_file_path=${uploading_root_dir}/uploads.log
-    local uploading_pid_file_path=${uploading_root_dir}/uploads.pid  ### Must match UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH
+    local uploading_log_file_path=${UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH}
+    local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
 
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
@@ -4061,7 +4061,7 @@ function check_for_zombies() {
         return
     fi
     ### First check if the watchdog and the upload daemons are running
-    for pid_file_path in ${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}; do
+    for pid_file_path in ${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}; do
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"
