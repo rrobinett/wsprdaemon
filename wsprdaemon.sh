@@ -2573,14 +2573,14 @@ function create_enhanced_spots_file() {
         [[ ${verbosity} -ge 2 ]] && echo "$(date): create_enhanced_spots_file() enhance line '${spot_line}'"
         local spot_line_list=(${spot_line/,/})          ### add c2
         local spot_line_list_count=${#spot_line_list[@]}
-        local signal_date signal_time signal_sync_quality signal_snr signal_dt signal_freq signal_call other_fields
-        read  signal_date signal_time signal_sync_quality signal_snr signal_dt signal_freq signal_call other_fields <<< "${spot_line/,/}"
-        local signal_grid signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise
+        local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
+        read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
+        local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_rms_noise spot_c2_noise
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read signal_grid signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise <<< "${other_fields}"
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_rms_noise spot_c2_noise <<< "${other_fields}"
         else
-            signal_grid="none"
-            read signal_pwr signal_drift signal_decode_cycles signal_jitter signal_rms_noise signal_c2_noise <<< "${other_fields}"
+            spot_grid="none"
+            read spot_pwr spot_drift spot_decode_cycles spot_jitter spot_rms_noise spot_c2_noise <<< "${other_fields}"
         fi
         ### G3ZIL 
         ### April 2020 V1    add azi
@@ -2597,8 +2597,8 @@ function create_enhanced_spots_file() {
         local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
         read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
 
-        ### Output a space-seperated line of enhanced spot data
-        echo "${signal_date} ${signal_time} ${band} ${my_grid} ${my_call_sign} ${signal_call} ${signal_grid} ${signal_snr} ${signal_c2_noise} ${signal_drift} ${signal_freq} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${signal_pwr} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
+        ### Output a space-seperated line of enhanced spot data.  The first 10/11 fields are in the same order as in the wspr_spot.txt file created by 'wsprd'
+        echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
 
     done < ${real_receiver_wspr_spots_file}
     [[ ${verbosity} -ge 2 ]] && printf "$(date): create_enhanced_spots_file() created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
@@ -2612,11 +2612,11 @@ declare DERIVED_ADDED_FILE=derived_azi.csv
 declare AZI_PYTHON_CMD=derived_calc.py
 
 function add_derived() {
-    local signal_grid=$1
+    local spot_grid=$1
     local my_grid=$2
-    local signal_freq=$3    
+    local spot_freq=$3    
 
-    python3 ${AZI_PYTHON_CMD} ${signal_grid} ${my_grid} ${signal_freq} 1>add_derived.txt 2 > add_derived.log
+    python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2 > add_derived.log
 }
 
 ### G3ZIL python script that gets copied into derived_calc.py and is run there
@@ -3476,27 +3476,20 @@ function upload_line_to_wsprdaemon() {
 
     case ${file_type} in
         spots.txt)
-            local signal_date signal_time band my_grid my_call_sign signal_call signal_grid signal_snr signal_c2_noise signal_drift signal_freq km rx_az rx_lat rx_lon tx_az signal_pwr tx_lat tx_lon v_lat v_lon
-            read  signal_date signal_time band my_grid my_call_sign signal_call signal_grid signal_snr signal_c2_noise signal_drift signal_freq km rx_az rx_lat rx_lon tx_az signal_pwr tx_lat tx_lon v_lat v_lon <<< "${file_line}"
-            local timestamp="${signal_date} ${signal_time}"
+            local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
+            read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${file_line}"
+            local timestamp="${spot_date} ${spot_time}"
             local sql1='Insert into wd_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon) values '
-            local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${signal_call}', '${signal_grid}', ${signal_snr}, ${signal_c2_noise}, ${signal_drift}, ${signal_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${signal_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
+            local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${spot_call}', '${spot_grid}', ${spot_snr}, ${spot_c2_noise}, ${spot_drift}, ${spot_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${spot_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon})"
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
 
             ### If running on a server and configured to do so, synthesize a wsprnet.org spot line
             if [[ "${UPLOAD_TO_WSPRNET_FTP}" == "yes" ]]; then
-                if [[ "${signal_grid}" == "none" ]]; then
+                if [[ "${spot_grid}" == "none" ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() WD spot line has no grid to add to wsprnet.org spot line"
-                    signal_grid=""
+                    spot_grid=""
                 fi
-                local signal_sync_quality=1
-                local signal_dt=0.0
-                local signal_pwr=23
-                local signal_decode_cycles=1
-                local signal_drift=0
-                local signal_decode_cycles=1
-                local signal_jitter=0
-                local wsprnet_spot_line="${signal_date} ${signal_time} ${signal_sync_quality} ${signal_snr} ${signal_dt} ${signal_freq} ${signal_call} ${signal_grid} ${signal_pwr} ${signal_drift} ${signal_decode_cycles} ${signal_jitter}"
+                local wsprnet_spot_line="${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter}"
                 echo "${wsprnet_spot_line}" >> ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() appended wsprnet_spot_line '${wsprnet_spot_line}' to ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}"
             else
