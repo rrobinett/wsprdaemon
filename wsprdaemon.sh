@@ -2584,8 +2584,8 @@ function create_enhanced_spots_file() {
         fi
         ### G3ZIL 
         ### April 2020 V1    add azi
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file() 'add_derived ${signal_grid} ${my_grid} ${signal_freq}'"
-        add_derived ${signal_grid} ${my_grid} ${signal_freq}
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): create_enhanced_spots_file() 'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
+        add_derived ${spot_grid} ${my_grid} ${spot_freq}
         if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
             [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file() spots.txt $INPUT file not found"
             return 1
@@ -2626,7 +2626,7 @@ function create_azi_python() {
 # April  2020  Gwyn Griffiths. Based on the add_azi used in the ts-wspr-scraper.sh script
 
 # Takes receiver and transmitter Maidenhead locators and calculates azimuths at tx and rx, lats and lons, distance and vertes lat and lon
-# Needs the two locators and frequency as arguments. If signal_grid="none" puts absent data in the calculated fields.
+# Needs the two locators and frequency as arguments. If spot_grid="none" puts absent data in the calculated fields.
 # The operating band is derived from the frequency, 60 and 60eu and 80 and 80eu are reported as 60 and 80
 # Miles are not copied to the azi-appended file
 # In the script the following lines preceed this code and there's an EOF added at the end
@@ -3497,7 +3497,7 @@ function upload_line_to_wsprdaemon() {
             fi
 
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
-             if ! grep -q "INSERT" add_derived_psql.txt ; then
+            if ! grep -q "INSERT" add_derived_psql.txt ; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
                  return 1
             fi
