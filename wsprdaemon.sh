@@ -140,6 +140,7 @@ declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsp
                                     ### Use FTP to upload spots and noise to wsprdaemon.org
                                     ### Add FTP server mode to run on wspdaemon.org and add '-u a/s/z' commands to start/status/stop it
                                     ### Proxy upload of spots to wsprnet.org
+                                    ### TODO: check .1 hz freq and .1 sec DT accuracy feature
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
@@ -346,13 +347,15 @@ declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_TMP_DIR}/template.conf
 if [[ ! -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
 
 cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
-
-#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload extended spots and noise levels to http://logs.wsprdaemon.org:3000/
-#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name used to view spots and noise at http://graphs.wsprdaemon.org:3000/
-#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://graphs.wsprdaemon.org/SIGNAL_LEVEL_UPLOAD_ID
+# To enable these options, remove the leading '#' and modify SIGNAL_LEVEL_UPLOAD_ID from "AI6VN" to your call sign:
+#SIGNAL_LEVEL_UPLOAD="proxy"        ### If this variable is defined and not "no", AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload signal levels to the wsprdaemon cloud database
+                                   ### SIGNAL_LEVEL_UPLOAD_MODE="no"    => (Default) Upload spots directly to wsprnet.org
+                                   ### SIGNAL_LEVEL_UPLOAD_MODE="noise" => Upload extended spots and noise data.  Upload spots directly to wsprnet.org
+                                   ### SIGNAL_LEVEL_UPLOAD_MODE="proxy" => In addition to "noise", don't upload to wsprnet.org from this server.  Regenerate and upload spots to wsprnet.org on the wsprdaemon.org server
+#SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload extended spots and noise levels to the logs.wsprdaemon.org database and graphics file server.
+#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name used to view spots and noise at that server.
+#SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://wsprdaemon.org/graphs/SIGNAL_LEVEL_UPLOAD_ID
 #SIGNAL_LEVEL_LOCAL_GRAPHS="yes"    ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then make graphs visible at http://localhost/
-
-#CURL_MEPT_MODE="no"                ### Default is "yes". When set to "no", spots are uploaded to wsprnet.org using the curl "POST" mode which is far less effecient but adds this SW version to the spot
 
 ##############################################################
 ### The RECEIVER_LIST() array defines the physical (KIWI_xxx,AUDIO_xxx,SDR_xxx) and logical (MERG...) receive devices available on this server
@@ -2151,7 +2154,7 @@ function decoding_daemon()
             fi
             [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): rms_value=${rms_value}"
 
-            if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "no" ]] || [[ ${SIGNAL_LEVEL_SOX_FFT_STATS-no} == "no" ]]; then
                 ### Don't spend a lot of CPU time calculating a value which will not be uploaded
                 local fft_value="-999.9"      ## i.e. "Not Calculated"
             else
@@ -2186,18 +2189,18 @@ function decoding_daemon()
                                                                                              #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
                 rm sox_fft_sorted.txt
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): sox_fft_value=${fft_value}"
-             fi
+            fi
 
-             ### Output a line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values:
-             ###                           Pre Tx                                                        Tx                                                   Post TX
-             ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'
-             local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${rms_value}    ${c2_FFT_nl_cal}"
-             echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
-             local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
-             echo "${signal_level_line}" > ${new_noise_file}
-             [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): noise was: '${signal_level_line}'"
+            ### Output a line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values:
+            ###                           Pre Tx                                                        Tx                                                   Post TX
+            ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'
+            local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${rms_value}    ${c2_FFT_nl_cal}"
+            echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${SIGNAL_LEVELS_LOG_FILE}
+            local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
+            echo "${signal_level_line}" > ${new_noise_file}
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): noise was: '${signal_level_line}'"
 
-            rm -f ${wav_file_name} ${wsprd_input_wav_filename}  ### We have comleted processing the wav file, so delete both names for it
+            rm -f ${wav_file_name} ${wsprd_input_wav_filename}  ### We have completed processing the wav file, so delete both names for it
 
             ### 'wsprd' appends the new decodes to ALL_WSPR.TXT, but we are going to post only the new decodes which it puts in the file 'wspr_spots.txt'
             update_hashtable_archive ${real_receiver_name} ${real_receiver_rx_band}
@@ -2208,9 +2211,13 @@ function decoding_daemon()
                 ### A zero length spots file signals the posting daemon that decodes are complete but no spots were found
                 rm -f ${new_spots_file}
                 touch  ${new_spots_file}
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon():no spots were found.  Queuing zero length spot file"
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon():no spots were found.  Queuing zero length spot file '${new_spots_file}'"
             else
                 ###  Spot were found, and we want to add the noise level fields to the end of each spot
+                local new_spots_count=$(cat wspr_spots.txt | wc -l)
+                local new_all_wspr_spot_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): decoding_daemon(): extracted the ${new_spots_count} new spots from ALL_WSPR.TXT:\n${new_all_wspr_spot_lines}\n"
+                
                 sed "s/\$/,  ${rms_value}  ${c2_FFT_nl_cal}/" wspr_spots.txt > ${new_spots_file}  ### add c2
                 [[ ${verbosity} -ge 1 ]] && printf "$(date): decoding_daemon(): queuing enhanced spot file:\n$(cat ${new_spots_file})\n"
             fi
@@ -2447,18 +2454,19 @@ function posting_daemon()
         local recording_freq_hz=${recording_info##*_}
         local recording_date_time=${recording_info%_*}
 
-        ### Queue spots (if any) fot this real or MERGed receiver to wsprnet.org
+        ### Queue spots (if any) for this real or MERGed receiver to wsprnet.org
         ### Create one spot file containing the best set of CALLS/SNRs for upload to wsprnet.org
         local newest_list=(${posting_source_dir_list[@]/%/\/${newest_all_wspr_file_name}})
         local wsprd_spots_all_file_path=${posting_receiver_dir_path}/wspr_spots.txt.ALL
         cat ${newest_list[@]} > ${wsprd_spots_all_file_path}
+        local wsprd_spots_best_file_path
         if [[ ! -s ${wsprd_spots_all_file_path} ]]; then
             ### The decode daemon of each real receiver signaled it had decoded a wave file with zero spots by creating a zero length spot.txt file 
             [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() no spots were decoded"
-            rm -f ${wsprd_spots_all_file_path}
+            wsprd_spots_best_file_path=${wsprd_spots_all_file_path}
         else
             ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
-            local wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
+             wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
 
             if [[ ${verbosity} -ge 2 ]]; then
                 echo "$(date): posting_daemon() merging and sorting files '${newest_list[@]}' to ${wsprd_spots_all_file_path}"
@@ -2490,13 +2498,18 @@ function posting_daemon()
                 log_merged_snrs >> ${merged_log_file}
                 truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
             fi
+        fi
 
+        mkdir -p ${wsprnet_upload_dir}
+        local upload_wsprnet_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+        if [[ ${posting_receiver_name} =~ MERG.* ]] || [[ ${SIGNAL_LEVEL_UPLOAD} != "proxy" ]]; then
             ### Move the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
-            ### The upload daemon will delete that file once it has transfered those spots to wsprnet.org
-            mkdir -p ${wsprnet_upload_dir}
-            local upload_wsprnet_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+            ### If  are running in proxy upload mode and this is a MERGed spot.file.  The FTP upload daemon will transfer it to wsprdaemon.org 
             mv ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path} 
-            [[ ${verbosity} -ge 2 ]] && printf "$(date): posting_daemon() copied ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})\n==============\n"
+            [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() moved ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})\n==============\n"
+        else
+            ### We are running in proxy upload mode and this is a real rx spot.file.  The  wsprdaemon.org proxy daemon will regenerate this file and upload it from that server
+            [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() since in proxy upload mode, not queuing ${upload_wsprnet_file_path} for local upload to wsprnet.org"
         fi
  
         ###  Queue spots and noise from all real receivers for upload to wsprdaemon.org
@@ -2518,20 +2531,19 @@ function posting_daemon()
             else
                 local real_receiver_wspr_spots_file=${real_receiver_wspr_spots_file_list[0]}
                 if [[ ! -s ${real_receiver_wspr_spots_file} ]]; then
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() spot file has no spots, so flush it"
-                    rm -f ${real_receiver_wspr_spots_file}
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() spot file has no spots, but copy it to the upload directory so upload_daemon knows that this wspr cycle decode has been completed"
                 else
                     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() queue real rx spots file '${real_receiver_wspr_spots_file}' for upload to wsprdaemon.org"
-                    local real_receiver_enhanced_wspr_spots_file="enhanced_wspr_spots.txt"
-                    create_enhanced_spots_file ${real_receiver_wspr_spots_file} ${real_receiver_enhanced_wspr_spots_file} ${my_grid}
-
-                    local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-                    mkdir -p ${upload_wsprdaemon_spots_dir}
-                    local upload_wsprd_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-                    mv ${real_receiver_enhanced_wspr_spots_file} ${upload_wsprd_file_path}
-                    rm -f ${real_receiver_wspr_spots_file}
-                    [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} \nwhich contains spot(s):\n$( cat ${upload_wsprd_file_path})\n==============\n"
                 fi
+                local real_receiver_enhanced_wspr_spots_file="enhanced_wspr_spots.txt"
+                create_enhanced_spots_file ${real_receiver_wspr_spots_file} ${real_receiver_enhanced_wspr_spots_file} ${my_grid}
+
+                local  upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
+                mkdir -p ${upload_wsprdaemon_spots_dir}
+                local upload_wsprd_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+                mv ${real_receiver_enhanced_wspr_spots_file} ${upload_wsprd_file_path}
+                rm -f ${real_receiver_wspr_spots_file}
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): posting_daemon() copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} \nwhich contains spot(s):\n$( cat ${upload_wsprd_file_path})\n==============\n"
             fi
  
             ### Upload noise file
@@ -3039,6 +3051,11 @@ declare UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DI
 
 declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/noise.d
 
+### wsprnet.org upload daemon files
+declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d
+declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/wspr_spots.txt
+declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
+declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
 
 ### wsprnet.org 
 declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet.d      
@@ -3046,11 +3063,6 @@ declare UPLOADS_WSPRNET_SPOTS_DIR=${UPLOADS_WSPRNET_ROOT_DIR}/spots.d
 declare UPLOADS_WSPRNET_PIDFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.pid
 declare UPLOADS_WSPRNET_LOGFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.log
 declare UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRNET_SPOTS_DIR}/successful_spot_uploads.log
-
-declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d   
-declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/wspr_spots.txt
-declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
-declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
 
 declare UPLOADS_MAX_LOG_LINES=100000    ### LImit our local spot log file size
 
@@ -3094,7 +3106,7 @@ function band_center_mhz_from_spot_freq()
 }
 
 ############
-declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-200}           ### Limit of number of spots to upload in one curl MEPT upload transaction
+declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-999}           ### Limit of number of spots to upload in one curl MEPT upload transaction
 declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
 
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
@@ -3139,177 +3151,114 @@ function upload_wsprnet_create_spot_file_list_file()
     [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
     echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
 }
-
-### Daemon which runs 10 seconds before the end of each 2 minute cycle.  
-### So each 2 minutes it creates a list of spot files with at most the oldest 200 spots, puts those spots into a tmp.txt file, and executes a 'curl MEPT' batch upload of those spots
+#            elif [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
+                ### In proxy upload mode we don't upload on the client.
+                ### If this is a real rx, then the wsprnet.org spot line will be regenerated and uploaded on the wsprdaemon.org server.
+                ### If this is a MERGed rx, then rename the spot file to *.proxy and it will be included in the tar file uploaded along with the extended spot and noise data files.
+                ### On the wsprdaemon.org server the *.proxy file will be reanmed to *.txt and then uploaded to wsprnet.org along with the regnerated spot files
+ 
+### Daemon which runs every 10 seconds at WD sites and also at wsprdaemon.org
+### It creates a list of spot files with at most the oldest 200 spots, puts those spots into a tmp.txt file, and executes a 'curl MEPT' batch upload of those spots
 ### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
 function upload_to_wsprnet_daemon()
 {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_WSPRNET_SPOTS_DIR}
-    mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}             ### for curl.log file
+    shopt -s nullglob    ### * expands to NULL if there are no file matches
     while true; do
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for files to upload in '${UPLOADS_WSPRNET_SPOTS_DIR}/*/*'"
-        shopt -s nullglob    ### * expands to NULL if there are no file matches
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for files to upload in '${UPLOADS_WSPRNET_SPOTS_DIR}/*/*'"
         local call_grid_path
         for call_grid_path in $(ls -d ${UPLOADS_WSPRNET_SPOTS_DIR}/*/) ; do
             call_grid_path=${call_grid_path%/*}      ### Chop off the trailing '/'
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for spot files in call_grid_path directory '${call_grid_path}'" 
-            ### Spots from all recievers with the same call/grid are put into this one directory
-            local call_grid=${call_grid_path##*/}
-            call_grid=${call_grid/=/\/}         ### Restore the '/' in the reporter call sign
-            local my_call_sign=${call_grid%_*}
-            local my_grid=${call_grid#*_}
-            shopt -s nullglob    ### * expands to NULL if thereo are no file matches
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for spot files in call_grid_path directory '${call_grid_path}'" 
             local all_spots_files=( $(echo ${call_grid_path}/*/*/*wspr_spots.txt) )
-            if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() found no spot files in '${my_call_sign}/${my_grid}'"
+            if [[ ${#all_spots_files[@]} -eq 0 ]] || [[ -z "${all_spots_files[@]}" ]] ; then
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() found ${#all_spots_files[@]} spots in '${all_spots_files[@]}', so no spot files.  Skip to next \${call_grid_path}\n"
+                continue
             else
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() found spot files in '${my_call_sign}/${my_grid}': '${all_spots_files[@]}'"
+                [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() found ${#all_spots_files[@]} spot files.\n" 
+            fi
+
+            ### Check that spots files exist for all real and MERGed rx 
+            if [[ -f ${call_grid_path}/running.jobs ]]; then
+                source ${call_grid_path}/running.jobs
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${call_grid_path}/running.jobs, so we are running on wsprdaemon.org"
+            else
+                source ${RUNNING_JOBS_FILE}
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() found no ${call_grid_path}/running.jobs, so we are running at a WD site"
+            fi
+            set +x
+            for job in ${RUNNING_JOBS[*]}; do
+                local job_path=${job/,//}
+                if [[ "${all_spots_files[@]}" =~ .*${job_path}/.*wspr_spots.txt ]]; then
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() found spots for ${job_path}/wspr_spots.txt"
+                else
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() found no spots for this ${job_path}/wspr_spots.txt, so this ${call_grid_path} not ready for uploading"
+                    all_spots_files=( )
+                    break
+                fi
+            done
+            set +x
+
+            if [[ ${#all_spots_files[@]} -eq 0  ]] ; then
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() no spot files in '\${all_spots_files}', so nothing to do now. "
+            else
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${#all_spots_files[@]} spot files in '\${all_spots_files}'.  Create file with at most ${MAX_UPLOAD_SPOTS_COUNT} spots for upload"
                 upload_wsprnet_create_spot_file_list_file ${all_spots_files[@]}
                 local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${my_call_sign}/${my_grid} files to upload: ${wspr_spots_files[@]}"
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() uploading spots from ${#wspr_spots_files[@]} files"
                 ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
                 cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
                 local    spots_to_xfer=$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l)
-                if [[ ${CURL_MEPT_MODE-yes} == "no" ]]; then
-                    ### MEPT uploades are efficient but as of 3/12/19 they appear to be unreliable, misreport failed uploads as successful,
-                    ### and they can't include the version of sw which created them.  But I may be wrong about that, and they are so much more efficient that I have made MEPT the default
-                    [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() starting curl POST upload loop" 
-                    local spot_line
-                    while read spot_line; do
-                        ###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
-                        ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  (in wspr_spots.txt line: Blocksize  Metric  OSD_Decode)
-                        ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]  (                      [11/12]   [12/13   [13:14]   )]
-                        local line_array=(${spot_line})
-                        local signal_date=${line_array[0]}
-                        local signal_time=${line_array[1]}
-                        local signal_snr=${line_array[3]}
-                        local signal_dt=${line_array[4]}
-                        local signal_freq=${line_array[5]}
-                        local signal_call=${line_array[6]}
-                        local  FIELD_COUNT_DECODE_LINE_WITH_GRID=12   ### Lines with a GRID whill have 12 fields, else 11 fields
-                        if [[ ${#line_array[@]} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                            local signal_grid=${line_array[7]}
-                            local signal_pwr=${line_array[8]}
-                            local signal_drift=${line_array[9]}
-                        else
-                            local signal_grid==""
-                            local signal_pwr=${line_array[7]}
-                            local signal_drift=${line_array[8]}
-                        fi
-                        local recording_band_center_mhz=$(band_center_mhz_from_spot_freq ${signal_freq})
-                        if [[ ${recording_band_center_mhz} == "ERROR" ]]; then
-                            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() ERROR: spot frequency '${signal_freq}' is not in a WSPR band, so discarding this spot"
-                        else
-                            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() starting curl upload "
-                            CURL_TRIES=2
-                            local -i xfer_tries_left=${CURL_TRIES}
-                            local    xfer_success="no"
-                            while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
-                                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() starting curl transfer attempt #$((${CURL_TRIES} - ${xfer_tries_left} + 1))"
-                                declare SPOT_UPLOAD_URL="https://us-central1-iot-data-storage.cloudfunctions.net/wspr?"
-                                curl "${SPOT_UPLOAD_URL}rcall=${my_call_sign}&rgrid=${my_grid}&rqrg=${recording_band_center_mhz}&date=${signal_date}&time=${signal_time}&sig=${signal_snr}&dt=${signal_dt}&drift=${signal_drift}&tqrg=${signal_freq}&tcall=${signal_call}&tgrid=${signal_grid}&dbm=${signal_pwr}&version=WD-${VERSION}&mode=2" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
-
-                                curl "http://wsprnet.org/post?function=wspr&rcall=${my_call_sign}&rgrid=${my_grid}&rqrg=${recording_band_center_mhz}&date=${signal_date}&time=${signal_time}&sig=${signal_snr}&dt=${signal_dt}&drift=${signal_drift}&tqrg=${signal_freq}&tcall=${signal_call}&tgrid=${signal_grid}&dbm=${signal_pwr}&version=WD-${VERSION}&mode=2" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
-
-                                local ret_code=$?
-                                if [[ ${ret_code} -eq 0 ]]; then
-                                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() curl reports successful upload on attempt #$((${CURL_TRIES} - ${xfer_tries_left} + 1))"
-                                    xfer_success="yes"
-                                else
-                                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() ERROR: uploading spot '${spot_line}'. curl => ${ret_code} on attempt #$((${CURL_TRIES} - ${xfer_tries_left} + 1))" && cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}
-                                fi
-                                ((--xfer_tries_left))
-                            done
-                            if [[ ${xfer_success} == "yes" ]]; then
-                                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() after $((${CURL_TRIES} - ${xfer_tries_left})) attempts, successful upload of spot '${spot_line}'"
-                                ### Ensure this log file doesn't grow too large
-                                local log_lines=$(cat ${UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE} | wc -l )
-                                if [[ ${log_lines} -gt ${UPLOADS_MAX_LOG_LINES} ]]; then
-                                    ### Chop off the first 10% of the log file
-                                    local leave_lines=$(( ${UPLOADS_MAX_LOG_LINES} * 9 / 10 ))
-                                    tail -n ${leave_lines} ${UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE} > ${UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE}
-                                    mv  ${UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE} ${UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE}
-                                fi
-                                echo "${spot_line}" >> ${UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE}
-                            else
-                                if [[ ${verbosity} -ge 1 ]]; then
-                                    echo "$(date): upload_to_wsprnet_daemon() ERROR: failed to upload after ${CURL_TRIES} attmepts"
-                                    echo "${spot_line}" >> ${UPLOADS_WSPRNET_ROOT_DIR}/failed_spot_uploads.txt
-                                fi
-                            fi
-                            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() finished attempt to upload one spot"
-                        fi
-                    done < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() completed curl POST upload loop" 
+                if [[ ${spots_to_xfer} -eq 0 ]] || [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
+                    if [[ ${spots_to_xfer} -eq 0 ]] ; then
+                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() no spots to upload in the ${#wspr_spots_files[@]} spot files.  Purging '${wspr_spots_files[@]}'"
+                    else
+                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() in proxy upload mode, so don't upload to wsprnet.org.  Purging '${wspr_spots_files[@]}'"
+                    fi
                     rm -f ${wspr_spots_files[@]}
                 else
-                    ### This code uploads all the spots in one curl execution and it has proved reliable
-                    CURL_TRIES=1
-                    local -i xfer_tries_left=${CURL_TRIES}
-                    local    xfer_success="no"
-                    while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
-                        if [[ ${verbosity} -ge 3 ]]; then
-                            echo "$(date): upload_to_wsprnet_daemon() starting curl MEPT transfer attempt #$((${CURL_TRIES} - ${xfer_tries_left} + 1))"
-                            if [[ ${verbosity} -ge 3 ]]; then
-                                echo "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
-                                cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
-                            fi
-                        fi
-                        curl -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${my_call_sign} -F grid=${my_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
-                        local ret_code=$?
-                        if [[ $ret_code -ne 0 ]]; then
-                            if [[ ${verbosity} -ge 2 ]]; then
-                                echo "$(date): upload_to_wsprnet_daemon() ERROR: curl returned error code => ${ret_code}, so try again"
-                                cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}
-                            fi
-                        else
-                            local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
-                            if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
-                                if [[ ${verbosity} -ge 2 ]] ; then
-                                    echo "$(date): upload_to_wsprnet_daemon() ERROR: couldn't extract 'spots added' from curl log, so presume no spots were recorded and try again"
-                                    cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}
-                                fi
-                            else
-                                local spots_xfered=${spot_xfer_counts[0]}
-                                local spots_offered=${spot_xfer_counts[1]}
-                                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
-                                if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
-                                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() UNEXPECTED ERROR: spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
-                                fi
-                                local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
-                                if [[ ${spots_xfered} -eq 0 ]]; then
-                                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() the curl upload was sucessful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
-                                else
-                                    ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
-                                    ### Assume we are done attempting to transfer those spots
-                                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() ${spots_xfered} of the offered ${spots_offered} spots were accepted by wsprnet.org."
-                                fi
-                                [[ ${verbosity} -ge 3 ]] && cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
-                                xfer_success="yes"
-                            fi  ## if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
-                        fi      ## if [[ $ret_code -ne 0 ]]; then
-                        ((--xfer_tries_left))
-                    done        ## while [[ ${xfer_success} != "yes" ]] && [[ ${xfer_tries_left} -gt 0 ]]; do
-                    if [[ ${xfer_success} == "yes" ]]; then
-                        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() curl MEPT transfer succeeded after $((${CURL_TRIES} - ${xfer_tries_left})) tries"
-                        [[ ${verbosity} -ge 3 ]] && cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}  >> ${UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE}
-                        rm -f ${wspr_spots_files[@]}
+                    ### Upload all the spots in one curl execution 
+                    local call_grid=${call_grid_path##*/}
+                    call_grid=${call_grid/=/\/}         ### Restore the '/' in the reporter call sign
+                    local my_call_sign=${call_grid%_*}
+                    local my_grid=${call_grid#*_}
+                    [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
+                    [[ ${verbosity} -ge 2 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
+                    curl -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${my_call_sign} -F grid=${my_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+                    local ret_code=$?
+                    if [[ $ret_code -ne 0 ]]; then
+                        [[ ${verbosity} -ge 1 ]] && echo -e "$(date): upload_to_wsprnet_daemon() curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
                     else
-                        ### If the upload failed, leave the spot source files alone and they will be incorporated into the next curl upload 
-                        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() ERROR: timeout after trying ${CURL_TRIES} curl xfers"
+                        local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
+                        if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
+                            [[ ${verbosity} -ge 1 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 2 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})So presume no spots were recorded and the our spots queued for the next upload attempt."
+                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' into '${spot_xfer_counts[@]}' from curl log, so presume no spots were recorded and try again:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\n"
+                        else
+                            local spots_xfered=${spot_xfer_counts[0]}
+                            local spots_offered=${spot_xfer_counts[1]}
+                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
+                            if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
+                                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() UNEXPECTED ERROR: spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
+                            fi
+                            local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
+                            if [[ ${spots_xfered} -eq 0 ]]; then
+                                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() the curl upload was successful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
+                            else
+                                ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
+                                ### Assume we are done attempting to transfer those spots
+                                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() success, ${spots_xfered} of the offered ${spots_offered} spots were accepted by wsprnet.org."
+                            fi
+                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${wspr_spots_files[@]}'"
+                            rm -f ${wspr_spots_files[@]}
+                        fi
                     fi
                 fi
             fi
         done
-        ### Sleep until 10 seconds before the end of the current two minute WSPR cycle by which time all of the previous cycle's spots will have been decoded
-        sleep 11
-        local sleep_secs=$(seconds_until_next_even_minute)
-        if [[ ${sleep_secs} -gt 10 ]]; then
-            sleep_secs=$(( sleep_secs - 10 ))
-        fi
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() sleeping for ${sleep_secs} seconds"
+        ### Pole every 10 seconds for a complete set of wspr_spots.txt files
+        local sleep_secs=10
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() sleeping for ${sleep_secs} seconds"
         sleep ${sleep_secs}
     done
 }
@@ -3331,7 +3280,7 @@ function spawn_upload_to_wsprnet_daemon()
     mkdir -p ${UPLOADS_WSPRNET_LOGFILE_PATH%/*}
     upload_to_wsprnet_daemon > ${UPLOADS_WSPRNET_LOGFILE_PATH} 2>&1 &
     echo $! > ${uploading_pid_file_path}
-    [[ $verbosity -ge 2 ]] && echo "$(date): spawn_upload_to_wsprnet_daemon() Spawned new uploading job  with PID '$!'"
+    [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_to_wsprnet_daemon() Spawned new uploading job with PID '$!'"
 }
 
 function kill_upload_to_wsprnet_daemon()
@@ -3358,7 +3307,7 @@ function upload_to_wsprnet_daemon_status()
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprnet    spots uploading daemon with pid '${uploading_pid}' is running"
+                echo "wsprnet.org spots uploading daemon is running"
             else
                 echo "$(date): upload_to_wsprnet_daemon_status() with pid ${uploading_pid} id running"
             fi
@@ -3372,7 +3321,7 @@ function upload_to_wsprnet_daemon_status()
         fi
     else
         if [[ $verbosity -eq 0 ]] ; then
-            echo "There is no Wsprnet spots uploading daemon pid file"
+            echo "No wsprnet.org upload daemon is running"
         else
             echo "$(date): upload_to_wsprnet_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
         fi
@@ -3484,7 +3433,8 @@ function upload_line_to_wsprdaemon() {
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
 
             ### If running on a server and configured to do so, synthesize a wsprnet.org spot line
-            if [[ "${UPLOAD_TO_WSPRNET_FTP}" == "yes" ]]; then
+            if [[ "${SIGNAL_LEVEL_UPLOAD}" == "proxy" ]] && [[ "${my_rx}" =~ "${RECEIVER_LIST[@]}" ]]; then
+                ### Don't upload rx members of a MERG* rx.  Those spot files were uploaded by the client in the tar file
                 if [[ "${spot_grid}" == "none" ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() WD spot line has no grid to add to wsprnet.org spot line"
                     spot_grid=""
@@ -3659,7 +3609,7 @@ function kill_upload_to_wsprdaemon_daemon()
 
 function upload_to_wsprdaemon_daemon_status()
 {
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "yes" ]]; then
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "no" ]]; then
         ## wsprdaemon uploading is not enabled
         return
     fi
@@ -3697,7 +3647,6 @@ function upload_to_wsprdaemon_daemon_status()
 
 ### Upload using FTP mode
 ### There is only one upload daemon in FTP mode
-declare UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP-no}    ### Default to directy upload to wsprnet.org, not new TS upload mode
 declare UPLOADS_WSPRDAEMON_FTP_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}
 declare UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads.pid
@@ -3722,10 +3671,23 @@ function ftp_upload_to_wsprdaemon_daemon() {
             [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
             sleep 10
         done
-        echo "UPLOAD_TO_WSPRNET_FTP=${UPLOAD_TO_WSPRNET_FTP}" > ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+
+        ### Communicate this client's configuraton to the wsprdaemon.org server through lines in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+        echo "SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}"          > ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+        echo "declare RECEIVER_LIST=("                               >> ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} 
+        local rx_line
+        for rx_line in "${RECEIVER_LIST[@]}" ; do
+            ### The server only needs to know about the real rxs which comprise each MERG* rx
+            if [[ "${rx_line}" =~ ^MERG ]]; then
+                local rx_line_array=( ${rx_line} )
+                echo "\"${rx_line_array[0]}   ${rx_line_array[1]}\"" >> ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+            fi
+        done
+        echo ")"                                                     >> ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+
         local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M).tbz"
         [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() creating tar file '${tar_file_name}'"
-        if ! tar cfj ${tar_file_name} ${file_list}; then
+        if ! tar cfj ${tar_file_name} ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} ${file_list}; then
             local ret_code=$?
             [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() ERROR 'tar cfj ${tar_file_name} ${file_list}' => ret_code ${ret_code}"
         else
@@ -3790,26 +3752,26 @@ function kill_ftp_upload_to_wsprdaemon_daemon()
 function ftp_upload_to_wsprdaemon_daemon_status()
 {
     local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
-    local data_type="FTP"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon ${data_type} uploading daemon with pid '${uploading_pid}' is running"
+                echo "The wsprdaemon.org uploading daemon is running"
             else
                 echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
             fi
         else
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon ${data_type} uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
+                echo "The wsprdemon.org uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
             else
                 echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
             fi
+            rm -f ${uploading_pid_file_path}
             return 1
         fi
     else
         if [[ $verbosity -eq 0 ]] ; then
-            echo "Wsprdaemon ${data_type} uploading daemon found no pid file '${uploading_pid_file_path}'"
+            echo "No wsprdaemon.org uploading daemon is running"
         else
             echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
         fi
@@ -3820,40 +3782,28 @@ function ftp_upload_to_wsprdaemon_daemon_status()
 ############## Top level which spawns/kill/shows status of all of the upload daemons
 function spawn_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): spawn_upload_daemons() start"
-    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && spawn_upload_to_wsprnet_daemon
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
-        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            spawn_ftp_upload_to_wsprdaemon_daemon 
-        else
-            spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR}
-            spawn_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR} ${UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR}
-        fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "no" ]]; then
+        spawn_upload_to_wsprnet_daemon
+    else
+        spawn_ftp_upload_to_wsprdaemon_daemon 
     fi
 }
 
 function kill_upload_daemons() {
     [[ ${verbosity} -ge 3 ]] && echo "$(date): kill_upload_daemons() start"
-    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && kill_upload_to_wsprnet_daemon
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
-        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            kill_ftp_upload_to_wsprdaemon_daemon
-        else
-            kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-            kill_upload_to_wsprdaemon_daemon ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
-        fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "no" ]]; then
+        kill_upload_to_wsprnet_daemon
+    else
+        kill_ftp_upload_to_wsprdaemon_daemon
     fi
 }
 
 function upload_daemons_status(){
     [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_daemons_status() start"
-    [[ "${UPLOAD_TO_WSPRNET-yes}" == "yes" ]] && upload_to_wsprnet_daemon_status
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "yes" ]]; then
-        if [[ "${UPLOAD_TO_WSPRNET_FTP-yes}" == "yes" ]]; then
-            ftp_upload_to_wsprdaemon_daemon_status
-        else
-            upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH}
-            upload_to_wsprdaemon_daemon_status ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH}
-        fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "no" ]]; then
+        upload_to_wsprnet_daemon_status
+    else
+        ftp_upload_to_wsprdaemon_daemon_status
     fi
 }
 
@@ -3890,10 +3840,11 @@ function upload_server_to_wsprdaemon_daemon() {
             ### Get FTP proxy upload to wsprnet.org config
             if [[ -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} ]]; then
                 ### If present, this communicates the FTP upload mode from the client
-                local ftp_mode_line=$(grep UPLOAD_TO_WSPRNET_FTP ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
+                local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
                 exec ${ftp_mode_line}
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found '${ftp_mode_line}' in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
             else
+                SIGNAL_LEVEL_UPLOAD="no"
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
             fi
             ### load wsprdaemon spots and noise files into the TS database
@@ -4309,7 +4260,7 @@ function show_running_jobs() {
     done
     if [[ ${found_job} == "no" ]]; then
         if [[ "${show_target}" == "all" ]]; then
-            echo "No jobs running"
+            echo "No spot recording jobs are running"
         else
           echo "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
       fi
@@ -5085,7 +5036,11 @@ function show_watchdog(){
     local watchdog_file_dir=${watchdog_pid_file%/*}
 
     if [[ ! -f ${watchdog_pid_file} ]]; then
-        echo "No Watchdog deaemon is running"
+        if [[ ${verbosity} -ge 1 ]]; then
+            echo "$(date): show_watchdog() found no watchdog daemon pid file '${watchdog_pid_file}'"
+        else
+            echo "No Watchdog deaemon is running"
+        fi
         return
     fi
     local watchdog_pid=$(cat ${watchdog_pid_file})
@@ -5098,7 +5053,11 @@ function show_watchdog(){
         rm ${watchdog_pid_file}
         return
     fi
-    echo "Watchdog daemon with pid '${watchdog_pid}' is running"
+    if [[ ${verbosity} -ge 1 ]]; then
+        echo "$(date): Watchdog daemon with pid ${watchdog_pid} is running"
+    else
+        echo "Watchdog daemon is running"
+    fi
 }
 
 ### '-w z' runs this:
