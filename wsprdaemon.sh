@@ -2267,8 +2267,8 @@ function decoding_daemon()
                         read spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
                         [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
                     fi
-                        #                          %6s %4s %3d %3.0f %5.2f %11.7f %-22s      %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x
-                    local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-16s %-6s %2d %5u %4s %4d %4d %2u\n" \
+                        #                          %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
+                    local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s %4d %4d %2u\n" \
                         "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}")
                     extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                     echo "${extended_line}" >> ${tmp_spot_file}
@@ -2663,10 +2663,11 @@ function posting_daemon()
 
 ### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length  enhanced spot file with tx and rx azi vectors added
 ###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
-###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  (in wspr_spots.txt line: Blocksize  Metric  OSD_Decode)
-###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]  (                      [11/12]   [12/13   [13:14]   )]
+###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
+###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=14   ### Lines with a GRID will have 12 + 2 fields, else 11 + 2 fields
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=17                                              ### Lines with a GRID will have 15 + 2 noise level fields
+declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer fields
 
 function create_enhanced_spots_file() {
     local real_receiver_wspr_spots_file=$1
@@ -2684,10 +2685,14 @@ function create_enhanced_spots_file() {
         read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
         local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"
-        else
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Most spot lines have a GRID
+        elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"
+            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Type 2 spots have no grid
+        else
+            ### The decoding daemon formated a line we don't recognize
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file()  INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
+            return 1
         fi
         ### G3ZIL 
         ### April 2020 V1    add azi
