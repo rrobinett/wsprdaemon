@@ -3428,61 +3428,6 @@ function upload_to_wsprnet_daemon_status()
     return 0
 }
 
-##### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org ####
-# V1.0 March 2020
-#G3ZIL python script that gets copied into /tmp/ts_batch_upload.py and is run there
-function create_noise_upload_python() {
-    [[ ${verbosity} -ge 1 ]] && echo "$(date): create_noise_upload_python() is creating ${NOISE_UPLOAD_PYTHON_CMD}"
-    cat > ${NOISE_UPLOAD_PYTHON_CMD} <<EOF
-# -*- coding: utf-8 -*-
-#!/usr/bin/python
-# March  2020  Gwyn Griffiths
-# Derived from ts_noise_upload.py   a program to test noise data upload to a TimescaleDB
-
-import psycopg2                  # This is the main connection tool, believed to be written in C
-import sys                       # Needed for argv
-
-dateline=sys.argv[1]             # Date and time have been passed seperately
-timeline=sys.argv[2]
-site=sys.argv[3]
-receiver=sys.argv[4]
-rx_grid=sys.argv[5]
-band=sys.argv[6]
-rms_level=sys.argv[7]
-c2_level=sys.argv[8]
-
-timestamp="'"+str(dateline)+" "+str(timeline)+"'"    # Combine date and time into a string with single quotes to suit Timebase DB
-                                                     # To check for errors look at /var/log/postgresql/postgresql-11-main.log on the
-                                                     # wsprdaemon.org server
-
-# initially set the connection flag set to None
-conn=None
-
-# This is the SQL that's needed to insert, here on two lines with the ; as the terminator
-sql="""INSERT INTO noise (time, site, receiver, rx_grid, band, rms_level, c2_level)
-VALUES (%s, %s, %s, %s, %s, %s, %s);"""
-try:
-        # connect to the PostgreSQL database
-        conn = psycopg2.connect("dbname='tutorial' user='wdupload' host='${TS_HOSTNAME}' password='Whisper2008'") # user wdupload has INSERT rights
-        # create a new cursor
-        cur = conn.cursor()
-        # execute the INSERT statement
-        cur.execute(sql,(timestamp, site, receiver, rx_grid, band, rms_level, c2_level))
-        # commit the changes to the database
-        conn.commit()
-        # close communication with the database
-        cur.close()
-except:
-        print ("Unable to connect to the database")
-        sys.exit[2]                                   # exit with error code 2 if can't connect
-finally:
-        if conn is not None:
-            conn.close()
-
-EOF
-}
-
-declare NOISE_UPLOAD_PYTHON_CMD=${WSPRDAEMON_TMP_DIR}/ts_noise_upload.py
 declare TS_HOSTNAME=logs.wsprdaemon.org
 declare TS_IP_ADDRESS=$(host ${TS_HOSTNAME})
 if [[ $? -eq 0 ]]; then
@@ -3492,17 +3437,6 @@ if [[ $? -eq 0 ]]; then
         TS_HOSTNAME=localhost
     fi
 fi
-if [[ ! -f ${NOISE_UPLOAD_PYTHON_CMD} ]]; then
-    create_noise_upload_python
-fi
-
-function noise_upload() {
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): noise upload() starting '${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8' "
-
-   python3 ${NOISE_UPLOAD_PYTHON_CMD} $1 $2 $3 $4 $5 $6 $7 $8
-   py_retcode=$?
-   return ${py_retcode}
-}
 
 function upload_line_to_wsprdaemon() {
     local file_path=$1
@@ -3590,12 +3524,10 @@ function upload_line_to_wsprdaemon() {
             local datestamp_ts="${time_year}-${time_month}-${time_day}"
             local timestamp_ts="${time_hour}:${time_minute}"
             local time_ts="${datestamp_ts} ${timestamp_ts}:00+00"
-            # noise_upload  ${datestamp_ts} ${timestamp_ts} ${my_call_sign} ${real_receiver_name} ${real_receiver_maidenhead} ${real_receiver_rx_band} ${rms_value} ${c2_fft_value}
-            local sql1='Insert into wsprdaemon_spots (time,  site,receiver,  rx_grid, band, rms_level, c2_level, ov) values '
-            local sql2="('${time_ts}', '${my_call_sign}', ${real_receiver_name}', '${real_receiver_maidenhead}', '${real_receiver_rx_band}', ${rms_value}, ${c2_fft_value}, ${ov_value} )"
-            set -x
+            # 
+            local sql1='Insert into wsprdaemon_noise (time,  site,receiver,  rx_grid, band, rms_level, c2_level, ov) values '
+            local sql2="('${time_ts}', '${my_call_sign}', '${real_receiver_name}', '${real_receiver_maidenhead}', '${real_receiver_rx_band}', ${rms_value}, ${c2_fft_value}, ${ov_value} )"
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
-            set +x
             local py_retcode=$?
             if [[ ${py_retcode} -ne 0 ]]; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() upload of noise from ${real_receiver_name}/${real_receiver_rx_band}  failed"
