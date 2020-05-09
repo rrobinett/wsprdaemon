@@ -3434,8 +3434,8 @@ declare TS_HOSTNAME=logs.wsprdaemon.org
 declare TS_IP_ADDRESS=$(host ${TS_HOSTNAME})
 if [[ $? -eq 0 ]]; then
     TS_IP_ADDRESS=$(awk '{print $NF}' <<< "${TS_IP_ADDRESS}")
-    declare MY_IP_ADDRESS=$(ifconfig eth0 | awk '/inet[^6]/{print $2}')
-    if [[ -n "${MY_IP_ADDRESS}" ]] && [[ "${MY_IP_ADDRESS}" == "${TS_IP_ADDRESS}" ]]; then
+    declare MY_IP_ADDRESS=$(ifconfig eth0 2> /dev/null | awk '/inet[^6]/{print $2}')
+    if [[ -n "${MY_IP_ADDRESS}" ]] && [[ "${MY_IP_ADDRESS}" == "${TS_IP_ADDRESS}" ]]  || [[ -z "${MY_IP_ADDRESS}" ]]; then
         TS_HOSTNAME=localhost
     fi
 fi
