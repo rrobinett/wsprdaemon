@@ -3874,13 +3874,13 @@ function upload_server_to_wsprdaemon_daemon() {
     cd ${UPLOADS_ROOT_DIR}
     shopt -s nullglob
     while true; do
-        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
         local -a tar_file_list
         while tar_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tar_file_list[@]} -eq 0 ]]; do
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
+            [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
             sleep 10
         done
-        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${#tar_file_list[@]} tar.tbz files"
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${#tar_file_list[@]} tar.tbz files"
         local valid_tbz_list=""
         local tbz_file 
         for tbz_file in ${tar_file_list[@]}; do
@@ -3890,9 +3890,9 @@ function upload_server_to_wsprdaemon_daemon() {
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found invalid tar file ${tbz_file}"
             fi
         done
-        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found valid tar.tbz files: ${valid_tbz_list}"
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found valid tar.tbz files: ${valid_tbz_list}"
         for tbz_file in ${valid_tbz_list}; do
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() untaring file '${tbz_file}'"
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() untaring file '${tbz_file}'"
             rm -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
             tar xf ${tbz_file}
             local ret_code=$?
@@ -3905,7 +3905,7 @@ function upload_server_to_wsprdaemon_daemon() {
                 ### If present, this communicates the FTP upload mode from the client
                 local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
                 SIGNAL_LEVEL_UPLOAD=noise ##echo exec ${ftp_mode_line}
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found '${ftp_mode_line}' in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found '${ftp_mode_line}' in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
             else
                 SIGNAL_LEVEL_UPLOAD="no"
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
@@ -3914,11 +3914,11 @@ function upload_server_to_wsprdaemon_daemon() {
             local -a file_list=$( find wsprdaemon.d -name '*wspr_*.txt' )
             local file
             for file in ${file_list[@]} ; do
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() start loading '${file}'"
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() start loading '${file}'"
                 rm -f ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
                 local line
                 while read line; do
-                    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
+                    [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
                     upload_line_to_wsprdaemon ${file} "${line}"
                 done < ${file}
                 [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished loading '${file}'"
@@ -3929,9 +3929,9 @@ function upload_server_to_wsprdaemon_daemon() {
                     [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() moved ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} to ${wsprnet_spots_file_path}"
                 fi
                 rm ${file}
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with lines in file '${file}'"
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with lines in file '${file}'"
             done
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with files in tar file '${tbz_file}'"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing '${tbz_file}'"
         done
     done
 }
