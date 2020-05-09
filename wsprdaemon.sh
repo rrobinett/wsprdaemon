@@ -133,7 +133,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
                                     ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
                                     ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
-declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsprdaemon.org database
+#declare -r VERSION=2.8b            ### Add upload of WD's enhanced spots to wsprdaemon.org database
                                     ### Add noise levels to WD spots
                                     ### Optimize azi calculations by moving them to run as part of the decoding_daemons() and thus can run in parallel on multiple CPU systems
                                     ### Handle failure of member of MERGed rx group
@@ -142,7 +142,7 @@ declare -r VERSION=2.8b             ### Add upload of WD's enhanced spots to wsp
                                     ### Post .1 hz freq and .01 sec DT accuracy spots to wsprdaemon.org
                                     ### Add OV count to noise reports to wsprdaemon.org
                                     ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
-                                    ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
+declare -r VERSION=2.9              ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
