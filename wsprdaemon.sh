@@ -2907,7 +2907,8 @@ function log_merged_snrs() {
         printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
         local file
         for file in ${newest_list[@]}; do
-            local rx_snr=$(grep -F " $call " $file | awk '{print $4}')
+            ### Only pick the strongest SNR from each file which went into the .BEST file
+            local rx_snr=$(grep -F " $call " $file | sort -k 4,4n | tail -n 1 | awk '{print $4}')
             if [[ -z "$rx_snr" ]]; then
                 printf "%8s" "*"
             elif [[ $rx_snr == $posted_snr ]]; then
