@@ -142,7 +142,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Post .1 hz freq and .01 sec DT accuracy spots to wsprdaemon.org
                                     ### Add OV count to noise reports to wsprdaemon.org
                                     ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
-declare -r VERSION=2.9              ### First release
+#declare -r VERSION=2.9             ### First release
 declare -r VERSION=2.9a             ### Fix noise graph generation
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
