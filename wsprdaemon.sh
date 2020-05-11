@@ -5228,7 +5228,7 @@ function plot_noise() {
         tail -n $rows ${log_file} \
             | sed -nr '/^[12]/s/\s+/,/gp' \
             | sed 's=^\(..\)\(..\)\(..\).\(..\)\(..\):=\3/\2/\1 \4:\5=' \
-            | awk -F ',' '{ if (NF == 15) print $0 }'  > ${SIGNAL_LEVELS_TMP_CSV_FILE}
+            | awk -F ',' '{ if (NF == 16) print $0 }'  > ${SIGNAL_LEVELS_TMP_CSV_FILE}
 	[[ -s ${SIGNAL_LEVELS_TMP_CSV_FILE} ]] && mv ${SIGNAL_LEVELS_TMP_CSV_FILE} ${log_file%.log}.csv  ### only create .csv if it has at least one line of data
     done
     local band_paths=(${signal_levels_root_dir}/*/*/signal-levels.csv)  
@@ -5358,8 +5358,8 @@ for csv_file_path in csv_file_path_list:
     timestamp  = genfromtxt(csv_file_path, delimiter=',', usecols=0, dtype=str)
     noise_vals = genfromtxt(csv_file_path, delimiter=',')[:,1:]  
 
-    n_recs=int((noise_vals.size)/14)              # there are 14 comma separated fields in each row, all in one dimensional array as read
-    noise_vals=noise_vals.reshape(n_recs,14)      # reshape to 2D array with n_recs rows and 13 columns
+    n_recs=int((noise_vals.size)/15)              # there are 15 comma separated fields in each row, all in one dimensional array as read
+    noise_vals=noise_vals.reshape(n_recs,15)      # reshape to 2D array with n_recs rows and 15 columns
 
     # now  extract the freq method data and calibrate
     freq_noise_vals=noise_vals[:,13]  ### +freq_offset+10*np.log10(1/freq_ne_bw)+fft_band+threshold
@@ -5367,6 +5367,7 @@ for csv_file_path in csv_file_path_list:
     rms_trough_end=noise_vals[:,11]
     rms_noise_vals=np.minimum(rms_trough_start, rms_trough_end)
     rms_noise_vals=rms_noise_vals     #### +rms_offset+10*np.log10(1/ne_bw)
+    ov_vals=noise_vals[:,14]          ### The OV (overload counts) reported by Kiwis have been added in V2.9
 
     # generate x axis with time
     fmt = mdates.DateFormatter('%H')          # fmt line sets the format that will be printed on the x axis
@@ -5375,6 +5376,7 @@ for csv_file_path in csv_file_path_list:
     ax1 = fig.add_subplot(plot_rows, 3, j)
     ax1.plot(timeArray, freq_noise_vals, 'b.', ms=2)
     ax1.plot(timeArray, rms_noise_vals, 'r.', ms=2)
+    # ax1.plot(timeArray, ov_vals, 'g.', ms=2)       # OV values will need to be scaled if they are to appear on the graph along with noise levels
 
     ax1.xaxis.set_major_formatter(fmt)
  
