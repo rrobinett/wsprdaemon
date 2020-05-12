@@ -143,7 +143,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add OV count to noise reports to wsprdaemon.org
                                     ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
 #declare -r VERSION=2.9             ### First release
-declare -r VERSION=2.9a             ### Fix noise graph generation
+#declare -r VERSION=2.9a            ### Fix noise graph generation
+declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
+                                    ### Fix to don't try to create png file at startup which generates bash errors
+                                    ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -455,7 +458,7 @@ fi
 #           23cm-----------1296.500000------------1296.501500 (+- 100Hz)
 
 ### These are the 'dial frequency' in KHz.  The actual wspr tx frequenecies are these values + 1400 to 1600 Hz
-declare -r WSPR_BAND_LIST=(
+declare WSPR_BAND_LIST=(
 "2200     136.0"
 "630      474.2"
 "160     1836.6"
@@ -475,6 +478,16 @@ declare -r WSPR_BAND_LIST=(
 "2     144489.0"
 "1     432300.0"
 "0    1296500.0"
+"WWVB      58.5"
+"WWV_2_5 2498.5"
+"WWV_5   4998.5"
+"WWV_10  9998.5"
+"WWV_15 14998.5"
+"WWV_20 19998.5"
+"WWV_25 24998.5"
+"CHU_3   3328.5"
+"CHU_7   7848.5"
+"CHU_14 14658.5"
 )
 
 function get_wspr_band_name_from_freq_hz() {
@@ -807,6 +820,11 @@ function validate_configuration_file()
             echo "INFO: configuration file '${WSPRDAEMON_CONFIG_FILE}' contains 'RECEIVER_LIST[] configuration line '${rx_line_info_fields[@]}'"
             echo "       that specifies grid '${rx_grid}' which differs from the grid '${first_rx_grid}' of the first receiver"
         fi
+        ### Validate file name, i.i don't allow ',' characters in the name
+        if [[ ${rx_name} =~ , ]]; then
+            echo "ERROR:  the receiver '${rx_name}' defined in wsprdaemon.conf contains the invalid character ','"
+            exit 1
+        fi
         rx_name_list=(${rx_name_list[@]} ${rx_name})
         ### More testing of validity of the fields on this line could be done
     done
@@ -829,6 +847,11 @@ if ! validate_configuration_file; then
 fi
 
 source ${WSPRDAEMON_CONFIG_FILE}
+
+### Additional bands can be defined in the conf file
+WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
+WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
+
 
 ### There is a valid config file.
 ### Only after the config file has been sourced, then check for utilities needed 
@@ -3174,7 +3197,7 @@ declare UPLOADS_MAX_LOG_LINES=100000    ### LImit our local spot log file size
 declare MAX_SPOT_DIFFERENCE_IN_MHZ_FROM_BAND_CENTER="0.000200"  ### WSPR bands are 200z wide, but we accept wsprd spots which are + or - 200 Hz of the band center
 
 ### This is an ugly and slow way to find the band center of spots.  To speed execution, put the bands with the most spots at the top of the list.
-declare -r WSPR_BAND_CENTERS_IN_MHZ=(
+declare WSPR_BAND_CENTERS_IN_MHZ=(
        7.040100
       14.097100
       10.140200
@@ -3194,6 +3217,16 @@ declare -r WSPR_BAND_CENTERS_IN_MHZ=(
      144.490500
      432.301500
     1296.501500
+       0.060000
+       2.500000
+       5.000000
+      10.000000
+      15.000000
+      20.000000
+      25.000000
+       3.330000
+       7.850000
+      14.670000
 )
 
 function band_center_mhz_from_spot_freq()
@@ -5226,8 +5259,27 @@ function plot_noise() {
     ### convert wsprdaemon AI6VN  sox stats format to csv for excel or Python matplotlib etc
 
     for log_file in ${signal_levels_root_dir}/*/*/signal-levels.log ; do
+        local csv_file=${log_file%.log}.csv
+        if [[ ! -f ${log_file} ]]; then
+            [[ ${verbosity} -gt 1 ]] && echo "$(date): plot_noise() found no expected log file ${log_file}"
+            rm -f ${csv_file}
+            continue
+        fi
+        local log_file_lines=$(( $(cat ${log_file} | wc -l ) - 2 ))  
+        if [[ "${log_file_lines}" -le 0 ]]; then
+            ### The log file has only the two header lines
+            [[ ${verbosity} -gt 1 ]] && echo "$(date): plot_noise() found log file ${log_file} has only the header lines"
+            rm -f ${csv_file}
+            continue
+        fi
+            
+        local csv_lines=${rows}
+        if [[ ${csv_lines} -gt ${log_file_lines} ]]; then
+            [[ ${verbosity} -gt 1 ]] && echo "$(date): plot_noise() log file ${log_file} has only ${log_file_lines} lines in it, which is less than 24 hours of data."
+            csv_lines=${log_file_lines}
+        fi
         #  format conversion is by Rob AI6VN - could work directly from log file, but nice to have csv files GG using tail rather than cat
-        tail -n $rows ${log_file} \
+        tail -n ${csv_lines} ${log_file} \
             | sed -nr '/^[12]/s/\s+/,/gp' \
             | sed 's=^\(..\)\(..\)\(..\).\(..\)\(..\):=\3/\2/\1 \4:\5=' \
             | awk -F ',' '{ if (NF == 16) print $0 }'  > ${SIGNAL_LEVELS_TMP_CSV_FILE}
