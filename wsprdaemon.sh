@@ -144,9 +144,12 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
 #declare -r VERSION=2.9             ### First release
 #declare -r VERSION=2.9a            ### Fix noise graph generation
-declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
+#declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
                                     ### Fix to don't try to create png file at startup which generates bash errors
                                     ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
+declare -r VERSION=2.9c             ### Support use of WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a  different line format 
+                                    ### TODO: timeout 'wsrpd' so it doesn't hang system on 60M decoding
+                                    ### TODO: Add new wsprd fields and flag if spot was uploaded to wsprnet.org to enhanced spot lines
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -1989,18 +1992,21 @@ EOF
 
 #########
 ### For future reference, here are the spot file output lines for ALL_WSPR.TXT and wspr_spots.txt taken from the wsjt-x 2.1-2 source code:
-#        fprintf(fall_wsprlines for ALL_WSPR.TXT and wspr_spots.txt taken from the wsjt-x 2.1-2 source codelines for ALL_WSPR.TXT and wspr_spots.txt taken from the wsjt-x 2.1-2 source code::,
-#                "%6s %4s %3d %3.0f %5.2f %11.7f  %-22s %2d %5u %4d %4d %4d %2u\n",
-#                decodes[i].date, decodes[i].time, (int)(10*decodes[i].sync),
-#                decodes[i].snr, decodes[i].dt, decodes[i].freq,
-#                decodes[i].message, (int)decodes[i].drift, decodes[i].cycles/81,
-#                decodes[i].jitter,decodes[i].blocksize,decodes[i].metric,decodes[i].osd_decode);
-#        fprintf(fwsprd,
-#                "%6s %4s %3d %3.0f %4.1f %10.6f  %-22s %2d %5u %4d\n",
-#                decodes[i].date, decodes[i].time, (int)(10*decodes[i].sync),
-#                decodes[i].snr, decodes[i].dt, decodes[i].freq,
-#                decodes[i].message, (int)decodes[i].drift, decodes[i].cycles/81,
-#                decodes[i].jitter);
+# In WSJT-x v 2.2, the wsprd decoder was enhanced.  That new wsprd can be detected because it outputs 17 fields to each line of ALL_WSPR.TXT
+# fprintf(fall_wspr, "%6s              %4s                                      %3.0f          %5.2f           %11.7f               %-22s                    %2d            %5.2f                          %2d                   %2d                %4d                    %2d                  %3d                   %5u                %5d\n",
+# NEW     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].sync,          decodes[i].ipass+1, decodes[i].blocksize, decodes[i].jitter, decodes[i].decodetype, decodes[i].nhardmin, decodes[i].cycles/81, decodes[i].metric);
+# fprintf(fall_wspr, "%6s              %4s                        %3d           %3.0f          %5.2f           %11.7f               %-22s                    %2d                        %5u                                      %4d                %4d                                                      %4d                        %2u\n",
+# OLD     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, (int)(10*decodes[i].sync),                    decodes[i].blocksize, decodes[i].jitter,                                             decodes[i].cycles/81, decodes[i].metric);
+# OLD                                                                                                                                                                                     , decodes[i].osd_decode);
+# OLD     decodes[i].date, decodes[i].time, (int)(10*decodes[i].sync), decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift,                                      decodes[i].cycles/81, decodes[i].jitter, decodes[i].blocksize, decodes[i].metric, decodes[i].osd_decode);
+# 
+# In WSJT-x v 2.1, the wsprd decoder was enhanced.  That new wsprd can be detected because it outputs 17 fields to each line of ALL_WSPR.TXT
+# fprintf(fall_wspr, "%6s %4s %3d %3.0f %5.2f %11.7f %-22s %2d %5u   %4d %4d %4d %2u\n",
+#          decodes[i].date, decodes[i].time, (int)(10*decodes[i].sync), decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].cycles/81, decodes[i].jitter,decodes[i].blocksize,decodes[i].metric,decodes[i].osd_decode);
+#
+# The lines of wsprd_spots.txt are the same in all versions
+#   fprintf(fwsprd, "%6s %4s %3d %3.0f %4.1f %10.6f  %-22s %2d %5u %4d\n",
+#            decodes[i].date, decodes[i].time, (int)(10*decodes[i].sync), decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].cycles/81, decodes[i].jitter);
 
 function decoding_daemon() 
 {
@@ -2275,29 +2281,61 @@ function decoding_daemon()
                 local new_spots_count=$(cat wspr_spots.txt | wc -l)
                 local all_wspr_new_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)
                 [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() processing these ALL_WSPR.TXT lines:\n${all_wspr_new_lines}"
-                local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
-                while read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields ; do
-                    [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
-                    local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode
+                local all_wspr_field_count=$(tail -n 1 ALL_WSPR.TXT | awk '{print NF}')
+                local WSPRD_2_2_FIELD_COUNT=17   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
+                if [[ ${all_wspr_field_count} -eq ${WSPRD_2_2_FIELD_COUNT} ]]; then
+# fprintf(fall_wspr, "%6s              %4s                                      %3.0f          %5.2f           %11.7f               %-22s                    %2d            %5.2f                          %2d                   %2d                %4d                    %2d                  %3d                   %5u                %5d\n",
+# NEW     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].sync,          decodes[i].ipass+1, decodes[i].blocksize, decodes[i].jitter, decodes[i].decodetype, decodes[i].nhardmin, decodes[i].cycles/81, decodes[i].metric);
+# OLD     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, (int)(10*decodes[i].sync),                    decodes[i].blocksize, decodes[i].jitter,                                             decodes[i].cycles/81, decodes[i].metric);
+# OLD                                                                                                                                                                                                                                                  , decodes[i].osd_decode);
+                    local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields
+                    while read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields ; do
+                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this V2.2 format ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
+                        local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric
 
-                    local other_fields_list=( ${other_fields} )
-                    local other_fields_list_count=${#other_fields_list[@]}
+                        local other_fields_list=( ${other_fields} )
+                        local other_fields_list_count=${#other_fields_list[@]}
 
-                    local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=8
-                    if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                        read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
-                        [[ ${verbosity} -ge 3 ]] && echo -e "$(date): decoding_daemon() ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                    else
-                        spot_grid=""
-                        read spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
-                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                    fi
-                        #                          %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
-                    local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u\n" \
+                        local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=11
+                        if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
+                            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 1 ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                        else
+                            spot_grid=""
+                            read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                            [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                        fi
+                        #                              %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
+                        local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d\n" \
                         "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}")
-                    extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
-                    echo "${extended_line}" >> ${tmp_spot_file}
-                done <<< "${all_wspr_new_lines}"
+                        extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
+                        echo "${extended_line}" >> ${tmp_spot_file}
+                    done <<< "${all_wspr_new_lines}"
+                else
+                    local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
+                    while read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields ; do
+                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
+                        local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode
+
+                        local other_fields_list=( ${other_fields} )
+                        local other_fields_list_count=${#other_fields_list[@]}
+
+                        local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=8
+                        if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
+                            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
+                            [[ ${verbosity} -ge 3 ]] && echo -e "$(date): decoding_daemon() ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                        else
+                            spot_grid=""
+                            read spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
+                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                        fi
+                        #                              %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
+                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u\n" \
+                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}")
+                        extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
+                        echo "${extended_line}" >> ${tmp_spot_file}
+                    done <<< "${all_wspr_new_lines}"
+                fi
 
                 local wspr_spots_file=${tmp_spot_file} 
                 sed "s/\$/ ${rms_value}  ${c2_FFT_nl_cal}/" ${wspr_spots_file} > ${new_spots_file}  ### add  the noise fields
