@@ -1,4 +1,4 @@
-# wsprdaemon (WD) Latest version is v2.8a
+# wsprdaemon (WD) Latest version is v2.9c
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
