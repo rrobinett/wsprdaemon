@@ -147,8 +147,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
                                     ### Fix to don't try to create png file at startup which generates bash errors
                                     ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
-declare -r VERSION=2.9c             ### Support use of WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a  different line format 
-                                    ### TODO: timeout 'wsrpd' so it doesn't hang system on 60M decoding
+declare -r VERSION=2.9c             ### Add support for WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a different line format 
+                                    ### Add timeout of 'wsrpd' so it doesn't hang system on 60M decoding
                                     ### TODO: Add new wsprd fields and flag if spot was uploaded to wsprnet.org to enhanced spot lines
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
@@ -2166,7 +2166,20 @@ function decoding_daemon()
             if [[ ${real_receiver_rx_band} =~ 60 ]]; then
                 wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
             fi
-            nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
+            local start_time=${SECONDS}
+            timeout ${WSPRD_TIMEOUT_SECS-90} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
+            local ret_code=$?
+            local run_time=$(( ${SECONDS} - ${start_time} ))
+            if [[ ${ret_code} -ne 0 ]]; then
+                if [[ ${ret_code} -eq 124 ]]; then
+                    [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon(): 'wsprd' timeout with ret_code = ${ret_code} after ${run_time} seconds"
+                else
+                    [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon(): 'wsprd' retuned error ${ret_code} after ${run_time} seconds.  It printed:\n$(cat ${WSPRD_DECODES_FILE})"
+                fi
+                ### A zero length wspr_spots.txt file signals the following code that no spots were decoded
+                rm -f wspr_spots.txt
+                touch wspr_spots.txt
+            fi
 
             ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
             local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
