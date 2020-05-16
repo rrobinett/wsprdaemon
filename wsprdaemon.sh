@@ -3587,17 +3587,15 @@ function upload_line_to_wsprdaemon() {
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1} ${sql2}" &> add_derived_psql.txt
 
             ### If running on a server and the client signals the server to perform a proxy upload, synthesize a wsprnet.org spot line
-            if [[ "${SIGNAL_LEVEL_UPLOAD}" == "proxy" ]] && [[ "${}" =~ "${RECEIVER_LIST[@]}" ]]; then
+            if [[ ${spot_for_wsprnet} -ne 0 ]]; then
                 ### Don't upload rx members of a MERG* rx.  Those spot files were uploaded by the client in the tar file
                 if [[ "${spot_grid}" == "none" ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() WD spot line has no grid to add to wsprnet.org spot line"
                     spot_grid=""
                 fi
                 local wsprnet_spot_line="${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter}"
-                echo "${wsprnet_spot_line}" >> ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() appended wsprnet_spot_line '${wsprnet_spot_line}' to ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}"
-            else
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() not configured to synthesize a wsprnet.org spot line"
+                # echo "${wsprnet_spot_line}" >> ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() NOT YET IMPLENTED: client marked this spot '${wsprnet_spot_line}' for proxy upload to wsprnet.org byu copying it to ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}"
             fi
 
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
@@ -4028,7 +4026,7 @@ function upload_server_to_wsprdaemon_daemon() {
                 #local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
                 #SIGNAL_LEVEL_UPLOAD=noise ##echo exec ${ftp_mode_line}
                 source ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loaded client config varibles from ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loaded client config varibles from ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
             else
                 SIGNAL_LEVEL_UPLOAD="no"
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
@@ -4063,7 +4061,7 @@ function upload_server_to_wsprdaemon_daemon() {
                 rm ${file}
                 [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with lines in file '${file}'"
             done
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing spot format ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} file '${tbz_file}'"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing 'Spot Format Type #${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}' file '${tbz_file}'"
         done
     done
 }
