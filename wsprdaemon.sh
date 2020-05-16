@@ -147,9 +147,13 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
                                     ### Fix to don't try to create png file at startup which generates bash errors
                                     ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
-declare -r VERSION=2.9c             ### Add support for WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a different line format 
+#declare -r VERSION=2.9c            ### Add support for WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a  different line format 
                                     ### Add timeout of 'wsrpd' so it doesn't hang system on 60M decoding
-                                    ### TODO: Add new wsprd fields and flag if spot was uploaded to wsprnet.org to enhanced spot lines
+declare -r VERSION=2.9d             ### Fix c2 noise level to be -999.9 when 'wsprd' times out
+                                    ### Change to generate new graphics files from every 4 minutes to every 8 minutes
+                                    ### Ensure that the 'curl' command is present
+                                    ### Add to the enhanced spot lines the new wsprd fields and a flag that signals the wsprdaemon.org server to 'proxy forward' that spot to  wsprnet.org 
+                                    ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -890,6 +894,15 @@ function check_for_needed_utilities()
 {
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
+    if ! dpkg -l | grep -wq curl ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt-get install curl --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'curl' which is needed for uploading to wsprnet.org and wsprdaemon.org"
+            exit 1
+        fi
+    fi
     if ! dpkg -l | grep -wq bc ; then
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
         sudo apt-get install bc --assume-yes
@@ -976,13 +989,6 @@ EOF
                 ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
                 touch        ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
                 sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
-            fi
-        fi
-        if [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
-            if ! dpkg -l | grep -wq sshpass ; then
-                # ask_user_to_install_sw "SIGNAL_LEVEL_UPLOAD_GRAPHS=yes requires that 'sshpass' be added to this system"
-                [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install sshpass --assume-yes
             fi
         fi
     fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
@@ -2179,14 +2185,17 @@ function decoding_daemon()
                 ### A zero length wspr_spots.txt file signals the following code that no spots were decoded
                 rm -f wspr_spots.txt
                 touch wspr_spots.txt
+                ### There is almost certainly no useful c2 noise level data
+                local c2_FFT_nl_cal=-999.9
+            else
+                ### 'wsprd' was successful
+                ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
+                local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
+                /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
+                local c2_FFT_nl=$(cat c2_FFT.txt)
+                local c2_FFT_nl_cal=$(bc <<< "scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};(var * 100)/100")
+                [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal} which is calculated from 'local c2_FFT_nl_cal=\$(bc <<< 'scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};var/=1;var')"
             fi
-
-            ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
-            local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
-            /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
-            local c2_FFT_nl=$(cat c2_FFT.txt)
-            local c2_FFT_nl_cal=$(bc <<< "scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};(var * 100)/100")
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal} which is calculated from 'local c2_FFT_nl_cal=\$(bc <<< 'scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};var/=1;var')"
 
             # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
             local pre_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
@@ -2288,6 +2297,7 @@ function decoding_daemon()
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon():no spots were found.  Queuing zero length spot file '${new_spots_file}'"
             else
                 ###  Spots were found. We want to add the noise level fields to the end of each spot
+                local spot_for_wsprnet=0         ### the posting_daemon() will fill in this field
                 local tmp_spot_file="spots.tmp"
                 rm -f ${tmp_spot_file}
                 touch ${tmp_spot_file}
@@ -2304,7 +2314,7 @@ function decoding_daemon()
                     local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields
                     while read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields ; do
                         [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this V2.2 format ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
-                        local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric
+                        local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype spot_nhardmin spot_decode_cycles spot_metric
 
                         local other_fields_list=( ${other_fields} )
                         local other_fields_list_count=${#other_fields_list[@]}
@@ -2316,19 +2326,23 @@ function decoding_daemon()
                         else
                             spot_grid=""
                             read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
-                            [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
                         fi
-                        #                              %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
-                        local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d\n" \
-                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}")
+                        #                              %6s %4s   %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d  %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
+                        local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
+                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
                         extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                         echo "${extended_line}" >> ${tmp_spot_file}
                     done <<< "${all_wspr_new_lines}"
                 else
+                    local spot_ipass="0"          ### These two fields are not present in wsprd v2.1 lines
+                    local spot_nhardmin="0"
                     local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
                     while read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields ; do
                         [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
-                        local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode
+                         local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode
+                        #local spot_grid spot_pwr spot_drift                              spot_blocksize spot_jitter                               spot_decode_cycles spot_metric spot_osd_decode
+                        #local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric
 
                         local other_fields_list=( ${other_fields} )
                         local other_fields_list_count=${#other_fields_list[@]}
@@ -2343,8 +2357,8 @@ function decoding_daemon()
                             [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
                         fi
                         #                              %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
-                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u\n" \
-                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}")
+                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
+                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
                         extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                         echo "${extended_line}" >> ${tmp_spot_file}
                     done <<< "${all_wspr_new_lines}"
@@ -2631,6 +2645,7 @@ function posting_daemon()
                 log_merged_snrs >> ${merged_log_file}
                 truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
             fi
+            ### TODO: get a per-rx list of spots so the operation below can mark which real-rx should be uploaded by the proxy upload service on the wsprdaemon.org server
         fi
 
         mkdir -p ${wsprnet_upload_dir}
@@ -2692,7 +2707,7 @@ function posting_daemon()
                         [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
                     done
                     ### Now ${wsprd_spots_best_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
-                    if [[ ${verbosity} -ge 1 ]]; then
+                    if [[ ${verbosity} -ge 2 ]]; then
                         if ! diff ${real_receiver_wspr_spots_file} best_snrs.tmp  > /dev/null; then
                             echo -e "$(date): posting_daemon() found duplicate calls in:\n$(cat ${real_receiver_wspr_spots_file})\nSo uploading only:\n$(cat best_snrs.tmp)"
                         fi
@@ -2708,7 +2723,7 @@ function posting_daemon()
                 local upload_wsprd_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
                 mv ${real_receiver_enhanced_wspr_spots_file} ${upload_wsprd_file_path}
                 rm -f ${real_receiver_wspr_spots_file}
-                if [[ ${verbosity} -ge 1 ]]; then
+                if [[ ${verbosity} -ge 2 ]]; then
                     if [[ -s ${upload_wsprd_file_path} ]]; then
                         echo -e "$(date): posting_daemon() copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} which contains spot(s):\n$( cat ${upload_wsprd_file_path})"
                     else
@@ -2737,13 +2752,15 @@ function posting_daemon()
     [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
 }
 
+### Called by the posting_daemon() to create a spot file which will be uploaded to wsprdaemon.org
+###
 ### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length  enhanced spot file with tx and rx azi vectors added
 ###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=17                                              ### Lines with a GRID will have 15 + 2 noise level fields
-declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer fields
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=20                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields
+declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file() {
     local real_receiver_wspr_spots_file=$1
@@ -2757,14 +2774,14 @@ function create_enhanced_spots_file() {
         [[ ${verbosity} -ge 3 ]] && echo "$(date): create_enhanced_spots_file() enhance line '${spot_line}'"
         local spot_line_list=(${spot_line/,/})         
         local spot_line_list_count=${#spot_line_list[@]}
-        local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
+        local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise
+        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise   ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Type 2 spots have no grid
+            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Type 2 spots have no grid
         else
             ### The decoding daemon formated a line we don't recognize
             [[ ${verbosity} -ge 1 ]] && echo "$(date): create_enhanced_spots_file()  INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
@@ -2786,7 +2803,7 @@ function create_enhanced_spots_file() {
         read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
 
         ### Output a space-seperated line of enhanced spot data.  The first 13/14 fields are in the same order as in the ALL_WSPR.TXT and wspr_spot.txt files created by 'wsprd'
-        echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
+        echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_ipass} ${spot_nhardmin} ${spot_for_wsprnet} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
 
     done < ${real_receiver_wspr_spots_file}
     [[ ${verbosity} -ge 3 ]] && printf "$(date): create_enhanced_spots_file() created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
@@ -3537,6 +3554,8 @@ function upload_line_to_wsprdaemon() {
     local line_array=(${file_line})
     local path_array=( ${file_path//\// } ) 
     local path_array_count=${#path_array[@]}
+    local my_receiver_index=$(( ${path_array_count} - 3 ))
+    local my_receiver=${path_array[${my_receiver_index}]}
     local path_call_grid_index=$(( ${path_array_count} - 4 ))
     local call_grid=( ${path_array[${path_call_grid_index}]/_/ } )
     local my_call_sign=${call_grid[0]/=//}
@@ -3546,15 +3565,29 @@ function upload_line_to_wsprdaemon() {
 
     case ${file_type} in
         spots.txt)
-            local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
-            read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${file_line}"
+            ### in the field  order of the extended spot lines version 2 which include the wsprd v2.2 additional 2 decode values and the 'spot_for_wsprnet' signal from the client that this server should recreate a wsprnet.org spot and queue it for uploading 
+            local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_rms_noise spot_c2_noise spot_for_wsprnet band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
+            if [[ ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} -eq 1 ]]; then
+                ### These fields are not present in version 1 spot files
+                spot_ipass=0
+                spot_nhardmin=0
+                spot_for_wsprnet=0
+                read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode                                          spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${file_line}"
+            elif [[ ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} -eq 2 ]]; then
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() processing VERSION = ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} extended spot line"
+                read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${file_line}"
+            else
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() INTERNAL ERROR: UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION = ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} is not supported"
+                return 1
+            fi
             local timestamp="${spot_date} ${spot_time}"
-            local sql1='Insert into wsprdaemon_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon, sync_quality, dt, decode_cycles, jitter, rms_noise, blocksize, metric, osd_decode) values '
-            local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${spot_call}', '${spot_grid}', ${spot_snr}, ${spot_c2_noise}, ${spot_drift}, ${spot_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${spot_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon}, ${spot_sync_quality}, ${spot_dt}, ${spot_decode_cycles}, ${spot_jitter}, ${spot_rms_noise}, ${spot_blocksize}, ${spot_metric}, ${spot_osd_decode} )"
-            PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
+            local sql1='Insert into wsprdaemon_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon, sync_quality, dt, decode_cycles, jitter, rms_noise, blocksize, metric, osd_decode, nhardmin, ipass, receiver) values '
+            local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${spot_call}', '${spot_grid}', ${spot_snr}, ${spot_c2_noise}, ${spot_drift}, ${spot_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${spot_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon}, ${spot_sync_quality}, ${spot_dt}, ${spot_decode_cycles}, ${spot_jitter}, ${spot_rms_noise}, ${spot_blocksize}, ${spot_metric}, ${spot_osd_decode}, ${spot_ipass}, ${spot_nhardmin}, '${my_receiver}' )"
+            #echo "PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c '${sql1} ${sql2}' &> add_derived_psql.txt"
+            PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1} ${sql2}" &> add_derived_psql.txt
 
-            ### If running on a server and configured to do so, synthesize a wsprnet.org spot line
-            if [[ "${SIGNAL_LEVEL_UPLOAD}" == "proxy" ]] && [[ "${my_rx}" =~ "${RECEIVER_LIST[@]}" ]]; then
+            ### If running on a server and the client signals the server to perform a proxy upload, synthesize a wsprnet.org spot line
+            if [[ "${SIGNAL_LEVEL_UPLOAD}" == "proxy" ]] && [[ "${}" =~ "${RECEIVER_LIST[@]}" ]]; then
                 ### Don't upload rx members of a MERG* rx.  Those spot files were uploaded by the client in the tar file
                 if [[ "${spot_grid}" == "none" ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() WD spot line has no grid to add to wsprnet.org spot line"
@@ -3569,7 +3602,7 @@ function upload_line_to_wsprdaemon() {
 
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
             if ! grep -q "INSERT" add_derived_psql.txt ; then
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql returned '$(cat add_derived_psql.txt)'"
+                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql '${sql1} ${sql2}' returned '$(cat add_derived_psql.txt)'"
                  return 1
             fi
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon() uploaded spots file '${file_path}' containing line '${file_line}'"
@@ -3787,7 +3820,7 @@ declare UPLOADS_FTP_MODE_SECONDS=${UPLOADS_FTP_MODE_SECONDS-10}       ### Defaul
 declare UPLOADS_FTP_MODE_MAX_BPS=${UPLOADS_FTP_MODE_MAX_BPS-100000}   ### Defaults to upload at 100 kbps
 declare UPOADS_MAX_FILES=${UPOADS_MAX_FILES-10000}                    ### Limit the number of *txt files in one upload tar file.  bash limits this to < 24000
 declare UPLOADS_WSPRNET_LINE_FORMAT_VERSION=1                         ### I don't expect this will change
-declare UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=1
+declare UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=2
 declare UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=1
 function ftp_upload_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
@@ -3824,7 +3857,8 @@ function ftp_upload_to_wsprdaemon_daemon() {
         done
 
         ### Communicate this client's configuraton to the wsprdaemon.org server through lines in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
-        echo -e "UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
+        echo -e "CLIENT_VERSION=${VERSION}
+                 UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION}
                  SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}
@@ -3991,12 +4025,22 @@ function upload_server_to_wsprdaemon_daemon() {
             ### Get FTP proxy upload to wsprnet.org config
             if [[ -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} ]]; then
                 ### If present, this communicates the FTP upload mode from the client
-                local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
-                SIGNAL_LEVEL_UPLOAD=noise ##echo exec ${ftp_mode_line}
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found '${ftp_mode_line}' in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+                #local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
+                #SIGNAL_LEVEL_UPLOAD=noise ##echo exec ${ftp_mode_line}
+                source ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loaded client config varibles from ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
             else
                 SIGNAL_LEVEL_UPLOAD="no"
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+            fi
+            if [[ ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} -ne 1 ]] && [[ $verbosity -ge 2 ]] ; then
+                echo -e "$(date): upload_server_to_wsprdaemon_daemon() got config variables:
+                 CLIENT_VERSION=${CLIENT_VERSION-*}
+                 UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
+                 UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}
+                 UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION}
+                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}
+                 MERGED_RX_LIST=( ${MERGED_RX_LIST[@]} ) "
             fi
             ### load wsprdaemon spots and noise files into the TS database
             local -a file_list=$( find wsprdaemon.d -name '*wspr_*.txt' )
@@ -4019,7 +4063,7 @@ function upload_server_to_wsprdaemon_daemon() {
                 rm ${file}
                 [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with lines in file '${file}'"
             done
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing '${tbz_file}'"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing spot format ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} file '${tbz_file}'"
         done
     done
 }
@@ -5280,10 +5324,10 @@ function plot_noise() {
         local graph_secs=$(date -r ${SIGNAL_LEVELS_NOISE_GRAPH_FILE} +%s)
         local graph_age_secs=$(( ${now_secs} - ${graph_secs} ))
 
-        if [[ ${verbosity} -eq 0 ]] && [[ ${graph_age_secs} -lt ${GRAPH_UPDATE_RATE-240} ]]; then
+        if [[ ${graph_age_secs} -lt ${GRAPH_UPDATE_RATE-480} ]]; then
             ### The python script which creates the graph file is very CPU intensive and causes the KPH Pis to fall behind
-            ### So create a new graph file only every 240 seconds, i.e. every other WSPR 2 minute cycle
-            [[ ${verbosity} -gt 1 ]] && echo "plot_noise() found graphic file is only ${graph_age_secs} seconds old, so don't update it"
+            ### So create a new graph file only every 480 seconds (== 8 minutes), i.e. every fourth WSPR 2 minute cycle
+            [[ ${verbosity} -gt 2 ]] && echo "plot_noise() found graphic file is only ${graph_age_secs} seconds old, so don't update it"
             return
         fi
     fi
