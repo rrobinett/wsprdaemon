@@ -1,4 +1,7 @@
-# wsprdaemon (WD) Latest version is v2.9c
+# wsprdaemon (WD) Latest version is v2.9d
+
+2.9d adds enhanced spots logging to wsprnet.org and a number of error resiliency enhancements.
+It is a very low risk upgrade, so I encourage all users to 'git pull' it
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
