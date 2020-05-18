@@ -154,11 +154,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Ensure that the 'curl' command is present
                                     ### Add to the enhanced spot lines the new wsprd fields and a flag that signals the wsprdaemon.org server to 'proxy forward' that spot to  wsprnet.org 
                                     ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
-<<<<<<< HEAD
-                                    ### Fix exchanged values of ipass and nhdwrmin when posting to TS
-=======
-declare -r VERSION=2.9e             ### Fix exchanged values of ipass and nhdwrmin when posting to TS
->>>>>>> ba0e37c7bbffea5451b3016568b64accf666ea3b
+declare -r VERSION=2.9e             ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
