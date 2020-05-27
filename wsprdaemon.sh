@@ -496,7 +496,7 @@ declare WSPR_BAND_LIST=(
 "WWV_25 24998.5"
 "CHU_3   3328.5"
 "CHU_7   7848.5"
-"CHU_14 14658.5"
+"CHU_14 14668.5"
 )
 
 function get_wspr_band_name_from_freq_hz() {
