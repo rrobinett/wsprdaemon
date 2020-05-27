@@ -1,5 +1,6 @@
-# wsprdaemon (WD) Latest version is v2.9d
+# wsprdaemon (WD) Latest version is v2.9e
 
+2.9e adds a small fix to code which runs only on the upload server at wsprdaemon.org.
 2.9d adds enhanced spots logging to wsprnet.org and a number of error resiliency enhancements.
 It is a very low risk upgrade, so I encourage all users to 'git pull' it
 
