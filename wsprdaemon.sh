@@ -156,6 +156,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
 #declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
 declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
+                                    ### Fix CHU_14 frequency
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
