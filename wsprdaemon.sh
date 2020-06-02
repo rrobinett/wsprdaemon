@@ -159,6 +159,7 @@ declare -r VERSION=2.9f             ### Fix wsprnet upload client to support mul
                                     ### Fix CHU_14 frequency
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
+                                    ### WD upload service better filters out corrupt spot lines.
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -4171,6 +4172,8 @@ function upload_server_to_wsprdaemon_daemon() {
 
     mkdir -p ${UPLOADS_TMP_ROOT_DIR}
     cd ${UPLOADS_TMP_ROOT_DIR}
+    echo "UPLOAD_SPOT_SQL=${UPLOAD_SPOT_SQL}" > upload_spot.sql       ### helps debugging from cmd line
+    echo "UPLOAD_NOISE_SQL=${UPLOAD_NOISE_SQL}" > upload_noise.sql
     shopt -s nullglob
     [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() starting in $PWD"
     while true; do
@@ -4180,6 +4183,10 @@ function upload_server_to_wsprdaemon_daemon() {
             [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
             sleep 10
         done
+        if [[ ${#tar_file_list[@]} -gt 1000 ]]; then
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() processing only first 1000 tar files of the ${#tar_file_list[@]} in ~/ftp/uploads directory"
+            tar_file_list=( ${tar_file_list[@]:0:1000} )
+        fi
         [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() validating ${#tar_file_list[@]} tar.tbz files..."
         local valid_tbz_list=()
         local tbz_file 
@@ -4263,14 +4270,25 @@ function upload_server_to_wsprdaemon_daemon() {
                     ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
                     ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
                     local TS_SPOTS_CSV_FILE=./ts_spots.csv
-                    awk 'NF == 32' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
-                    python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_SPOTS_CSV_FILE}  "${UPLOAD_SPOT_SQL}"
-                    local ret_code=$?
-                    if [[ ${ret_code} -eq 0 ]]; then
-                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() recorded $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files. So delete those spot files."
-                        rm ${spot_file_list[@]} 
+                    awk 'NF == 32 && $7 != "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
+                    if [[ -s ${TS_SPOTS_CSV_FILE} ]]; then
+                        python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_SPOTS_CSV_FILE}  "${UPLOAD_SPOT_SQL}"
+                        local ret_code=$?
+                        if [[ ${ret_code} -eq 0 ]]; then
+                            if [[ $verbosity -ge 1 ]]; then
+                                echo "$(date): upload_server_to_wsprdaemon_daemon() recorded $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
+                                awk 'NF != 32 || $7 == "none" {printf "Skipped line in %s which contains invalid spot line %s\n", FILENAME, $0}' ${spot_file_list[@]}
+                            fi
+                            rm ${spot_file_list[@]} 
+                        else
+                            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() python failed to record $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from \${spot_file_list[@]}"
+                        fi
                     else
-                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() python failed to record $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from \${spot_file_list[@]}"
+                        if [[ $verbosity -ge 1 ]]; then
+                            echo "$(date): upload_server_to_wsprdaemon_daemon() found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
+                            awk 'NF != 32 || $7 == "none" {printf "Skipped line in %s which contains invalid spot line %s\n", FILENAME, $0}' ${spot_file_list[@]}
+                        fi
+                        rm ${spot_file_list[@]} 
                     fi
                 fi
             fi
@@ -4324,7 +4342,11 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
             rm -f ${uploading_pid_file_path}
         fi
     fi
-    upload_server_to_wsprdaemon_daemon ${uploading_root_dir} > ${uploading_log_file_path} 2>&1 &
+    if [[ ${verbosity} -ge 2 ]]; then
+        upload_server_to_wsprdaemon_daemon ${uploading_root_dir} 
+    else
+        upload_server_to_wsprdaemon_daemon ${uploading_root_dir} > ${uploading_log_file_path} 2>&1 &
+    fi
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 2 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
 }
