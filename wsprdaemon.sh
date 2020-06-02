@@ -157,6 +157,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
 declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
                                     ### Fix CHU_14 frequency
+                                    ### Tweek comments in prototype WD.conf file
+                                    ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -379,8 +381,9 @@ cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
 ### Each element of RECEIVER_LIST is a string with 5 space-seperated fields:
 ###   " ID(no spaces)             IP:PORT or RTL:n    MyCall       MyGrid  KiwPassword    Optional SIGNAL_LEVEL_ADJUSTMENTS
 ###                                                                                       [[DEFAULT:ADJUST,]BAND_0:ADJUST[,BAND_N:ADJUST_N]...]
-###                                                                                       A comma-separated list of BAND:ADJUST pairsyy
-###                                                                                       BAND is one of 2200..10, while AJUST is in dBp TO BE ADDED to the raw data, e.g. '-10' will LOWER the reported level
+###                                                                                       A comma-separated list of BAND:ADJUST pairs
+###                                                                                       BAND is one of 2200..10, while ADJUST is in dBs TO BE ADDED to the raw data 
+###                                                                                       So If you have a +10 dB LNA, ADJUST '-10' will LOWER the reported level so that your reports reflect the level at the input of the LNA
 ###                                                                                       DEFAULT defaults to zero and is applied to all bands not specified with a BAND:ADJUST
 
 declare RECEIVER_LIST=(
@@ -2332,7 +2335,8 @@ function decoding_daemon()
                             [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
                         fi
                         #                              %6s %4s   %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d  %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
-                        local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
+                        #local extended_line=$( printf "%4s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
+                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
                         "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
                         extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                         echo "${extended_line}" >> ${tmp_spot_file}
@@ -3872,6 +3876,8 @@ declare UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/u
 declare UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/uploads_config.txt  ## Communicates client FTP mode to FTP server
 declare UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH=${UPLOADS_WSPRDAEMON_FTP_ROOT_DIR}/wsprnet_spots.txt  ## On FTP server, TMP file synthesized from WD spots line
 
+
+
 ##############
 #############
 ### FTP upload mode functions
@@ -4048,12 +4054,125 @@ function upload_daemons_status(){
 }
 
 ############## Implents the '-u' cmd which runs only on wsprdaemon.org to process the tar .tbz files uploaded by WD sites
+
 declare UPLOAD_FTP_PATH=~/ftp/upload       ### Where the FTP server leaves tar.tbz files
+declare UPLOAD_BATCH_PYTHON_CMD=${UPLOADS_TMP_ROOT_DIR}/ts_upload_batch.py
+
+#G3ZIL python script that gets copied into /tmp/ts_bath_upload.py and is run there
+function create_spots_batch_upload_python() {
+    cat > ${UPLOAD_BATCH_PYTHON_CMD} <<EOF
+# -*- coding: utf-8 -*-
+#!/usr/bin/python
+# March-May  2020  Gwyn Griffiths
+# ts_batch_upload.py   a program to read in a spots file scraped from wsprnet.org by scraper.sh and upload to a TimescaleDB
+# Version 1.2 May 2020 batch upload from a parsed file. Takes about 1.7s compared with 124s for line by line
+# that has been pre-formatted with an awk line to be in the right order and have single quotes around the time and character fields
+# Added additional diagnostics to identify which part of the upload fails (12 in 1936 times)
+import psycopg2                  # This is the main connection tool, believed to be written in C
+import psycopg2.extras           # This is needed for the batch upload functionality
+import csv                       # To import the csv file
+import sys                       # to get at command line argument with argv
+
+# initially set the connection flag to be None
+conn=None
+connected="Not connected"
+cursor="No cursor"
+execute="Not executed"
+commit="Not committed"
+ret_code=0
+
+# get the path to the latest_log.txt file from the command line
+batch_file_path=sys.argv[1]
+sql=sys.argv[2]
+#sql_orig="""INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon)
+#                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
+#
+#print("sql:       ", sql,
+#       "sql_orig: ", sql_orig)
+
+try:
+    with open (batch_file_path) as csv_file:
+        csv_data = csv.reader(csv_file, delimiter=',')
+        try:
+               # connect to the PostgreSQL database
+               #print ("Trying to  connect")
+               conn = psycopg2.connect("dbname='tutorial' user='postgres' host='localhost' password='GW3ZIL'")
+               connected="Connected"
+               #print ("Appear to have connected")
+               # create a new cursor
+               cur = conn.cursor()
+               cursor="Got cursor"
+               # execute the INSERT statement
+               psycopg2.extras.execute_batch(cur,sql,csv_data)
+               execute="Executed"
+               #print ("After the execute")
+               # commit the changes to the database
+               conn.commit()
+               commit="Committed"
+               # close communication with the database
+               cur.close()
+               #print (connected,cursor, execute,commit)
+        except:
+               print ("Unabdle to connect to the database:",connected,cursor, execute,commit)
+               ret_code=1
+finally:
+        if conn is not None:
+            conn.close()
+        sys.exit(ret_code)
+EOF
+}
+
+declare TS_NOISE_AWK_SCRIPT=ts_noise.awk
+
+function create_ts_noise_awk_script() {
+    cat > ${TS_NOISE_AWK_SCRIPT} << 'EOF'
+NF == 15 {
+    no_head=FILENAME
+
+    split (FILENAME, path_array, /\//)
+    call_grid=path_array[3]
+
+    split (call_grid, call_grid_array, "_")
+    site=call_grid_array[1]
+    gsub(/=/,"/",site)
+    rx_grid=call_grid_array[2]
+
+    receiver=path_array[4]
+    band=path_array[5]
+    time_freq=path_array[6]
+
+    split (time_freq, time_freq_array, "_")
+    date=time_freq_array[1]
+    split (date,date_array,"")
+    date_ts="20"date_array[1]date_array[2]"-"date_array[3]date_array[4]"-"date_array[5]date_array[6]
+    time=time_freq_array[2]
+    split (time, time_array,"")
+    time_ts=time_array[1]time_array[2]":"time_array[3]time_array[4]
+
+    rms_level=$13
+    c2_level=$14
+    ov=$15
+    #printf "time='%s:%s' \nsite='%s' \nreceiver='%s' \nrx_grid='%s' \nband='%s' \nrms_level:'%s' \nc2_level:'%s' \nov='%s'\n", date_ts, time_ts, site, receiver, rx_grid, band, rms_level, c2_level, ov
+    printf "%s:%s,%s,%s,%s,%s,%s,%s,%s\n", date_ts, time_ts, site, receiver, rx_grid, band, rms_level, c2_level, ov
+}
+EOF
+}
+
+#     
+#  local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
+#                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
+declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
+
 function upload_server_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
-    mkdir -p ${UPLOADS_ROOT_DIR}
-    cd ${UPLOADS_ROOT_DIR}
+    create_spots_batch_upload_python
+    create_ts_noise_awk_script
+
+    mkdir -p ${UPLOADS_TMP_ROOT_DIR}
+    cd ${UPLOADS_TMP_ROOT_DIR}
     shopt -s nullglob
+    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() starting in $PWD"
     while true; do
         [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
         local -a tar_file_list
@@ -4061,76 +4180,131 @@ function upload_server_to_wsprdaemon_daemon() {
             [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() waiting for *.tbz files"
             sleep 10
         done
-        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${#tar_file_list[@]} tar.tbz files"
-        local valid_tbz_list=""
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() validating ${#tar_file_list[@]} tar.tbz files..."
+        local valid_tbz_list=()
         local tbz_file 
         for tbz_file in ${tar_file_list[@]}; do
             if tar tf ${tbz_file} &> /dev/null ; then
-                valid_tbz_list="${valid_tbz_list} ${tbz_file}"
+                [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found valid tar file ${tbz_file}"
+                valid_tbz_list+=(${tbz_file})
             else
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found invalid tar file ${tbz_file}"
+                if [[ -f ${tbz_file} ]]; then
+                    ### A client may be in the process of uploading a tar file.
+                    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found invalid tar file ${tbz_file}"
+                    local file_mod_time=0
+                    file_mod_time=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
+                    local current_time=$(date +"%s")
+                    local file_age=$(( ${current_time}  - ${file_mod_time} ))
+                    if [[ ${file_age} -gt ${MAX_TAR_AGE_SECS-3600} ]] ; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() deleting invalid file ${tbz_file} which is ${file_age} seconds old"
+                        rm ${tbz_file}
+                    fi
+                else
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() unexpectedly found tar file ${tbz_file} was deleted during validation"
+                fi
             fi
         done
-        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found valid tar.tbz files: ${valid_tbz_list}"
-        for tbz_file in ${valid_tbz_list}; do
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() untaring file '${tbz_file}'"
-            rm -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
-            tar xf ${tbz_file}
+        [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${#valid_tbz_list[@]} valid tar.tbz files"
+        if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no valid tar files among the ${#tar_file_list[@]} raw tar files"
+            sleep 1
+            continue
+        else
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() extracting ${#valid_tbz_list[@]} valid tar files"
+            cat  ${valid_tbz_list[@]} | tar jxf - -i
             local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then 
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() ERROR 'tar xf ${tbz_file}' => ${ret_code}"
+            if [[ ${ret_code} -ne 0 ]]; then
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() ERROR: tar returned error code ${ret_code}"
             fi
-            rm ${tbz_file}
-            ### Get FTP proxy upload to wsprnet.org config
-            if [[ -f ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} ]]; then
-                ### If present, this communicates the FTP upload mode from the client
-                #local ftp_mode_line=$(grep SIGNAL_LEVEL_UPLOAD ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})
-                #SIGNAL_LEVEL_UPLOAD=noise ##echo exec ${ftp_mode_line}
-                source ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loaded client config varibles from ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
+            if [[ ! -d wsprdaemon.d ]]; then
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() ERROR: tar sources didn't create wsprdaemon.d"
+            fi
+
+            ### Record the spot files
+            local spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  )
+            if [[ ${#spot_file_list[@]} -eq 0 ]]; then
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no spot files in any of the tar files.  Checking for noise files in $(ls -d wsprdaemon.d/*) ."
             else
-                SIGNAL_LEVEL_UPLOAD="no"
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found no ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH} file"
-            fi
-            if [[ ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} -ne 1 ]] && [[ $verbosity -ge 2 ]] ; then
-                echo -e "$(date): upload_server_to_wsprdaemon_daemon() got config variables:
-                 CLIENT_VERSION=${CLIENT_VERSION-*}
-                 UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
-                 UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}
-                 UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION}
-                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}
-                 MERGED_RX_LIST=( ${MERGED_RX_LIST[@]} ) "
-            fi
-            ### load wsprdaemon spots and noise files into the TS database
-            local -a file_list=$( find wsprdaemon.d -name '*wspr_*.txt' )
-            local file
-            for file in ${file_list[@]} ; do
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() start loading '${file}'"
-                rm -f ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH}
-                local line
-                while read line; do
-                    [[ $verbosity -ge 3 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() loading '${line}' from '${file}'"
-                    upload_line_to_wsprdaemon ${file} "${line}"
-                done < ${file}
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished loading '${file}'"
-                if [[ -f ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} ]]; then
-                    local wsprnet_spots_file_path="${file/wsprdaemon.d/wsprnet.d}"
-                    mkdir -p "${wsprnet_spots_file_path%/*}"
-                    mv ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} ${wsprnet_spots_file_path}
-                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() moved ${UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH} to ${wsprnet_spots_file_path}"
+                ### There are spot files 
+
+                ### Remove zero length spot files (that is common, since they are used by the decoding daemon to signal the posting daemon that decoding has been completed when no spots are decoded
+                local zero_length_spot_file_list=( $(find wsprdaemon.d/spots.d -name '*wspr_spots.txt' -size 0) )
+                if [[ ${#zero_length_spot_file_list[@]} -gt 0 ]]; then
+                    local raw_spot_file_list_count=${#spot_file_list[@]}
+                    rm ${zero_length_spot_file_list[@]}
+                    spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  )
+                    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${raw_spot_file_list_count} spot files, of which ${#zero_length_spot_file_list[@]} were zero length spot files.  After deleting those zero length files there are now ${#spot_file_list[@]} files with spots in them."
                 fi
-                if [[ ${HOSTNAME} == "wsprdaemon" ]] && [[ ${UPLOADS_WSPRDAEMON_FWD_TO_WD1-no} == "yes" ]]; then
-                   curl -s -m 5 -T ${tbz_file} --user uploader:wsprdaemon ftp://logs1.wsprdaemon.org       ### Try to copy this file to the WD1 server at Rob's house.  timeout after 5 seconds
-                   local ret_code=$?
-                   if [[ ${ret_code} -ne 0 ]]; then
-                       [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() curl FTP upload of ${tbz_file} to WD1 at rob's house failed ret_code=${ret_code}"
-                   fi
+
+                ###
+                if [[ ${#spot_file_list[@]} -eq 0 ]]; then
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() there were no non-zero length spot files. Go on to check for noise files under wsprdaemon.noise."
+                else
+                    ### There are spot files with spot lines
+                    local calls_delivering_jtx_2_1_lines=( $(awk 'NF == 32 && $3  !~ /\./{ print $23}' ${spot_file_list[@]} | sort -u) )
+                    if [[ ${#calls_delivering_jtx_2_1_lines[@]} -ne 0 ]]; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() Calls using WSJT-x V2.1 wsprd: ${calls_delivering_jtx_2_1_lines[@]}"
+                    fi
+                    local calls_delivering_jtx_2_2_lines=( $(awk 'NF == 32 && $3  ~ /\./{ print $23}' ${spot_file_list[@]} | sort -u) )
+                    if [[ ${#calls_delivering_jtx_2_2_lines[@]} -ne 0 ]]; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() Calls using WSJT-x V2.2 wsprd: ${calls_delivering_jtx_2_2_lines[@]}"
+                    fi
+                    ###   spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_rms_noise spot_c2_noise spot_for_wsprnet band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
+
+                    ###  awk 'NF == 32' ${spot_file_list[@]:0:20000}  => filters out corrupt spot lines.  Only lines with 32 fields are fed to TS.  The bash cmd line can process no more than about 23,500 arguments, so pass at most 20,000 txt file names to awk.  If there are more, they will get processed in the next loop iteration
+                    ###  sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/;'"s/\"/'/g"
+                    ###          s/\S+\s+//18;  => deletes the 18th field, the 'proxy upload this spot to wsprnet.org'
+                    ###                        s/ /,/g; => replace all spaces with ','s
+                    ###                                   s/,/:/; => change the first two fields from DATE,TIME to DATE:TIME
+                    ###                                          s/./&"/11; => add '"' to get DATE:TIME"
+                    ###                                                      s/./&:/9; => insert ':' to get YYMMDD:HH:MM"
+                    ###                                                                s/./&-/4; s/./&-/2;   => insert ':' to get YY-MM-DD:HH:MM"
+                    ###                                                                                   s/^/"20/;  => insert '"20' to get "20YY-MM-DD:HH:MM"
+                    ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
+                    ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
+                    local TS_SPOTS_CSV_FILE=./ts_spots.csv
+                    awk 'NF == 32' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
+                    python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_SPOTS_CSV_FILE}  "${UPLOAD_SPOT_SQL}"
+                    local ret_code=$?
+                    if [[ ${ret_code} -eq 0 ]]; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() recorded $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files. So delete those spot files."
+                        rm ${spot_file_list[@]} 
+                    else
+                        [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() python failed to record $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from \${spot_file_list[@]}"
+                    fi
                 fi
-                rm ${file}
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished with lines in file '${file}'"
-            done
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() finished processing 'Spot Format Type #${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}' file '${tbz_file}'"
-        done
+            fi
+
+            ### Record the noise files
+            local noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') )
+            if [[ ${#noise_file_list[@]} -eq 0 ]]; then
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() unexpectedly found no noise files"
+                sleep 1
+            else
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() found ${#noise_file_list[@]} noise files"
+                local TS_NOISE_CSV_FILE=ts_noise.csv
+                awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
+                if [[ $verbosity -ge 1 ]]; then
+                    [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() awk created ${TS_NOISE_CSV_FILE} which contains $( cat ${TS_NOISE_CSV_FILE} | wc -l ) noise lines"
+                    local UPLOAD_NOISE_SKIPPED_FILE=ts_noise_skipped.txt
+                    awk 'NF != 15 {printf "%s: %s\n", FILENAME, $0}' ${noise_file_list[@]} > ${UPLOAD_NOISE_SKIPPED_FILE}
+                    if [[ -s ${UPLOAD_NOISE_SKIPPED_FILE} ]]; then
+                        echo "$(date): upload_server_to_wsprdaemon_daemon() awk found $(cat ${UPLOAD_NOISE_SKIPPED_FILE} | wc -l) invalid noise lines which are saved in ${UPLOAD_NOISE_SKIPPED_FILE}:"
+                        head -n 10 ${UPLOAD_NOISE_SKIPPED_FILE}
+                    fi
+                fi
+                python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
+                local ret_code=$?
+                if [[ ${ret_code} -eq 0 ]]; then
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() recorded $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to the wsprdaemon_noise table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
+                    rm ${noise_file_list[@]}
+                else
+                    [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() python failed to record $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to  the wsprdaemon_noise table from \${noise_file_list[@]}"
+                fi
+            fi
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() deleting the ${#valid_tbz_list[@]} valid tar files"
+            rm ${valid_tbz_list[@]} 
+        fi
     done
 }
 
