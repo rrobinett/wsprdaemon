@@ -4114,7 +4114,7 @@ try:
                cur.close()
                #print (connected,cursor, execute,commit)
         except:
-               print ("Unabdle to connect to the database:",connected,cursor, execute,commit)
+               print ("Unable to record spot file do the database:",connected,cursor, execute,commit)
                ret_code=1
 finally:
         if conn is not None:
@@ -4270,14 +4270,19 @@ function upload_server_to_wsprdaemon_daemon() {
                     ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
                     ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
                     local TS_SPOTS_CSV_FILE=./ts_spots.csv
-                    awk 'NF == 32 && $7 != "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
+                    local TS_BAD_SPOTS_CSV_FILE=./ts_bad_spots.csv
+                    awk 'NF == 32 && $7 != "none" && $8 != "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
+                    awk 'NF != 32 || $7 == "none" || $8 == "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_BAD_SPOTS_CSV_FILE}
+                    if [[ $verbosity -ge 1 ]] && [[ -s ${TS_BAD_SPOTS_CSV_FILE} ]] ; then
+                        local bad_spots_count=$(cat ${TS_BAD_SPOTS_CSV_FILE} | wc -l)
+                        echo -e "$(date): upload_server_to_wsprdaemon_daemon() found ${bad_spots_count} bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_CSV_FILE})"
+                    fi
                     if [[ -s ${TS_SPOTS_CSV_FILE} ]]; then
                         python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_SPOTS_CSV_FILE}  "${UPLOAD_SPOT_SQL}"
                         local ret_code=$?
                         if [[ ${ret_code} -eq 0 ]]; then
                             if [[ $verbosity -ge 1 ]]; then
                                 echo "$(date): upload_server_to_wsprdaemon_daemon() recorded $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
-                                awk 'NF != 32 || $7 == "none" {printf "Skipped line in %s which contains invalid spot line %s\n", FILENAME, $0}' ${spot_file_list[@]}
                             fi
                             rm ${spot_file_list[@]} 
                         else
