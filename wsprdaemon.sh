@@ -1030,21 +1030,37 @@ else
     exit 1
 fi
 
+### If not present or an older version, get latest wsprd decoder installed
+set +x
+cpu_arch=$(uname -m)
+wsjtx_pkg=""
+case ${cpu_arch} in
+    x86_64)
+        wsjtx_pkg=wsjtx_2.2.1_amd64.deb
+        expected_wsprd_pgm_file_size=84068
+        ;;
+    armv7l)
+        # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
+        wsjtx_pkg=wsjtx_2.2.1_armhf.deb
+        expected_wsprd_pgm_file_size=84068
+        ;;
+    *)
+        echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
+        exit 1
+        ;;
+esac
+
+install_wsprd="no"
 if [[ ! -x ${WSPRD_CMD} ]]; then
-    cpu_arch=$(uname -m)
-    wsjtx_pkg=""
-    case ${cpu_arch} in
-        x86_64)
-            wsjtx_pkg=wsjtx_2.0.1_amd64.deb
-            ;;
-        armv7l)
-            wsjtx_pkg=wsjtx_2.0.1_armhf.deb
-            ;;
-        *)
-            echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
-            exit 1
-            ;;
-    esac
+    install_wsprd="yes"
+else
+    wsprd_file_size=$(${GET_FILE_SIZE_CMD} ${WSPRD_CMD})
+    if [[ ${wsprd_file_size} -ne ${expected_wsprd_pgm_file_size} ]]; then
+        install_wsprd="yes"
+    fi
+fi
+
+if [[ ${install_wsprd} = "yes" ]]; then
     # ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
     sudo apt update --assume-yes
     sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
@@ -1055,6 +1071,7 @@ if [[ ! -x ${WSPRD_CMD} ]]; then
         exit 1
     fi
 fi
+set +x
 
 if ${WSPRD_CMD} | grep -q '\-o' ; then
     declare WSPRD_CMD_FLAGS="-C 5000 -o 4"
