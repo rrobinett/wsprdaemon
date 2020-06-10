@@ -155,11 +155,12 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add to the enhanced spot lines the new wsprd fields and a flag that signals the wsprdaemon.org server to 'proxy forward' that spot to  wsprnet.org 
                                     ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
 #declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
-declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
+#declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
                                     ### Fix CHU_14 frequency
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
+declare -r VERSION=2.9g             ### Install WSJT-x 2.2-1 if not currently installed
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -1050,13 +1051,29 @@ case ${cpu_arch} in
         ;;
 esac
 
-install_wsprd="no"
+declare WSPRD_V_2_2_NF=17       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
+declare WSPRD_COMPARE="yes"     ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
+declare WSPRDAEMON_TMP_WSPRD_DIR=${WSPRDAEMON_TMP_WSPRD_DIR-${WSPRDAEMON_TMP_DIR}/wsprd.old}
+declare WSPRD_PREVIOUS_CMD="${WSPRDAEMON_TMP_WSPRD_DIR}/wsprd"   ### If WSPRD_COMPARE="yes" and a new version of wsprd was installed, then the old wsprd was moved here
+
+declare install_wsprd="no"      
 if [[ ! -x ${WSPRD_CMD} ]]; then
     install_wsprd="yes"
 else
-    wsprd_file_size=$(${GET_FILE_SIZE_CMD} ${WSPRD_CMD})
-    if [[ ${wsprd_file_size} -ne ${expected_wsprd_pgm_file_size} ]]; then
-        install_wsprd="yes"
+    ### There is an installed version of wsprd.  Check to see if it is the latest version
+    declare all_wspr_files=$(find ${WSPRDAEMON_TMP_DIR}/recording.d/ -not -path "*wsprd.old*" -name ALL_WSPR.TXT ! -size 0)
+    if [[ -n "${all_wspr_files}" ]]; then
+        declare most_recent_non_zero_length_all_wspr_file=$(ls -t ${all_wspr_files} | head -n 1)   ### Find the most recent non-zero length ALL_WSPR.TXT file
+        declare all_wspr_field_count=$(awk 'END {print NF}' ${most_recent_non_zero_length_all_wspr_file})   ### Find the number of fields in the last line of that file
+        if [[ ${all_wspr_field_count} -ne ${WSPRD_V_2_2_NF} ]]; then
+            ### That line didn't have the expected 17 fields
+            install_wsprd="yes"
+            if [[ ${WSPRD_COMPARE-no} == "yes" ]]; then
+                ### save the old version of wsprd so we can compare its performance to the new version
+                mkdir -p ${WSPRDAEMON_TMP_WSPRD_DIR}
+                cp -p ${WSPRD_CMD} ${WSPRDAEMON_TMP_WSPRD_DIR}
+            fi
+        fi
     fi
 fi
 
@@ -2219,6 +2236,21 @@ function decoding_daemon()
                 local c2_FFT_nl=$(cat c2_FFT.txt)
                 local c2_FFT_nl_cal=$(bc <<< "scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};(var * 100)/100")
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal} which is calculated from 'local c2_FFT_nl_cal=\$(bc <<< 'scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};var/=1;var')"
+                if [[ ${verbosity} -ge 1 ]] && [[ -x ${WSPRD_PREVIOUS_CMD} ]]; then
+                    mkdir -p wsprd.old
+                    cd wsprd.old
+                    timeout ${WSPRD_TIMEOUT_SECS-30} nice ${WSPRD_PREVIOUS_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ../${wsprd_input_wav_filename} > wsprd_decodes.txt
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): decoded spots using old wsprd in $PWD"
+                    cd -
+                    cut -c -60 wspr_spots.txt                   > wspr_spots.txt.cut
+                    cut -c -60 wsprd.old/wspr_spots.txt         > wsprd.old/wspr_spots.txt.cut
+                    local spot_diffs
+                    if ! spot_diffs=$(diff wspr_spots.txt.cut wsprd.old/wspr_spots.txt.cut) ; then
+                        local new_count=$(cat wspr_spots.txt | wc -l)
+                        local old_count=$(cat wsprd.old/wspr_spots.txt | wc -l)
+                        echo -e "$(date): decoding_daemon(): '<' new wsprd decoded ${new_count} spots, '>' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 7,7n)"
+                    fi
+                fi
             fi
 
             # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
@@ -2354,7 +2386,7 @@ function decoding_daemon()
                         fi
                         #                              %6s %4s   %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d  %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
                         #local extended_line=$( printf "%4s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
-                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
+                        local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
                         "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
                         extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                         echo "${extended_line}" >> ${tmp_spot_file}
@@ -4265,11 +4297,12 @@ function upload_server_to_wsprdaemon_daemon() {
                     [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() there were no non-zero length spot files. Go on to check for noise files under wsprdaemon.noise."
                 else
                     ### There are spot files with spot lines
-                    local calls_delivering_jtx_2_1_lines=( $(awk 'NF == 32 && $3  !~ /\./{ print $23}' ${spot_file_list[@]} | sort -u) )
+                    ### If the sync_quality in the third field is a float (i.e. has a '.' in it), then this spot was decoded by wsprd v2.1
+                    local calls_delivering_jtx_2_1_lines=( $(awk 'NF == 32 && $3  !~ /\./ { print $23}' ${spot_file_list[@]} | sort -u) )
                     if [[ ${#calls_delivering_jtx_2_1_lines[@]} -ne 0 ]]; then
                         [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() Calls using WSJT-x V2.1 wsprd: ${calls_delivering_jtx_2_1_lines[@]}"
                     fi
-                    local calls_delivering_jtx_2_2_lines=( $(awk 'NF == 32 && $3  ~ /\./{ print $23}' ${spot_file_list[@]} | sort -u) )
+                    local calls_delivering_jtx_2_2_lines=( $(awk 'NF == 32 && $3  ~ /\./ { print $23}' ${spot_file_list[@]} | sort -u) )
                     if [[ ${#calls_delivering_jtx_2_2_lines[@]} -ne 0 ]]; then
                         [[ $verbosity -ge 1 ]] && echo "$(date): upload_server_to_wsprdaemon_daemon() Calls using WSJT-x V2.2 wsprd: ${calls_delivering_jtx_2_2_lines[@]}"
                     fi
