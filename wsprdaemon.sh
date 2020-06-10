@@ -161,6 +161,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
 declare -r VERSION=2.9g             ### Install WSJT-x 2.2-1 if not currently installed
+                                    ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
@@ -2122,6 +2123,8 @@ function decoding_daemon()
     decode_create_hanning_window_cmd
 
     [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): starting daemon to record '${real_receiver_name},${real_receiver_rx_band}'"
+    local decoded_spots=0        ### Maintain a running count of the total number of spots_decoded
+    local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
     cd ${real_recording_dir}
     local old_kiwi_ov_lines=0
@@ -2230,6 +2233,10 @@ function decoding_daemon()
                 local c2_FFT_nl_cal=-999.9
             else
                 ### 'wsprd' was successful
+                local new_spots=$(wc -l wspr_spots.txt)
+                decoded_spots=$(( decoded_spots + ${new_spots/ *} ))
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): decoded ${new_spots/ *} new spots.  ${decoded_spots} spots have been decoded since this daemon started"
+
                 ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
                 local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
                 /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
@@ -2240,10 +2247,13 @@ function decoding_daemon()
                     mkdir -p wsprd.old
                     cd wsprd.old
                     timeout ${WSPRD_TIMEOUT_SECS-30} nice ${WSPRD_PREVIOUS_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ../${wsprd_input_wav_filename} > wsprd_decodes.txt
-                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): decoded spots using old wsprd in $PWD"
-                    cd -
-                    cut -c -60 wspr_spots.txt                   > wspr_spots.txt.cut
-                    cut -c -60 wsprd.old/wspr_spots.txt         > wsprd.old/wspr_spots.txt.cut
+                    local old_wsprd_spots=$(wc -l wspr_spots.txt)
+                    old_wsprd_decoded_spots=$(( old_wsprd_decoded_spots + ${old_wsprd_spots/ *} ))
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): old wsprd added ${old_wsprd_spots/ *} new spots.  ${old_wsprd_decoded_spots} spots have been decoded by old wsprd, ${decoded_spots} by new wsprd since this daemon started"
+                    cd - > /dev/null
+                    ### Look for differences only in fields like SNR and frequency which are relevant to this comparison
+                    awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wspr_spots.txt                   > wspr_spots.txt.cut
+                    awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wsprd.old/wspr_spots.txt         > wsprd.old/wspr_spots.txt.cut
                     local spot_diffs
                     if ! spot_diffs=$(diff wspr_spots.txt.cut wsprd.old/wspr_spots.txt.cut) ; then
                         local new_count=$(cat wspr_spots.txt | wc -l)
