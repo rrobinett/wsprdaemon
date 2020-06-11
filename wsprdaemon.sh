@@ -2246,19 +2246,26 @@ function decoding_daemon()
                 if [[ ${verbosity} -ge 1 ]] && [[ -x ${WSPRD_PREVIOUS_CMD} ]]; then
                     mkdir -p wsprd.old
                     cd wsprd.old
-                    timeout ${WSPRD_TIMEOUT_SECS-30} nice ${WSPRD_PREVIOUS_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ../${wsprd_input_wav_filename} > wsprd_decodes.txt
-                    local old_wsprd_spots=$(wc -l wspr_spots.txt)
-                    old_wsprd_decoded_spots=$(( old_wsprd_decoded_spots + ${old_wsprd_spots/ *} ))
-                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): old wsprd added ${old_wsprd_spots/ *} new spots.  ${old_wsprd_decoded_spots} spots have been decoded by old wsprd, ${decoded_spots} by new wsprd since this daemon started"
-                    cd - > /dev/null
-                    ### Look for differences only in fields like SNR and frequency which are relevant to this comparison
-                    awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wspr_spots.txt                   > wspr_spots.txt.cut
-                    awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wsprd.old/wspr_spots.txt         > wsprd.old/wspr_spots.txt.cut
-                    local spot_diffs
-                    if ! spot_diffs=$(diff wspr_spots.txt.cut wsprd.old/wspr_spots.txt.cut) ; then
-                        local new_count=$(cat wspr_spots.txt | wc -l)
-                        local old_count=$(cat wsprd.old/wspr_spots.txt | wc -l)
-                        echo -e "$(date): decoding_daemon(): '<' new wsprd decoded ${new_count} spots, '>' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 7,7n)"
+                    timeout ${WSPRD_TIMEOUT_SECS-60} nice ${WSPRD_PREVIOUS_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ../${wsprd_input_wav_filename} > wsprd_decodes.txt
+                    local ret_code=$?
+
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): error ${ret_code} reported running old wsprd"
+                        cd - > /dev/null
+                    else
+                        local old_wsprd_spots=$(wc -l wspr_spots.txt)
+                        old_wsprd_decoded_spots=$(( old_wsprd_decoded_spots + ${old_wsprd_spots/ *} ))
+                        [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): new wsprd decoded ${new_spots/ *} new spots, ${decoded_spots} total spots.  Old wsprd decoded  ${old_wsprd_spots/ *} new spots, ${old_wsprd_decoded_spots} total spots"
+                        cd - > /dev/null
+                        ### Look for differences only in fields like SNR and frequency which are relevant to this comparison
+                        awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wspr_spots.txt                   > wspr_spots.txt.cut
+                        awk '{printf "%s %s %4s %10s %-10s %-6s %s\n", $1, $2, $4, $6, $7, $8, $9 }' wsprd.old/wspr_spots.txt         > wsprd.old/wspr_spots.txt.cut
+                        local spot_diffs
+                        if ! spot_diffs=$(diff wsprd.old/wspr_spots.txt.cut wspr_spots.txt.cut) ; then
+                            local new_count=$(cat wspr_spots.txt | wc -l)
+                            local old_count=$(cat wsprd.old/wspr_spots.txt | wc -l)
+                            echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 7,7n)"
+                        fi
                     fi
                 fi
             fi
