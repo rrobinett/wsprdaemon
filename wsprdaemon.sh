@@ -2265,7 +2265,7 @@ function decoding_daemon()
                         if ! spot_diffs=$(diff wsprd.old/wspr_spots.txt.cut wspr_spots.txt.cut) ; then
                             local new_count=$(cat wspr_spots.txt | wc -l)
                             local old_count=$(cat wsprd.old/wspr_spots.txt | wc -l)
-                            echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 7,7n)"
+                            echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 5,5n)"
                         fi
                     fi
                 fi
