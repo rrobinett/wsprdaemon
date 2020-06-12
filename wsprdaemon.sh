@@ -1053,7 +1053,8 @@ case ${cpu_arch} in
 esac
 
 declare WSPRD_V_2_2_NF=17       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
-declare WSPRD_COMPARE="yes"     ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
+declare WSPRD_V_2_1_NF=15       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
+declare WSPRD_COMPARE="no"      ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
 declare WSPRDAEMON_TMP_WSPRD_DIR=${WSPRDAEMON_TMP_WSPRD_DIR-${WSPRDAEMON_TMP_DIR}/wsprd.old}
 declare WSPRD_PREVIOUS_CMD="${WSPRDAEMON_TMP_WSPRD_DIR}/wsprd"   ### If WSPRD_COMPARE="yes" and a new version of wsprd was installed, then the old wsprd was moved here
 
@@ -1066,7 +1067,7 @@ else
     if [[ -n "${all_wspr_files}" ]]; then
         declare most_recent_non_zero_length_all_wspr_file=$(ls -t ${all_wspr_files} | head -n 1)   ### Find the most recent non-zero length ALL_WSPR.TXT file
         declare all_wspr_field_count=$(awk 'END {print NF}' ${most_recent_non_zero_length_all_wspr_file})   ### Find the number of fields in the last line of that file
-        if [[ ${all_wspr_field_count} -ne ${WSPRD_V_2_2_NF} ]]; then
+        if [[ ${all_wspr_field_count} -eq ${WSPRD_V_2_1_NF} ]] ; then
             ### That line didn't have the expected 17 fields
             install_wsprd="yes"
             if [[ ${WSPRD_COMPARE-no} == "yes" ]]; then
