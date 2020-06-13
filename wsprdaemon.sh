@@ -161,6 +161,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
 declare -r VERSION=2.9g             ### Install WSJT-x 2.2-1 if not currently installed
+                                    ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
@@ -2214,11 +2215,11 @@ function decoding_daemon()
             refresh_local_hashtable  ## In case we are using a hashtable created by merging hashes from other bands
             ln ${wav_file_name} ${wsprd_input_wav_filename}
             local wsprd_cmd_flags=${WSPRD_CMD_FLAGS}
-            if [[ ${real_receiver_rx_band} =~ 60 ]]; then
-                wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
-            fi
+            #if [[ ${real_receiver_rx_band} =~ 60 ]]; then
+            #    wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
+            #fi
             local start_time=${SECONDS}
-            timeout ${WSPRD_TIMEOUT_SECS-90} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
+            timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wsprd_input_wav_filename} > ${WSPRD_DECODES_FILE}
             local ret_code=$?
             local run_time=$(( ${SECONDS} - ${start_time} ))
             if [[ ${ret_code} -ne 0 ]]; then
