@@ -1093,7 +1093,7 @@ fi
 set +x
 
 if ${WSPRD_CMD} | grep -q '\-o' ; then
-    declare WSPRD_CMD_FLAGS="-C 5000 -o 4"
+    declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
     [[ ${verbosity} -ge 1 ]] && echo "$(date): INFO: ${WSPRD_CMD} is version 2, so set command line flags to '${WSPRD_CMD_FLAGS}'"
 else
     declare WSPRD_CMD_FLAGS="-d -C 10000"        ### Default to do deep decode.  Can be overwritten by re-declaring in wsprdaemon.conf.  It takes about 30 CPU seconds to run on a Pi B3 core
