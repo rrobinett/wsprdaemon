@@ -1,7 +1,13 @@
-# wsprdaemon (WD) Latest version is v2.9e
+# wsprdaemon (WD) Latest version is v2.9g
 
-2.9e adds a small fix to code which runs only on the upload server at wsprdaemon.org.
-2.9d adds enhanced spots logging to wsprnet.org and a number of error resiliency enhancements.
+2.9g Installs WSJT-x 2.2.2 which includes an enhanced wsprd decoding utility capable of extracting up to 6% more spots from your receiver
+
+2.9f Fixes parsing of the config file so that WD supports multiple call/grid definitions
+
+2.9e Adds a small fix to code which runs only on the upload server at wsprdaemon.org.
+
+2.9d Adds enhanced spots logging to wsprnet.org and a number of error resiliency enhancements.
+
 It is a very low risk upgrade, so I encourage all users to 'git pull' it
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
@@ -14,15 +20,24 @@ Signals obtained from multiple receievers on the same band ( e.g a 40M vertical 
 
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
 
-WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands and 30+ rx sources on a Pi 4 or x86 server.
+WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decoder 30+ bands.
 
 ## Greenfield Installation
 
-I recommend that you create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page.
+On a Raspberry Pi, install as user 'pi'.
 
-While logged on as that user:
+On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page. 
 
-Download `wsprdaemon.sh` from this site
+To configure user 'wsprdaemon' to sudo:
+```bash
+su -
+adduser wsprdaemon sudo
+exit
+```
+
+While logged on as user 'pi' or 'wsprdaemon':
+
+Download `wsprdaemon.sh` from this site by executing:
 
 ```bash
 cd ~
