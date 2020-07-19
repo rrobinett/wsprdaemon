@@ -23,146 +23,16 @@
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
-#declare -r VERSION=0.1
-#declare -r VERSION=0.2          ### Default to print usage, add -w (spawn watchdog)
-#declare -r VERSION=0.3a         ### Fix usage printout for -w & -W,  cleanup -w logfile, -w now configures itself on Pi/Debian to run at Pi startup, -w runs every odd minute
-#declare -r VERSION=0.3b          ### Add OSTYPE == linux-gnu to support Glenn's Debian server, fix leading zero bug in function which caluclates seconds until next odd minute
-#declare -r VERSION=0.4a          ### Enhance -w watchdog to run on every odd 2 minute, rework the cmd line syntax to (hopefully) make it simpler and much more consistent
-#declare -r VERSION=0.4b          ### Fix -j z
-#declare -r VERSION=0.5a            ### Add scheduled band changes which are executed by the watchdog daemon
-#declare -r VERSION=0.5b            ### Fix '-j s' to use list of running jobs from kiwiwspr.jobs file
-#declare -r VERSION=0.5c            ### Add '-j o' => check for zombie captures and decodes
-#declare -r VERSION=0.5d            ### Cleanup watchdog log printouts.
-#declare -r VERSION=0.5e            ### Fix bug in auto created wsprdaemon.conf
-#declare -r VERSION=0.5f           ### Fix help message to say '-j z,all'
-#declare -r VERSION=0.6a           ### Add check on Pi for Stretch OS version upograde from the relase version 4.7.  When running that version occasional ethernet packet drops stimulate
-                                  ###         many kiwirecorder.py sessions to die.  Version 4.14 greatly reduces and many times completely elimiates the problem
-                                  ###         With version 4.14 installed I am running 17 decode jobs for 12 hours with no restarts
-#declare -r VERSION=0.6b           ### Spots now include frequency resolution to .N Hz.  wsprnet.org doens't print it, but all_wspr.txt file includes "date time freq_to_1/10 Hz ..."
-#declare -r VERSION=0.6c            ### Add support for sunrise/sunset scheduled changes
-#declare -r VERSION=0.7a            ### Cleanup
-#declare -r VERSION=0.7b            ### Fixup for odroid.  fix time_math()  Fix '-j o' (kill zombies)
-#declare -r VERSION=0.7c            ### Fix creation and usage of kwiwwspr.jobs. Append kiwirecorder.py output to capture.log in hope of catching crash debug messages
-#declare -r VERSION=1.0            ### First release
-#declare -r VERSION=1.0a            ### Printout schedule changes.  Enhance logging of captures to help debug kiwirecorder.py crashes
-#declare -r VERSION=1.0b            ### Better maintain kiwiwspr.jobs
-#declare -r VERSION=1.1            ### No functional changes, but major rewrite of scheduling code
-#declare -r VERSION=1.1a            ### Fix scheduler bug which was encountered when there was no 00:00 entry
-#declare -r VERSION=1.1b            ### Fix scheduler bug HHMM which was encountered when there was a 00:48 (for example) entry. (Hopefully) enhanced validity checking of HH:MM
-#declare -r VERSION=1.1c            ### Fix suntimes bug.  It needs to be updated if wsprdaemon.conf is changed in case a new Kiwi at a different grid is added
-#declare -r VERSION=1.1d            ### Remove -T -100 from the kiwirecorder command line to completely disable squelch.  Fix bug in add_remove_jobs_in_running_file(), missing 'grep -w'
-                                    ###     Add WSPRD_CMD_FLAGS (default = "-d") which can be modified by redeclaring it in wsprdaemon.conf
-#declare -r VERSION=1.1e           ### Center rx audio 1500 +- 250 Hz.  Watchdog purges zombie wav files
-#declare -r VERSION=1.1f           ### Change kiwirecorder to add '-u  kiwiwspr_V${VERSION}' and '-g 0'.   Decode using primary wsprd, then if confgured decode using wsprd.v2.
-#declare -r VERSION=1.1g           ### If KIWIRECORDER_CLIENT_NAME is defined in conf file, it's value will be shown as client name on Kiwi's user list
-                                   ### Check for version of wsprd and if it is version 2.x (i.e. it suuports the '-o' command line flag), then add '-C 5000 -o 4' to the wspr command line and get 10% more spots
-#declare -r VERSION=1.1h            ### Fix diags printouts
-#declare -r VERSION=2.uploads.log0a            ### Add support for RTL-SDR dongles.  Change name to wsprdaemon.sh.  Stable operation on 3 bands using RTL-SDRs with rtl_sdr application.  Running 3 bands in Berkeley, one at Sunol
-#declare -r VERSION=2.0b            ### Fix bug which fills up ~/save_wav.d/
-#declare -r VERSION=2.0c            ### Moved from Berkley83 and testing RTL-SDR to KPH Pi 84 to: fix wsprd flag, merge hashtable and preserve themi, preserve ALL_WSPR.TXT, add diversity rx support
-#declare -r VERSION=2.0d            ### Remove incorrect '-d' from wsprd cmd line, restore creation of log file with full time/frequency information
-#declare -r VERSION=2.0d1           ### Patch in corrupt hashtable and duplicate hash fixes, merge on  kph85 when done
-#declare -r VERSION=2.0e            ### Greatly improved hashtable handling.  Running on kph84.  Release to ZKD and OM
-#declare -r VERSION=2.0f            ### Fix error which happens when wav file is deleted by capture daemon while watchdog is flushing stale wav files
-#declare -r VERSION=2.0g           ### Restore callsigns with '/' to the master hashtable.  Thanks Larry W6LVP
-#declare -r VERSION=2.0f           ### Get correct sunrise/sunset times by correcting function maidenhead_to_long_lat().  Thanks Gwyn G3ZIL
-#declare -r VERSION=2.0h           ### Remove 'set -x' from maidenhead_to_long_lat(). Add -a, -z, -s command flags
-#declare -r VERSION=2.0i           ### Remove all hashtable validation.  Make hashtable merging configurable with HASHTABLE_MERGE="yes" (default is "no")
-#declare -r VERSION=2.1a           ### Split off posting into a seperate process from decoding in the first step towards 'virtual receivers == merged decodes' 
-#declare -r VERSION=2.1b           ### Fix merged decode sorting
-#declare -r VERSION=2.1c           ### Fix W6LVP/A 'missing 2 part messages' bug 
-#declare -r VERSION=2.2a           ### Add suport for 'AUDIO_xxx' baseband audio input receive devices.  Add '-i ' command which lists those devices
-#declare -r VERSION=2.2b           ### tweak -i.  fix AUDIO hw:0 in prototype conf file
-#declare -r VERSION=2.2c           ###  fix bug in audio_recording_dameon() usage of audio_device, audio_subdevice
-#declare -r VERSION=2.2d           ### Truncate ALL_WSPR.TXT when it grows too large.  Fix -z
-#declare -r VERSION=2.2e           ### Stop using ALL_WSPR.TXT.OLD. Post in call->time->freq order
-#declare -r VERSION=2.2f           ### Enhance curl upload error detection and resiliency
-#declare -r VERSION=2.2g           ### curl MEPT uploads are not reliable and failures cannot be detected, so use curl POSTs
-#declare -r VERSION=2.2h          ### Both curl POST (the default) and curl MEPT are functional.  Put "CURL_MEPT_MODE=yes" in .conf file to switch upload modes.
-                                   ### Add optional per-band signal level logging to signal-levels.txt if "SIGNAL_LEVEL_STATS=yes" is in .conf file
-#declare -r VERSION=2.3            ### Enhance validation of config file and further automate installaton of utilites like 'wsprd' and 'kwiwrecorder'
-#declare -r VERSION=2.3b            ### Modify kiwirecorder call to 1340 to 1660 Hz to improve noise level measurements
-#declare -r VERSION=2.3c            ### add '-p HOURS' command which generates a noise level graph from the signal-levels,log files
-#declare -r VERSION=2.4a            ### Publish the graphs of the last 24 hours using ApacheL  http://localhost/ will show the last 24 hours 
-#declare -r VERSION=2.4b            ###  Fixup installation code
-#declare -r VERSION=2.4c            ###  Fixup installation code
-#declare -r VERSION=2.4d            ###  Fix creating /var/www/html/index.html, add receiver name before band already in graph title
-                                   ###  If SIGNAL_LEVEL_UPLOAD_ID="SITE_NAME" is defined in the conf file, upload the noise_graph.png to logs.kphsdr.com
-                                   ###  Those graphs can be viewed at "http://logs.kphsdr.com:20080/SITE_NAME/"
-                                   ### To reduce CPU overload, generate new graph every 4 minutes.
-                                   ### Try to force use of US number formats so 'locale' need not be changed to US
-#declare -r VERSION=2.4e            ### Fix locale, fix path to calibration.csv
-#declare -r VERSION=2.4f            ### Fix locale some more, fix uninitialized SIGNAL_LEVEL_STATS which caused code to crash 
-#declare -r VERSION=2.4g            ### Don't create zero length csv files
-#declare -r VERSION=2.4h            ### Correct signal levels for Kiwi's LPF.  Upload sigal levels to Grafana cloud database
-#declare -r VERSION=2.4i            ### Clarify 80m and 60m band names.  Fix installation on Ubuntu and other non-Pi systems.  Add 40 seconds of temout to kill
-#declare -r VERSION=2.4j            ### 1) scheduled band changes leave rx0/rx1 free and there is no long wait for -z
-                                   ### 2) fixed the red/blue labels
-                                   ### 3) one can configure to only measure noise and log it, only publish graphs to graphs.wsprdaemon.org, only publish graphs to localhost running Apache, or publish to both
-                                   ### 4) download and install only the SW packages required by the configuration (e.g. no apache2 if you aren't publishing locally)
-                                   ### 5) publishing graphs to graphs.wsprdaemon.org  no longer requires one to set up ssh auto-login.
-                                   ### 6) added -Z, check for and offer to kill zombies and add it to -z
-#declare -r VERSION=2.5             ### Release to public, same as 2.4j
-#declare -r VERSION=2.5a             ### Enhance checks for zombies.  Add support for installation of WSJT-x on x86 machines
-#declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
-                                    ### Prompt user before installing new SW.  Graphs now -165 to -115
-                                    ### Use /tmp/wsprdaemon/... and move all WD temp files there,
-                                    ### Verify that the best SNR from the MERG are 
-                                    ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
-                                    ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
-                                    ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
-#declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
-                                    ### Fixed spurious sys.excepthook is missing error message
-#declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
-#declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
-                                    ### Use Python library to obtain sunrise/sunset times rather than web site
-                                    ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
-                                    ### Limit size of ALL_WSPR.TXT and OV log files
-                                    ### Now MERG... is enough to specify a MERG receiver
-                                    ### Tested dual USB audio input
-#declare -r VERSION=2.6d             ### To test and install astral, use 'pip install astral'
-                                    ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
-#declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
-#declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-#declare -r VERSION=2.7a             ### Cache noise and spot databases
-                                    ### Use Christoph's python code to obtain noise levels
-#declare -r VERSION=2.7b             ### FIX: always install 'sox'
-#declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
-                                    ### Don't allow it to run as user 'root'
-                                    ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
-                                    ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
-                                    ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
-                                    ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
-#declare -r VERSION=2.8b            ### Add upload of WD's enhanced spots to wsprdaemon.org database
-                                    ### Add noise levels to WD spots
-                                    ### Optimize azi calculations by moving them to run as part of the decoding_daemons() and thus can run in parallel on multiple CPU systems
-                                    ### Handle failure of member of MERGed rx group
-                                    ### Use FTP to upload spots and noise to wsprdaemon.org
-                                    ### Add FTP server mode to run on wspdaemon.org and add '-u a/s/z' commands to start/status/stop it
-                                    ### Post .1 hz freq and .01 sec DT accuracy spots to wsprdaemon.org
-                                    ### Add OV count to noise reports to wsprdaemon.org
-                                    ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
-#declare -r VERSION=2.9             ### First release
-#declare -r VERSION=2.9a            ### Fix noise graph generation
-#declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
-                                    ### Fix to don't try to create png file at startup which generates bash errors
-                                    ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
-#declare -r VERSION=2.9c            ### Add support for WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a  different line format 
-                                    ### Add timeout of 'wsrpd' so it doesn't hang system on 60M decoding
-#declare -r VERSION=2.9d             ### Fix c2 noise level to be -999.9 when 'wsprd' times out
-                                    ### Change to generate new graphics files from every 4 minutes to every 8 minutes
-                                    ### Ensure that the 'curl' command is present
-                                    ### Add to the enhanced spot lines the new wsprd fields and a flag that signals the wsprdaemon.org server to 'proxy forward' that spot to  wsprnet.org 
-                                    ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
 #declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
 #declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
                                     ### Fix CHU_14 frequency
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
-declare -r VERSION=2.9g             ### Install WSJT-x 2.2-1 if not currently installed
+declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
+                                    ### TODO: Split Python utiliteis in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
@@ -906,6 +776,10 @@ function ask_user_to_install_sw() {
     fi
 }
 
+declare WSPRD_CMD=/usr/bin/wsprd
+declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
+declare WSJTX_REQUIRED_VERSION=2.2.2
+
 function check_for_needed_utilities()
 {
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
@@ -967,6 +841,38 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
+    local wsjtx_version=$(awk '/wsjtx/{print $3}' <<< "${dpkg_list}")
+    if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsjtx_version}" ]] || [[ ${wsjtx_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
+        local cpu_arch=$(uname -m)
+        local wsjtx_pkg=""
+        case ${cpu_arch} in
+            x86_64)
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
+                ;;
+            armv7l)
+                # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
+                ;;
+            *)
+                echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
+                exit 1
+                ;;
+        esac
+       [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
+        wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
+        if [[ ! -f ${wsjtx_pkg} ]] ; then
+            echo "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
+            exit 1
+        fi
+        sudo ${DPKG_CMD} -i ${wsjtx_pkg}
+        ret_code=$?
+        if [[ ${ret_code} -ne 0 ]] || [[ ! -x ${WSPRD_CMD} ]]; then
+            echo "ERROR: failed to install 'wsprd'.  ${DPKG_CMD} -i ${wsjtx_pkg} => ${ret_code} and/or ! -x ${WSPRD_CMD}"
+            exit 1
+        fi
+    fi
+
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
         if !  sudo pip3 install psycopg2 ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
@@ -1046,86 +952,6 @@ EOF
 
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
 check_for_needed_utilities
-
-### These variables cannot be declared in a function, since they are reference by many funtions and thus need to be globals
-if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
-    ### We are running on a Rasperberry Pi or generic Debian server
-    declare -r WSPRD_CMD=/usr/bin/wsprd
-elif [[ "${OSTYPE}" == "darwin18" ]]; then
-    ### We are running on a Mac
-    declare -r WSPRD_CMD=/Applications/wsjtx.app/Contents/MacOS/wsprd
-else
-    ### TODO:  
-    echo "ERROR: We are running on a OS '${OSTYPE}' which is not yet supported by WSJT-x"
-    exit 1
-fi
-
-### If not present or an older version, get latest wsprd decoder installed
-cpu_arch=$(uname -m)
-wsjtx_pkg=""
-case ${cpu_arch} in
-    x86_64)
-        wsjtx_pkg=wsjtx_2.2.1_amd64.deb
-        expected_wsprd_pgm_file_size=84068
-        ;;
-    armv7l)
-        # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
-        wsjtx_pkg=wsjtx_2.2.1_armhf.deb
-        expected_wsprd_pgm_file_size=84068
-        ;;
-    *)
-        echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
-        exit 1
-        ;;
-esac
-
-declare WSPRD_V_2_2_NF=17       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
-declare WSPRD_V_2_1_NF=15       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
-declare WSPRD_COMPARE="no"      ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
-declare WSPRDAEMON_TMP_WSPRD_DIR=${WSPRDAEMON_TMP_WSPRD_DIR-${WSPRDAEMON_TMP_DIR}/wsprd.old}
-declare WSPRD_PREVIOUS_CMD="${WSPRDAEMON_TMP_WSPRD_DIR}/wsprd"   ### If WSPRD_COMPARE="yes" and a new version of wsprd was installed, then the old wsprd was moved here
-
-declare install_wsprd="no"      
-if [[ ! -x ${WSPRD_CMD} ]]; then
-    install_wsprd="yes"
-else
-    ### There is an installed version of wsprd.  Check to see if it is the latest version
-    mkdir -p ${WSPRDAEMON_TMP_DIR}/recording.d/
-    declare all_wspr_files=$(find ${WSPRDAEMON_TMP_DIR}/recording.d/ -not -path "*wsprd.old*" -name ALL_WSPR.TXT ! -size 0)
-    if [[ -n "${all_wspr_files}" ]]; then
-        declare most_recent_non_zero_length_all_wspr_file=$(ls -t ${all_wspr_files} | head -n 1)   ### Find the most recent non-zero length ALL_WSPR.TXT file
-        declare all_wspr_field_count=$(awk 'END {print NF}' ${most_recent_non_zero_length_all_wspr_file})   ### Find the number of fields in the last line of that file
-        if [[ ${all_wspr_field_count} -eq ${WSPRD_V_2_1_NF} ]] ; then
-            ### That line didn't have the expected 17 fields
-            install_wsprd="yes"
-            if [[ ${WSPRD_COMPARE-no} == "yes" ]]; then
-                ### save the old version of wsprd so we can compare its performance to the new version
-                mkdir -p ${WSPRDAEMON_TMP_WSPRD_DIR}
-                cp -p ${WSPRD_CMD} ${WSPRDAEMON_TMP_WSPRD_DIR}
-            fi
-        fi
-    fi
-fi
-
-if [[ ${install_wsprd} = "yes" ]]; then
-    # ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
-    sudo apt update --assume-yes
-    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
-    wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
-    sudo ${DPKG_CMD} -i ${wsjtx_pkg}
-    if [[ ! -x ${WSPRD_CMD} ]]; then
-        echo "ERROR: failed to install 'wsprd'"
-        exit 1
-    fi
-fi
-
-if ${WSPRD_CMD} | ${GREP_CMD} -q '\-o' ; then
-    declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
-    [[ ${verbosity} -ge 1 ]] && echo "$(date): INFO: ${WSPRD_CMD} is version 2, so set command line flags to '${WSPRD_CMD_FLAGS}'"
-else
-    declare WSPRD_CMD_FLAGS="-d -C 10000"        ### Default to do deep decode.  Can be overwritten by re-declaring in wsprdaemon.conf.  It takes about 30 CPU seconds to run on a Pi B3 core
-    [[ ${verbosity} -ge 0 ]] && echo "$(date): INFO: ${WSPRD_CMD} is version 1, so set command line flags to '${WSPRD_CMD_FLAGS}', but you should update to wsprd version 2.x"
-fi
 
 ##############################################################
 function truncate_file() {
