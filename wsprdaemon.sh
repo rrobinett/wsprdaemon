@@ -782,6 +782,7 @@ declare WSJTX_REQUIRED_VERSION=2.2.2
 
 function check_for_needed_utilities()
 {
+
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     local dpkg_list=$(${DPKG_CMD} -l)
@@ -816,7 +817,7 @@ function check_for_needed_utilities()
     fi
     if ! [[ ${dpkg_list} =~ " ntp " ]] ; then
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install curl --assume-yes
+        sudo apt-get install ntp --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
             echo "FATAL ERROR: Failed to install 'ntp' which is needed to ensure synchronization with the 2 minute WSPR cycle"
