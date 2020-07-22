@@ -32,7 +32,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
-                                    ### TODO: Split Python utiliteis in seperate files maintained by git
+                                    ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
+                                    ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
@@ -45,6 +46,8 @@ if [[ $USER == "root" ]]; then
 fi
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+
+export TZ=UTC LC_TIME=POSIX          ### Ensures that log dates will be in UTC
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
@@ -3275,26 +3278,23 @@ function upload_wsprnet_create_spot_file_list_file()
         [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-        if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
-            echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
-            return
-        fi
-        spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
-        spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
-    done
-    [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
-    echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+        if [[ ${cycle_spots_count} -eq 0 ]]; then
+            [[ $verbosity -ge 0 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
+            rm ${cycle_files}
+        else
+            if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+                echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+                return
+            fi
+            spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
+            spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
+       fi
+   done
+   [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
+   echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
 }
-#            elif [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
-                ### In proxy upload mode we don't upload on the client.
-                ### If this is a real rx, then the wsprnet.org spot line will be regenerated and uploaded on the wsprdaemon.org server.
-                ### If this is a MERGed rx, then rename the spot file to *.proxy and it will be included in the tar file uploaded along with the extended spot and noise data files.
-                ### On the wsprdaemon.org server the *.proxy file will be reanmed to *.txt and then uploaded to wsprnet.org along with the regnerated spot files
- 
-### Daemon which runs every 10 seconds at WD sites and also at wsprdaemon.org
-### It creates a list of spot files with at most the oldest 200 spots, puts those spots into a tmp.txt file, and executes a 'curl MEPT' batch upload of those spots
-### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
+
 function get_call_grid_from_receiver_name() {
     local target_rx=$1
 
@@ -3414,7 +3414,7 @@ function upload_to_wsprnet_daemon()
                     fi
                     rm -f ${all_spots_file_list[@]}
                 else
-                    ### Upload all the spots for on eCAL_GRID in one curl transaction 
+                    ### Upload all the spots for one CALL_GRID in one curl transaction 
                     [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
                     curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
