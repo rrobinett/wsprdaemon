@@ -2091,6 +2091,17 @@ function decoding_daemon()
                 local c2_FFT_nl_cal=-999.9
             else
                 ### 'wsprd' was successful
+                ### Validate, and if necessary cleanup, the spot list file created by wsprd
+                local bad_wsprd_lines=$(awk 'NF < 11 || NF > 12 || $6 == 0.0 {printf "%40s: %s\n", FILENAME, $0}' wspr_spots.txt)
+                if [[ -n "${bad_wsprd_lines}" ]]; then
+                    ### Save this corrupt wspr_spots.txt, but leave it untouched so it can be used later to tell us how man ALL_WSPT.TXT lines to process
+                    mkdir -p bad_wspr_spots.d
+                    cp -p wspr_spots.txt bad_wspr_spots.d/
+                    ###
+                    ### awk 'NF >= 11 && NF <= 12 &&  $6 != 0.0' bad_wspr_spots.d/wspr_spots.txt > wspr_spots.txt
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING:  wsprd created a wspr_spots.txt with corrupt line(s):\n%s" "${bad_wsprd_lines}"
+                fi
+
                 local new_spots=$(wc -l wspr_spots.txt)
                 decoded_spots=$(( decoded_spots + ${new_spots/ *} ))
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): decoded ${new_spots/ *} new spots.  ${decoded_spots} spots have been decoded since this daemon started"
@@ -2233,7 +2244,24 @@ function decoding_daemon()
                 rm -f ${tmp_spot_file}
                 touch ${tmp_spot_file}
                 local new_spots_count=$(cat wspr_spots.txt | wc -l)
-                local all_wspr_new_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)
+                local all_wspr_new_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)     ### Take the same number of lines from the end of ALL_WSPR.TXT as are in wspr_sport.txt
+
+                ### Further validation of the spots we are going to upload
+                ### Use the date in the wspr_spots.txt to extract the corresponding lines from ALL_WSPR.TXT and verify the number of spots extracted matches the number of spots in wspr_spots.txt
+                local wspr_spots_date=$( awk '{printf "%s %s\n", $1, $2}' wspr_spots.txt | sort -u )
+                local all_wspr_new_date_lines=$( grep "^${wspr_spots_date}" ALL_WSPR.TXT)
+                local all_wspr_new_date_lines_count=$( echo "${all_wspr_new_date_lines}" | wc -l )
+                if [[ ${all_wspr_new_date_lines_count} -ne ${new_spots_count} ]]; then
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING: the ${new_spots_count} spot lines in wspr_spots.txt don't match the ${all_wspr_new_date_lines_count} spots with the same date in ALL_WSPR.TXT\n"
+                fi
+
+                ### Cull corrupt lines from ALL_WSPR.TXT
+                local all_wspr_bad_new_lines=$(awk 'NF < 16 || NF > 17 || $5 < 0.1' <<< "${all_wspr_new_lines}")
+                if [[ -n "${all_wspr_bad_new_lines}" ]]; then
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING: removing corrupt line(s) in ALL_WSPR.TXT:\n%s\n" "${all_wspr_bad_new_lines}"
+                    all_wspr_new_lines=$(awk 'NF >= 16 && NF <=  17 && $5 >= 0.1' <<< "${all_wspr_new_lines}")
+                fi
+
                 [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() processing these ALL_WSPR.TXT lines:\n${all_wspr_new_lines}"
                 local all_wspr_field_count=$(tail -n 1 ALL_WSPR.TXT | awk '{print NF}')
                 local WSPRD_2_2_FIELD_COUNT=17   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
