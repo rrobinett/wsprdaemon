@@ -33,6 +33,7 @@ declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which sup
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
                                     ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
+                                    ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
                                     ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
