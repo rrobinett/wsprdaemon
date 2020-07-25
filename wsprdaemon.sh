@@ -33,7 +33,10 @@ declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which sup
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
                                     ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
+                                    ### Fix wrong start/stop args in wsprdeamon.service
+                                    ### Stop checking the Pi OS version number, since we run on almost every Pi
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
+                                    ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
@@ -103,42 +106,10 @@ function decrement_verbosity() {
 }
 
 ###################### Check OS ###################
-declare -r PI_OS_MAJOR_VERION_MIN=4
-declare -r PI_OS_MINOR_VERSION_MIN=14
-declare -r OS_TYPE_FILE="/etc/os-release"
-function check_pi_os() {
-    if [[ -f ${OS_TYPE_FILE} ]]; then
-        local os_name=$(grep "^NAME=" ${OS_TYPE_FILE})
-        if [[ "${os_name}" =~ Raspbian ]]; then
-            declare -r os_version_info=($(uname -a | cut -d " " -f 3 | awk -F . '{printf "%s %s\n", $1, $2}') )
-            if [[ -z "${os_version_info[0]-}" ]] ; then
-                echo "WARNING: can't extract Linux OS version from 'uname -a'"
-            else
-                local os_major_version=${os_version_info[0]}
-                if [[ ${os_major_version} -lt ${PI_OS_MAJOR_VERION_MIN} ]]; then
-                    echo "WARNING: this Raspberry Pi is running Linux version ${os_major_version}."
-                    echo "         For reliable operation of this script update OS to at laest version ${PI_OS_MAJOR_VERION_MIN}.${PI_OS_MINOR_VERSION_MIN} by running 'sudo rpi-update"
-                else
-                    if [[ -z "${os_version_info[1]-}" ]]; then
-                        echo "WARNING: can't extract Linux OS minor version from 'uname -a'"
-                    else
-                        local os_minor_version="${os_version_info[1]}"
-                        if [[ ${os_minor_version} -lt ${PI_OS_MINOR_VERSION_MIN} ]]; then
-                            echo "WARNING: This Raspberry Pi is running Linux version ${os_major_version}.${os_minor_version}."
-                            echo "         For reliable operation of this script update OS to at laest version 4.${PI_OS_MINOR_VERSION_MIN} by running 'sudo rpi-update'"
-                        fi
-                    fi
-                fi
-            fi
-        fi
-    fi
-}
-
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
     ### We are running on a Rasperberry Pi or generic Debian server
     declare -r GET_FILE_SIZE_CMD="stat --format=%s" 
     declare -r GET_FILE_MOD_TIME_CMD="stat -c %Y"       
-    check_pi_os
 elif [[ "${OSTYPE}" == "darwin18" ]]; then
     ### We are running on a Mac, but as of 3/21/19 this code has not been verified to run on these systems
     declare -r GET_FILE_SIZE_CMD="stat -f %z"       
@@ -5443,8 +5414,8 @@ function setup_systemctl_deamon() {
     User=${my_id}
     Group=${my_group}
     WorkingDirectory=${WSPRDAEMON_ROOT_DIR}
-    ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
-    ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}
+    ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
+    ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}
     Type=forking
     Restart=on-abort
 
