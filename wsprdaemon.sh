@@ -29,13 +29,15 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
-declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
+#declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
                                     ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
                                     ### Fix wrong start/stop args in wsprdeamon.service
                                     ### Stop checking the Pi OS version number, since we run on almost every Pi
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
+declare -r VERSION=2.9h             ### Install at beta sites
+                                    ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
