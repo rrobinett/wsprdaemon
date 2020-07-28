@@ -2845,13 +2845,8 @@ with open("${DERIVED_ADDED_FILE}", "w") as out_file:
         km=absent_data
         # end of list of absent data values for where tx_locator = "none"
      
-<<<<<<< HEAD
-      # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
-    band=9999
-=======
     # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
     band=9999
->>>>>>> f435866fd6ec6f256d71766ae8225fff1a8ac642
     freq=int(10*float(frequency))
     if freq==1:
         band=2200
