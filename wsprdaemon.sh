@@ -23,144 +23,23 @@
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
-#declare -r VERSION=0.1
-#declare -r VERSION=0.2          ### Default to print usage, add -w (spawn watchdog)
-#declare -r VERSION=0.3a         ### Fix usage printout for -w & -W,  cleanup -w logfile, -w now configures itself on Pi/Debian to run at Pi startup, -w runs every odd minute
-#declare -r VERSION=0.3b          ### Add OSTYPE == linux-gnu to support Glenn's Debian server, fix leading zero bug in function which caluclates seconds until next odd minute
-#declare -r VERSION=0.4a          ### Enhance -w watchdog to run on every odd 2 minute, rework the cmd line syntax to (hopefully) make it simpler and much more consistent
-#declare -r VERSION=0.4b          ### Fix -j z
-#declare -r VERSION=0.5a            ### Add scheduled band changes which are executed by the watchdog daemon
-#declare -r VERSION=0.5b            ### Fix '-j s' to use list of running jobs from kiwiwspr.jobs file
-#declare -r VERSION=0.5c            ### Add '-j o' => check for zombie captures and decodes
-#declare -r VERSION=0.5d            ### Cleanup watchdog log printouts.
-#declare -r VERSION=0.5e            ### Fix bug in auto created wsprdaemon.conf
-#declare -r VERSION=0.5f           ### Fix help message to say '-j z,all'
-#declare -r VERSION=0.6a           ### Add check on Pi for Stretch OS version upograde from the relase version 4.7.  When running that version occasional ethernet packet drops stimulate
-                                  ###         many kiwirecorder.py sessions to die.  Version 4.14 greatly reduces and many times completely elimiates the problem
-                                  ###         With version 4.14 installed I am running 17 decode jobs for 12 hours with no restarts
-#declare -r VERSION=0.6b           ### Spots now include frequency resolution to .N Hz.  wsprnet.org doens't print it, but all_wspr.txt file includes "date time freq_to_1/10 Hz ..."
-#declare -r VERSION=0.6c            ### Add support for sunrise/sunset scheduled changes
-#declare -r VERSION=0.7a            ### Cleanup
-#declare -r VERSION=0.7b            ### Fixup for odroid.  fix time_math()  Fix '-j o' (kill zombies)
-#declare -r VERSION=0.7c            ### Fix creation and usage of kwiwwspr.jobs. Append kiwirecorder.py output to capture.log in hope of catching crash debug messages
-#declare -r VERSION=1.0            ### First release
-#declare -r VERSION=1.0a            ### Printout schedule changes.  Enhance logging of captures to help debug kiwirecorder.py crashes
-#declare -r VERSION=1.0b            ### Better maintain kiwiwspr.jobs
-#declare -r VERSION=1.1            ### No functional changes, but major rewrite of scheduling code
-#declare -r VERSION=1.1a            ### Fix scheduler bug which was encountered when there was no 00:00 entry
-#declare -r VERSION=1.1b            ### Fix scheduler bug HHMM which was encountered when there was a 00:48 (for example) entry. (Hopefully) enhanced validity checking of HH:MM
-#declare -r VERSION=1.1c            ### Fix suntimes bug.  It needs to be updated if wsprdaemon.conf is changed in case a new Kiwi at a different grid is added
-#declare -r VERSION=1.1d            ### Remove -T -100 from the kiwirecorder command line to completely disable squelch.  Fix bug in add_remove_jobs_in_running_file(), missing 'grep -w'
-                                    ###     Add WSPRD_CMD_FLAGS (default = "-d") which can be modified by redeclaring it in wsprdaemon.conf
-#declare -r VERSION=1.1e           ### Center rx audio 1500 +- 250 Hz.  Watchdog purges zombie wav files
-#declare -r VERSION=1.1f           ### Change kiwirecorder to add '-u  kiwiwspr_V${VERSION}' and '-g 0'.   Decode using primary wsprd, then if confgured decode using wsprd.v2.
-#declare -r VERSION=1.1g           ### If KIWIRECORDER_CLIENT_NAME is defined in conf file, it's value will be shown as client name on Kiwi's user list
-                                   ### Check for version of wsprd and if it is version 2.x (i.e. it suuports the '-o' command line flag), then add '-C 5000 -o 4' to the wspr command line and get 10% more spots
-#declare -r VERSION=1.1h            ### Fix diags printouts
-#declare -r VERSION=2.uploads.log0a            ### Add support for RTL-SDR dongles.  Change name to wsprdaemon.sh.  Stable operation on 3 bands using RTL-SDRs with rtl_sdr application.  Running 3 bands in Berkeley, one at Sunol
-#declare -r VERSION=2.0b            ### Fix bug which fills up ~/save_wav.d/
-#declare -r VERSION=2.0c            ### Moved from Berkley83 and testing RTL-SDR to KPH Pi 84 to: fix wsprd flag, merge hashtable and preserve themi, preserve ALL_WSPR.TXT, add diversity rx support
-#declare -r VERSION=2.0d            ### Remove incorrect '-d' from wsprd cmd line, restore creation of log file with full time/frequency information
-#declare -r VERSION=2.0d1           ### Patch in corrupt hashtable and duplicate hash fixes, merge on  kph85 when done
-#declare -r VERSION=2.0e            ### Greatly improved hashtable handling.  Running on kph84.  Release to ZKD and OM
-#declare -r VERSION=2.0f            ### Fix error which happens when wav file is deleted by capture daemon while watchdog is flushing stale wav files
-#declare -r VERSION=2.0g           ### Restore callsigns with '/' to the master hashtable.  Thanks Larry W6LVP
-#declare -r VERSION=2.0f           ### Get correct sunrise/sunset times by correcting function maidenhead_to_long_lat().  Thanks Gwyn G3ZIL
-#declare -r VERSION=2.0h           ### Remove 'set -x' from maidenhead_to_long_lat(). Add -a, -z, -s command flags
-#declare -r VERSION=2.0i           ### Remove all hashtable validation.  Make hashtable merging configurable with HASHTABLE_MERGE="yes" (default is "no")
-#declare -r VERSION=2.1a           ### Split off posting into a seperate process from decoding in the first step towards 'virtual receivers == merged decodes' 
-#declare -r VERSION=2.1b           ### Fix merged decode sorting
-#declare -r VERSION=2.1c           ### Fix W6LVP/A 'missing 2 part messages' bug 
-#declare -r VERSION=2.2a           ### Add suport for 'AUDIO_xxx' baseband audio input receive devices.  Add '-i ' command which lists those devices
-#declare -r VERSION=2.2b           ### tweak -i.  fix AUDIO hw:0 in prototype conf file
-#declare -r VERSION=2.2c           ###  fix bug in audio_recording_dameon() usage of audio_device, audio_subdevice
-#declare -r VERSION=2.2d           ### Truncate ALL_WSPR.TXT when it grows too large.  Fix -z
-#declare -r VERSION=2.2e           ### Stop using ALL_WSPR.TXT.OLD. Post in call->time->freq order
-#declare -r VERSION=2.2f           ### Enhance curl upload error detection and resiliency
-#declare -r VERSION=2.2g           ### curl MEPT uploads are not reliable and failures cannot be detected, so use curl POSTs
-#declare -r VERSION=2.2h          ### Both curl POST (the default) and curl MEPT are functional.  Put "CURL_MEPT_MODE=yes" in .conf file to switch upload modes.
-                                   ### Add optional per-band signal level logging to signal-levels.txt if "SIGNAL_LEVEL_STATS=yes" is in .conf file
-#declare -r VERSION=2.3            ### Enhance validation of config file and further automate installaton of utilites like 'wsprd' and 'kwiwrecorder'
-#declare -r VERSION=2.3b            ### Modify kiwirecorder call to 1340 to 1660 Hz to improve noise level measurements
-#declare -r VERSION=2.3c            ### add '-p HOURS' command which generates a noise level graph from the signal-levels,log files
-#declare -r VERSION=2.4a            ### Publish the graphs of the last 24 hours using ApacheL  http://localhost/ will show the last 24 hours 
-#declare -r VERSION=2.4b            ###  Fixup installation code
-#declare -r VERSION=2.4c            ###  Fixup installation code
-#declare -r VERSION=2.4d            ###  Fix creating /var/www/html/index.html, add receiver name before band already in graph title
-                                   ###  If SIGNAL_LEVEL_UPLOAD_ID="SITE_NAME" is defined in the conf file, upload the noise_graph.png to logs.kphsdr.com
-                                   ###  Those graphs can be viewed at "http://logs.kphsdr.com:20080/SITE_NAME/"
-                                   ### To reduce CPU overload, generate new graph every 4 minutes.
-                                   ### Try to force use of US number formats so 'locale' need not be changed to US
-#declare -r VERSION=2.4e            ### Fix locale, fix path to calibration.csv
-#declare -r VERSION=2.4f            ### Fix locale some more, fix uninitialized SIGNAL_LEVEL_STATS which caused code to crash 
-#declare -r VERSION=2.4g            ### Don't create zero length csv files
-#declare -r VERSION=2.4h            ### Correct signal levels for Kiwi's LPF.  Upload sigal levels to Grafana cloud database
-#declare -r VERSION=2.4i            ### Clarify 80m and 60m band names.  Fix installation on Ubuntu and other non-Pi systems.  Add 40 seconds of temout to kill
-#declare -r VERSION=2.4j            ### 1) scheduled band changes leave rx0/rx1 free and there is no long wait for -z
-                                   ### 2) fixed the red/blue labels
-                                   ### 3) one can configure to only measure noise and log it, only publish graphs to graphs.wsprdaemon.org, only publish graphs to localhost running Apache, or publish to both
-                                   ### 4) download and install only the SW packages required by the configuration (e.g. no apache2 if you aren't publishing locally)
-                                   ### 5) publishing graphs to graphs.wsprdaemon.org  no longer requires one to set up ssh auto-login.
-                                   ### 6) added -Z, check for and offer to kill zombies and add it to -z
-#declare -r VERSION=2.5             ### Release to public, same as 2.4j
-#declare -r VERSION=2.5a             ### Enhance checks for zombies.  Add support for installation of WSJT-x on x86 machines
-#declare -r VERSION=2.5b             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
-                                    ### Prompt user before installing new SW.  Graphs now -165 to -115
-                                    ### Use /tmp/wsprdaemon/... and move all WD temp files there,
-                                    ### Verify that the best SNR from the MERG are 
-                                    ### Added log output from two checks for GPS lock .  Fix in Kiwi V1.335 seems to fix the 'permanent loss of GPS lock'  problem 
-                                    ### Added overload (OV) detection and reporting to watchdog.log at verbosity=1 and above
-                                    ### Added logging of  WD listeners on RX0/1 channel when verbosity > 1
-#declare -r VERSION=2.6a             ### Extend wait time to 30 seconds during schedule changes, but still seeing WD listeners on wrong RX 0/1. 
-                                    ### Fixed spurious sys.excepthook is missing error message
-#declare -r VERSION=2.6b             ### Limit spot upload transaction size to MAX_UPLOAD_SPOTS_COUNT (default 200)
-#declare -r VERSION=2.6c             ### Default package installation to "yes" so you aren't prompted for it during package installation
-                                    ### Use Python library to obtain sunrise/sunset times rather than web site
-                                    ### Add trap handlers to increment and decrement verbosity of a running program without restarting it 
-                                    ### Limit size of ALL_WSPR.TXT and OV log files
-                                    ### Now MERG... is enough to specify a MERG receiver
-                                    ### Tested dual USB audio input
-#declare -r VERSION=2.6d             ### To test and install astral, use 'pip install astral'
-                                    ### Add -d and -D command line flags which increment/decrement the logging verbosity of WD processes logging in current directory
-#declare -r VERSION=2.6e             ### Fix FFT noise level calculations by applying Hanning filter to wav file
-#declare -r VERSION=2.6f             ### Don't treat /tmp/wsprdaemon/wav_window.py as a zombie and kill it
-#declare -r VERSION=2.7a             ### Cache noise and spot databases
-                                    ### Use Christoph's python code to obtain noise levels
-#declare -r VERSION=2.7b             ### FIX: always install 'sox'
-#declare -r VERSION=2.8a             ### Upload graphics files using a curl FTP transfer rather than 'scp ...'.  Improves security of wsprdaemon.org server.
-                                    ### Don't allow it to run as user 'root'
-                                    ### Put MERGE decision log for each rx/band in truncated 'merge.log' files
-                                    ### G3ZIL added python script to upload noise data to a Timescale DB running on the Droplet that's hosting wsprdaemon.org
-                                    ### Add optional SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS which can be declared in .conf. It is in bits per second.
-                                    ### Add optional NOISE_GRAPHS_* parameters which change noise graph sizes
-#declare -r VERSION=2.8b            ### Add upload of WD's enhanced spots to wsprdaemon.org database
-                                    ### Add noise levels to WD spots
-                                    ### Optimize azi calculations by moving them to run as part of the decoding_daemons() and thus can run in parallel on multiple CPU systems
-                                    ### Handle failure of member of MERGed rx group
-                                    ### Use FTP to upload spots and noise to wsprdaemon.org
-                                    ### Add FTP server mode to run on wspdaemon.org and add '-u a/s/z' commands to start/status/stop it
-                                    ### Post .1 hz freq and .01 sec DT accuracy spots to wsprdaemon.org
-                                    ### Add OV count to noise reports to wsprdaemon.org
-                                    ### Add all of the ALL_WSPR.TXT fields to enhanced spot reports to wsprdaemon.org
-#declare -r VERSION=2.9             ### First release
-#declare -r VERSION=2.9a            ### Fix noise graph generation
-#declare -r VERSION=2.9b             ### Fix to rejct rx names which contain ','
-                                    ### Fix to don't try to create png file at startup which generates bash errors
-                                    ### Add WWV and CHU frequencies as valid bands and support user-define bands EXTRA_BAND_LIST[] and EXTRA_BAND_CENTERS_IN_MHZ[] in conf file
-#declare -r VERSION=2.9c            ### Add support for WSJT-x V2.2-x 'wsprd' decoder which outputs to ALL_WSPR.TXT in a  different line format 
-                                    ### Add timeout of 'wsrpd' so it doesn't hang system on 60M decoding
-#declare -r VERSION=2.9d             ### Fix c2 noise level to be -999.9 when 'wsprd' times out
-                                    ### Change to generate new graphics files from every 4 minutes to every 8 minutes
-                                    ### Ensure that the 'curl' command is present
-                                    ### Add to the enhanced spot lines the new wsprd fields and a flag that signals the wsprdaemon.org server to 'proxy forward' that spot to  wsprnet.org 
-                                    ### Remove installation of 'sshpass', a program replaced by use of 'curl' to upload spots and noise using FTP transfers
 #declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
 #declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
                                     ### Fix CHU_14 frequency
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
-declare -r VERSION=2.9g             ### Install WSJT-x 2.2-1 if not currently installed
+#declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
+                                    ### Check for and install if needed 'ntp' and 'at'
+                                    ### Cleanup systemctl setup so startup after boot functions on Ubuntu
+                                    ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
+                                    ### Fix wrong start/stop args in wsprdeamon.service
+                                    ### Stop checking the Pi OS version number, since we run on almost every Pi
+                                    ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
+declare -r VERSION=2.9h             ### Install at beta sites
+                                    ### TODO: Flush antique ~/signal_level log files
+                                    ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
+                                    ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
@@ -171,6 +50,10 @@ if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
     exit 1
 fi
+declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+
+export TZ=UTC LC_TIME=POSIX          ### Ensures that log dates will be in UTC
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
@@ -225,42 +108,10 @@ function decrement_verbosity() {
 }
 
 ###################### Check OS ###################
-declare -r PI_OS_MAJOR_VERION_MIN=4
-declare -r PI_OS_MINOR_VERSION_MIN=14
-declare -r OS_TYPE_FILE="/etc/os-release"
-function check_pi_os() {
-    if [[ -f ${OS_TYPE_FILE} ]]; then
-        local os_name=$(grep "^NAME=" ${OS_TYPE_FILE})
-        if [[ "${os_name}" =~ Raspbian ]]; then
-            declare -r os_version_info=($(uname -a | cut -d " " -f 3 | awk -F . '{printf "%s %s\n", $1, $2}') )
-            if [[ -z "${os_version_info[0]-}" ]] ; then
-                echo "WARNING: can't extract Linux OS version from 'uname -a'"
-            else
-                local os_major_version=${os_version_info[0]}
-                if [[ ${os_major_version} -lt ${PI_OS_MAJOR_VERION_MIN} ]]; then
-                    echo "WARNING: this Raspberry Pi is running Linux version ${os_major_version}."
-                    echo "         For reliable operation of this script update OS to at laest version ${PI_OS_MAJOR_VERION_MIN}.${PI_OS_MINOR_VERSION_MIN} by running 'sudo rpi-update"
-                else
-                    if [[ -z "${os_version_info[1]-}" ]]; then
-                        echo "WARNING: can't extract Linux OS minor version from 'uname -a'"
-                    else
-                        local os_minor_version="${os_version_info[1]}"
-                        if [[ ${os_minor_version} -lt ${PI_OS_MINOR_VERSION_MIN} ]]; then
-                            echo "WARNING: This Raspberry Pi is running Linux version ${os_major_version}.${os_minor_version}."
-                            echo "         For reliable operation of this script update OS to at laest version 4.${PI_OS_MINOR_VERSION_MIN} by running 'sudo rpi-update'"
-                        fi
-                    fi
-                fi
-            fi
-        fi
-    fi
-}
-
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
     ### We are running on a Rasperberry Pi or generic Debian server
     declare -r GET_FILE_SIZE_CMD="stat --format=%s" 
     declare -r GET_FILE_MOD_TIME_CMD="stat -c %Y"       
-    check_pi_os
 elif [[ "${OSTYPE}" == "darwin18" ]]; then
     ### We are running on a Mac, but as of 3/21/19 this code has not been verified to run on these systems
     declare -r GET_FILE_SIZE_CMD="stat -f %z"       
@@ -319,8 +170,8 @@ function check_tmp_filesystem()
 check_tmp_filesystem
 
 ################## Check that kiwirecorder is installed and running #######################
-declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+declare -r DPKG_CMD="/usr/bin/dpkg"
+declare -r GREP_CMD="/bin/grep"
 
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
@@ -332,7 +183,7 @@ function check_for_kiwirecorder_cmd() {
         get_kiwirecorder="yes"
     else
         ## Check to see if kwr supports overload reporting
-        if ! ${KIWI_RECORD_COMMAND} --help | grep "ADC OV" > /dev/null 2>&1 ; then
+        if ! ${KIWI_RECORD_COMMAND} --help | ${GREP_CMD} "ADC OV" > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
@@ -340,7 +191,9 @@ function check_for_kiwirecorder_cmd() {
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
-        if ! dpkg -l | grep -wq git  ; then
+        cd /home/wsprdaemon/wsprdaemon
+        echo "Installing kiwirecorder in $PWD"
+        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq git  ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
@@ -351,7 +204,7 @@ function check_for_kiwirecorder_cmd() {
             echo "       You may also need to install the Python library 'numpy' with:  sudo apt-get install python-numpy"
             exit 1
         fi
-        if ! dpkg -l | grep -wq python-numpy ; then
+        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq python-numpy ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt --yes install python-numpy
         fi
@@ -787,7 +640,7 @@ function validate_configured_schedule()
                 echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
                 exit 1
             fi
-            if grep -qi ERROR <<< "${job_time_resolved}" ; then
+            if ${GREP_CMD} -qi ERROR <<< "${job_time_resolved}" ; then
                 echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
                 exit 1
             fi
@@ -900,20 +753,28 @@ function ask_user_to_install_sw() {
     fi
 }
 
+declare WSPRD_CMD=/usr/bin/wsprd
+declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
+declare WSJTX_REQUIRED_VERSION=2.2.2
+
 function check_for_needed_utilities()
 {
+
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
-    if ! dpkg -l | grep -wq curl ; then
+    local dpkg_list=$(${DPKG_CMD} -l)
+
+    if ! [[ ${dpkg_list} =~ " at " ]] ; then
+        ### Used by the optional wsprd_vpn service
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install curl --assume-yes
+        sudo apt-get install at --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'curl' which is needed for uploading to wsprnet.org and wsprdaemon.org"
+            echo "FATAL ERROR: Failed to install 'at' which is needed iby the wspd_vpn service"
             exit 1
         fi
     fi
-    if ! dpkg -l | grep -wq bc ; then
+    if !  [[ ${dpkg_list} =~ " bc " ]] ; then
         [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
         sudo apt-get install bc --assume-yes
         local ret_code=$?
@@ -922,16 +783,25 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
-    if ! dpkg -l | grep -wq sox  ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install sox --assume-yes
+    if ! [[ ${dpkg_list} =~ " curl " ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt-get install curl --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
+            echo "FATAL ERROR: Failed to install 'curl' which is needed for uploading to wsprnet.org and wsprdaemon.org"
             exit 1
         fi
     fi
-    if ! dpkg -l | grep -wq postgresql  ; then
+    if ! [[ ${dpkg_list} =~ " ntp " ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt-get install ntp --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'ntp' which is needed to ensure synchronization with the 2 minute WSPR cycle"
+            exit 1
+        fi
+    fi
+    if !  [[ ${dpkg_list} =~ " postgresql  " ]] ; then
         [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
         sudo apt-get install postgresql libpq-dev postgresql-client postgresql-client-common --assume-yes
         local ret_code=$?
@@ -940,6 +810,47 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
+    if !  [[ ${dpkg_list} =~ " sox  " ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install sox --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
+            exit 1
+        fi
+    fi
+    local wsjtx_version=$(awk '/wsjtx/{print $3}' <<< "${dpkg_list}")
+    if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsjtx_version}" ]] || [[ ${wsjtx_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
+        local cpu_arch=$(uname -m)
+        local wsjtx_pkg=""
+        case ${cpu_arch} in
+            x86_64)
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
+                ;;
+            armv7l)
+                # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
+                ;;
+            *)
+                echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
+                exit 1
+                ;;
+        esac
+       [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
+        sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
+        wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
+        if [[ ! -f ${wsjtx_pkg} ]] ; then
+            echo "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
+            exit 1
+        fi
+        sudo ${DPKG_CMD} -i ${wsjtx_pkg}
+        ret_code=$?
+        if [[ ${ret_code} -ne 0 ]] || [[ ! -x ${WSPRD_CMD} ]]; then
+            echo "ERROR: failed to install 'wsprd'.  ${DPKG_CMD} -i ${wsjtx_pkg} => ${ret_code} and/or ! -x ${WSPRD_CMD}"
+            exit 1
+        fi
+    fi
+
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
         if !  sudo pip3 install psycopg2 ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
@@ -965,19 +876,19 @@ function check_for_needed_utilities()
     fi
     if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
         ### Get the Python packages needed to create the graphs.png
-        if ! dpkg -l | grep -wq python3-matplotlib; then
+        if !  [[ ${dpkg_list} =~ " python3-matplotlib " ]] ; then
             # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
             sudo apt-get install python3-matplotlib --assume-yes
         fi
-        if ! dpkg -l | grep -wq python3-scipy; then
+        if !  [[ ${dpkg_list} =~ " python3-scipy " ]] ; then
             # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
             [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
             sudo apt-get install python3-scipy --assume-yes
         fi
         if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
             ## Ensure that Apache is installed and running
-            if ! dpkg -l | grep -wq apache2 ; then
+            if !  [[ ${dpkg_list} =~ " apache2 " ]]; then
                 # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
                 [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
                 sudo apt-get install apache2 -y --fix-missing
@@ -1020,87 +931,9 @@ EOF
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
 check_for_needed_utilities
 
-### These variables cannot be declared in a function, since they are reference by many funtions and thus need to be globals
-if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
-    ### We are running on a Rasperberry Pi or generic Debian server
-    declare -r WSPRD_CMD=/usr/bin/wsprd
-elif [[ "${OSTYPE}" == "darwin18" ]]; then
-    ### We are running on a Mac
-    declare -r WSPRD_CMD=/Applications/wsjtx.app/Contents/MacOS/wsprd
-else
-    ### TODO:  
-    echo "ERROR: We are running on a OS '${OSTYPE}' which is not yet supported"
-    exit 1
-fi
-
-### If not present or an older version, get latest wsprd decoder installed
-set +x
-cpu_arch=$(uname -m)
-wsjtx_pkg=""
-case ${cpu_arch} in
-    x86_64)
-        wsjtx_pkg=wsjtx_2.2.1_amd64.deb
-        expected_wsprd_pgm_file_size=84068
-        ;;
-    armv7l)
-        # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
-        wsjtx_pkg=wsjtx_2.2.1_armhf.deb
-        expected_wsprd_pgm_file_size=84068
-        ;;
-    *)
-        echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
-        exit 1
-        ;;
-esac
-
-declare WSPRD_V_2_2_NF=17       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
-declare WSPRD_V_2_1_NF=15       ### An ALL_WSPR.TXT spot line created by wsjt-x v2.2-x has 17 fields, v2.1.x and earlier only 15 fields
 declare WSPRD_COMPARE="no"      ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
 declare WSPRDAEMON_TMP_WSPRD_DIR=${WSPRDAEMON_TMP_WSPRD_DIR-${WSPRDAEMON_TMP_DIR}/wsprd.old}
 declare WSPRD_PREVIOUS_CMD="${WSPRDAEMON_TMP_WSPRD_DIR}/wsprd"   ### If WSPRD_COMPARE="yes" and a new version of wsprd was installed, then the old wsprd was moved here
-
-declare install_wsprd="no"      
-if [[ ! -x ${WSPRD_CMD} ]]; then
-    install_wsprd="yes"
-else
-    ### There is an installed version of wsprd.  Check to see if it is the latest version
-    mkdir -p ${WSPRDAEMON_TMP_DIR}/recording.d/
-    declare all_wspr_files=$(find ${WSPRDAEMON_TMP_DIR}/recording.d/ -not -path "*wsprd.old*" -name ALL_WSPR.TXT ! -size 0)
-    if [[ -n "${all_wspr_files}" ]]; then
-        declare most_recent_non_zero_length_all_wspr_file=$(ls -t ${all_wspr_files} | head -n 1)   ### Find the most recent non-zero length ALL_WSPR.TXT file
-        declare all_wspr_field_count=$(awk 'END {print NF}' ${most_recent_non_zero_length_all_wspr_file})   ### Find the number of fields in the last line of that file
-        if [[ ${all_wspr_field_count} -eq ${WSPRD_V_2_1_NF} ]] ; then
-            ### That line didn't have the expected 17 fields
-            install_wsprd="yes"
-            if [[ ${WSPRD_COMPARE-no} == "yes" ]]; then
-                ### save the old version of wsprd so we can compare its performance to the new version
-                mkdir -p ${WSPRDAEMON_TMP_WSPRD_DIR}
-                cp -p ${WSPRD_CMD} ${WSPRDAEMON_TMP_WSPRD_DIR}
-            fi
-        fi
-    fi
-fi
-
-if [[ ${install_wsprd} = "yes" ]]; then
-    # ask_user_to_install_sw "The 'wsprd' utility which is part of WSJT-x is not installed on this server" "WSJT-x"
-    sudo apt update --assume-yes
-    sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
-    wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
-    sudo dpkg -i ${wsjtx_pkg}
-    if [[ ! -x ${WSPRD_CMD} ]]; then
-        echo "ERROR: failed to install 'wsprd'"
-        exit 1
-    fi
-fi
-set +x
-
-if ${WSPRD_CMD} | grep -q '\-o' ; then
-    declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
-    [[ ${verbosity} -ge 1 ]] && echo "$(date): INFO: ${WSPRD_CMD} is version 2, so set command line flags to '${WSPRD_CMD_FLAGS}'"
-else
-    declare WSPRD_CMD_FLAGS="-d -C 10000"        ### Default to do deep decode.  Can be overwritten by re-declaring in wsprdaemon.conf.  It takes about 30 CPU seconds to run on a Pi B3 core
-    [[ ${verbosity} -ge 0 ]] && echo "$(date): INFO: ${WSPRD_CMD} is version 1, so set command line flags to '${WSPRD_CMD_FLAGS}', but you should update to wsprd version 2.x"
-fi
 
 ##############################################################
 function truncate_file() {
@@ -1153,7 +986,7 @@ function list_kiwis() {
         local receiver_name=${receiver_info[0]}
         local receiver_ip_address=${receiver_info[1]}
 
-        if echo "${receiver_ip_address}" | grep -q '^[1-9]' ; then
+        if echo "${receiver_ip_address}" | ${GREP_CMD} -q '^[1-9]' ; then
             echo "${receiver_name}"
         fi
     done
@@ -1164,7 +997,7 @@ function list_kiwis() {
 function list_audio_devices()
 {
     local arecord_output=$(arecord -l 2>&1)
-    if grep -q "no soundcards found" <<< "${arecord_output}" ; then
+    if ${GREP_CMD} -q "no soundcards found" <<< "${arecord_output}" ; then
         echo "ERROR: found no audio input devices"
         return 1
     fi
@@ -1483,7 +1316,7 @@ function kiwi_recording_daemon()
                 ### there are new OV events.  
                 local old_ov_info=( $(tail -1 ov.log) )
                 local old_ov_count=${old_ov_info[1]}
-                local new_ov_count=$( grep OV kiwi_recorder.log | wc -l )
+                local new_ov_count=$( ${GREP_CMD} OV kiwi_recorder.log | wc -l )
                 local new_ov_time=${current_time}
                 printf "\n${current_time} ${new_ov_count}" >> ov.log
                 if [[ "${new_ov_count}" -le "${old_ov_count}" ]]; then
@@ -1552,7 +1385,7 @@ function print_new_ov_lines() {
             local ov_reported_path=${band_path}/ov_reported.log
             if [[ -f ${recording_log_path} ]]; then
                 if [[ ! -f ${ov_reported_path} ]] || [[ ${recording_log_path} -nt ${ov_reported_path} ]]; then
-                    local last_line=$(grep "OV" ${recording_log_path} | tail -1 )
+                    local last_line=$(${GREP_CMD} "OV" ${recording_log_path} | tail -1 )
                     if [[ -n "${last_line}" ]]; then
                         printf "$(date): ${kiwi},${band}: ${last_line}\n" 
                         touch ${ov_reported_path}
@@ -1893,15 +1726,15 @@ function update_master_hashtable()
         ### There is at least one hashtable.txt file.  Create a clean master
         cat ${HASHFILE_MASTER_FILE} ${HASHFILE_ARCHIVE_PATH}/*/*/hashtable.txt                                                        | sort -un > ${HASHFILE_TMP_ALL_FILE}
         ### Remove all lines with duplicate calls, calls with '/', and lines with more or less than 2 fields
-        awk '{print $2}' ${HASHFILE_TMP_ALL_FILE}        | uniq -d | grep -v -w -F -f - ${HASHFILE_TMP_ALL_FILE}                      > ${HASHFILE_TMP_UNIQ_CALLS_FILE}
+        awk '{print $2}' ${HASHFILE_TMP_ALL_FILE}        | uniq -d | ${GREP_CMD} -v -w -F -f - ${HASHFILE_TMP_ALL_FILE}                      > ${HASHFILE_TMP_UNIQ_CALLS_FILE}
         ### Remove both lines if their hash values match
-        awk '{print $1}' ${HASHFILE_TMP_UNIQ_CALLS_FILE} | uniq -d | grep -v -w -F -f - ${HASHFILE_TMP_UNIQ_CALLS_FILE}                          > ${HASHFILE_TMP_UNIQ_HASHES_FILE}
+        awk '{print $1}' ${HASHFILE_TMP_UNIQ_CALLS_FILE} | uniq -d | ${GREP_CMD} -v -w -F -f - ${HASHFILE_TMP_UNIQ_CALLS_FILE}                          > ${HASHFILE_TMP_UNIQ_HASHES_FILE}
         if diff ${HASHFILE_MASTER_FILE} ${HASHFILE_TMP_UNIQ_HASHES_FILE} > ${HASHFILE_TMP_DIFF_FILE} ; then
             [[ ${verbosity} -ge 3 ]] && echo "$(date): update_master_hashtable found no new hashes"
         else
             if [[ ${verbosity} -ge 2 ]]; then
                 echo "$(date): Updating the master hashtable with new entries:"
-                grep '>' ${HASHFILE_TMP_DIFF_FILE}
+                ${GREP_CMD} '>' ${HASHFILE_TMP_DIFF_FILE}
                 local old_size=$(cat ${HASHFILE_MASTER_FILE} | wc -l)
                 local new_size=$(cat ${HASHFILE_TMP_UNIQ_HASHES_FILE}       | wc -l)
                 local added_lines_count=$(( $new_size - $old_size))
@@ -2236,6 +2069,17 @@ function decoding_daemon()
                 local c2_FFT_nl_cal=-999.9
             else
                 ### 'wsprd' was successful
+                ### Validate, and if necessary cleanup, the spot list file created by wsprd
+                local bad_wsprd_lines=$(awk 'NF < 11 || NF > 12 || $6 == 0.0 {printf "%40s: %s\n", FILENAME, $0}' wspr_spots.txt)
+                if [[ -n "${bad_wsprd_lines}" ]]; then
+                    ### Save this corrupt wspr_spots.txt, but leave it untouched so it can be used later to tell us how man ALL_WSPT.TXT lines to process
+                    mkdir -p bad_wspr_spots.d
+                    cp -p wspr_spots.txt bad_wspr_spots.d/
+                    ###
+                    ### awk 'NF >= 11 && NF <= 12 &&  $6 != 0.0' bad_wspr_spots.d/wspr_spots.txt > wspr_spots.txt
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING:  wsprd created a wspr_spots.txt with corrupt line(s):\n%s" "${bad_wsprd_lines}"
+                fi
+
                 local new_spots=$(wc -l wspr_spots.txt)
                 decoded_spots=$(( decoded_spots + ${new_spots/ *} ))
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): decoded ${new_spots/ *} new spots.  ${decoded_spots} spots have been decoded since this daemon started"
@@ -2267,7 +2111,7 @@ function decoding_daemon()
                         if ! spot_diffs=$(diff wsprd.old/wspr_spots.txt.cut wspr_spots.txt.cut) ; then
                             local new_count=$(cat wspr_spots.txt | wc -l)
                             local old_count=$(cat wsprd.old/wspr_spots.txt | wc -l)
-                            echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(grep '^[<>]' <<< "${spot_diffs}" | sort -n -k 5,5n)"
+                            echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(${GREP_CMD} '^[<>]' <<< "${spot_diffs}" | sort -n -k 5,5n)"
                         fi
                     fi
                 fi
@@ -2318,7 +2162,7 @@ function decoding_daemon()
                 nice awk -v freq_min=${SNR_FREQ_MIN-1338} -v freq_max=${SNR_FREQ_MAX-1662} '$1 > freq_min && $1 < freq_max {printf "%s %s\n", $1, $2}' sox_fft.txt > sox_fft_trimmed.txt      # extract the rows with frequencies within the 1340-1660 band
 
                 ### Check to see if we are overflowing the /tmp/wsprdaemon file system
-                local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | grep tmpfs) )
+                local df_report_fields=( $(df ${WSPRDAEMON_TMP_DIR} | ${GREP_CMD} tmpfs) )
                 local tmp_size=${df_report_fields[1]}
                 local tmp_used=${df_report_fields[2]}
                 local tmp_avail=${df_report_fields[3]}
@@ -2341,7 +2185,7 @@ function decoding_daemon()
             local new_kiwi_ov_count=0
             local current_kiwi_ov_lines=0
             if [[ -f kiwi_recorder.log ]]; then
-                current_kiwi_ov_lines=$(grep "^ ADC OV" kiwi_recorder.log | wc -l)
+                current_kiwi_ov_lines=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
                 if [[ ${current_kiwi_ov_lines} -lt ${old_kiwi_ov_lines} ]]; then
                     ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
                     old_kiwi_ov_lines=0
@@ -2378,69 +2222,62 @@ function decoding_daemon()
                 rm -f ${tmp_spot_file}
                 touch ${tmp_spot_file}
                 local new_spots_count=$(cat wspr_spots.txt | wc -l)
-                local all_wspr_new_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)
+                local all_wspr_new_lines=$(tail -n ${new_spots_count} ALL_WSPR.TXT)     ### Take the same number of lines from the end of ALL_WSPR.TXT as are in wspr_sport.txt
+
+                ### Further validation of the spots we are going to upload
+                ### Use the date in the wspr_spots.txt to extract the corresponding lines from ALL_WSPR.TXT and verify the number of spots extracted matches the number of spots in wspr_spots.txt
+                local wspr_spots_date=$( awk '{printf "%s %s\n", $1, $2}' wspr_spots.txt | sort -u )
+                local all_wspr_new_date_lines=$( grep "^${wspr_spots_date}" ALL_WSPR.TXT)
+                local all_wspr_new_date_lines_count=$( echo "${all_wspr_new_date_lines}" | wc -l )
+                if [[ ${all_wspr_new_date_lines_count} -ne ${new_spots_count} ]]; then
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING: the ${new_spots_count} spot lines in wspr_spots.txt don't match the ${all_wspr_new_date_lines_count} spots with the same date in ALL_WSPR.TXT\n"
+                fi
+
+                ### Cull corrupt lines from ALL_WSPR.TXT
+                local all_wspr_bad_new_lines=$(awk 'NF < 16 || NF > 17 || $5 < 0.1' <<< "${all_wspr_new_lines}")
+                if [[ -n "${all_wspr_bad_new_lines}" ]]; then
+                    [[ ${verbosity} -ge 0 ]] && printf "$(date): decoding_daemon(): WARNING: removing corrupt line(s) in ALL_WSPR.TXT:\n%s\n" "${all_wspr_bad_new_lines}"
+                    all_wspr_new_lines=$(awk 'NF >= 16 && NF <=  17 && $5 >= 0.1' <<< "${all_wspr_new_lines}")
+                fi
+
                 [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() processing these ALL_WSPR.TXT lines:\n${all_wspr_new_lines}"
-                local all_wspr_field_count=$(tail -n 1 ALL_WSPR.TXT | awk '{print NF}')
                 local WSPRD_2_2_FIELD_COUNT=17   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
-                if [[ ${all_wspr_field_count} -eq ${WSPRD_2_2_FIELD_COUNT} ]]; then
-# fprintf(fall_wspr, "%6s              %4s                                      %3.0f          %5.2f           %11.7f               %-22s                    %2d            %5.2f                          %2d                   %2d                %4d                    %2d                  %3d                   %5u                %5d\n",
-# NEW     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].sync,          decodes[i].ipass+1, decodes[i].blocksize, decodes[i].jitter, decodes[i].decodetype, decodes[i].nhardmin, decodes[i].cycles/81, decodes[i].metric);
-# OLD     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, (int)(10*decodes[i].sync),                    decodes[i].blocksize, decodes[i].jitter,                                             decodes[i].cycles/81, decodes[i].metric);
-# OLD                                                                                                                                                                                                                                                  , decodes[i].osd_decode);
-                    local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields
-                    while read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields ; do
-                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this V2.2 format ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
-                        local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype spot_nhardmin spot_decode_cycles spot_metric
+                local WSPRD_2_2_WITHOUT_GRID_FIELD_COUNT=16   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
+                # fprintf(fall_wspr, "%6s              %4s                                      %3.0f          %5.2f           %11.7f               %-22s                    %2d            %5.2f                          %2d                   %2d                %4d                    %2d                  %3d                   %5u                %5d\n",
+		# 2.2.x:     decodes[i].date, decodes[i].time,                            decodes[i].snr, decodes[i].dt, decodes[i].freq, decodes[i].message, (int)decodes[i].drift, decodes[i].sync,          decodes[i].ipass+1, decodes[i].blocksize, decodes[i].jitter, decodes[i].decodetype, decodes[i].nhardmin, decodes[i].cycles/81, decodes[i].metric);
+		# 2.2.x with grid:     200724 1250 -24  0.24  28.1260734  M0UNI IO82 33           0  0.23  1  1    0  1  45     1   810
+		# 2.2.x without grid:  200721 0800  -7  0.15  28.1260594  DC7JZB/B 27            -1  0.68  1  1    0  0   0     1   759
+		local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields
+		while read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields ; do
+		    [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this V2.2 format ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
+		    local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype spot_nhardmin spot_decode_cycles spot_metric
 
-                        local other_fields_list=( ${other_fields} )
-                        local other_fields_list_count=${#other_fields_list[@]}
+		    local other_fields_list=( ${other_fields} )
+		    local other_fields_list_count=${#other_fields_list[@]}
 
-                        local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=11
-                        if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
-                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 1 ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                        else
-                            spot_grid=""
-                            read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
-                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                        fi
+		    local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=11
+		    local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITHOUT_GRID=10
+                    local got_valid_line="yes"
+		    if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
+		        read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 1 ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+		    elif [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
+                        spot_grid=""
+                        read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
+                    else
+                        [[ ${verbosity} -ge 0 ]] && echo -e "$(date): decoding_daemon() WARNING: tossing  a corrupt (not the expected 15 or 16 fields) ALL_WSPR.TXT spot line"
+                        got_valid_line="no"
+                    fi
+                    if [[ ${got_valid_line} == "yes" ]]; then
                         #                              %6s %4s   %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d  %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
                         #local extended_line=$( printf "%4s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
                         local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
                         "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
                         extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                         echo "${extended_line}" >> ${tmp_spot_file}
-                    done <<< "${all_wspr_new_lines}"
-                else
-                    local spot_ipass="0"          ### These two fields are not present in wsprd v2.1 lines
-                    local spot_nhardmin="0"
-                    local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields
-                    while read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields ; do
-                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() read this ALL_WSPR.TXT line: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${other_fields}'"
-                         local spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode
-                        #local spot_grid spot_pwr spot_drift                              spot_blocksize spot_jitter                               spot_decode_cycles spot_metric spot_osd_decode
-                        #local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric
-
-                        local other_fields_list=( ${other_fields} )
-                        local other_fields_list_count=${#other_fields_list[@]}
-
-                        local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=8
-                        if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
-                            [[ ${verbosity} -ge 3 ]] && echo -e "$(date): decoding_daemon() ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                        else
-                            spot_grid=""
-                            read spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode  <<< "${other_fields}"
-                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): decoding_daemon() this ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
-                        fi
-                        #                              %6s %4s %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
-                        local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
-                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
-                        extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
-                        echo "${extended_line}" >> ${tmp_spot_file}
-                    done <<< "${all_wspr_new_lines}"
-                fi
-
+                    fi
+                done <<< "${all_wspr_new_lines}"
                 local wspr_spots_file=${tmp_spot_file} 
                 sed "s/\$/ ${rms_value}  ${c2_FFT_nl_cal}/" ${wspr_spots_file} > ${new_spots_file}  ### add  the noise fields
                 [[ ${verbosity} -ge 2 ]] && printf "$(date): decoding_daemon(): queuing enhanced spot file:\n$(cat ${new_spots_file})\n"
@@ -2695,7 +2532,7 @@ function posting_daemon()
             if [[ ${verbosity} -ge 2 ]]; then
                 echo "$(date): posting_daemon() merging and sorting files '${newest_list[@]}' to ${wsprd_spots_all_file_path}"
                 echo "$(date): posting_daemon() cat ${newest_list[@]} > ${wsprd_spots_all_file_path}.  Files contain spots:"
-                grep . ${newest_list[@]}
+                ${GREP_CMD} . ${newest_list[@]}
                 printf ">>>>>>>> which were put into '${wsprd_spots_all_file_path}' which contains:\n$( cat ${wsprd_spots_all_file_path})\n=============\n"
             fi
 
@@ -2708,7 +2545,7 @@ function posting_daemon()
             touch best_snrs.tmp
             local call
             for call in ${posting_call_list}; do
-                grep " ${call} " ${wsprd_spots_all_file_path} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
+                ${GREP_CMD} " ${call} " ${wsprd_spots_all_file_path} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
                 cat this_calls_best_snr.tmp >> best_snrs.tmp
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
             done
@@ -2779,7 +2616,7 @@ function posting_daemon()
                     touch best_snrs.tmp       ## In case there are no calls, ensure there is a zero length file
                     local call
                     for call in ${posting_call_list}; do
-                        grep " ${call} " ${real_receiver_wspr_spots_file} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
+                        ${GREP_CMD} " ${call} " ${real_receiver_wspr_spots_file} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
                         cat this_calls_best_snr.tmp >> best_snrs.tmp
                         [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
                     done
@@ -3008,8 +2845,13 @@ with open("${DERIVED_ADDED_FILE}", "w") as out_file:
         km=absent_data
         # end of list of absent data values for where tx_locator = "none"
      
+<<<<<<< HEAD
       # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
-    band=999
+    band=9999
+=======
+    # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
+    band=9999
+>>>>>>> f435866fd6ec6f256d71766ae8225fff1a8ac642
     freq=int(10*float(frequency))
     if freq==1:
         band=2200
@@ -3073,13 +2915,13 @@ function log_merged_snrs() {
     printf "       TOTAL=%2s, POSTED=%2s\n" ${source_line_count} ${sorted_line_count}
     local call
     for call in ${sorted_call_list[@]}; do
-        local posted_freq=$(grep " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
-        local posted_snr=$( grep " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
+        local posted_freq=$(${GREP_CMD} " $call " ${wsprd_spots_best_file_path} | awk '{print $6}')
+        local posted_snr=$( ${GREP_CMD} " $call " ${wsprd_spots_best_file_path} | awk '{print $4}')
         printf "$date_string: %10s %8s %10s" $posted_freq $call $posted_snr
         local file
         for file in ${newest_list[@]}; do
             ### Only pick the strongest SNR from each file which went into the .BEST file
-            local rx_snr=$(grep -F " $call " $file | sort -k 4,4n | tail -n 1 | awk '{print $4}')
+            local rx_snr=$(${GREP_CMD} -F " $call " $file | sort -k 4,4n | tail -n 1 | awk '{print $4}')
             if [[ -z "$rx_snr" ]]; then
                 printf "%8s" "*"
             elif [[ $rx_snr == $posted_snr ]]; then
@@ -3423,26 +3265,23 @@ function upload_wsprnet_create_spot_file_list_file()
         [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-        if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
-            echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
-            return
-        fi
-        spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
-        spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
-    done
-    [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
-    echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+        if [[ ${cycle_spots_count} -eq 0 ]]; then
+            [[ $verbosity -ge 0 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
+            rm ${cycle_files}
+        else
+            if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+                [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+                echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+                return
+            fi
+            spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
+            spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
+       fi
+   done
+   [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
+   echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
 }
-#            elif [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
-                ### In proxy upload mode we don't upload on the client.
-                ### If this is a real rx, then the wsprnet.org spot line will be regenerated and uploaded on the wsprdaemon.org server.
-                ### If this is a MERGed rx, then rename the spot file to *.proxy and it will be included in the tar file uploaded along with the extended spot and noise data files.
-                ### On the wsprdaemon.org server the *.proxy file will be reanmed to *.txt and then uploaded to wsprnet.org along with the regnerated spot files
- 
-### Daemon which runs every 10 seconds at WD sites and also at wsprdaemon.org
-### It creates a list of spot files with at most the oldest 200 spots, puts those spots into a tmp.txt file, and executes a 'curl MEPT' batch upload of those spots
-### When the curl is sucessfully executed  it deletes the spot files from which the uploaded spots were extracted
+
 function get_call_grid_from_receiver_name() {
     local target_rx=$1
 
@@ -3562,7 +3401,7 @@ function upload_to_wsprnet_daemon()
                     fi
                     rm -f ${all_spots_file_list[@]}
                 else
-                    ### Upload all the spots for on eCAL_GRID in one curl transaction 
+                    ### Upload all the spots for one CALL_GRID in one curl transaction 
                     [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
                     curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
@@ -3735,7 +3574,7 @@ function upload_line_to_wsprdaemon() {
             fi
 
             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_line_to_wsprdaemon(): uploaded spot '$sql2'"  ### add c2
-            if ! grep -q "INSERT" add_derived_psql.txt ; then
+            if ! ${GREP_CMD} -q "INSERT" add_derived_psql.txt ; then
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() failed upload of spots file '${file_path}' containing line '${file_line}'. psql '${sql1} ${sql2}' returned '$(cat add_derived_psql.txt)'"
                  return 1
             fi
@@ -4473,6 +4312,8 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
     local mirror_pid_file_path=${uploading_root_dir}/mirror.pid  
     UPLOAD_TO_MIRROR_QUEUE_DIR=${uploading_root_dir}/mirror_queue.d
 
+    [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() start"
+    setup_systemctl_deamon "-u a"  "-u z"
     if [[ -f ${mirror_pid_file_path} ]]; then
         local mirror_pid=$(cat ${mirror_pid_file_path})
         if ps ${mirror_pid} > /dev/null ; then
@@ -4552,9 +4393,7 @@ function upload_server_to_wsprdaemon_daemon_status()
             fi
         fi
     else
-        if [[ $verbosity -eq 0 ]] ; then
-            echo "Wsprdaemon mirror daemon found no pid file '${mirror_pid_file_path}'"
-        else
+        if [[ $verbosity -ge 2 ]] ; then
             echo "$(date): upload_to_wsprdaemon_daemon_status() found no mirror.pid file ${mirror_pid_file_path}"
         fi
     fi
@@ -4702,7 +4541,7 @@ function check_for_zombies() {
              
         if [[ ! "${receiver_name}" =~ ^MERG ]]; then
             ### This is a KIWI,AUDIO or SDR reciever
-            if grep -wq ${job_id} <<< "${running_rx_list}" ; then
+            if [[ ${running_rx_list} =~ " ${job_id} " ]] ; then
                 [[ ${verbosity} -ge 1 ]] && printf "$(date): check_for_zombies() real rx job ${job_id}' is already listed in '${running_rx_list}'\n"
             else
                 [[ ${verbosity} -ge 3 ]] && printf "$(date): check_for_zombies() real rx job ${job_id}' is not listed in running_rx_list ${running_rx_list}', so add it\n"
@@ -4760,7 +4599,7 @@ function check_for_zombies() {
                     for rx_device in ${merged_receiver_name_list}; do  ### Check each real rx
                         ### Check each real rx
                         job_id=${rx_device},${receiver_band}
-                        if grep -wq ${job_id} <<< "${running_rx_list}" ; then 
+                        if ${GREP_CMD} -wq ${job_id} <<< "${running_rx_list}" ; then 
                             [[ ${verbosity} -ge 1 ]] && printf "$(date): check_for_zombies() merged job '${merged_job_id}' is fed by real job '${job_id}' which is already listed in '${running_rx_list}'\n"
                         else ### Add new real rx
                             [[ ${verbosity} -ge 2 ]] && printf "$(date): check_for_zombies() merged job '${merged_job_id}' is fed by real job '${job_id}' which needs to be added to '${running_rx_list}'\n"
@@ -4805,12 +4644,12 @@ function check_for_zombies() {
     local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ && !/derived_calc.py/ && !/curl/ && !/avahi-daemon/ {print $2}' <<< "${ps_output_lines}" )
     [[ $verbosity -ge 3 ]] && echo "$(date): check_for_zombies() filtered 'ps usxf' output '${ps_output_lines}' to get list '${ps_running_list}"
     for running_pid in ${ps_running_list} ; do
-       if grep -qw ${running_pid} <<< "${expected_and_running_pids}"; then
+       if ${GREP_CMD} -qw ${running_pid} <<< "${expected_and_running_pids}"; then
            [[ $verbosity -ge 3 ]] && printf "$(date): check_for_zombies() Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
        else
            if [[ $verbosity -ge 2 ]] ; then
                printf "$(date): check_for_zombies() WARNING: did not find running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'\n"
-               grep -w ${running_pid} <<< "${ps_output_lines}"
+               ${GREP_CMD} -w ${running_pid} <<< "${ps_output_lines}"
            fi
            if ps ${running_pid} > /dev/null; then
                [[ $verbosity -ge 1 ]] && printf "$(date): check_for_zombies() adding running  zombie '${running_pid}' to kill list\n"
@@ -4965,7 +4804,7 @@ function add_remove_jobs_in_running_file() {
     source ${RUNNING_JOBS_FILE}
     case $action in
         a)
-            if grep -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
+            if ${GREP_CMD} -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
                 ### We come here when restarting a dead capture jobs, so this condition is already printed out
                 [[ $verbosity -ge 2 ]] && \
                     echo "$(date): add_remove_jobs_in_running_file():  WARNING: found job ${receiver_name},${receiver_band} was already listed in ${RUNNING_JOBS_FILE}"
@@ -4975,7 +4814,7 @@ function add_remove_jobs_in_running_file() {
             RUNNING_JOBS+=( ${job} )
             ;;
         z)
-            if ! grep -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
+            if ! ${GREP_CMD} -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
                 echo "$(date) WARNING: start_stop_job(remove) found job ${receiver_name},${receiver_band} was already not listed in ${RUNNING_JOBS_FILE}"
                 return 2
             fi
@@ -5194,26 +5033,26 @@ function check_kiwi_wspr_channels() {
         return
     fi
 
-    local active_receivers_list=$( curl -s --connect-timeout 5 ${kiwi_ip}/users | sed -n '/"i":\([0-9]\),"n"/s//\n\1/gp' | grep "^[0-9]" )
+    local active_receivers_list=$( curl -s --connect-timeout 5 ${kiwi_ip}/users | sed -n '/"i":\([0-9]\),"n"/s//\n\1/gp' | ${GREP_CMD} "^[0-9]" )
     if [[ -z "${active_receivers_list}" ]];  then
         [[ $verbosity -ge 2 ]] && echo "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' not reporting users status or there are no active rx channels on it.  So nothing to do"
         return
     fi
     [[ $verbosity -ge 4 ]] && printf "$(date): check_kiwi_wspr_channels() Kiwi '%s' active listeners:\n%s\n" "${kiwi_name}" "${active_receivers_list}"
 
-    if ! grep -q "wsprdaemon" <<< "${active_receivers_list}" ; then
+    if ! ${GREP_CMD} -q "wsprdaemon" <<< "${active_receivers_list}" ; then
         [[ $verbosity -ge 2 ]] && echo "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' has no active WD listeners"
         return
     fi
-    local wd_listeners_count=$( grep wsprdaemon <<< "${active_receivers_list}" | wc -l) 
-    local wd_ch_01_listeners_count=$( grep "^[01]:.wsprdaemon" <<< "${active_receivers_list}" | wc -l) 
+    local wd_listeners_count=$( ${GREP_CMD} wsprdaemon <<< "${active_receivers_list}" | wc -l) 
+    local wd_ch_01_listeners_count=$( ${GREP_CMD} "^[01]:.wsprdaemon" <<< "${active_receivers_list}" | wc -l) 
     [[ $verbosity -ge 3 ]] && echo "$(date): check_kiwi_wspr_channels() Kiwi '${kiwi_name}' has ${wd_listeners_count} WD listeners of which ${wd_ch_01_listeners_count} listeners are on ch 0 or ch 1"
     if [[ ${wd_listeners_count} -le 6 && ${wd_ch_01_listeners_count} -gt 0 ]]; then
         if [[ $verbosity -ge 1 ]] ; then
             echo   "$(date): check_kiwi_wspr_channels() WARNING, Kiwi '${kiwi_name}' configured in 8 channel mode has ${wd_listeners_count} WD listeners."
             printf "$(date):    So all of them should be on rx ch 2-7,  but %s isteners are on ch 0 or ch 1: \n%s\n" "${wd_ch_01_listeners_count}" "${active_receivers_list}"
         fi
-        if grep -q ${kiwi_name} <<< "${RUNNING_JOBS[@]}"; then
+        if ${GREP_CMD} -q ${kiwi_name} <<< "${RUNNING_JOBS[@]}"; then
             [[ $verbosity -ge 1 ]] && echo "$(date): check_kiwi_wspr_channels() found '${kiwi_name}' is in use by this instance of WD, so add code to clean up the RX channels used"
             ### TODO: recover from listener on rx 0/1 code here 
         else
@@ -5322,7 +5161,7 @@ function let_kiwi_get_gps_lock() {
     fi
     [[ $verbosity -ge 2 ]] && echo "$(date): let_kiwi_get_gps_lock() Kiwi '${kiwi_name}' reporting ${GPS_MIN_GOOD_COUNT} locks, but new count ${kiwi_fixes_count} == old count ${kiwi_last_fixes_count}, so fixes count has not changed"
     ### GPS fixes count has not changed.  If there are active users or WD clients, kill those sessions so as to free the Kiwi to search for sats
-    local active_receivers_list=$( curl -s --connect-timeout 5 ${kiwi_ip}/users | sed -n '/"i":\([0-9]\),"n"/s//\n\1/gp' | grep "^[0-9]" )
+    local active_receivers_list=$( curl -s --connect-timeout 5 ${kiwi_ip}/users | sed -n '/"i":\([0-9]\),"n"/s//\n\1/gp' | ${GREP_CMD} "^[0-9]" )
     if [[ -z "${active_receivers_list}" ]];  then
         [[ $verbosity -ge 2 ]] && echo "$(date): let_kiwi_get_gps_lock() found no active rx channels on Kiwi '${kiwi_name}, so it is already searching for GPS"
         touch ${kiwi_gps_log_file}
@@ -5565,13 +5404,15 @@ function seconds_until_next_odd_minute() {
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
 declare -r SYSTEMNCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
 function setup_systemctl_deamon() {
+    local start_args=${1--a}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
+    local stop_args=${2--z} 
     local systemctl_dir=${SYSTEMNCTL_UNIT_PATH%/*}
     if [[ ! -d ${systemctl_dir} ]]; then
         echo "$(date): setup_systemctl_deamon() WARNING, this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
         return
     fi
     if [[ -f ${SYSTEMNCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_deamon() found his server already has a ${SYSTEMNCTL_UNIT_PATH} file. So leaving it alone."
+        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_deamon() found this server already has a ${SYSTEMNCTL_UNIT_PATH} file. So leaving it alone."
         return
     fi
     local my_id=$(id -u -n)
@@ -5584,9 +5425,10 @@ function setup_systemctl_deamon() {
     [Service]
     User=${my_id}
     Group=${my_group}
+    WorkingDirectory=${WSPRDAEMON_ROOT_DIR}
+    ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
+    ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}
     Type=forking
-    ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh -z
-    ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh -a
     Restart=on-abort
 
     [Install]
