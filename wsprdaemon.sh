@@ -3009,6 +3009,7 @@ with open("${DERIVED_ADDED_FILE}", "w") as out_file:
         # end of list of absent data values for where tx_locator = "none"
      
       # derive the band in metres (except 70cm and 23cm reported as 70 and 23) from the frequency
+    band=999
     freq=int(10*float(frequency))
     if freq==1:
         band=2200
@@ -4420,6 +4421,7 @@ function upload_to_mirror_daemon() {
     local upload_password=xahFie6g
     local upload_url=logs1.wsprdaemon.org
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${mirror_files_path}
     cd ${UPLOAD_TO_MIRROR_QUEUE_DIR}
 
@@ -4431,11 +4433,11 @@ function upload_to_mirror_daemon() {
         if [[ ${#files_to_upload[@]} -gt 0 ]]; then
             local upload_file_list=${files_to_upload[@]}
             upload_file_list=${upload_file_list// /,}     ### curl wants a comma-seperated list of files
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
+            [[ $verbosity -ge 3 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${upload_file_list}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful.  Deleting local files"
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful, so delete ${#files_to_upload[@]} local files: ${upload_file_list}"
                 rm ${files_to_upload[@]}
             else
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer failed => ${ret_code}"
@@ -4447,10 +4449,14 @@ function upload_to_mirror_daemon() {
 }
 
 function queue_files_for_upload_to_wd1() {
-    local files=$1
+    local files="$@"
 
     if [[ ${UPLOAD_TO_MIRROR_SERVER_ENALBED} == "yes" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): queue_files_for_upload_to_wd1() queuing '${files}' in '${UPLOAD_TO_MIRROR_QUEUE_DIR}'"
+        if [[ $verbosity -ge 1 ]]; then
+            local files_path_list=(${files})
+            local files_name_list=(${files_path_list[@]##*/})
+            echo "$(date): queue_files_for_upload_to_wd1() queuing ${#files_name_list[@]} files '${files_name_list[@]}' in '${UPLOAD_TO_MIRROR_QUEUE_DIR}'"
+        fi
         ln ${files} ${UPLOAD_TO_MIRROR_QUEUE_DIR}
     else
         [[ $verbosity -ge 2 ]] && echo "$(date): queue_files_for_upload_to_wd1() queuing disabled, so ignoring '${files}'"
