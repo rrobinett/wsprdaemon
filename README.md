@@ -1,4 +1,6 @@
-# wsprdaemon (WD) Latest version is v2.9g
+# wsprdaemon (WD) Latest version is v2.9h
+
+2.9h Fixes a number of installation and error handling problems.  Unless you are having problems with your installation, I don't think exisiting installatons need to upgrade to this build
 
 2.9g Installs WSJT-x 2.2.2 which includes an enhanced wsprd decoding utility capable of extracting up to 6% more spots from your receiver
 
