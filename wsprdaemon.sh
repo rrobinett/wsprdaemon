@@ -3261,7 +3261,7 @@ function upload_wsprnet_create_spot_file_list_file()
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
         if [[ ${cycle_spots_count} -eq 0 ]]; then
-            [[ $verbosity -ge 0 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
             rm ${cycle_files}
         else
             if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
