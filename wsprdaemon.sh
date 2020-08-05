@@ -37,6 +37,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Stop checking the Pi OS version number, since we run on almost every Pi
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
 declare -r VERSION=2.9h             ### Install at beta sites
+                                    ### WD server: Force call signs and rx_id to upppercase and grids to UUNNll
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -4102,6 +4103,10 @@ function wsprdaemon_tgz_service_daemon() {
             if tar tf ${tbz_file} &> /dev/null ; then
                 [[ $verbosity -ge 3 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found valid tar file ${tbz_file}"
                 valid_tbz_list+=(${tbz_file})
+                if [[ ${tbz_file} =~ "[fF]6*" ]]; then
+                    [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() copying ${tbz_file} to /tmp"
+                    cp -p {tbz_file} /tmp/
+                fi
             else
                 if [[ -f ${tbz_file} ]]; then
                     ### A client may be in the process of uploading a tar file.
@@ -4180,8 +4185,16 @@ function wsprdaemon_tgz_service_daemon() {
                     ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
                     local TS_SPOTS_CSV_FILE=./ts_spots.csv
                     local TS_BAD_SPOTS_CSV_FILE=./ts_bad_spots.csv
-                    awk 'NF == 32 && $7 != "none" && $8 != "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_SPOTS_CSV_FILE}
-                    awk 'NF != 32 || $7 == "none" || $8 == "none"' ${spot_file_list[@]} | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g"            > ${TS_BAD_SPOTS_CSV_FILE}
+                    ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
+                    awk 'NF == 32 && $7 != "none" && $8 != "none" {\
+                        $7=toupper($7); \
+                        $8 = ( toupper(substr($8, 0, 2)) tolower(substr($8, 3, 4))); \
+                        $22 = ( toupper(substr($22, 0, 2)) tolower(substr($22, 3, 4))); \
+                        $23=toupper($23); \
+                        print} ' ${spot_file_list[@]} \
+                        | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_SPOTS_CSV_FILE}
+                    awk 'NF != 32 || $7 == "none" || $8 == "none" {$7=toupper($7); $22 = ( toupper(substr($22, 0, 2)) tolower(substr($22, 3, 4))); $23=toupper($23); print} ' ${spot_file_list[@]} \
+                        | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_BAD_SPOTS_CSV_FILE}
                     if [[ $verbosity -ge 1 ]] && [[ -s ${TS_BAD_SPOTS_CSV_FILE} ]] ; then
                         local bad_spots_count=$(cat ${TS_BAD_SPOTS_CSV_FILE} | wc -l)
                         echo -e "$(date): wsprdaemon_tgz_service_daemon() found ${bad_spots_count} bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_CSV_FILE})"
@@ -4192,6 +4205,7 @@ function wsprdaemon_tgz_service_daemon() {
                         if [[ ${ret_code} -eq 0 ]]; then
                             if [[ $verbosity -ge 1 ]]; then
                                 echo "$(date): wsprdaemon_tgz_service_daemon() recorded $( cat ${TS_SPOTS_CSV_FILE} | wc -l) spots to the wsprdaemon_spots table from ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
+                                grep -i f6bir ${spot_file_list[@]}
                             fi
                             rm ${spot_file_list[@]} 
                         else
@@ -4255,6 +4269,7 @@ function upload_to_mirror_daemon() {
     local upload_password=xahFie6g
     local upload_url=logs1.wsprdaemon.org
 
+    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${mirror_files_path}
     cd ${UPLOAD_TO_MIRROR_QUEUE_DIR}
 
@@ -4266,12 +4281,18 @@ function upload_to_mirror_daemon() {
         if [[ ${#files_to_upload[@]} -gt 0 ]]; then
             local upload_file_list=${files_to_upload[@]}
             upload_file_list=${upload_file_list// /,}     ### curl wants a comma-seperated list of files
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
+            [[ $verbosity -ge 3 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${upload_file_list}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful.  Deleting local files"
-                rm ${files_to_upload[@]}
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful, so delete ${#files_to_upload[@]} local files: ${upload_file_list}"
+                if [[ $verbosity -ge 1 ]] && [[ "${files_to_upload[@]}" =~ "N6GNp" ]]; then
+                    echo "$(date): upload_to_mirror_daemon() move files which include some from N6GNp to $PWD/n6gnp.d/: '${files_to_upload[@]}'"
+                    mkdir -p n6gnp.d
+                    mv ${files_to_upload[@]} n6gnp.d/
+                else
+                    rm ${files_to_upload[@]}
+                fi
             else
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer failed => ${ret_code}"
             fi
@@ -4282,10 +4303,14 @@ function upload_to_mirror_daemon() {
 }
 
 function queue_files_for_upload_to_wd1() {
-    local files=$1
+    local files="$@"
 
     if [[ ${UPLOAD_TO_MIRROR_SERVER_ENALBED} == "yes" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): queue_files_for_upload_to_wd1() queuing '${files}' in '${UPLOAD_TO_MIRROR_QUEUE_DIR}'"
+        if [[ $verbosity -ge 1 ]]; then
+            local files_path_list=(${files})
+            local files_name_list=(${files_path_list[@]##*/})
+            echo "$(date): queue_files_for_upload_to_wd1() queuing ${#files_name_list[@]} files '${files_name_list[@]}' in '${UPLOAD_TO_MIRROR_QUEUE_DIR}'"
+        fi
         ln ${files} ${UPLOAD_TO_MIRROR_QUEUE_DIR}
     else
         [[ $verbosity -ge 2 ]] && echo "$(date): queue_files_for_upload_to_wd1() queuing disabled, so ignoring '${files}'"
@@ -4307,7 +4332,7 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
     if [[ -f ${mirror_pid_file_path} ]]; then
         local mirror_pid=$(cat ${mirror_pid_file_path})
         if ps ${mirror_pid} > /dev/null ; then
-            [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() mirror daemon in '${mirror_root_dir}' with pid ${mirror_pid} is already running"
+            [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() mirror daemon in '${mirror_pid_file_path}' with pid ${mirror_pid} is already running"
             kill ${mirror_pid}
         fi
         rm ${mirror_pid_file_path}
