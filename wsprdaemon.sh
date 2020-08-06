@@ -4281,18 +4281,12 @@ function upload_to_mirror_daemon() {
         if [[ ${#files_to_upload[@]} -gt 0 ]]; then
             local upload_file_list=${files_to_upload[@]}
             upload_file_list=${upload_file_list// /,}     ### curl wants a comma-seperated list of files
-            [[ $verbosity -ge 3 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
+            [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${upload_file_list}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful, so delete ${#files_to_upload[@]} local files: ${upload_file_list}"
-                if [[ $verbosity -ge 1 ]] && [[ "${files_to_upload[@]}" =~ "N6GNp" ]]; then
-                    echo "$(date): upload_to_mirror_daemon() move files which include some from N6GNp to $PWD/n6gnp.d/: '${files_to_upload[@]}'"
-                    mkdir -p n6gnp.d
-                    mv ${files_to_upload[@]} n6gnp.d/
-                else
-                    rm ${files_to_upload[@]}
-                fi
+                rm ${files_to_upload[@]}
             else
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer failed => ${ret_code}"
             fi
