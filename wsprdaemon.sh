@@ -1248,7 +1248,7 @@ function audio_recording_daemon()
         local start_time=$(sleep_until_next_even_minute)
         local wav_file_name="${start_time}_${arg_rx_freq_hz}_usb.wav"
         [[ $verbosity -ge 1 ]] && echo "$(date): starting a ${capture_secs} second capture from AUDIO device ${audio_device},${audio_subdevice} to '${wav_file_name}'" 
-        sox -q -t alsa hw:${audio_device},${audio_subdevice} --rate 12k ${wav_file_name} trim 0 ${capture_secs}
+        sox -q -t alsa hw:${audio_device},${audio_subdevice} --rate 12k ${wav_file_name} trim 0 ${capture_secs} ${SOX_MIX_OPTIONS-}
         local sox_stats=$(sox ${wav_file_name} -n stats 2>&1)
         if [[ $verbosity -ge 1 ]] ; then
             printf "$(date): stats for '${wav_file_name}':\n${sox_stats}\n"
