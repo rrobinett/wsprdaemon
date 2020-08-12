@@ -38,6 +38,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
 declare -r VERSION=2.9h             ### Install at beta sites
                                     ### WD server: Force call signs and rx_id to upppercase and grids to UUNNll
+                                    ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -756,7 +757,7 @@ function ask_user_to_install_sw() {
 
 declare WSPRD_CMD=/usr/bin/wsprd
 declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
-declare WSJTX_REQUIRED_VERSION=2.2.2
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.2.2}"
 
 function check_for_needed_utilities()
 {
@@ -820,7 +821,7 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
-    local wsjtx_version=$(awk '/wsjtx/{print $3}' <<< "${dpkg_list}")
+    local wsjtx_version=$(awk '/wsjtx /{print $3}' <<< "${dpkg_list}")
     if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsjtx_version}" ]] || [[ ${wsjtx_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
         local cpu_arch=$(uname -m)
         local wsjtx_pkg=""
@@ -1259,10 +1260,12 @@ function audio_recording_daemon()
 
 ###
 declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is on longer a client and frees that rx2...7 channel
+declare KIWIRECORDER_FREQ_OFFSET=${KIWIRECORDER_FREQ_OFFSET:-0}   ### If the Kiwi RF is coming from a downconvertor, then enter the KHz value from Kiwi->Admin->Config->Freq scale offset here. e.g. for 2M: 116000
+
 function kiwi_recording_daemon()
 {
     local receiver_ip=$1
-    local receiver_rx_freq_khz=$2
+    local receiver_rx_freq_khz=$( bc <<< " $2 - ${KIWIRECORDER_FREQ_OFFSET}" )
     local my_receiver_password=$3
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
@@ -2033,7 +2036,7 @@ function decoding_daemon()
             wspr_decode_capture_time=${wspr_decode_capture_time:0:4}
             local wsprd_input_wav_filename=${wspr_decode_capture_date}_${wspr_decode_capture_time}.wav    ### wsprd prepends the date_time to each new decode in wspr_spots.txt
             local wspr_decode_capture_freq_hz=${wav_file_name#*_}
-            wspr_decode_capture_freq_hz=${wspr_decode_capture_freq_hz/_*}
+            wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${KIWIRECORDER_FREQ_OFFSET} * 1000)" )
             local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
             local wspr_decode_capture_band_center_mhz=$( printf "%2.6f\n" $(bc <<< "scale = 5; (${wspr_decode_capture_freq_hz}+1500)/1000000.0" ) )
             ### 
