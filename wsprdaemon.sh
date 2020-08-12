@@ -36,9 +36,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Fix wrong start/stop args in wsprdeamon.service
                                     ### Stop checking the Pi OS version number, since we run on almost every Pi
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
-declare -r VERSION=2.9h             ### Install at beta sites
+#declare -r VERSION=2.9h             ### Install at beta sites
                                     ### WD server: Force call signs and rx_id to upppercase and grids to UUNNll
                                     ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
+declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -437,6 +438,16 @@ function get_receiver_af_list_from_name() {
     echo ${receiver_info[5]-}
 }
 
+function get_receiver_khz_offset_list_from_name() {
+    local receiver_name=$1
+    local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
+    local khz_offset=0
+    local khz_info=${receiver_info[6]-}
+    if [[ -n "${khz_info}" ]]; then
+        khz_offset=${khz_info##*:}
+    fi
+    echo ${khz_offset}
+}
 
 ### Validation requires we check the time specified for each job
 ####  Input is HH:MM or {sunrise,sunset}{+,-}HH:MM
@@ -1260,12 +1271,11 @@ function audio_recording_daemon()
 
 ###
 declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is on longer a client and frees that rx2...7 channel
-declare KIWIRECORDER_FREQ_OFFSET=${KIWIRECORDER_FREQ_OFFSET:-0}   ### If the Kiwi RF is coming from a downconvertor, then enter the KHz value from Kiwi->Admin->Config->Freq scale offset here. e.g. for 2M: 116000
 
 function kiwi_recording_daemon()
 {
     local receiver_ip=$1
-    local receiver_rx_freq_khz=$( bc <<< " $2 - ${KIWIRECORDER_FREQ_OFFSET}" )
+    local receiver_rx_freq_khz=$2
     local my_receiver_password=$3
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
@@ -1490,7 +1500,10 @@ function spawn_recording_daemon() {
             rm -f rtl_test.log
             rtl_daemon ${device_id} ${receiver_rx_freq_mhz}  >> recording.log 2>&1 &
         else
-            kiwi_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} > recording.log 2>&1 &
+	    local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
+	    local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
+	    [[ $verbosity -ge 0 ]] && [[ ${kiwi_offset} -gt 0 ]] && echo "$(date): spawn_recording_daemon() tuning Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
+            kiwi_recording_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} > recording.log 2>&1 &
         fi
     fi
     echo $! > recording.pid
@@ -1946,6 +1959,7 @@ function decoding_daemon()
                                                                                      (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
                                                                                      (1.0013 * (10 ^ -1) * (${wspr_band_freq_mhz} ^ 2)) - (3.7796 * (10 ^ -1) *  ${wspr_band_freq_mhz}     ) - (9.1509 * (10 ^ -1)))" )"
     local antenna_factor_adjust=$(get_af_db ${real_receiver_name} ${real_receiver_rx_band})
+    local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${real_receiver_name})
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
     local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
     local fft_adjust=$(bc -l <<< "${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}" )  ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
@@ -2036,7 +2050,7 @@ function decoding_daemon()
             wspr_decode_capture_time=${wspr_decode_capture_time:0:4}
             local wsprd_input_wav_filename=${wspr_decode_capture_date}_${wspr_decode_capture_time}.wav    ### wsprd prepends the date_time to each new decode in wspr_spots.txt
             local wspr_decode_capture_freq_hz=${wav_file_name#*_}
-            wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${KIWIRECORDER_FREQ_OFFSET} * 1000)" )
+            wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
             local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
             local wspr_decode_capture_band_center_mhz=$( printf "%2.6f\n" $(bc <<< "scale = 5; (${wspr_decode_capture_freq_hz}+1500)/1000000.0" ) )
             ### 
