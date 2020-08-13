@@ -40,6 +40,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### WD server: Force call signs and rx_id to upppercase and grids to UUNNll
                                     ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
 declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
+                                    ### Fix noise level calcs and graphs for transcoder-fed Kiwis
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -1958,6 +1959,10 @@ function decoding_daemon()
     local kiwi_amplitude_versus_frequency_correction="$(bc <<< "scale = 10; -1 * ( (2.2474 * (10 ^ -7) * (${wspr_band_freq_mhz} ^ 6)) - (2.1079 * (10 ^ -5) * (${wspr_band_freq_mhz} ^ 5)) + \
                                                                                      (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
                                                                                      (1.0013 * (10 ^ -1) * (${wspr_band_freq_mhz} ^ 2)) - (3.7796 * (10 ^ -1) *  ${wspr_band_freq_mhz}     ) - (9.1509 * (10 ^ -1)))" )"
+    if [[ $(bc <<< "${wspr_band_freq_mhz} > 30") -eq 1 ]]; then
+        ### Don't adjust Kiwi's af when fed by transverter
+        kiwi_amplitude_versus_frequency_correction=0
+    fi
     local antenna_factor_adjust=$(get_af_db ${real_receiver_name} ${real_receiver_rx_band})
     local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${real_receiver_name})
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
