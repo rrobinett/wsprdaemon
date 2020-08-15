@@ -4342,7 +4342,7 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() uploading job for '${uploading_root_dir}' with pid ${uploading_pid} is already running"
-            return
+            return 0
         else
             [[ $verbosity -ge 1 ]] && echo "$(date): WARNING: spawn_upload_server_to_wsprdaemon_daemon() found a stale file '${uploading_pid_file_path}' with pid ${uploading_pid}, so deleting it"
             rm -f ${uploading_pid_file_path}
@@ -4351,6 +4351,7 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
     wsprdaemon_tgz_service_daemon ${uploading_root_dir} > ${uploading_log_file_path} 2>&1 &
     echo $! > ${uploading_pid_file_path}
     [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
+    return 0
 }
 
 function kill_upload_server_to_wsprdaemon_daemon()
