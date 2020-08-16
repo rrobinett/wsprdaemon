@@ -41,6 +41,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
 declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
                                     ### Fix noise level calcs and graphs for transcoder-fed Kiwis
+                                    ### Fix mirror deaemon to handle 50,000+ cached files
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -3776,7 +3777,7 @@ function upload_to_wsprdaemon_daemon_status()
             if [[ $verbosity -eq 0 ]] ; then
                 echo "Wsprdaemon ${data_type} uploading daemon with pid '${uploading_pid}' is running"
             else
-                echo "$(date): upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
+                echo "$(date): upload_to_wsprdaemon_daemon_status() '${uploading_pid_file_path}' with pid ${uploading_pid} id running"
             fi
         else
             if [[ $verbosity -eq 0 ]] ; then
@@ -4283,6 +4284,7 @@ else
 fi
 declare UPLOAD_TO_MIRROR_QUEUE_DIR          ## setup when upload daemon is spawned
 declare UPLOAD_TO_MIRROR_SERVER_SECS=10       ## How often to attempt to upload tar files to log1.wsprdaemon.org
+declare UPLOAD_MAX_FILE_COUNT=1000          ## curl will upload only a ?? number of files, so limit the number of files given to curl
 
 ### Copies the valid tar files found by the upload_server_daemon() to logs1.wsprdaemon.org
 function upload_to_mirror_daemon() {
@@ -4299,16 +4301,17 @@ function upload_to_mirror_daemon() {
     while true; do
         [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() looking for files to upload"
         shopt -s nullglob
-        local files_to_upload=( * )
-        if [[ ${#files_to_upload[@]} -gt 0 ]]; then
-            local upload_file_list=${files_to_upload[@]}
-            upload_file_list=${upload_file_list// /,}     ### curl wants a comma-seperated list of files
-            [[ $verbosity -ge 2 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of files '${upload_file_list}'"
-            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${upload_file_list}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
+        local files_queued_for_upload_list=( * )
+        if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
+            local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of ${#curl_upload_file_list[@]}  files"
+            local curl_upload_file_string=${curl_upload_file_list[@]}
+            curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
+            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful, so delete ${#files_to_upload[@]} local files: ${upload_file_list}"
-                rm ${files_to_upload[@]}
+                [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer was successful, so delete ${#curl_upload_file_list[@]} local files"
+                rm ${curl_upload_file_list[@]}
             else
                 [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() curl xfer failed => ${ret_code}"
             fi
@@ -4413,20 +4416,20 @@ function upload_server_to_wsprdaemon_daemon_status()
         local mirror_pid=$(cat ${mirror_pid_file_path})
         if ps ${mirror_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon mirror daemon with pid '${mirror_pid}' is running"
+                echo "Mirror daemon with pid '${mirror_pid}' is running"
             else
-                echo "$(date): upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${mirror_pid} id running"
+                echo "$(date): upload_server_to_wsprdaemon_daemon_status(): mirror service daemon file '${mirror_pid_file_path}' with pid ${mirror_pid} id running"
             fi
         else
             if [[ $verbosity -eq 0 ]] ; then
                 echo "Wsprdaemon mirror daemon pid file ${mirror_pid_file_path}' records pid '${mirror_pid}', but that pid is not running"
             else
-                echo "$(date): upload_to_wsprdaemon_daemon_status() found a stale pid file '${mirror_pid_file_path}'with pid ${mirror_pid}"
+                echo "$(date): upload_server_to_wsprdaemon_daemon_status(): found a stale pid file '${mirror_pid_file_path}'with pid ${mirror_pid}"
             fi
         fi
     else
         if [[ $verbosity -ge 2 ]] ; then
-            echo "$(date): upload_to_wsprdaemon_daemon_status() found no mirror.pid file ${mirror_pid_file_path}"
+            echo "$(date): upload_to_wsprdaemon_daemon_status(): found no mirror.pid file ${mirror_pid_file_path}"
         fi
     fi
     local uploading_pid_file_path=${1}/uploads.pid
@@ -4434,23 +4437,23 @@ function upload_server_to_wsprdaemon_daemon_status()
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon uploading daemon with pid '${uploading_pid}' is running"
+                echo "Uploading daemon with pid '${uploading_pid}' is running"
             else
-                echo "$(date): upload_to_wsprdaemon_daemon_status() upload_to_wsprdaemon_daemon() with pid ${uploading_pid} id running"
+                echo "$(date): upload_server_to_wsprdaemon_daemon_status(): upload service daemon file '${uploading_pid_file_path}' with pid ${uploading_pid} id running"
             fi
         else
             if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprdaemon uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
+                echo "Uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
             else
-                echo "$(date): upload_to_wsprdaemon_daemon_status() found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
+                echo "$(date): upload_server_to_wsprdaemon_daemon_status(): found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
             fi
             return 1
         fi
     else
         if [[ $verbosity -eq 0 ]] ; then
-            echo "Wsprdaemon uploading daemon found no pid file '${uploading_pid_file_path}'"
+            echo "Uploading daemon found no pid file '${uploading_pid_file_path}'"
         else
-            echo "$(date): upload_to_wsprdaemon_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
+            echo "$(date): upload_server_to_wsprdaemon_daemon_status(): found no uploading.pid file ${uploading_pid_file_path}"
         fi
     fi
     return 0
