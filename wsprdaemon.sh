@@ -2110,7 +2110,7 @@ function decoding_daemon()
 
                 ### Since they are so computationally and storage space cheap, always calculate a C2 FFT noise level
                 local c2_filename="000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
-                /usr/bin/python3 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
+                /usr/bin/python2 ${C2_FFT_CMD} ${c2_filename}  > c2_FFT.txt 
                 local c2_FFT_nl=$(cat c2_FFT.txt)
                 local c2_FFT_nl_cal=$(bc <<< "scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};(var * 100)/100")
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): c2_FFT_nl_cal=${c2_FFT_nl_cal} which is calculated from 'local c2_FFT_nl_cal=\$(bc <<< 'scale=2;var=${c2_FFT_nl};var+=${c2_FFT_nl_adjust};var/=1;var')"
