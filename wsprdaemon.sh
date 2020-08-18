@@ -4306,7 +4306,7 @@ function upload_to_mirror_daemon() {
         local files_queued_for_upload_list=( * )
         if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of ${#curl_upload_file_list[@]}  files"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${upload_user}:${upload_password} ftp://${upload_url}'"
             local curl_upload_file_string=${curl_upload_file_list[@]}
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
