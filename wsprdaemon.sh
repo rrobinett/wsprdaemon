@@ -42,6 +42,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
                                     ### Fix noise level calcs and graphs for transcoder-fed Kiwis
                                     ### Fix mirror deaemon to handle 50,000+ cached files
+                                    ### Cleaup handling of WD spots and noise file mirroring to logs1...
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -4277,11 +4278,7 @@ function wsprdaemon_tgz_service_daemon() {
     done
 }
 
-if [[ ${HOSTNAME} == "wsprdaemon" ]]; then
-    declare UPLOAD_TO_MIRROR_SERVER_ENALBED="yes"
-else
-    declare UPLOAD_TO_MIRROR_SERVER_ENALBED="no"
-fi
+declare UPLOAD_TO_MIRROR_SERVER_URL="${UPLOAD_TO_MIRROR_SERVER_URL-}"
 declare UPLOAD_TO_MIRROR_QUEUE_DIR          ## setup when upload daemon is spawned
 declare UPLOAD_TO_MIRROR_SERVER_SECS=10       ## How often to attempt to upload tar files to log1.wsprdaemon.org
 declare UPLOAD_MAX_FILE_COUNT=1000          ## curl will upload only a ?? number of files, so limit the number of files given to curl
@@ -4289,9 +4286,14 @@ declare UPLOAD_MAX_FILE_COUNT=1000          ## curl will upload only a ?? number
 ### Copies the valid tar files found by the upload_server_daemon() to logs1.wsprdaemon.org
 function upload_to_mirror_daemon() {
     local mirror_files_path=${UPLOAD_TO_MIRROR_QUEUE_DIR}
-    local upload_user=uploader
-    local upload_password=xahFie6g
-    local upload_url=logs1.wsprdaemon.org
+    local parsed_server_url_list=( ${UPLOAD_TO_MIRROR_SERVER_URL//,/ } )
+    if [[ ${#parsed_server_url_list[@]} -ne 3 ]]; then
+        [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon(): ERROR: invalid configuration variable UPLOAD_TO_MIRROR_SERVER_URL  = '${UPLOAD_TO_MIRROR_SERVER_URL}'"
+        return 1
+    fi
+    local upload_url=${parsed_server_url_list[0]}
+    local upload_user=${parsed_server_url_list[1]}
+    local upload_password=${parsed_server_url_list[2]}
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     mkdir -p ${mirror_files_path}
@@ -4304,7 +4306,7 @@ function upload_to_mirror_daemon() {
         local files_queued_for_upload_list=( * )
         if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of ${#curl_upload_file_list[@]}  files"
+            [[ $verbosity -ge 1 ]] && echo "$(date): upload_to_mirror_daemon() starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${upload_user}:${upload_password} ftp://${upload_url}'"
             local curl_upload_file_string=${curl_upload_file_list[@]}
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
@@ -4324,7 +4326,7 @@ function upload_to_mirror_daemon() {
 function queue_files_for_upload_to_wd1() {
     local files="$@"
 
-    if [[ ${UPLOAD_TO_MIRROR_SERVER_ENALBED} == "yes" ]]; then
+    if [[ -n "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
         if [[ $verbosity -ge 1 ]]; then
             local files_path_list=(${files})
             local files_name_list=(${files_path_list[@]##*/})
@@ -4336,7 +4338,8 @@ function queue_files_for_upload_to_wd1() {
     fi
 }
 
-### Spawns 2 daemons:  one to upload parsed new wsprnet.org spots and the second to upload a copy of wsprdaemon_spot and ._noise files carried in tgz files delivered to this machine by WD sites
+### Spawns 2 daemons:  one to process the WD extended spots and noise delivered to the 'noisegrahs' user in .tgz files
+###                    a second (optional) daemon mirrors those tgz files to a backup WD server
 function spawn_upload_server_to_wsprdaemon_daemon() {
     local uploading_root_dir=$1
     mkdir -p ${uploading_root_dir}
@@ -4345,6 +4348,9 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
     local mirror_log_file_path=${uploading_root_dir}/mirror.log
     local mirror_pid_file_path=${uploading_root_dir}/mirror.pid  
     UPLOAD_TO_MIRROR_QUEUE_DIR=${uploading_root_dir}/mirror_queue.d
+    if [[ ! -d ${UPLOAD_TO_MIRROR_QUEUE_DIR} ]]; then
+        mkdir -p ${UPLOAD_TO_MIRROR_QUEUE_DIR}
+    fi
 
     [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_server_to_wsprdaemon_daemon() start"
     setup_systemctl_deamon "-u a"  "-u z"
@@ -4356,7 +4362,7 @@ function spawn_upload_server_to_wsprdaemon_daemon() {
         fi
         rm ${mirror_pid_file_path}
     fi
-    if [[ ${UPLOAD_TO_MIRROR_SERVER_ENALBED} == "yes" ]]; then
+    if [[ -n "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
         upload_to_mirror_daemon  > ${mirror_log_file_path} 2>&1 &
         local mirror_pid=$!
         echo ${mirror_pid}  > ${mirror_pid_file_path}
