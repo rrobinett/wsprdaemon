@@ -43,6 +43,7 @@ declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET define
                                     ### Fix noise level calcs and graphs for transcoder-fed Kiwis
                                     ### Fix mirror deaemon to handle 50,000+ cached files
                                     ### Cleaup handling of WD spots and noise file mirroring to logs1...
+                                    ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -4110,7 +4111,7 @@ function wsprdaemon_tgz_service_daemon() {
     shopt -s nullglob
     [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() starting in $PWD"
     while true; do
-        [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() waiting for *.tbz files"
+        [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() waiting for *.tbz files to appear in ${UPLOAD_FTP_PATH}"
         local -a tar_file_list
         while tar_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tar_file_list[@]} -eq 0 ]]; do
             [[ $verbosity -ge 3 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() waiting for *.tbz files"
@@ -4166,19 +4167,26 @@ function wsprdaemon_tgz_service_daemon() {
 
             ### Record the spot files
             local spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  )
+            local raw_spot_file_list_count=${#spot_file_list[@]}
             if [[ ${#spot_file_list[@]} -eq 0 ]]; then
                 [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found no spot files in any of the tar files.  Checking for noise files in $(ls -d wsprdaemon.d/*) ."
             else
                 ### There are spot files 
+                [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found ${raw_spot_file_list_count} spot files.  Flushing zero length spot files"
 
                 ### Remove zero length spot files (that is common, since they are used by the decoding daemon to signal the posting daemon that decoding has been completed when no spots are decoded
                 local zero_length_spot_file_list=( $(find wsprdaemon.d/spots.d -name '*wspr_spots.txt' -size 0) )
-                if [[ ${#zero_length_spot_file_list[@]} -gt 0 ]]; then
-                    local raw_spot_file_list_count=${#spot_file_list[@]}
-                    rm ${zero_length_spot_file_list[@]}
-                    spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  )
-                    [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found ${raw_spot_file_list_count} spot files, of which ${#zero_length_spot_file_list[@]} were zero length spot files.  After deleting those zero length files there are now ${#spot_file_list[@]} files with spots in them."
-                fi
+                local zero_length_spot_file_list_count=${#zero_length_spot_file_list[@]}
+                [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found ${#zero_length_spot_file_list[@]} zero length spot files"
+                local rm_file_list=()
+                while rm_file_list=( ${zero_length_spot_file_list[@]:0:10000} ) && [[ ${#rm_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
+                    [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() deleting batch of the first ${#rm_file_list[@]} of the remaining ${#zero_length_spot_file_list[@]}  zero length spot files"
+                    rm ${rm_file_list[@]}
+                    zero_length_spot_file_list=( ${zero_length_spot_file_list[@]:10000} )          ### Chop off the 10000 files we just rm'd
+                done
+                [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() finished flushing zero length spot files.  Reload list of remaining non-zero length files"
+                spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  )
+                [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found ${raw_spot_file_list_count} spot files, of which ${zero_length_spot_file_list_count} were zero length spot files.  After deleting those zero length files there are now ${#spot_file_list[@]} files with spots in them."
 
                 ###
                 if [[ ${#spot_file_list[@]} -eq 0 ]]; then
@@ -4253,24 +4261,36 @@ function wsprdaemon_tgz_service_daemon() {
             else
                 [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() found ${#noise_file_list[@]} noise files"
                 local TS_NOISE_CSV_FILE=ts_noise.csv
-                awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
-                if [[ $verbosity -ge 1 ]]; then
-                    [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() awk created ${TS_NOISE_CSV_FILE} which contains $( cat ${TS_NOISE_CSV_FILE} | wc -l ) noise lines"
-                    local UPLOAD_NOISE_SKIPPED_FILE=ts_noise_skipped.txt
-                    awk 'NF != 15 {printf "%s: %s\n", FILENAME, $0}' ${noise_file_list[@]} > ${UPLOAD_NOISE_SKIPPED_FILE}
-                    if [[ -s ${UPLOAD_NOISE_SKIPPED_FILE} ]]; then
-                        echo "$(date): wsprdaemon_tgz_service_daemon() awk found $(cat ${UPLOAD_NOISE_SKIPPED_FILE} | wc -l) invalid noise lines which are saved in ${UPLOAD_NOISE_SKIPPED_FILE}:"
-                        head -n 10 ${UPLOAD_NOISE_SKIPPED_FILE}
+
+                local csv_files_left_list=(${noise_file_list[@]})
+                local csv_file_list=( )
+                CSV_MAX_FILES=5000
+                local csv_files_left_list=(${noise_file_list[@]})
+                local csv_file_list=( )
+                while csv_file_list=( ${csv_files_left_list[@]::${CSV_MAX_FILES}} ) && [[ ${#csv_file_list[@]} -gt 0 ]] ; do
+                    [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() processing batch of ${#csv_file_list[@]} of the remaining ${#csv_files_left_list[@]} noise_files into ${TS_NOISE_CSV_FILE}"
+                    awk -f ${TS_NOISE_AWK_SCRIPT} ${csv_file_list[@]} > ${TS_NOISE_CSV_FILE}
+                    if [[ $verbosity -ge 1 ]]; then
+                        [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() awk created ${TS_NOISE_CSV_FILE} which contains $( cat ${TS_NOISE_CSV_FILE} | wc -l ) noise lines"
+                        local UPLOAD_NOISE_SKIPPED_FILE=ts_noise_skipped.txt
+                        awk 'NF != 15 {printf "%s: %s\n", FILENAME, $0}' ${csv_file_list[@]} > ${UPLOAD_NOISE_SKIPPED_FILE}
+                        if [[ -s ${UPLOAD_NOISE_SKIPPED_FILE} ]]; then
+                            echo "$(date): wsprdaemon_tgz_service_daemon() awk found $(cat ${UPLOAD_NOISE_SKIPPED_FILE} | wc -l) invalid noise lines which are saved in ${UPLOAD_NOISE_SKIPPED_FILE}:"
+                            head -n 10 ${UPLOAD_NOISE_SKIPPED_FILE}
+                        fi
                     fi
-                fi
-                python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
-                local ret_code=$?
-                if [[ ${ret_code} -eq 0 ]]; then
-                    [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() recorded $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to the wsprdaemon_noise table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
-                    rm ${noise_file_list[@]}
-                else
-                    [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() python failed to record $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to  the wsprdaemon_noise table from \${noise_file_list[@]}"
-                fi
+                    python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
+                    local ret_code=$?
+                    if [[ ${ret_code} -eq 0 ]]; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() recorded $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to the wsprdaemon_noise table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
+                        rm ${csv_file_list[@]}
+                    else
+                        [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() python failed to record $( cat ${TS_NOISE_CSV_FILE} | wc -l) noise lines to  the wsprdaemon_noise table from \${noise_file_list[@]}"
+                    fi
+                    csv_files_left_list=( ${csv_files_left_list[@]:${CSV_MAX_FILES}} )            ### Chops off the first 1000 elements of the list 
+                    [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() finished with csv batch"
+                done
+                [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() finished with all noise files"
             fi
             [[ $verbosity -ge 2 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() deleting the ${#valid_tbz_list[@]} valid tar files"
             rm ${valid_tbz_list[@]} 
