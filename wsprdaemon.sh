@@ -4230,7 +4230,7 @@ function wsprdaemon_tgz_service_daemon() {
                         cat awk.out | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_SPOTS_CSV_FILE}
 
                     ### 9/5/20:  RR include receiver name in bad spots lines
-                    awk 'NF != 32 || $7 != "none" || $8 == "none" {\
+                    awk 'NF != 32 || $7 == "none" || $8 == "none" {\
                         $7=toupper($7); \
                         $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); \
                         $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); \
