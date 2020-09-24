@@ -39,11 +39,13 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.9h             ### Install at beta sites
                                     ### WD server: Force call signs and rx_id to upppercase and grids to UUNNll
                                     ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
-declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
+#declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
                                     ### Fix noise level calcs and graphs for transcoder-fed Kiwis
                                     ### Fix mirror deaemon to handle 50,000+ cached files
                                     ### Cleaup handling of WD spots and noise file mirroring to logs1...
                                     ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
+declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
+                                    ### Execute the astral python sunrise/sunset calculation script with python3
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -526,7 +528,7 @@ d = date.today()
 sun = l.sun(local=True, date=d)
 print( str(sun['sunrise'])[11:16] + " " + str(sun['sunset'])[11:16] )
 EOF
-    local sun_times=$(python ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone})
+    local sun_times=$(python3 ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone})
     echo "${sun_times}"
 }
 
@@ -836,8 +838,34 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
-    local wsjtx_version=$(awk '/wsjtx /{print $3}' <<< "${dpkg_list}")
-    if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsjtx_version}" ]] || [[ ${wsjtx_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
+    ### WD uses the 'wsprd' binary from the WSJT-x package.  The following section insures that one binary we use from that package is installed
+    ### 9/16/20 RR - WSJT-x doesn't yet install on Ubuntu 20.04, so special case that.
+    ### 'wsprd' doesn't report its version number (e.g. with wsprd -V), so on most systems we learn the version from 'dpkt -l'.
+    ### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
+    ### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
+    ### Perhaps I will save the version number of wsprd and use this process on all OSs
+
+    ### If wsprd is installed, try to get its version number
+    declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
+    local wsprd_version=""
+    if [[ -x ${WSPRD_VERSION_CMD} ]]; then
+        wsprd_version=$( ${WSPRD_VERSION_CMD} )
+    else
+        wsprd_version=$(awk '/wsjtx /{print $3}' <<< "${dpkg_list}")
+        if [[ -n "${wsprd_version}" ]] && [[ -x ${WSPRD_CMD} ]] && [[ ! -x ${WSPRD_VERSION_CMD} ]]; then
+            sudo sh -c "echo 'echo ${wsprd_version}' > ${WSPRD_VERSION_CMD}"
+            sudo chmod +x ${WSPRD_VERSION_CMD}
+        fi
+    fi
+
+    ### Now install wsprd if it doesn't exist or if it is the wrong version
+    if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsprd_version}" ]] || [[ ${wsprd_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
+        local os_name=""
+        if [[ -f /etc/os-release ]]; then
+            ### See if we are running on Ubuntu 20.04
+            ### can't use 'source /etc/os-release' since the variable names in that conflict with variables in WD
+            os_name=$(awk -F = '/^VERSION=/{print $2}' /etc/os-release | sed 's/"//g')
+        fi
         local cpu_arch=$(uname -m)
         local wsjtx_pkg=""
         case ${cpu_arch} in
@@ -853,19 +881,30 @@ function check_for_needed_utilities()
                 exit 1
                 ;;
         esac
-       [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt install libgfortran3 libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 libqt5sql5-sqlite libfftw3-single3  --assume-yes
-        wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}
-        if [[ ! -f ${wsjtx_pkg} ]] ; then
+        ### Download WSJT-x and extract its files and copy wsprd to /usr/bin/
+        local wsjtx_dpkg_file=${WSPRDAEMON_TMP_DIR}/${wsjtx_pkg}
+        wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg} -O ${wsjtx_dpkg_file}
+        if [[ ! -f ${wsjtx_dpkg_file} ]] ; then
             echo "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
             exit 1
         fi
-        sudo ${DPKG_CMD} -i ${wsjtx_pkg}
+        local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt
+        mkdir -p ${dpkg_tmp_dir}
+        dpkg-deb -x ${wsjtx_dpkg_file} ${dpkg_tmp_dir}
         ret_code=$?
-        if [[ ${ret_code} -ne 0 ]] || [[ ! -x ${WSPRD_CMD} ]]; then
-            echo "ERROR: failed to install 'wsprd'.  ${DPKG_CMD} -i ${wsjtx_pkg} => ${ret_code} and/or ! -x ${WSPRD_CMD}"
+        if [[ ${ret_code} -ne 0 ]] ; then
+            echo "ERROR: on ${os_name} failed to extract files from package file ${wsjtx_pkg_file}"
             exit 1
         fi
+        local dpkg_wsprd_file=${dpkg_tmp_dir}/${WSPRD_CMD}
+        if [[ ! -x ${dpkg_wsprd_file} ]]; then
+            echo "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
+            exit 1
+        fi
+        sudo cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
+        sudo sh -c "echo 'echo ${WSJTX_REQUIRED_VERSION}' > ${WSPRD_VERSION_CMD}"
+        sudo chmod +x ${WSPRD_VERSION_CMD}
+        echo "Installed  ${WSPRD_CMD} version ${wsprd_version}"
     fi
 
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
@@ -930,13 +969,13 @@ EOF
             fi
         fi
     fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
-    if ! python -c "import astral" 2> /dev/null ; then
-        if ! sudo apt-get install python-astral -y ; then
-            if !  pip install astral ; then
-                if ! sudo apt-get install python-pip -y ; then
-                    echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip' needed to install the Python 'astral' library"
+    if ! python3 -c "import astral" 2> /dev/null ; then
+        if ! sudo apt-get install python3-astral -y ; then
+            if !  pip3 install astral ; then
+                if ! sudo apt-get install python-pip3 -y ; then
+                    echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip3' needed to install the Python 'astral' library"
                 else
-                    if !  pip install astral ; then
+                    if !  pip3 install astral ; then
                         echo "$(date) check_for_needed_utilities() ERROR: pip can't install the Python 'astral' library used to calculate sunup/sunset times"
                     fi
                 fi
@@ -1303,7 +1342,7 @@ function kiwi_recording_daemon()
         local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
         check_for_kiwirecorder_cmd
         ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-        python -u ${KIWI_RECORD_COMMAND} \
+        python3 -u ${KIWI_RECORD_COMMAND} \
             --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
             --OV --user=${recording_client_name}  --password=${my_receiver_password} \
             --agc-gain=60 --quiet --no_compression --modulation=usb  --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=120 > kiwi_recorder.log 2>&1 &
