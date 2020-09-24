@@ -44,7 +44,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Fix mirror deaemon to handle 50,000+ cached files
                                     ### Cleaup handling of WD spots and noise file mirroring to logs1...
                                     ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
-declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
+#declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
 declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
                                     ### TODO: Flush antique ~/signal_level log files
