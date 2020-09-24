@@ -44,6 +44,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Fix mirror deaemon to handle 50,000+ cached files
                                     ### Cleaup handling of WD spots and noise file mirroring to logs1...
                                     ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
+declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
 declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
                                     ### TODO: Flush antique ~/signal_level log files
@@ -4133,7 +4134,7 @@ EOF
 #     
 #  local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
 #                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
-declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 
 ### This deamon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
@@ -4257,15 +4258,26 @@ function wsprdaemon_tgz_service_daemon() {
                     local TS_SPOTS_CSV_FILE=./ts_spots.csv
                     local TS_BAD_SPOTS_CSV_FILE=./ts_bad_spots.csv
                     ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
+                    ### 9/5/20:  RR added receiver name to end of each line.  It is extracted from the path of the wsprdaemon_spots.txt file
                     awk 'NF == 32 && $7 != "none" && $8 != "none" {\
                         $7=toupper($7); \
-                        $8 = ( toupper(substr($8, 0, 2)) tolower(substr($8, 3, 4))); \
-                        $22 = ( toupper(substr($22, 0, 2)) tolower(substr($22, 3, 4))); \
+                        $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); \
+                        $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); \
                         $23=toupper($23); \
-                        print} ' ${spot_file_list[@]} \
-                        | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_SPOTS_CSV_FILE}
-                    awk 'NF != 32 || $7 == "none" || $8 == "none" {$7=toupper($7); $22 = ( toupper(substr($22, 0, 2)) tolower(substr($22, 3, 4))); $23=toupper($23); print} ' ${spot_file_list[@]} \
-                        | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_BAD_SPOTS_CSV_FILE}
+                        n = split(FILENAME, a, "/"); \
+                        printf "%s %s\n", $0, a[n-2]} ' ${spot_file_list[@]}  > awk.out
+                        cat awk.out | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_SPOTS_CSV_FILE}
+
+                    ### 9/5/20:  RR include receiver name in bad spots lines
+                    awk 'NF != 32 || $7 == "none" || $8 == "none" {\
+                        $7=toupper($7); \
+                        $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); \
+                        $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); \
+                        $23=toupper($23); \
+                        n = split(FILENAME, a, "/"); \
+                        printf "%s %s\n", $0, a[n-2]} ' ${spot_file_list[@]}  > awk_bad.out
+                        cat awk_bad.out | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_BAD_SPOTS_CSV_FILE}
+
                     if [[ $verbosity -ge 1 ]] && [[ -s ${TS_BAD_SPOTS_CSV_FILE} ]] ; then
                         local bad_spots_count=$(cat ${TS_BAD_SPOTS_CSV_FILE} | wc -l)
                         echo -e "$(date): wsprdaemon_tgz_service_daemon() found ${bad_spots_count} bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_CSV_FILE})"

@@ -1,4 +1,8 @@
-# wsprdaemon (WD) Latest version is v2.9h
+# wsprdaemon (WD) Latest version is v2.9j
+
+2.9j WD Server fixes:  to get correct format of rx/tx GRIDs and add rx name to spot records
+
+2.9i Add supplort for offset frequency assicated with VHF/UHF downconvertors
 
 2.9h Fixes a number of installation and error handling problems.  Unless you are having problems with your installation, I don't think exisiting installatons need to upgrade to this build
 
