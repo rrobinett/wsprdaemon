@@ -45,8 +45,9 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Cleaup handling of WD spots and noise file mirroring to logs1...
                                     ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
 #declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
-declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
+#declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
+declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -185,6 +186,7 @@ declare -r GREP_CMD="/bin/grep"
 
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
+declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
@@ -192,8 +194,26 @@ function check_for_kiwirecorder_cmd() {
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
         get_kiwirecorder="yes"
     else
-        ## Check to see if kwr supports overload reporting
-        if ! ${KIWI_RECORD_COMMAND} --help | ${GREP_CMD} "ADC OV" > /dev/null 2>&1 ; then
+        ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
+        if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${KIWI_RECORD_TMP_LOG_FILE} ; then
+            echo "Currently installed version of kiwirecorder.py fails to run."
+            if ! ${GREP_CMD} "No module named 'numpy'" ${KIWI_RECORD_TMP_LOG_FILE}; then
+                echo "Found unknown error in ${KIWI_RECORD_TMP_LOG_FILE} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+                exit 1
+            fi
+            if ! pip3 install numpy; then 
+                echo "Installation command 'pip3 install numpy' failed"
+                exit 1
+            fi
+            echo "Installation command 'pip3 install numpy' was successful"
+            if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${KIWI_RECORD_TMP_LOG_FILE} ; then
+                echo "urrently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                exit 1
+            fi
+            exit 0
+        fi
+        ### kwirecorder.py ran successfully
+        if ! ${GREP_CMD} "ADC OV" ${KIWI_RECORD_TMP_LOG_FILE} > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
@@ -201,7 +221,7 @@ function check_for_kiwirecorder_cmd() {
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
-        cd /home/wsprdaemon/wsprdaemon
+        cd ${WSPRDAEMON_ROOT_DIR}
         echo "Installing kiwirecorder in $PWD"
         if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq git  ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
@@ -218,6 +238,8 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt --yes install python-numpy
         fi
+        echo "Successfully installed kwirecorder.py"
+        cd - >& /dev/null
     fi
 }
 if ! check_for_kiwirecorder_cmd ; then
@@ -773,9 +795,13 @@ function ask_user_to_install_sw() {
     fi
 }
 
-declare WSPRD_CMD=/usr/bin/wsprd
-declare WSPRD_CMD_FLAGS="-C 500 -o 4 -d"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.2.2}"
+### To avoid conflicts with wsprd from WSJT-x which may be also installed on this PC, run a WD copy of wsprd
+declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
+mkdir -p ${WSPRD_BIN_DIR}
+declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
+declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
+declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0}"
 
 function check_for_needed_utilities()
 {
@@ -897,15 +923,15 @@ function check_for_needed_utilities()
             echo "ERROR: on ${os_name} failed to extract files from package file ${wsjtx_pkg_file}"
             exit 1
         fi
-        local dpkg_wsprd_file=${dpkg_tmp_dir}/${WSPRD_CMD}
+        local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
         if [[ ! -x ${dpkg_wsprd_file} ]]; then
             echo "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
             exit 1
         fi
-        sudo cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
-        sudo sh -c "echo 'echo ${WSJTX_REQUIRED_VERSION}' > ${WSPRD_VERSION_CMD}"
-        sudo chmod +x ${WSPRD_VERSION_CMD}
-        echo "Installed  ${WSPRD_CMD} version ${wsprd_version}"
+        cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
+        echo "echo ${WSJTX_REQUIRED_VERSION}" > ${WSPRD_VERSION_CMD}
+        chmod +x ${WSPRD_VERSION_CMD}
+        echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
 
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
@@ -1846,7 +1872,7 @@ declare C2_FFT_CMD=${WSPRDAEMON_TMP_DIR}/c2_noise.py
 
 function decode_create_c2_fft_cmd() {
     cat > ${C2_FFT_CMD} <<EOF
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Filename: c2_noise.py
 # Program to extract the noise level from the 'wsprd -c' C2 format file
@@ -1890,7 +1916,7 @@ EOF
 
 function decode_create_hanning_window_cmd() {
     cat > ${FFT_WINDOW_CMD} <<EOF
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Filename: wav_window_v1.py
 # January  2020  Gwyn Griffiths
@@ -4033,7 +4059,7 @@ declare UPLOAD_BATCH_PYTHON_CMD=${UPLOADS_TMP_ROOT_DIR}/ts_upload_batch.py
 function create_spots_batch_upload_python() {
     cat > ${UPLOAD_BATCH_PYTHON_CMD} <<EOF
 # -*- coding: utf-8 -*-
-#!/usr/bin/python
+#!/usr/bin/python3
 # March-May  2020  Gwyn Griffiths
 # ts_batch_upload.py   a program to read in a spots file scraped from wsprnet.org by scraper.sh and upload to a TimescaleDB
 # Version 1.2 May 2020 batch upload from a parsed file. Takes about 1.7s compared with 124s for line by line
@@ -5829,7 +5855,7 @@ function create_noise_python_script() {
     source ${WSPRDAEMON_CONFIG_FILE}      ### To read NOISE_GRAPHS_* parameters, if they are defined
 
     cat > ${NOISE_PLOT_CMD} << EOF
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Filename: noise_plot.py
 # April-May  2019  Gwyn Griffiths G3ZIL
