@@ -874,6 +874,16 @@ function check_for_needed_utilities()
     ### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
     ### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
     ### Perhaps I will save the version number of wsprd and use this process on all OSs
+    
+    if !  [[ ${dpkg_list} =~ " libgfortran5:" ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install libgfortran5 --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'libgfortran5' which is needed to run wsprd V2.3.xxxx"
+            exit 1
+        fi
+    fi
 
     ### If wsprd is installed, try to get its version number
     declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
