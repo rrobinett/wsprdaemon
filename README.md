@@ -1,6 +1,6 @@
 # wsprdaemon (WD) Latest version is v2.10a
 
-2.10b Attempts to get installation on Ubuntu 20.04 servers.
+2.10b Attempts to get installation working on Ubuntu 20.04 servers.
 Also, installs the new 'wsprd' decoder from WSJT-x V2.3.0. I have been told this new wsprd supports a newly introduced modulation mode being heavily used on 2200 and 630
 
 2.10a Support for installation on Ubuntu 20.04.  This required changes to the installation of the 'wsprd' decoding binary we take from WSJT-x.  Instead of installing the whole WSHT-x, we extract only the '/usr/bin/wsprd' program from the WSJT-x package file.  This greatly reduces the number of libraries and packages installed during installation.  However, I cannot easily test this new installation proceedure on other Linux distros, so I have incremented the minor version number to alert users to this change in installation operations.  So please contact me if you have problems running this new code.
