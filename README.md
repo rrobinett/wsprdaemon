@@ -1,4 +1,6 @@
-# wsprdaemon (WD) Latest version is v2.10a
+# wsprdaemon (WD) Latest version is v2.10d
+
+2.10d Check and loads if missing the libgfortran5 library used by the new version of wsprd
 
 2.10b Attempts to get installation working on Ubuntu 20.04 servers.
 Also, installs the new 'wsprd' decoder from WSJT-x V2.3.0. I have been told this new wsprd supports a newly introduced modulation mode being heavily used on 2200 and 630
