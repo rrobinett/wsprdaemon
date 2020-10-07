@@ -47,7 +47,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
 #declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
-declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
+#declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
+declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
@@ -186,7 +187,7 @@ declare -r GREP_CMD="/bin/grep"
 
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
-declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
+declare   KIWI_RECORD_TMP_LOG_FILE="./kiwiclient.log"
 
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
@@ -196,7 +197,8 @@ function check_for_kiwirecorder_cmd() {
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${KIWI_RECORD_TMP_LOG_FILE} ; then
-            echo "Currently installed version of kiwirecorder.py fails to run."
+            echo "Currently installed version of kiwirecorder.py fails to run:"
+            cat ${KIWI_RECORD_TMP_LOG_FILE}
             if ! ${GREP_CMD} "No module named 'numpy'" ${KIWI_RECORD_TMP_LOG_FILE}; then
                 echo "Found unknown error in ${KIWI_RECORD_TMP_LOG_FILE} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
@@ -242,6 +244,7 @@ function check_for_kiwirecorder_cmd() {
         cd - >& /dev/null
     fi
 }
+
 if ! check_for_kiwirecorder_cmd ; then
     echo "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
     exit 1
@@ -801,7 +804,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0-rc1}"
 
 function check_for_needed_utilities()
 {
