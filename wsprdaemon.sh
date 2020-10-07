@@ -48,7 +48,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
 #declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
-declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
+#declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
+declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
