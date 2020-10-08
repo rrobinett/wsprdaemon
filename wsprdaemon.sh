@@ -1,5 +1,26 @@
 #!/bin/bash
 
+###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
+
+###    Copyright (C) 2020  Robert S. Robinett
+###
+###    This program is free software: you can redistribute it and/or modify
+###    it under the terms of the GNU General Public License as published by
+###    the Free Software Foundation, either version 3 of the License, or
+###    (at your option) any later version.
+###
+###    This program is distributed in the hope that it will be useful,
+###    but WITHOUT ANY WARRANTY; without even the implied warranty of
+###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+###   GNU General Public License for more details.
+###
+###    You should have received a copy of the GNU General Public License
+###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
+This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
+This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details."
+
 ### This bash script logs WSPR spots from one or more Kiwi
 ### It differs from the autowspr mode built in to the Kiwi by:
 ### 1) Processing the uncompressed audio .wav file through the 'wsprd' utility program supplied as part of the WSJT-x distribution
@@ -49,10 +70,12 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Execute the astral python sunrise/sunset calculation script with python3
 #declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
 #declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
-declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
+#declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
+declare -r VERSION=2.10e            ### Add GNU Public license
+                                    ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
-                                    ### TODO: Split Python utilities in seperate files maintained by git
+                                    ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
@@ -69,7 +92,7 @@ declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 export TZ=UTC LC_TIME=POSIX          ### Ensures that log dates will be in UTC
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
-if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
+if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
@@ -2060,7 +2083,7 @@ function decoding_daemon()
     fi
     ## G3ZIL implementation of algorithm using the c2 file by Christoph Mayer
     local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
-    [[ ${verbosity} -ge 2 ]] && "$(date): decoding_daemon() c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
     decode_create_c2_fft_cmd
     decode_create_hanning_window_cmd
 
@@ -5994,7 +6017,23 @@ EOF
 ########## Section which implements the help menu ########################################################################################################
 ##########################################################################################################################################################
 function usage() {
-    echo "usage:                VERSION = ${VERSION}
+    echo "
+###    Copyright (C) 2020  Robert S. Robinett
+###
+###    This program is free software: you can redistribute it and/or modify
+###    it under the terms of the GNU General Public License as published by
+###    the Free Software Foundation, either version 3 of the License, or
+###    (at your option) any later version.
+###
+###    This program is distributed in the hope that it will be useful,
+###    but WITHOUT ANY WARRANTY; without even the implied warranty of
+###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+###   GNU General Public License for more details.
+###
+###    You should have received a copy of the GNU General Public License
+###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+usage:                VERSION = ${VERSION}
     ${WSPRDAEMON_ROOT_PATH} -[asz} Start,Show Status, or Stop the watchdog daemon
     
      This program reads the configuration file wsprdaemon.conf which defines a schedule to capture and post WSPR signals from one or more KiwiSDRs 
