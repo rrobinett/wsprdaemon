@@ -19,7 +19,10 @@
 
 echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
 This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
-This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details."
+This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
+wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
+Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WSJT-x
+"
 
 ### This bash script logs WSPR spots from one or more Kiwi
 ### It differs from the autowspr mode built in to the Kiwi by:
