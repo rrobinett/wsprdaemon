@@ -1,4 +1,6 @@
-# wsprdaemon (WD) Latest version is v2.10d
+# wsprdaemon (WD) Latest version is v2.10e
+
+2.10e  At the sugguestionof Joe Taylor, I have added the GNU GPL license.
 
 2.10d Check and loads if missing the libgfortran5 library used by the new version of wsprd
 
