@@ -74,7 +74,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
 #declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
 #declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
-declare -r VERSION=2.10e            ### Add GNU Public license
+#declare -r VERSION=2.10e            ### Add GNU Public license
+declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -833,9 +834,13 @@ declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0-rc1}"
 
+### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
+declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
+declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
+declare JT9_DECODE_EANABLED=${JT9_DECODE_EANABLED:-no}
+
 function check_for_needed_utilities()
 {
-
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     local dpkg_list=$(${DPKG_CMD} -l)
@@ -911,6 +916,15 @@ function check_for_needed_utilities()
             exit 1
         fi
     fi
+    if !  [[ ${dpkg_list} =~ " qt5-default:" ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install qt5-default --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'qt5-default' which is needed to run the 'jt9' copmmand in wsprd V2.3.xxxx"
+            exit 1
+        fi
+    fi
 
     ### If wsprd is installed, try to get its version number
     declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
@@ -972,6 +986,14 @@ function check_for_needed_utilities()
         echo "echo ${WSJTX_REQUIRED_VERSION}" > ${WSPRD_VERSION_CMD}
         chmod +x ${WSPRD_VERSION_CMD}
         echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
+
+        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/wsprd
+        if [[ ! -x ${dpkg_jt9_file} ]]; then
+            echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            exit 1
+        fi
+        cp -p ${dpkg_jt9_file} ${JT9_CMD} 
+        echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
 
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
@@ -2246,6 +2268,20 @@ function decoding_daemon()
                             echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(${GREP_CMD} '^[<>]' <<< "${spot_diffs}" | sort -n -k 5,5n)"
                         fi
                     fi
+                fi
+            fi
+
+            ### If enabled, execute jt9 to attempt to decode FSTW4-120 beacons
+            if [[ ${JT9_DECODE_ENABLED} == "yes" ]]; then
+                ${JT9_CMD} ${JT9_CMD_FLAGS} ${wsprd_input_wav_filename} >& jt9.log
+                local ret_code=$?
+                if [[ ${ret_code} -eq 0 ]]; then
+                    if [[ ${verbosity} -ge 1 ]]; then
+                        echo "$(date): decoding_daemon(): jt9 decode OK"
+                        cat jt9.log
+                    fi
+                else
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): error ${ret_code} reported by jt9 decoder"
                 fi
             fi
 
