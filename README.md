@@ -1,6 +1,6 @@
 # wsprdaemon (WD) Latest version is v2.10f
 
-2.10f Add FST4W-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file.  Disabled by default, but even when enabled DOES NOT UPOLOAD FSTW4 SPOTS!!!!
+2.10f Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file.  Disabled by default, but even when enabled DOES NOT UPOLOAD FSTW4 SPOTS!!!!
 
 2.10e  At the sugguestionof Joe Taylor, I have added the GNU GPL license.
 
