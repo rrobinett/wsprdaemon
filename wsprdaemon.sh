@@ -1,5 +1,29 @@
 #!/bin/bash
 
+###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
+
+###    Copyright (C) 2020  Robert S. Robinett
+###
+###    This program is free software: you can redistribute it and/or modify
+###    it under the terms of the GNU General Public License as published by
+###    the Free Software Foundation, either version 3 of the License, or
+###    (at your option) any later version.
+###
+###    This program is distributed in the hope that it will be useful,
+###    but WITHOUT ANY WARRANTY; without even the implied warranty of
+###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+###   GNU General Public License for more details.
+###
+###    You should have received a copy of the GNU General Public License
+###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
+This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
+This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
+wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
+Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WSJT-x
+"
+
 ### This bash script logs WSPR spots from one or more Kiwi
 ### It differs from the autowspr mode built in to the Kiwi by:
 ### 1) Processing the uncompressed audio .wav file through the 'wsprd' utility program supplied as part of the WSJT-x distribution
@@ -48,10 +72,14 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
                                     ### Execute the astral python sunrise/sunset calculation script with python3
 #declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
-declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
+#declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
+#declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
+#declare -r VERSION=2.10e            ### Add GNU Public license
+declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
+                                    ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
-                                    ### TODO: Split Python utilities in seperate files maintained by git
+                                    ### TODO: Split Python utilities in seperate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
@@ -68,7 +96,7 @@ declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 export TZ=UTC LC_TIME=POSIX          ### Ensures that log dates will be in UTC
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
-if [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
+if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
@@ -807,9 +835,13 @@ declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0-rc1}"
 
+### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
+declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
+declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
+declare JT9_DECODE_EANABLED=${JT9_DECODE_EANABLED:-no}
+
 function check_for_needed_utilities()
 {
-
     ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
     local apt_update_done="no"
     local dpkg_list=$(${DPKG_CMD} -l)
@@ -875,6 +907,25 @@ function check_for_needed_utilities()
     ### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
     ### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
     ### Perhaps I will save the version number of wsprd and use this process on all OSs
+    
+    if !  [[ ${dpkg_list} =~ " libgfortran5:" ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install libgfortran5 --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'libgfortran5' which is needed to run wsprd V2.3.xxxx"
+            exit 1
+        fi
+    fi
+    if !  [[ ${dpkg_list} =~ " qt5-default:" ]] ; then
+        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
+        sudo apt-get install qt5-default --assume-yes
+        local ret_code=$?
+        if [[ $ret_code -ne 0 ]]; then
+            echo "FATAL ERROR: Failed to install 'qt5-default' which is needed to run the 'jt9' copmmand in wsprd V2.3.xxxx"
+            exit 1
+        fi
+    fi
 
     ### If wsprd is installed, try to get its version number
     declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
@@ -936,6 +987,14 @@ function check_for_needed_utilities()
         echo "echo ${WSJTX_REQUIRED_VERSION}" > ${WSPRD_VERSION_CMD}
         chmod +x ${WSPRD_VERSION_CMD}
         echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
+
+        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/wsprd
+        if [[ ! -x ${dpkg_jt9_file} ]]; then
+            echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            exit 1
+        fi
+        cp -p ${dpkg_jt9_file} ${JT9_CMD} 
+        echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
 
     if ! python3 -c "import psycopg2" 2> /dev/null ; then
@@ -2050,7 +2109,7 @@ function decoding_daemon()
     fi
     ## G3ZIL implementation of algorithm using the c2 file by Christoph Mayer
     local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
-    [[ ${verbosity} -ge 2 ]] && "$(date): decoding_daemon() c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
+    [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon() c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
     decode_create_c2_fft_cmd
     decode_create_hanning_window_cmd
 
@@ -2210,6 +2269,20 @@ function decoding_daemon()
                             echo -e "$(date): decoding_daemon(): '>' new wsprd decoded ${new_count} spots, '<' old wsprd decoded ${old_count} spots\n$(${GREP_CMD} '^[<>]' <<< "${spot_diffs}" | sort -n -k 5,5n)"
                         fi
                     fi
+                fi
+            fi
+
+            ### If enabled, execute jt9 to attempt to decode FSTW4-120 beacons
+            if [[ ${JT9_DECODE_ENABLED} == "yes" ]]; then
+                ${JT9_CMD} ${JT9_CMD_FLAGS} ${wsprd_input_wav_filename} >& jt9.log
+                local ret_code=$?
+                if [[ ${ret_code} -eq 0 ]]; then
+                    if [[ ${verbosity} -ge 1 ]]; then
+                        echo "$(date): decoding_daemon(): jt9 decode OK"
+                        cat jt9.log
+                    fi
+                else
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): error ${ret_code} reported by jt9 decoder"
                 fi
             fi
 
@@ -5984,7 +6057,23 @@ EOF
 ########## Section which implements the help menu ########################################################################################################
 ##########################################################################################################################################################
 function usage() {
-    echo "usage:                VERSION = ${VERSION}
+    echo "
+###    Copyright (C) 2020  Robert S. Robinett
+###
+###    This program is free software: you can redistribute it and/or modify
+###    it under the terms of the GNU General Public License as published by
+###    the Free Software Foundation, either version 3 of the License, or
+###    (at your option) any later version.
+###
+###    This program is distributed in the hope that it will be useful,
+###    but WITHOUT ANY WARRANTY; without even the implied warranty of
+###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+###   GNU General Public License for more details.
+###
+###    You should have received a copy of the GNU General Public License
+###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+usage:                VERSION = ${VERSION}
     ${WSPRDAEMON_ROOT_PATH} -[asz} Start,Show Status, or Stop the watchdog daemon
     
      This program reads the configuration file wsprdaemon.conf which defines a schedule to capture and post WSPR signals from one or more KiwiSDRs 
