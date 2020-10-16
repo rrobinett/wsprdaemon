@@ -196,11 +196,12 @@ function check_for_kiwirecorder_cmd() {
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
-        if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${KIWI_RECORD_TMP_LOG_FILE} ; then
+        local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
+        if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             echo "Currently installed version of kiwirecorder.py fails to run:"
-            cat ${KIWI_RECORD_TMP_LOG_FILE}
-            if ! ${GREP_CMD} "No module named 'numpy'" ${KIWI_RECORD_TMP_LOG_FILE}; then
-                echo "Found unknown error in ${KIWI_RECORD_TMP_LOG_FILE} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+            cat ${log_file}
+            if ! ${GREP_CMD} "No module named 'numpy'" ${log_file}; then
+                echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
             fi
             if ! pip3 install numpy; then 
@@ -208,14 +209,14 @@ function check_for_kiwirecorder_cmd() {
                 exit 1
             fi
             echo "Installation command 'pip3 install numpy' was successful"
-            if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${KIWI_RECORD_TMP_LOG_FILE} ; then
+            if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
                 echo "urrently installed version of kiwirecorder.py fails to run even after installing module numpy"
                 exit 1
             fi
             exit 0
         fi
         ### kwirecorder.py ran successfully
-        if ! ${GREP_CMD} "ADC OV" ${KIWI_RECORD_TMP_LOG_FILE} > /dev/null 2>&1 ; then
+        if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
