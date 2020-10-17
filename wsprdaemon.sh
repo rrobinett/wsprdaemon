@@ -17,7 +17,7 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
+[[ ${v:-yes} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
 This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
 This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
 wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
@@ -75,7 +75,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
 #declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
 #declare -r VERSION=2.10e            ### Add GNU Public license
-declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
+#declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
+declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -102,7 +103,7 @@ if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "$
 fi
 
 #############################################
-declare -i verbosity=${v:-0}         ### default to level 0, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
+declare -i verbosity=${verbosity:-0}         ### default to level 0, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
 
 function verbosity_increment() {
     verbosity=$(( $verbosity + 1))
@@ -1087,7 +1088,7 @@ function truncate_file() {
     local file_max_size=$2   ### In bytes
     local file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
 
-    [[ $verbosity -ge 2 ]] && echo "$(date): truncate_file() '${file_path}' of size ${file_size} bytes to max size of ${file_max_size} bytes"
+    [[ $verbosity -ge 3 ]] && echo "$(date): truncate_file() '${file_path}' of size ${file_size} bytes to max size of ${file_max_size} bytes"
     
     if [[ ${file_size} -gt ${file_max_size} ]]; then 
         local file_lines=$( cat ${file_path} | wc -l )
@@ -2100,7 +2101,7 @@ function decoding_daemon()
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
     local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
     local fft_adjust=$(bc -l <<< "${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}" )  ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
-    if [[ ${verbosity} -ge 0 ]]; then
+    if [[ ${verbosity} -ge 2 ]]; then
             echo "decoding_daemon() calculated the Kiwi to require a ${kiwi_amplitude_versus_frequency_correction} dB correction in this band
             Adding to that the antenna factor of ${antenna_factor_adjust} dB to results in a total correction of ${total_correction_db}
             rms_adjust=${rms_adjust} comes from ${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}
@@ -2273,7 +2274,7 @@ function decoding_daemon()
             fi
 
             ### If enabled, execute jt9 to attempt to decode FSTW4-120 beacons
-            if [[ ${JT9_DECODE_ENABLED} == "yes" ]]; then
+            if [[ ${JT9_DECODE_ENABLED:-no} == "yes" ]]; then
                 ${JT9_CMD} ${JT9_CMD_FLAGS} ${wsprd_input_wav_filename} >& jt9.log
                 local ret_code=$?
                 if [[ ${ret_code} -eq 0 ]]; then
