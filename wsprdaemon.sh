@@ -76,7 +76,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
 #declare -r VERSION=2.10e            ### Add GNU Public license
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
-declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
+#declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
+declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -181,7 +182,7 @@ function check_tmp_filesystem()
         fi
     fi
     if df ${WSPRDAEMON_TMP_DIR} | grep -q tmpfs ; then
-        [[ $verbosity -ge 1 ]] && "check_tmp_filesystem() found '{WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
+        [[ $verbosity -ge 1 ]] && echo "check_tmp_filesystem() found '${WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
     else
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
             echo "WARNING: configured to record to a non-ram file system"
@@ -222,9 +223,11 @@ function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
         local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             echo "Currently installed version of kiwirecorder.py fails to run:"
@@ -250,6 +253,8 @@ function check_for_kiwirecorder_cmd() {
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
+        else
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
@@ -1431,7 +1436,7 @@ function kiwi_recording_daemon()
     if [[ -z "${recorder_pid}" ]]; then
         ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
         local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
-        check_for_kiwirecorder_cmd
+        ### check_for_kiwirecorder_cmd
         ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
         python3 -u ${KIWI_RECORD_COMMAND} \
             --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
