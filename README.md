@@ -1,4 +1,6 @@
-# wsprdaemon (WD) Latest version is v2.10h
+# wsprdaemon (WD) Latest version is v2.10i
+
+2.10i Fix installation of python-numpy on Ubuntu 20.04.1 LTE 
 
 2.10h Fix a bug which on fast CPUs caused loss of connection to Kiwis.  There is no need to upgrade to 2.10h unless your installation is failing to connect to your Kiwis.
 
