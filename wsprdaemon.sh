@@ -77,7 +77,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10e            ### Add GNU Public license
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
 #declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
-declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
+#declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
+declare -r VERSION=2.10oi            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -236,16 +237,20 @@ function check_for_kiwirecorder_cmd() {
                 echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
             fi
-            if ! pip3 install numpy; then 
-                echo "Installation command 'pip3 install numpy' failed"
-                exit 1
+            if sudo apt install python3-numpy ; then
+                echo "Successfully installed numpy"
+            else
+                echo "'sudo apt install python3-numpy' failed to install numpy"
+                if ! pip3 install numpy; then 
+                    echo "Installation command 'pip3 install numpy' failed"
+                    exit 1
+                fi
+                echo "Installation command 'pip3 install numpy' was successful"
+                if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
+                    echo "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    exit 1
+                fi
             fi
-            echo "Installation command 'pip3 install numpy' was successful"
-            if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-                echo "urrently installed version of kiwirecorder.py fails to run even after installing module numpy"
-                exit 1
-            fi
-            exit 0
         fi
         ### kwirecorder.py ran successfully
         if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
