@@ -78,7 +78,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
 #declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
 #declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
-declare -r VERSION=2.10oi            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
+declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
