@@ -78,7 +78,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
 #declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
 #declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
-declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
+#declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
+declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -844,7 +845,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0-rc1}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -999,11 +1000,12 @@ function check_for_needed_utilities()
         chmod +x ${WSPRD_VERSION_CMD}
         echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
 
-        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/wsprd
+        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
             echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
             exit 1
         fi
+        sudo apt install libboost-log1.67.0       ### Needed by jt9
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
         echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
