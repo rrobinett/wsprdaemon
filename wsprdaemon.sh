@@ -49,7 +49,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 
 #declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
-declare -r VERSION=3.0a             ### Move .py and other 'here' files to their own files instead of creating them inline 
+declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
+                                    ### TODO: Fix kiwirecorder arguments
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
