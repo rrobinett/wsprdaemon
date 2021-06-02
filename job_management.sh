@@ -56,7 +56,9 @@ function check_for_zombies() {
         return
     fi
     ### First check if the watchdog and the upload daemons are running
-    for pid_file_path in ${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}; do
+    local PID_FILE_LIST="${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} 
+                       ${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH} ${WSPRDAEMON_PROXY_PID_FILE}"
+    for pid_file_path in ${PID_FILE_LIST}; do
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"

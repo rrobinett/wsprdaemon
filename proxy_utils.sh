@@ -3,8 +3,8 @@ declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
 declare WD_FRPS_URL=${WD_FRPS_URL-logs.wsprdaemon.org}
 declare WD_FRPS_PORT=35735
-declare WD_FRPC_REMOTE_PORT=$(( ${WD_FRPS_PORT} + ${RANDOM} % 50 ))
-declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}
+declare WD_FRPC_REMOTE_PORT=${WD_FRPC_REMOTE_PORT-$(( ${WD_FRPS_PORT} + ${RANDOM} % 50 ))}   ### Unless the remote port is specified in WD.conf, generate a random port number
+declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}    ### Default to use FRP version 0.36.2
 declare FRPC_LOG_FILE=${FRPC_CMD}.log
 declare FRPC_INI_FILE=${FRPC_CMD}_wd.ini
 
