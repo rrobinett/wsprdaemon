@@ -6,6 +6,7 @@ declare WD_FRPS_PORT=35735
 declare WD_FRPC_REMOTE_PORT=$(( ${WD_FRPS_PORT} + ${RANDOM} % 50 ))
 declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}
 declare FRPC_LOG_FILE=${FRPC_CMD}.log
+declare FRPC_INI_FILE=${FRPC_CMD}_wd.ini
 
 ### Echos 0 if no client is running, else echos the pid of the running proxy
 function proxy_connection_status() {
@@ -41,7 +42,8 @@ function proxy_connection_manager() {
     fi
     wd_logger 0 "Proxy connection is enabled"
     if [[ ${proxy_pid} -ne 0 ]]; then
-        wd_logger 0 "Proxy is already running with pid ${proxy_pid}"
+        eval $(sed -n 's/^/local\t/;/=/s/ //gp' ${FRPC_INI_FILE})
+        wd_logger 0 "Proxy is already running with pid ${proxy_pid} and connected to ${server_addr} on port ${remote_port}"
         return 0
     fi
 
@@ -75,9 +77,8 @@ function proxy_connection_manager() {
         cp -p ${frp_dir}/frpc ${FRPC_CMD}
         cd -
     fi
-    local frp_ini_file=${FRPC_CMD}_wd.ini
-    if [[ ! -f ${frp_ini_file} ]]; then
-        cat > ${frp_ini_file} <<EOF
+    if [[ ! -f ${FRPC_INI_FILE} ]]; then
+        cat > ${FRPC_INI_FILE} <<EOF
 [common]
 server_addr = ${WD_FRPS_URL}
 server_port = ${WD_FRPS_PORT}
@@ -88,10 +89,10 @@ local_ip = 127.0.0.1
 local_port = 22
 remote_port = ${WD_FRPC_REMOTE_PORT}
 EOF
-        wd_logger 0 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${WD_FRPC_REMOTE_PORT} for that server"
+        wd_logger 0 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${WD_FRPC_REMOTE_PORT} of that server"
     fi
-    wd_logger 0 "Spawning the frpc daemon"
-    ${FRPC_CMD} -c ${frp_ini_file} > ${FRPC_LOG_FILE} 2>&1 & #-c ${frp_ini_file} &
+    wd_logger 0 "Spawning the frpc daemon connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${WD_FRPC_REMOTE_PORT} of that server"
+    ${FRPC_CMD} -c ${FRPC_INI_FILE} > ${FRPC_LOG_FILE} 2>&1 & #-c ${FRPC_INI_FILE} &
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 0 "Error ${ret_code} when spawning the frpc daemon"
