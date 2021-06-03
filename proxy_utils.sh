@@ -14,14 +14,14 @@ function proxy_connection_status() {
     if [[ -f ${WSPRDAEMON_PROXY_PID_FILE} ]]; then
         proxy_pid=$(cat ${WSPRDAEMON_PROXY_PID_FILE})
         if ps ${proxy_pid} > /dev/null; then
-            wd_logger 0 "FRPC is running with pid ${proxy_pid}"
+            wd_logger 2 "FRPC is running with pid ${proxy_pid}"
         else
-            wd_logger 0 "FRPC pid file contains zombie pid ${proxy_pid}"
+            wd_logger 2 "FRPC pid file contains zombie pid ${proxy_pid}"
             rm ${WSPRDAEMON_PROXY_PID_FILE}
             proxy_pid=0
         fi
     else
-        wd_logger 0 "No ${WSPRDAEMON_PROXY_PID_FILE} file, so no proxy client daemon is running"
+        wd_logger 2 "No ${WSPRDAEMON_PROXY_PID_FILE} file, so no proxy client daemon is running"
     fi
     echo ${proxy_pid}
 }
@@ -40,10 +40,10 @@ function proxy_connection_manager() {
         fi
         return
     fi
-    wd_logger 0 "Proxy connection is enabled"
+    wd_logger 2 "Proxy connection is enabled"
     if [[ ${proxy_pid} -ne 0 ]]; then
         eval $(sed -n 's/^/local\t/;/=/s/ //gp' ${FRPC_INI_FILE})
-        wd_logger 0 "Proxy is already running with pid ${proxy_pid} and connected to ${server_addr} on port ${remote_port}"
+        wd_logger 0 "ALERT: There is an active proxy connection to ${server_addr} port ${remote_port}"
         return 0
     fi
 
