@@ -38,7 +38,7 @@ function wd_logger() {
     [[ ${verbosity} -lt ${log_at_level} ]] && return
 
     local format_string=$2
-    local log_line=$(printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() ${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
+    local log_line=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() ${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
     [ -t 0 -a -t 1 -a -t 2 ] &&  printf "${log_line}\n"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session 
     if [[ -n "${WD_LOGFILE-}" ]]; then
         [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist

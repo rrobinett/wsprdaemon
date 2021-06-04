@@ -15,3 +15,4 @@ wsprdaemon.log
 wsprdaemon.pid
 wsprdaemon.conf
 wsprdaemon.status
+proxy.pid
