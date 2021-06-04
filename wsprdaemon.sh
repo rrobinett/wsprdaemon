@@ -950,7 +950,7 @@ function truncate_file() {
         local tmp_file_path="${file_path%.*}.tmp"
         tail -n ${truncated_file_lines} ${file_path} > ${tmp_file_path}
         mv ${tmp_file_path} ${file_path}
-        local truncated_file_size=$( {GET_FILE_SIZE_CMD} ${file_path} )
+        local truncated_file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
         [[ $verbosity -ge 1 ]] && echo "$(date): truncate_file() '${file_path}' of original size ${file_size} bytes / ${file_lines} lines now is ${truncated_file_size} bytes"
     fi
 }
@@ -2311,7 +2311,8 @@ function posting_daemon()
 
     ### Create a /tmp/.. dir where this instance of the daemon will process and merge spotfiles.  Then it will copy them to the uploads.d directory in a persistent file system
     local posting_receiver_dir_path=$PWD
-    wd_logger 1 "Starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${real_receiver_list[@]}' to '${wsprnet_upload_dir}"
+    local printf_real_receiver_list=("${real_receiver_list//$'\n'/ /}")   ### Remove '\n's in array elements which cause errors in logging printfs
+    wd_logger 1 "Starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${printf_real_receiver_list[@]}' to '${wsprnet_upload_dir}"
 
     ### Link the real receivers to this dir
     local posting_source_dir_list=()
