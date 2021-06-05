@@ -83,7 +83,7 @@ function proxy_connection_manager() {
 server_addr = ${WD_FRPS_URL}
 server_port = ${WD_FRPS_PORT}
 
-[ssh]
+[${SIGNAL_LEVEL_UPLOAD_ID}]
 type = tcp
 local_ip = 127.0.0.1
 local_port = 22
