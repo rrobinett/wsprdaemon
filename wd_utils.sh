@@ -19,7 +19,7 @@
 
 shopt -s -o nounset                               ### bash stops with error if undeclared variable is referenced
 
-declare -i verbosity=${verbosity:-1}              ### default to level 2, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
+declare -i verbosity=${verbosity:-0}              ### default to level 2, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
 
 export TZ=UTC                                                    ### Log lines use FMT below, but legacy $(date) will printout 12H UTC
 
