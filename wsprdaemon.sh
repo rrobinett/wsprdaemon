@@ -71,6 +71,9 @@ declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 check_for_needed_utilities
+source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
+source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
+source ${WSPRDAEMON_ROOT_DIR}/sdr_recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
@@ -84,8 +87,11 @@ source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZshij:pvVw:dDu:U: opt ; do
+while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
     case $opt in
+        r)
+            spawn_wav_recording ${OPTARG//,/ }
+            ;;
         U)
             uploading_controls $OPTARG
             ;;

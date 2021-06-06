@@ -85,7 +85,6 @@ function wav_recording_daemon_sig_handler() {
     kill ${sdrtest_pid}
 }
 
-declare WSPRDAEMON_ROOT_DIR=${WSPRDAEMON_ROOT_DIR-/home/pi/wsprdaemon}
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -134,7 +133,7 @@ function wav_recording_daemon() {
 
         fi
         if [[ ${sdrtest_pid} -eq 0 ]] ; then
-            [[ ${sdrtest_pid} -eq 0 ]] && printf "${WD_TIME_FMT}: ${FUNCNAME[0]}() is spawning new sdrTest job"
+            wd_logger 0 "Spawning new sdrTest job"
             (sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${soapy_device} -faudio ${SDR_AUDIO_SPS} -dumpbyminute  > ${SDR_RECORDING_DAEMON_LOG_FILE} 2>&1) &
             ret_code=$?
             sdrtest_pid=$!
@@ -314,13 +313,13 @@ function wav_recording_daemon() {
     rm -f ${SDR_RECORDING_DAEMON_PID_FILE} ${WAV_RECORDING_DAEMON_STOP_FILE}
 }
 
-declare SPAWN_SUFFIX="&"
+declare SPAWN_SUFFIX="" # "&"
 function spawn_wav_recording() {
-    local soapy_device=$1
+    local sdr_device=$1
     local wspr_band=$2
     local wspr_lengths_secs="${@:3}"
 
-    wd_logger 0 "Spawn daemon wav_recording_daemon on device #${soapy_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds"
+    wd_logger 0 "Spawn daemon wav_recording_daemon on SDR ${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds"
 
     if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE} ]]; then
         local wav_recording_daemon_pid=$(cat ${WAV_RECORDING_DAEMON_PID_FILE})
@@ -337,14 +336,14 @@ function spawn_wav_recording() {
     rm -f ${WAV_RECORDING_DAEMON_STOP_FILE}
     
     if [[ -n "${SPAWN_SUFFIX}" ]]; then
-        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${soapy_device} ${wspr_band} ${wspr_lengths_secs} &
+        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs} &
     else
-        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${soapy_device} ${wspr_band} ${wspr_lengths_secs}
+        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs}
     fi
     local ret_code=$?
     local wav_recording_daemon_pid=$!
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 0 "ERROR spawning daemon wav_recording_daemon on device #${soapy_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds => ${ret_code}"
+        wd_logger 0 "ERROR spawning daemon wav_recording_daemon on device #${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds => ${ret_code}"
         return 1
     fi
     echo ${wav_recording_daemon_pid} > ${WAV_RECORDING_DAEMON_PID_FILE}
