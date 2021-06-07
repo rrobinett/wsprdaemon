@@ -53,11 +53,11 @@ function flush_zombie_raw_files {
  
 declare RAW_FILE_FULL_SIZE=1440000   ### Number of types in a full size one kinute long raw file
 
-### If sdrTest is running we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
+### If SDR_Recording_Daemon is running we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
 function sleep_until_raw_file_is_full() {
     local filename=$1
     local current_file_size=$(stat -c %s ${filename})
-    local sleep_secs=$(( (${RAW_FILE_FULL_SIZE} - ${current_file_size}) / ( ${RAW_FILE_FULL_SIZE} / 60 ) ))        ### If sdrTest is filling the first raw file we can calculate how many seconds until it fills the raw file and sleep until then
+    local sleep_secs=$(( (${RAW_FILE_FULL_SIZE} - ${current_file_size}) / ( ${RAW_FILE_FULL_SIZE} / 60 ) ))        ### If SDR_Recording_Daemon is filling the first raw file we can calculate how many seconds until it fills the raw file and sleep until then
     if [[ ${sleep_secs} -gt 0 ]]; then
         (( ++sleep_secs ))
         wd_logger 0 "file ${filename} is ${current_file_size} bytes, not full size ${RAW_FILE_FULL_SIZE}. Sleep for ${sleep_secs} seconds while it fills."
@@ -79,10 +79,10 @@ function sleep_until_raw_file_is_full() {
 }
 
 function wav_recording_daemon_sig_handler() {
-    local sdrtest_pid=$1
+    local sdr_recording_daemon_pid=$1
 
-    wd_logger 0 "Got SIGTERM for sdrtest_pid = ${sdrtest_pid}"
-    kill ${sdrtest_pid}
+    wd_logger 0 "Got SIGTERM for sdr_recording_daemon_pid = ${sdr_recording_daemon_pid}"
+    kill ${sdr_recording_daemon_pid}
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
@@ -91,71 +91,105 @@ declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
+
+function spawn_sdr_recording_daemon() {
+    local sdr_device_name=$1
+    local tuning_frequency=$2
+
+    wd_logger 0 "Spawning wav recording job on SDR ${sdr_device} at frequency ${tuning_frequency}"
+    case ${sdr_device_name} in
+        *)
+            local center_frequency=$(( ${tuning_frequency} - ${ATSC_CENTER_OFFSET_HZ} ))
+            (sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -dumpbyminute  > ${SDR_RECORDING_DAEMON_LOG_FILE} 2>&1) &
+            ret_code=$?
+            sdr_recording_daemon_pid=$!
+            if [[ ${ret_code} -ne 0 ]]; then
+                 wd_logger 0 "ERROR: sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -timeout ${SDR_SAMPLE_TIME}... => ${ret_code}"
+                killall sdrTest
+                sleep 5
+                continue
+            fi
+            sleep 1
+            ;;
+        KIWI*)
+            local tuning_frequency_khz=$(bc <<< "scale=2; ${tuning_frequency} / 1000")
+            local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
+            ### check_for_kiwirecorder_cmd
+            ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
+            python3 -u ${KIWI_RECORD_COMMAND} \
+                --freq=${tuning_frequency_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
+                --OV --user=${recording_client_name}  --password=${my_receiver_password} \
+                --agc-gain=60 --quiet --no_compression --modulation=usb  --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > kiwi_recorder.log 2>&1 &
+            recorder_pid=$!
+            echo ${recorder_pid} > kiwi_recorder.pid
+            ## Initialize the file which logs the date (in epoch seconds, and the number of OV errors st that time
+            printf "$(date +%s) 0" > ov.log
+            if [[ $verbosity -ge 2 ]]; then
+                echo "$(date): kiwi_recording_daemon() PID $$ spawned kiwrecorder PID ${recorder_pid}"
+                ps -f -q ${recorder_pid}
+            fi
+            ;;
+        *)
+            wd_logger 0 "ERROR: SDR named ${sdr_device_name} is not supported"
+            exit 1
+            ;;
+    esac
+    wd_logger 0 "Spawned job has pid ${sdr_recording_daemon_pid}. Sleep 1 so that sdrTest can create the output file." 
+    echo ${sdr_recording_daemon_pid} > ${SDR_RECORDING_DAEMON_PID_FILE}
+    trap "wav_recording_daemon_sig_handler ${sdr_recording_daemon_pid}" SIGTERM
+
+}
  
 function wav_recording_daemon() {
-    local soapy_device=$1
+    local sdr_device=$1
     local wspr_band=${2//[^[:ascii:]]/}    ### Strip off any non-printing characters
     shift 2
     local wspr_lengths_secs=( $* )
 
-    wd_logger 0 "Tune device #${soapy_device} to WSPR band ${wspr_band} and create wav files" 
+    wd_logger 0 "Tune SDR '${sdr_device}' to WSPR band ${wspr_band} and create wav files" 
 
     local tuning_frequency
     get_wspr_tuning_frquency   tuning_frequency ${wspr_band}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-         wd_logger 0 "ERROR: get_wspr_tuning_frquency   tuning_frequency ${wspr_band} => ${ret_code}"
+         wd_logger 0 "ERROR: get_wspr_tuning_frquency tuning_frequency ${wspr_band} => ${ret_code}"
         return 1
     fi
-    local center_frequency=$(( ${tuning_frequency} - ${ATSC_CENTER_OFFSET_HZ} ))
 
     ### We expect that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
     local index_last=$(( ${#wspr_lengths_secs[@]} - 1 ))
     local oldest_file_needed=$(( ${wspr_lengths_secs[index_last]} + 1 ))
 
-    wd_logger 0 "tune device #${soapy_device} to WSPR band ${wspr_band} which is at tuning frequency ${tuning_frequency}.  Flush raw files older than ${oldest_file_needed} seconds"
+    wd_logger 0 "Tune SDR '${sdr_device}' to WSPR band ${wspr_band} which is at tuning frequency ${tuning_frequency}.  Flush raw files older than ${oldest_file_needed} seconds"
 
     while [[ ! -f ${WAV_RECORDING_DAEMON_STOP_FILE} ]]; do
         local ret_code
 
-        local sdrtest_pid=0
+        local sdr_recording_daemon_pid=0
         if [[ -f ${SDR_RECORDING_DAEMON_PID_FILE} ]]; then
-            sdrtest_pid=$(cat ${SDR_RECORDING_DAEMON_PID_FILE})
-            ps ${sdrtest_pid} > /dev/null
+            sdr_recording_daemon_pid=$(< ${SDR_RECORDING_DAEMON_PID_FILE})
+            ps ${sdr_recording_daemon_pid} > /dev/null
             ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "found a sdrTest job with pid ${sdrtest_pid} is running, so no need to spawn a sdrTest job"
+                wd_logger 2 "found a SDR_Recording_Daemon job with pid ${sdr_recording_daemon_pid} is running, so no need to spawn a SDR_Recording_Daemon job"
             else
-                wd_logger 0 "file ${SDR_RECORDING_DAEMON_PID_FILE} contains pid #${sdrtest_pid}, but 'ps ${sdrtest_pid} => ${ret_code}', so flush that dead pid file"
-                sdrtest_pid=0
+                wd_logger 0 "file ${SDR_RECORDING_DAEMON_PID_FILE} contains pid #${sdr_recording_daemon_pid}, but 'ps ${sdr_recording_daemon_pid} => ${ret_code}', so flush that dead pid file"
+                sdr_recording_daemon_pid=0
                 rm -f ${SDR_RECORDING_DAEMON_PID_FILE}
             fi
 
         fi
-        if [[ ${sdrtest_pid} -eq 0 ]] ; then
-            wd_logger 0 "Spawning new sdrTest job"
-            (sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${soapy_device} -faudio ${SDR_AUDIO_SPS} -dumpbyminute  > ${SDR_RECORDING_DAEMON_LOG_FILE} 2>&1) &
-            ret_code=$?
-            sdrtest_pid=$!
-            if [[ ${ret_code} -ne 0 ]]; then
-                 wd_logger 0 "ERROR: sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${soapy_device} -faudio ${SDR_AUDIO_SPS} -timeout ${SDR_SAMPLE_TIME}... => ${ret_code}"
-                killall sdrTest
-                sleep 5
-                continue
-            fi
-             wd_logger 0 "spawned sdrTest which has pid ${sdrtest_pid}. Sleep 1 so that sdrTest can create the output file." 
-            echo ${sdrtest_pid} > ${SDR_RECORDING_DAEMON_PID_FILE}
-            sleep 1
+        if [[ ${sdr_recording_daemon_pid} -eq 0 ]] ; then
+            wd_logger 0 "Spawning new SDR_Recording_Daemon job"
+            spawn_sdr_recording_daemon ${sdr_device} ${tuning_frequency} 
         fi
-        trap "wav_recording_daemon_sig_handler ${sdrtest_pid}" SIGTERM
-
         shopt -s nullglob
         local minute_raw_file_list=( minute-*.raw )
         shopt -u nullglob
 
         case ${#minute_raw_file_list[@]} in
             0 )
-                 wd_logger 0 "sdrTest is running or was spawned, but there is no raw file. Sleep 5, then go to top, check for running sdrTest and spawn again if needed."
+                 wd_logger 0 "SDR_Recording_Daemon is running or was spawned, but there is no raw file. Sleep 5, then go to top, check for running SDR_Recording_Daemon and spawn again if needed."
                 sleep 5
                 continue
                 ;;
@@ -299,56 +333,18 @@ function wav_recording_daemon() {
     done    ### with:  while [[ ! -f ${WAV_RECORDING_DAEMON_STOP_FILE} ]]; do
 
     ### We have been instructed to terminate...
-    if [[ ${sdrtest_pid} -ne 0 ]]; then
-        kill ${sdrtest_pid}
+    if [[ ${sdr_recording_daemon_pid} -ne 0 ]]; then
+        kill ${sdr_recording_daemon_pid}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-             wd_logger 0 "ERROR: terminating after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' while sdrTest is running, but 'kill ${sdrtest_pid}' => ${ret_code}"
+             wd_logger 0 "ERROR: terminating after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' while SDR_Recording_Daemon is running, but 'kill ${sdr_recording_daemon_pid}' => ${ret_code}"
         else
-             wd_logger 0 "clean termination after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' while sdrTest is running, after sucessfull 'kill ${sdrtest_pid}'"
+             wd_logger 0 "clean termination after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' while SDR_Recording_Daemon is running, after sucessfull 'kill ${sdr_recording_daemon_pid}'"
         fi
     else
-         wd_logger 0 "clean termination after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' when no sdrtest_pid"
+         wd_logger 0 "clean termination after detecting '${WAV_RECORDING_DAEMON_STOP_FILE}' when no sdr_recording_daemon_pid"
     fi
     rm -f ${SDR_RECORDING_DAEMON_PID_FILE} ${WAV_RECORDING_DAEMON_STOP_FILE}
-}
-
-declare SPAWN_SUFFIX="" # "&"
-function spawn_wav_recording() {
-    local sdr_device=$1
-    local wspr_band=$2
-    local wspr_lengths_secs="${@:3}"
-
-    wd_logger 0 "Spawn daemon wav_recording_daemon on SDR ${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds"
-
-    if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE} ]]; then
-        local wav_recording_daemon_pid=$(cat ${WAV_RECORDING_DAEMON_PID_FILE})
-        
-        ps ${wav_recording_daemon_pid}
-        local ret_code=$?
-        if [[ ${ret_code} -eq 0 ]]; then
-            wd_logger 0 "wav_recording_daemon() is running with pid ${wav_recording_daemon_pid}"
-            return 0
-        fi
-        wd_logger 0 "Found wav_recording_daemon() with pid ${wav_recording_daemon_pid}"
-    fi
-
-    rm -f ${WAV_RECORDING_DAEMON_STOP_FILE}
-    
-    if [[ -n "${SPAWN_SUFFIX}" ]]; then
-        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs} &
-    else
-        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs}
-    fi
-    local ret_code=$?
-    local wav_recording_daemon_pid=$!
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 0 "ERROR spawning daemon wav_recording_daemon on device #${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds => ${ret_code}"
-        return 1
-    fi
-    echo ${wav_recording_daemon_pid} > ${WAV_RECORDING_DAEMON_PID_FILE}
-
-    wd_logger 0 "Spawned recording daemon with pid ${wav_recording_daemon_pid}"
 }
 
 function kill_wav_recording() {
@@ -379,7 +375,7 @@ function kill_wav_recording() {
         sleep 1
     done
     if [[ ${loop_count} -eq 0 ]]; then
-        wd_logger 0 "Timeout waiting for daemon to stop, so killing pid ${wav_recording_daemon_pid}, and also 'killall sdrTest'"
+        wd_logger 0 "Timeout waiting for daemon to stop, so killing pid ${wav_recording_daemon_pid}, and also 'killall SDR_Recording_Daemon'"
         kill ${wav_recording_daemon_pid}
         killall sdrTest
     else
@@ -388,3 +384,43 @@ function kill_wav_recording() {
     rm -f ${WAV_RECORDING_DAEMON_STOP_FILE} ${WAV_RECORDING_DAEMON_PID_FILE}
     return 0
 }
+
+declare SPAWN_SUFFIX="" # "&"
+function spawn_wav_recording() {
+    local sdr_device=$1
+    local wspr_band=$2
+    local wspr_lengths_secs="${@:3}"
+
+    wd_logger 0 "Spawn daemon wav_recording_daemon on SDR ${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds"
+
+    if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE} ]]; then
+        local wav_recording_daemon_pid=$(cat ${WAV_RECORDING_DAEMON_PID_FILE})
+        
+        ps ${wav_recording_daemon_pid}
+        local ret_code=$?
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger 0 "wav_recording_daemon() is running with pid ${wav_recording_daemon_pid}"
+            return 0
+        fi
+        wd_logger 0 "Found wav_recording_daemon() with pid ${wav_recording_daemon_pid}"
+    fi
+
+    rm -f ${WAV_RECORDING_DAEMON_STOP_FILE}
+    
+    if [[ -n "${SPAWN_SUFFIX}" ]]; then
+        WD_LOGFILE=wav_recording_daemon.log  wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs} &
+    else
+        wav_recording_daemon ${sdr_device} ${wspr_band} ${wspr_lengths_secs}
+    fi
+    local ret_code=$?
+    local wav_recording_daemon_pid=$!
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 0 "ERROR spawning daemon wav_recording_daemon on device #${sdr_device}, band '${wspr_band}' producing wav files of '${wspr_lengths_secs}' seconds => ${ret_code}"
+        return 1
+    fi
+    echo ${wav_recording_daemon_pid} > ${WAV_RECORDING_DAEMON_PID_FILE}
+
+    wd_logger 0 "Spawned recording daemon with pid ${wav_recording_daemon_pid}"
+}
+
+
