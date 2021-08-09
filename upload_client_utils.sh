@@ -338,7 +338,8 @@ function upload_to_wsprnet_daemon()
                     ### Upload all the spots for one CALL_GRID in one curl transaction 
                     [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
-                    curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+                    echo "curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}.cmd 2>&1
+                    curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
                     local ret_code=$?
                     if [[ $ret_code -ne 0 ]]; then
                         [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"

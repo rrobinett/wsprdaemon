@@ -60,6 +60,7 @@ declare -r VERSION=3.0a             ### Move python code and other 'here' files 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOCAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
+                                    ### TODO: Uploader should flush all spots, not just ones for current scheduled rxs 
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
