@@ -171,4 +171,21 @@ function disable_systemctl_deamon() {
     sudo systemctl disable wsprdaemon.service
 }
 
+##############################################################
+function truncate_file() {
+    local file_path=$1       ### Must be a text format file
+    local file_max_size=$2   ### In bytes
+    local file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
 
+    [[ $verbosity -ge 3 ]] && echo "$(date): truncate_file() '${file_path}' of size ${file_size} bytes to max size of ${file_max_size} bytes"
+    
+    if [[ ${file_size} -gt ${file_max_size} ]]; then 
+        local file_lines=$( cat ${file_path} | wc -l )
+        local truncated_file_lines=$(( ${file_lines} / 2))
+        local tmp_file_path="${file_path%.*}.tmp"
+        tail -n ${truncated_file_lines} ${file_path} > ${tmp_file_path}
+        mv ${tmp_file_path} ${file_path}
+        local truncated_file_size=$( ${GET_FILE_SIZE_CMD} ${file_path} )
+        [[ $verbosity -ge 1 ]] && echo "$(date): truncate_file() '${file_path}' of original size ${file_size} bytes / ${file_lines} lines now is ${truncated_file_size} bytes"
+    fi
+}
