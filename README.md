@@ -1,4 +1,7 @@
-# wsprdaemon (WD) Latest version is v2.10i
+# wsprdaemon (WD) Latest version is v2.10k
+2.10k Add WD's version number to spots uploaded to wsprnet.org
+
+2.10j Upload WSJT-x 2.3.0 binaries
 
 2.10i Fix installation of python-numpy on Ubuntu 20.04.1 LTE 
 
