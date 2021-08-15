@@ -463,24 +463,25 @@ function spawn_decode_daemon() {
     local receiver_rx_band=$2
     local capture_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
-    [[ $verbosity -ge 4 ]] && echo "$(date): spawn_decode_daemon(): starting decode of '${receiver_name},${receiver_rx_band}'"
+    wd_logger 1 "Starting with args  '${receiver_name},${receiver_rx_band}'"
 
     mkdir -p ${capture_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
     cd ${capture_dir}
     if [[ -f decode.pid ]] ; then
         local decode_pid=$(cat decode.pid)
         if ps ${decode_pid} > /dev/null ; then
-            [[ ${verbosity} -ge 4 ]] && echo "$(date): spawn_decode_daemon(): INFO: decode job with pid ${decode_pid} is already running, so nothing to do"
+            wd_logger 1 "Finshed. A decode job with pid ${decode_pid} is already running, so nothing to do"
             return
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): spawn_decode_daemon(): INFO: found dead decode job"
+            wd_logger 1 "Found dead decode job"
             rm -f decode.pid
         fi
     fi
+    wd_logger 1 "Spawning decode daemon in $PWD"
     WD_LOGFILE=decoding_daemon.log decoding_daemon ${receiver_name} ${receiver_rx_band} &
     echo $! > decode.pid
     cd - > /dev/null
-    [[ $verbosity -ge 2 ]] && echo "$(date): spawn_decode_daemon(): INFO: Spawned new decode  job '${receiver_name},${receiver_rx_band}' with PID '$!'"
+    wd_logger 1 ": Finished.  Spawned new decode  job '${receiver_name},${receiver_rx_band}' with PID '$!'"
 }
 
 ###

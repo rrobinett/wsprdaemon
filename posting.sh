@@ -44,7 +44,7 @@ function posting_daemon()
         local this_rx_local_dir_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
         [[ ! -f ${this_rx_local_dir_name} ]] && ln -s ${real_receiver_posting_dir_path} ${this_rx_local_dir_name}
         posting_source_dir_list+=(${this_rx_local_dir_name})
-        wd_logger 2 "Created a symlink from ${this_rx_local_dir_name} to ${real_receiver_posting_dir_path}"
+        wd_logger 1 "Created a symlink from ${this_rx_local_dir_name} to ${real_receiver_posting_dir_path}"
     done
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches
@@ -61,7 +61,7 @@ function posting_daemon()
             ### Start or keep alive decoding daemons for each real receiver
             local real_receiver_name
             for real_receiver_name in ${real_receiver_list[@]} ; do
-                wd_logger 4 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
+                wd_logger 1 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
                 ### '(...) runs in subshell so it can't change the $PWD of this function
                 (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
@@ -428,10 +428,10 @@ function spawn_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
 
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band}"
     local daemon_status
-    
     if daemon_status=$(get_posting_status $receiver_name $receiver_band) ; then
-        [[ $verbosity -ge 1 ]] && echo "$(date): spawn_posting_daemon(): daemon for '${receiver_name}','${receiver_band}' is already running"
+        wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running. Finished"
         return
     fi
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
@@ -440,20 +440,21 @@ function spawn_posting_daemon() {
     if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
         real_receiver_list="${receiver_address//,/ }"
-        [[ $verbosity -ge 3 ]] && echo "$(date): spawn_posting_daemon(): creating merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}' => list '${real_receiver_list[@]}'"  
+        wd_logger 1 "Creating merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}' => list '${real_receiver_list[@]}'"  
     else
-        [[ $verbosity -ge 3 ]] && echo "$(date): spawn_posting_daemon(): creating real rx '${receiver_name}','${receiver_band}'"  
+        wd_logger 1 "Creating real rx '${receiver_name}','${receiver_band}'"  
         real_receiver_list=${receiver_name} 
     fi
     local receiver_posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     mkdir -p ${receiver_posting_dir}
     cd ${receiver_posting_dir}
-    WD_LOG_FILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} "${real_receiver_list}" &
+    wd_logger 1 "Spawning posting job in $PWD"
+    WD_LOGFILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} "${real_receiver_list}" &
     local posting_pid=$!
     echo ${posting_pid} > posting.pid
 
-    [[ $verbosity -ge 3 ]] && echo "$(date): spawn_posting_daemon(): spawned posting daemon in '$PWD' with pid ${posting_pid}"
     cd - > /dev/null
+    wd_logger 1 "Finished"
 }
 
 ###
