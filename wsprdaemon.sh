@@ -76,7 +76,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
 #declare -r VERSION=2.10e            ### Add GNU Public license
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
-declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
+#declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
+#declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
+#declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
+declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
                                     ### TODO: Support FST4W decodomg through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -181,7 +184,7 @@ function check_tmp_filesystem()
         fi
     fi
     if df ${WSPRDAEMON_TMP_DIR} | grep -q tmpfs ; then
-        [[ $verbosity -ge 1 ]] && "check_tmp_filesystem() found '{WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
+        [[ $verbosity -ge 1 ]] && echo "check_tmp_filesystem() found '${WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
     else
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
             echo "WARNING: configured to record to a non-ram file system"
@@ -222,9 +225,11 @@ function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
+        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
         local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             echo "Currently installed version of kiwirecorder.py fails to run:"
@@ -233,16 +238,20 @@ function check_for_kiwirecorder_cmd() {
                 echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
             fi
-            if ! pip3 install numpy; then 
-                echo "Installation command 'pip3 install numpy' failed"
-                exit 1
+            if sudo apt install python3-numpy ; then
+                echo "Successfully installed numpy"
+            else
+                echo "'sudo apt install python3-numpy' failed to install numpy"
+                if ! pip3 install numpy; then 
+                    echo "Installation command 'pip3 install numpy' failed"
+                    exit 1
+                fi
+                echo "Installation command 'pip3 install numpy' was successful"
+                if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
+                    echo "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    exit 1
+                fi
             fi
-            echo "Installation command 'pip3 install numpy' was successful"
-            if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-                echo "urrently installed version of kiwirecorder.py fails to run even after installing module numpy"
-                exit 1
-            fi
-            exit 0
         fi
         ### kwirecorder.py ran successfully
         if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
@@ -250,6 +259,8 @@ function check_for_kiwirecorder_cmd() {
             echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
+        else
+            [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
@@ -834,7 +845,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0-rc1}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -989,11 +1000,12 @@ function check_for_needed_utilities()
         chmod +x ${WSPRD_VERSION_CMD}
         echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
 
-        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/wsprd
+        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
             echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
             exit 1
         fi
+        sudo apt install libboost-log1.67.0       ### Needed by jt9
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
         echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
@@ -1431,7 +1443,7 @@ function kiwi_recording_daemon()
     if [[ -z "${recorder_pid}" ]]; then
         ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
         local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
-        check_for_kiwirecorder_cmd
+        ### check_for_kiwirecorder_cmd
         ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
         python3 -u ${KIWI_RECORD_COMMAND} \
             --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
@@ -3720,8 +3732,9 @@ function upload_line_to_wsprdaemon() {
                 [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_line_to_wsprdaemon() INTERNAL ERROR: UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION = ${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION} is not supported"
                 return 1
             fi
+            # G3ZIL change wsprdaemon_spots to wsprdaemon_spots_s which is an autosequence table
             local timestamp="${spot_date} ${spot_time}"
-            local sql1='Insert into wsprdaemon_spots (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon, sync_quality, dt, decode_cycles, jitter, rms_noise, blocksize, metric, osd_decode, ipass, nhardmin, receiver) values '
+            local sql1='Insert into wsprdaemon_spots_s (time, band, rx_grid, rx_id, tx_call, tx_grid, "SNR", c2_noise, drift, freq, km, rx_az, rx_lat, rx_lon, tx_az, "tx_dBm", tx_lat, tx_lon, v_lat, v_lon, sync_quality, dt, decode_cycles, jitter, rms_noise, blocksize, metric, osd_decode, ipass, nhardmin, receiver) values '
             local sql2="('${timestamp}', '${band}', '${my_grid}', '${my_call_sign}', '${spot_call}', '${spot_grid}', ${spot_snr}, ${spot_c2_noise}, ${spot_drift}, ${spot_freq}, ${km}, ${rx_az}, ${rx_lat}, ${rx_lon}, ${tx_az}, ${spot_pwr}, ${tx_lat}, ${tx_lon}, ${v_lat}, ${v_lon}, ${spot_sync_quality}, ${spot_dt}, ${spot_decode_cycles}, ${spot_jitter}, ${spot_rms_noise}, ${spot_blocksize}, ${spot_metric}, ${spot_osd_decode}, ${spot_ipass}, ${spot_nhardmin}, '${my_receiver}' )"
             #echo "PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c '${sql1} ${sql2}' &> add_derived_psql.txt"
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1} ${sql2}" &> add_derived_psql.txt
@@ -3784,7 +3797,7 @@ function upload_line_to_wsprdaemon() {
             local timestamp_ts="${time_hour}:${time_minute}"
             local time_ts="${datestamp_ts} ${timestamp_ts}:00+00"
             # 
-            local sql1='Insert into wsprdaemon_noise (time,  site,receiver,  rx_grid, band, rms_level, c2_level, ov) values '
+            local sql1='Insert into wsprdaemon_noise_s (time,  site,receiver,  rx_grid, band, rms_level, c2_level, ov) values '  # 10 Aug 2021 G3ZIL edit to noise_s table
             local sql2="('${time_ts}', '${my_call_sign}', '${real_receiver_name}', '${real_receiver_maidenhead}', '${real_receiver_rx_band}', ${rms_value}, ${c2_fft_value}, ${ov_value} )"
             PGPASSWORD=Whisper2008 psql -U wdupload -d tutorial -h ${ts_server_url} -A -F, -c "${sql1}${sql2}" &> add_derived_psql.txt
             local py_retcode=$?
@@ -4159,7 +4172,8 @@ ret_code=0
 # get the path to the latest_log.txt file from the command line
 batch_file_path=sys.argv[1]
 sql=sys.argv[2]
-#sql_orig="""INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon)
+# G3ZIL change wsprdaemon_spots to wsprdaemon_spots_s to match autosequence table. This is commented out but left here as a note
+#sql_orig="""INSERT INTO wsprdaemon_spots_s (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon)
 #                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
 #
 #print("sql:       ", sql,
@@ -4238,8 +4252,9 @@ EOF
 #     
 #  local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
 #                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
-declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
+declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
+# 10-11 Aug 2021 G3ZIL edits to noise_s and spots_s tables
 
 ### This deamon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
@@ -4337,6 +4352,13 @@ function wsprdaemon_tgz_service_daemon() {
                     [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() there were no non-zero length spot files. Go on to check for noise files under wsprdaemon.noise."
                 else
                     ### There are spot files with spot lines
+                    ###  Limit the number of files, since bash won't pass more than 22,000 arguments
+                    declare MAX_BASH_CMD_LINE_ARGS=20000
+                    if [[ ${#spot_file_list[@]} -gt ${MAX_BASH_CMD_LINE_ARGS} ]]; then
+                        [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() WARNING, ${#spot_file_list[@]} spot files, limiting to ${MAX_BASH_CMD_LINE_ARGS}"
+                        spot_file_list=( ${spot_file_list[@]:0:10000} )
+                        [[ $verbosity -ge 1 ]] && echo "$(date): wsprdaemon_tgz_service_daemon() reduced to ${#spot_file_list[@]} spot files"
+                    fi
                     ### If the sync_quality in the third field is a float (i.e. has a '.' in it), then this spot was decoded by wsprd v2.1
                     local calls_delivering_jtx_2_1_lines=( $(awk 'NF == 32 && $3  !~ /\./ { print $23}' ${spot_file_list[@]} | sort -u) )
                     if [[ ${#calls_delivering_jtx_2_1_lines[@]} -ne 0 ]]; then
