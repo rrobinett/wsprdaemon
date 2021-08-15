@@ -315,7 +315,7 @@ function kiwi_recording_daemon()
     local my_receiver_password=$3
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
-    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() starting recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
+    wd_logger 1 "Starting.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
     rm -f recording.stop
     local recorder_pid=""
     if [[ -f kiwi_recorder.pid ]]; then
@@ -323,9 +323,9 @@ function kiwi_recording_daemon()
         local ps_output=$(ps ${recorder_pid})
         local ret_code=$?
         if [[ ${ret_code} -eq 0 ]]; then
-            [[ $verbosity -ge 3 ]] && echo "$(date): kiwi_recording_daemon() found there is an active kiwirercorder with pid ${recorder_pid}"
+            wd_logger 1 " found there is an active kiwirercorder with pid ${recorder_pid}"
         else
-            [[ $verbosity -ge 2 ]] && printf "$(date): kiwi_recording_daemon() 'ps ${recorder_pid}' reports error:\n%s\n" "${ps_output}"
+            wd_logger 1 " 'ps ${recorder_pid}' reports error:\n%s\n" "${ps_output}"
             recorder_pid=""
         fi
     fi
@@ -343,22 +343,19 @@ function kiwi_recording_daemon()
         echo ${recorder_pid} > kiwi_recorder.pid
         ## Initialize the file which logs the date (in epoch seconds, and the number of OV errors st that time
         printf "$(date +%s) 0" > ov.log
-        if [[ $verbosity -ge 2 ]]; then
-            echo "$(date): kiwi_recording_daemon() PID $$ spawned kiwrecorder PID ${recorder_pid}"
-            ps -f -q ${recorder_pid}
-        fi
+        wd_logger 1 "Decoding daemon with PID $$ spawned kiwrecorder PID ${recorder_pid}"
     fi
 
     ### Monitor the operation of the kiwirecorder we spawned
     while [[ ! -f recording.stop ]] ; do
         if ! ps ${recorder_pid} > /dev/null; then
-            [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: kiwirecorder with PID ${recorder_pid} died unexpectedly. Wwait for ${KIWIRECORDER_KILL_WAIT_SECS} seconds before restarting it."
+            wd_logger 1 "kiwirecorder with PID ${recorder_pid} died unexpectedly. Wait for ${KIWIRECORDER_KILL_WAIT_SECS} seconds before restarting it."
             rm -f kiwi_recorder.pid
             sleep ${KIWIRECORDER_KILL_WAIT_SECS}
-            [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: awake after error detected and done"
-            return
+            wd_logger 1 "Awake after error detected. Restart"
+            return 1
         else
-            [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking for stale wav files"
+            wd_logger 1 "Checking for stale wav files"
             flush_stale_wav_files   ## ### Ensure that the file system is not filled up with zombie wav files
 
             local current_time=$(date +%s)
@@ -370,10 +367,10 @@ function kiwi_recording_daemon()
                 local new_ov_time=${current_time}
                 printf "\n${current_time} ${new_ov_count}" >> ov.log
                 if [[ "${new_ov_count}" -le "${old_ov_count}" ]]; then
-                    [[ $verbosity -ge 1 ]] && echo "$(date): kiwi_recording_daemon() found 'kiwi_recorder.log' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
+                    wd_logger 1 "Found 'kiwi_recorder.log' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
                 else
                     local ov_event_count=$(( "${new_ov_count}" - "${old_ov_count}" ))
-                    [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() found ${new_ov_count}" new - "${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
+                    wd_logger 1 "Found ${new_ov_count}" new - "${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
                 fi
             fi
             ### In there have been OV events, then every 10 minutes printout the count and mark the most recent line in ov.log as PRINTED
@@ -386,7 +383,7 @@ function kiwi_recording_daemon()
             local ov_print_interval=${OV_PRINT_INTERVAL_SECS-600}        ## By default, print OV count every 10 minutes
             local ovs_since_last_print=$((${latest_ov_count} - ${last_ov_print_count}))
             if [[ ${secs_since_last_ov_print} -ge ${ov_print_interval} ]] && [[ "${ovs_since_last_print}" -gt 0 ]]; then
-                [[ $verbosity -ge 0 ]] && printf "$(date): %3d overload events (OV) were reported in the last ${ov_print_interval} seconds\n"  "${ovs_since_last_print}"
+                wd_logger 1 "${ovs_since_last_print} overload events (OV) were reported in the last ${ov_print_interval} seconds"
                 printf " PRINTED" >> ov.log
             fi
 
@@ -395,24 +392,25 @@ function kiwi_recording_daemon()
             local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): kiwi_recording_daemon() kiwi_recorder.log has grown too large (${ov_file_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
+                wd_logger 1 "kiwi_recorder.log has grown too large (${ov_file_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
                 touch recording.stop
             fi
             if [[ ! -f recording.stop ]]; then
-                [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
+                wd_logger 1 "Checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
                 sleep ${WAV_FILE_POLL_SECONDS}
             fi
         fi
     done
     ### We have been signaled to stop recording 
-    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() PID $$ has been signaled to stop. Killing the kiwirecorder with PID ${recorder_pid}"
+    wd_logger 1 "my PID $$ has been signaled to stop. Killing the kiwirecorder with PID ${recorder_pid}"
     kill -9 ${recorder_pid}
     rm -f kiwi_recorder.pid
-    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() PID $$ Sleeping for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
+    wd_logger 1 "my PID $$ will now sleep for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
     sleep ${KIWIRECORDER_KILL_WAIT_SECS}
-    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() Awake. Signaling it is done  by deleting 'recording.stop'"
+    wd_logger 1 "Signaling I am done  by deleting 'recording.stop'"
     rm -f recording.stop
-    [[ $verbosity -ge 1 ]] && echo "$(date): kiwi_recording_daemon() done. terminating myself"
+    wd_logger 1 "Finished"
+    return 0
 }
 
 
@@ -534,12 +532,12 @@ function spawn_recording_daemon() {
                 exit 1
             fi
             rm -f rtl_test.log
-            rtl_daemon ${device_id} ${receiver_rx_freq_mhz}  >> recording.log 2>&1 &
+            WD_LOGFILE=recording.log rtl_daemon ${device_id} ${receiver_rx_freq_mhz} &
         else
 	    local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
 	    local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
 	    [[ $verbosity -ge 0 ]] && [[ ${kiwi_offset} -gt 0 ]] && echo "$(date): spawn_recording_daemon() tuning Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
-            kiwi_recording_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} > recording.log 2>&1 &
+            WD_LOGFILE=recording.log kiwi_recording_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} &
         fi
     fi
     echo $! > recording.pid

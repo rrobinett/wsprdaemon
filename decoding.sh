@@ -470,8 +470,8 @@ function spawn_decode_daemon() {
     if [[ -f decode.pid ]] ; then
         local decode_pid=$(cat decode.pid)
         if ps ${decode_pid} > /dev/null ; then
-            wd_logger 1 "Finshed. A decode job with pid ${decode_pid} is already running, so nothing to do"
-            return
+            wd_logger 2 "Finshed. A decode job with pid ${decode_pid} is already running, so nothing to do"
+            return 0
         else
             wd_logger 1 "Found dead decode job"
             rm -f decode.pid
@@ -482,6 +482,7 @@ function spawn_decode_daemon() {
     echo $! > decode.pid
     cd - > /dev/null
     wd_logger 1 ": Finished.  Spawned new decode  job '${receiver_name},${receiver_rx_band}' with PID '$!'"
+    return 0
 }
 
 ###

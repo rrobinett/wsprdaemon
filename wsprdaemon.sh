@@ -111,6 +111,7 @@ while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
             check_for_zombies no   ## prompt before killing any zombies
             ;;
         s)
+            proxy_connection_status
             jobs_cmd     s
             upload_daemons_status
             watchdog_cmd s

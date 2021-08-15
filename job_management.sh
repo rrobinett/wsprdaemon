@@ -247,14 +247,15 @@ function show_running_jobs() {
     local receiver_name
     local receiver_band
     local found_job="no"
- 
+
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         wd_logger 0 "There is no RUNNING_JOBS_FILE '${RUNNING_JOBS_FILE}'"
         wd_logger 2 "Finished"
         return 1
     fi
     source ${RUNNING_JOBS_FILE}
-    
+
+    local running_jobs_count=0
     for job_index in $(seq 0 $(( ${#RUNNING_JOBS[*]} - 1 )) ) ; do
         job_info=(${RUNNING_JOBS[job_index]/,/ } )
         receiver_band=${job_info[1]}
@@ -272,24 +273,24 @@ function show_running_jobs() {
             wd_logger 0 "\n${print_string}"
             #printf "%2s: %12s,%-4s posting  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})"
         fi
-        if [[ ${verbosity} -gt 0 ]]; then
-            for receiver_name in ${receiver_name_list[@]}; do
-                if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
-                    printf "%2s: %12s,%-4s capture  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
-                    printf "%2s: %12s,%-4s decode   %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
-                    found_job="yes"
-                fi
-            done
-            if [[ ${found_job} == "no" ]]; then
-                if [[ "${show_target}" == "all" ]]; then
-                    echo "No spot recording jobs are running"
-                else
-                    echo "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
-                fi
-           fi
+        for receiver_name in ${receiver_name_list[@]}; do
+            if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
+                printf "%2s: %12s,%-4s capture  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s decode   %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                found_job="yes"
+            fi
+        done
+        if [[ ${found_job} == "yes" ]]; then
+            (( ++running_jobs_count ))
+            if [[ "${show_target}" == "all" ]]; then
+                wd_logger 1 "No spot recording jobs are running"
+            else
+                wd_logger 1 "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
+            fi
         fi
     done
-     wd_logger 2 "Finished"
+    wd_logger 1 "Found ${running_jobs_count} running decode jobs"
+    wd_logger 2 "Finished"
 }
 
 ##############################################################
@@ -669,9 +670,9 @@ function stop_running_jobs() {
         local running_job=(${temp_running_jobs[${index_running_jobs}]/,/ })
         local running_reciever=${running_job[0]}
         local running_band=${running_job[1]}
-        wd_logger 1 "Compare against running job ${running_receiver}.${running_band}"
+        wd_logger 1 "Compare against running job ${running_reciever},${running_band}"
         if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_reciever} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
-            wd_logger 1 "INFO: is terminating running  job '${running_job[@]/ /,}'"
+            wd_logger 1 "Terminating running  job ${running_reciever},${running_band}"
             start_stop_job z ${running_reciever} ${running_band}       ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
         else
             wd_logger 1 "does not match running job '${running_job[@]}'"
@@ -690,7 +691,7 @@ function stop_running_jobs() {
             local running_reciever=${running_job[0]}
             local running_band=${running_job[1]}
             if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_reciever} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
-                wd_logger 1 "INFO: checking to see if job '${running_job[@]/ /,}' is still running"
+                wd_logger 1 "Checking to see if job ${running_reciever},${running_band} is still running"
                 local recording_dir=$(get_recording_dir_path ${running_reciever} ${running_band})
                 if [[ -f ${recording_dir}/recording.stop ]]; then
                     wd_logger 1 "INFO: found file '${recording_dir}/recording.stop'"
