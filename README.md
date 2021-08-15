@@ -1,4 +1,11 @@
-# wsprdaemon (WD) Latest version is v2.10g
+# wsprdaemon (WD) Latest version is v2.10k
+2.10k Add WD's version number to spots uploaded to wsprnet.org
+
+2.10j Upload WSJT-x 2.3.0 binaries
+
+2.10i Fix installation of python-numpy on Ubuntu 20.04.1 LTE 
+
+2.10h Fix a bug which on fast CPUs caused loss of connection to Kiwis.  There is no need to upgrade to 2.10h unless your installation is failing to connect to your Kiwis.
 
 2.10g Fix uninitialized variable bug which was causing recording jobs to abort
 
