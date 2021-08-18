@@ -588,16 +588,16 @@ function update_running_jobs_to_match_expected_jobs() {
         local running_reciever=${running_job%,*}
         local running_band=${running_job#*,}
         local found_it="no"
-        wd_logger 1 "Checkling status of job $running_job"
+        wd_logger 1 "Checking status of job $running_job"
         for index_schedule_jobs in $( seq 0 $(( ${#EXPECTED_JOBS[*]} - 1)) ) ; do
             if [[ ${running_job} == ${EXPECTED_JOBS[$index_schedule_jobs]} ]]; then
                 found_it="yes"
                 ### Verify that it is still running
                 local status
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
-                    wd_logger 1 "found job ${running_reciever} ${running_band} is running"
+                    wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
-                    wd_logger 1 "found dead recording job '%s,%s'. get_recording_status() returned '%s', so starting job."  \
+                    wd_logger 1 "Found dead posting_daemon() job '%s,%s'. get_recording_status() returned '%s', so starting job"  \
                         ${running_reciever} ${running_band} "$status"
                     start_stop_job a ${running_reciever} ${running_band}
                 fi
@@ -605,7 +605,7 @@ function update_running_jobs_to_match_expected_jobs() {
             fi
         done
         if [[ $found_it == "no" ]]; then
-            wd_logger 1 "found Schedule has changed. Terminating posting job '${running_reciever},${running_band}'"
+            wd_logger 1 "Found Schedule has changed. Terminating posting job '${running_reciever},${running_band}'"
             ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE} and tell the posting_dameon to stop.  Ot polls every 5 seconds and if there are no more clients will signal the recording deamon to stop
             start_stop_job z ${running_reciever} ${running_band} 
             schedule_change="yes"

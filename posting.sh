@@ -66,7 +66,7 @@ function posting_daemon()
                 (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            wd_logger 3 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
+            wd_logger 1 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
@@ -90,7 +90,7 @@ function posting_daemon()
                 done
             done
             if [[ ${daemon_stop} != "no" ]]; then
-                wd_logger 3 " The expected posting dir ${posting_dir} does not exist, so exiting inner while loop"
+                wd_logger 1 " The expected posting dir ${posting_dir} does not exist, so exiting inner while loop"
                 daemon_stop="yes"
                 break
             fi
@@ -126,10 +126,10 @@ function posting_daemon()
                 done
             fi
             if [[  ${waiting_for_decodes} == "yes" ]]; then
-                wd_logger 4 "Is waiting for files. Sleeping..."
+                wd_logger 1 "Is waiting for files. Sleeping..."
                 sleep ${WAV_FILE_POLL_SECONDS}
             else
-                wd_logger 3 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
+                wd_logger 1 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
             fi
         done
         if [[ ${daemon_stop} != "no" ]]; then
@@ -139,7 +139,7 @@ function posting_daemon()
         ### All of the ${real_receiver_list[@]} directories have *_wspr_spot.txt files with the same time&name
 
         ### Clean out any older *_wspr_spots.txt files
-        wd_logger 3 "Flushing old *_wspr_spots.txt files"
+        wd_logger 1 "Flushing old *_wspr_spots.txt files"
         local posting_source_dir
         local posting_source_file
         for posting_source_dir in ${posting_source_dir_list[@]} ; do
@@ -168,13 +168,13 @@ function posting_daemon()
         local wsprd_spots_best_file_path
         if [[ ! -s ${wsprd_spots_all_file_path} ]]; then
             ### The decode daemon of each real receiver signaled it had decoded a wave file with zero spots by creating a zero length spot.txt file 
-            wd_logger 2 "No spots were decoded"
+            wd_logger 1 "No spots were decoded"
             wsprd_spots_best_file_path=${wsprd_spots_all_file_path}
         else
             ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
              wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
 
-            wd_logger 2 "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}"
+            wd_logger 1 "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}"
 
             ### Get a list of all calls found in all of the receiver's decodes
             local posting_call_list=$( cat ${wsprd_spots_all_file_path} | awk '{print $7}'| sort -u )
@@ -241,9 +241,9 @@ function posting_daemon()
                 rm -f ${filtered_receiver_wspr_spots_file}
                 touch ${filtered_receiver_wspr_spots_file}    ### In case there are no spots in the real rx
                 if [[ ! -s ${real_receiver_wspr_spots_file} ]]; then
-                    wd_logger 2 " spot file has no spots, but copy it to the upload directory so upload_daemon knows that this wspr cycle decode has been completed"
+                    wd_logger 1 "This spot file has no spots, but copy it to the upload directory so upload_daemon knows that this wspr cycle decode has been completed"
                 else
-                    wd_logger 2 " queue real rx spots file '${real_receiver_wspr_spots_file}' for upload to wsprdaemon.org"
+                    wd_logger 1 "Queue real rx spots file '${real_receiver_wspr_spots_file}' for upload to wsprdaemon.org"
                     ### Make sure there is only one spot for each CALL in this file.
                     ### Get a list of all calls found in all of the receiver's decodes
                     local posting_call_list=$( cat ${real_receiver_wspr_spots_file} | awk '{print $7}'| sort -u )
@@ -275,11 +275,11 @@ function posting_daemon()
                 local upload_wsprd_file_path=${upload_wsprdaemon_spots_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
                 mv ${real_receiver_enhanced_wspr_spots_file} ${upload_wsprd_file_path}
                 rm -f ${real_receiver_wspr_spots_file}
-                if [[ ${verbosity} -ge 2 ]]; then
+                if [[ ${verbosity} -ge 1 ]]; then
                     if [[ -s ${upload_wsprd_file_path} ]]; then
-                        echo -e "$(date): posting_daemon() copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} which contains spot(s):\n$( cat ${upload_wsprd_file_path})"
+                        wd_logger 1 "Copied ${real_receiver_enhanced_wspr_spots_file} to ${upload_wsprd_file_path} which contains spot(s):\n$( cat ${upload_wsprd_file_path})"
                     else
-                        echo -e "$(date): posting_daemon() created zero length spot file ${upload_wsprd_file_path}"
+                        wd_logger 1 "Created zero length spot file ${upload_wsprd_file_path}"
                     fi
                 fi
             fi
@@ -288,20 +288,20 @@ function posting_daemon()
             local noise_files_list=( ${real_receiver_dir}/*_wspr_noise.txt )
             local noise_files_list_count=${#noise_files_list[@]}
             if [[ ${noise_files_list_count} -lt 1 ]]; then
-                [[ ${verbosity} -ge 2 ]] && printf "$(date): posting_daemon() expected noise.txt file is missing\n"
+                wd_logger 1 "The expected noise.txt file is missing"
             else
                 local  upload_wsprdaemon_noise_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
                 mkdir -p ${upload_wsprdaemon_noise_dir}
 
                 mv ${noise_files_list[@]} ${upload_wsprdaemon_noise_dir}   ### The TIME_FREQ is already part of the noise file name
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() moved noise file '${noise_files_list[@]}' to '${upload_wsprdaemon_noise_dir}'"
+                wd_logger 1 "Moved noise file(s) '${noise_files_list[@]}' to '${upload_wsprdaemon_noise_dir}'"
             fi
         done
         ### We have uploaded all the spot and noise files
  
         sleep ${WAV_FILE_POLL_SECONDS}
     done
-    [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() has stopped"
+    wd_logger 1 "Finished"
 }
 
 ### Called by the posting_daemon() to create a spot file which will be uploaded to wsprdaemon.org

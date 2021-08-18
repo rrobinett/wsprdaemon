@@ -193,18 +193,18 @@ function upload_wsprnet_create_spot_file_list_file()
         wd_logger 1 "checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
 
         local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_root_path
-        wd_logger 1 "checking for number of spots in \n%s\n" "${cycle_files}"
+        wd_logger 2 "Checking for number of spots in '${cycle_files}'"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
-        wd_logger 1 "found ${cycle_spots_count} spots in cycle ${cycle}"
+        wd_logger 1 "Found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
         if [[ ${cycle_spots_count} -eq 0 ]]; then
-            wd_logger 1 "found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
+            wd_logger 1 "Found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
             rm ${cycle_files}
         else
             if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-                wd_logger 1 "found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+                wd_logger 1 "Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
                 echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
                 return
             fi
@@ -212,7 +212,7 @@ function upload_wsprnet_create_spot_file_list_file()
             spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
        fi
    done
-   wd_logger 1 "found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
+   wd_logger 1 "Found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
    echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
 }
 
@@ -380,21 +380,23 @@ function spawn_upload_to_wsprnet_daemon()
 {
     local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     mkdir -p ${uploading_pid_file_path%/*}
-    wd_logger 1 "Starting in ${uploading_pid_file_path%/*}"
+    wd_logger 2 "Starting in ${uploading_pid_file_path%/*}"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            wd_logger 1 "Uploading job with pid ${uploading_pid} is already running"
-            return
+            wd_logger 2 "Uploading job with pid ${uploading_pid} is already running"
+            return 0
         else
             wd_logger 1 "Found a stale uploading.pid file with pid ${uploading_pid}. Deleting file ${uploading_pid_file_path}"
             rm -f ${uploading_pid_file_path}
         fi
     fi
+    wd_logger 1 "Spawning new upload_to_wsprnet_daemon()"
     mkdir -p ${UPLOADS_WSPRNET_LOGFILE_PATH%/*}
-    upload_to_wsprnet_daemon &
+    WD_LOGFILE=${UPLOADS_WSPRNET_LOGFILE_PATH} upload_to_wsprnet_daemon &
     echo $! > ${uploading_pid_file_path}
     wd_logger 1 "Spawned new uploading job with PID '$!'"
+    return 0
 }
 
 function kill_upload_to_wsprnet_daemon()

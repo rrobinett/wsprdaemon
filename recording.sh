@@ -355,7 +355,7 @@ function kiwi_recording_daemon()
             wd_logger 1 "Awake after error detected. Restart"
             return 1
         else
-            wd_logger 1 "Checking for stale wav files"
+            wd_logger 2 "Checking for stale wav files"
             flush_stale_wav_files   ## ### Ensure that the file system is not filled up with zombie wav files
 
             local current_time=$(date +%s)
@@ -396,7 +396,7 @@ function kiwi_recording_daemon()
                 touch recording.stop
             fi
             if [[ ! -f recording.stop ]]; then
-                wd_logger 1 "Checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
+                wd_logger 2 "Checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
                 sleep ${WAV_FILE_POLL_SECONDS}
             fi
         fi
