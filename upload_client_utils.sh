@@ -336,7 +336,8 @@ function upload_to_wsprnet_daemon()
                     rm -f ${all_spots_file_list[@]}
                 else
                     ### Upload all the spots for one CALL_GRID in one curl transaction 
-                    [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
+                    local wd_arg=$(printf "Uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.")
+                    wd_logger 1 "${wd_arg}"
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
                     curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
                     local ret_code=$?
@@ -360,7 +361,8 @@ function upload_to_wsprnet_daemon()
                             else
                                 ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
                                 ### Assume we are done attempting to transfer those spots
-                                [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
+                                local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
+                                wd_logger 1 "${wd_arg}"
                             fi
                             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${all_spots_file_list[@]}'"
                             rm -f ${all_spots_file_list[@]}
@@ -574,13 +576,14 @@ function upload_to_wsprdaemon_daemon() {
 
     mkdir -p ${source_root_dir}
     cd ${source_root_dir}
+    wd_logger 1 "Starting in '${source_root_dir}'"
     while true; do
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
+        wd_logger 2 " upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
         local call_grid_path
         for call_grid_path in $(ls -d ${source_root_dir}/*/) ; do
             call_grid_path=${call_grid_path%/*}      ### Chop off the trailing '/'
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files under call_grid_path directory '${call_grid_path}'" 
+            wd_logger 2 "Checking for files under call_grid_path directory '${call_grid_path}'" 
             ### Spots from all recievers with the same call/grid are put into this one directory
             local call_grid=${call_grid_path##*/}
             call_grid=${call_grid/=/\/}         ### Restore the '/' in the reporter call sign
@@ -590,41 +593,41 @@ function upload_to_wsprdaemon_daemon() {
             unset all_upload_files
             local all_upload_files=( $(echo ${call_grid_path}/*/*/*.txt) )
             if [[ ${#all_upload_files[@]} -eq 0  ]] ; then
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() found no files to  upload under '${my_call_sign}_${my_grid}'"
+                wd_logger 2 "Found no files to  upload under '${my_call_sign}_${my_grid}'"
             else
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() found upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
+                wd_logger 2 "Found upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
                 local upload_file
                 for upload_file in ${all_upload_files[@]} ; do
-                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting to upload '${upload_file}"
+                    wd_logger 2 "Starting to upload '${upload_file}"
                     local xfer_success=yes
                     local upload_line
                     while read upload_line; do
                         ### Parse the spots.txt or noise.txt line to determine the curl URL and arg`
-                        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting curl upload from '${upload_file}' of line ${upload_line}"
+                        wd_logger 2 "Starting curl upload from '${upload_file}' of line ${upload_line}"
                         upload_line_to_wsprdaemon ${upload_file} "${upload_line}" 
                         local ret_code=$?
                         if [[ ${ret_code} -eq 0 ]]; then
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprdaemon_daemon() upload_line_to_wsprdaemon()  eports successful upload of line '${upload_line}'"
+                            wd_logger 2 "Successful upload of line '${upload_line}'"
                         else
-                            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() curl reports failed upload of line '${upload_line}'"
+                            wd_logger 2 "curl reports failed upload of line '${upload_line}'"
                             xfer_success=no
                         fi
                     done < ${upload_file}
 
                     if [[ ${xfer_success} == yes ]]; then
-                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() sucessfully uploaded all the lines from '${upload_file}', delete the file"
+                        wd_logger 2 "Sucessfully uploaded all the lines from '${upload_file}', delete the file"
                     else 
-                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() failed to  upload all the lines from '${upload_file}', delete the file"
+                        wd_logger 2 "Failed to  upload all the lines from '${upload_file}', delete the file"
                     fi
                     rm ${upload_file}
                 done ## for upload_file in ${all_upload_files[@]} ; do
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() finished upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
+                wd_logger 1 "finished upload of files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
             fi  ### 
         done
 
         ### Sleep until 10 seconds before the end of the current two minute WSPR cycle by which time all of the previous cycle's spots will have been decoded
         local sleep_secs=5
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() sleeping for ${sleep_secs} seconds"
+        wd_logger 1 "sleeping for ${sleep_secs} seconds"
         sleep ${sleep_secs}
     done
 }

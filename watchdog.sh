@@ -6,6 +6,15 @@ declare -r    PATH_WATCHDOG_PID=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.pid
 declare -r    PATH_WATCHDOG_LOG=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.log
 declare       WATCHDOG_POLL_SECONDS=5      ## How often the watchdog wakes up to check for all the log files for new lines and at the beginning of each odd minute run zombie checks, create noise graphs, etc....
 
+function wd_logger_flush_all_logs {
+    wd_logger 2 "Flushing printed files"
+    local printed_files=( $( find -name '*printed' ) )
+    rm ${printed_files[@]}
+    wd_logger 2 "Flushing log files"
+    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
+    rm ${log_files[@]}
+}
+
 function wd_logger_check_all_logs {
     wd_logger 2 "Checking log files"
     local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
@@ -44,6 +53,7 @@ function watchdog_daemon()
 {
     local last_minute=-1
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    wd_logger_flush_all_logs
     wd_logger 1 "Starting in $PWD as pid $$"
     while true; do
         wd_logger_check_all_logs

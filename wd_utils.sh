@@ -25,7 +25,7 @@ export TZ=UTC                                                    ### Log lines u
 
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
-declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-100000}        ### Limit log files to 100 KBytes
+declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then

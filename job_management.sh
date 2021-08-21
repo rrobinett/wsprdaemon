@@ -283,7 +283,7 @@ function show_running_jobs() {
         if [[ ${found_job} == "yes" ]]; then
             (( ++running_jobs_count ))
             if [[ "${show_target}" == "all" ]]; then
-                wd_logger 1 "No spot recording jobs are running"
+                wd_logger 1 "${running_jobs_count} recording jobs are running"
             else
                 wd_logger 1 "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
             fi
@@ -727,7 +727,7 @@ function start_or_kill_jobs() {
         exit 1
     fi
 
-    wd_logger 1 "Atarting with args $action,'$target_arg'"
+    wd_logger 1 "Starting with args $action,'$target_arg'"
     case ${action} in 
         a)
             if [[ ${target_receiver} == "all" ]]; then
