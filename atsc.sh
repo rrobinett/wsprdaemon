@@ -37,7 +37,8 @@ function atsc_pilot_freq_table_create() {
     local last_channel_frequency=${last_channel_info[1]}
     local table_index=0
 
-    wd_logger 2 "Filling ATSC_PILOT_FREQ_TABLE[] with ATSC channels from #${channel_number} at %d Hz to #${last_channel_number} at %d\n" ${channel_freqency} ${last_channel_frequency}
+    local wd_arg=$(printf "Filling ATSC_PILOT_FREQ_TABLE[] with ATSC channels from #${channel_number} at %d Hz to #${last_channel_number} at %d\n" ${channel_freqency} ${last_channel_frequency})
+    wd_logger 2 "${wd_arg}"
     while [[ ${channel_freqency} -le ${last_channel_frequency} ]]; do
         ATSC_PILOT_FREQ_TABLE[${table_index}]="${channel_number} ${channel_freqency}"
         wd_logger 3 "Assigned Ch '${channel_number}' / Freq '${channel_freqency}' to ATSC_PILOT_FREQ_TABLE[${table_index}]"

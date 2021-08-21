@@ -33,7 +33,55 @@ if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "$
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
 
+function wd_logger_flush_all_logs {
+    wd_logger 2 "Flushing printed files"
+    local printed_files=( $( find -name '*printed' ) )
+    rm ${printed_files[@]}
+    wd_logger 2 "Flushing log files"
+    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
+    rm ${log_files[@]}
+}
+
+function wd_logger_check_all_logs {
+    wd_logger 2 "Checking log files"
+    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
+    for log_file in ${log_files[@]}; do
+        local log_file_last_printed=${log_file}.printed
+        if [[ ! -s ${log_file} ]]; then
+            wd_logger 2 "Log file ${log_file} is empty"
+        else
+            ### The log file is not empty
+            local new_log_lines
+            if [[ ! -f ${log_file_last_printed} ]]; then
+                ### None of the log file lines have been printed
+                wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file} (if any) have been printed"
+                new_log_lines=$(cat ${log_file})
+            else
+                ### Some lines have been previously printed
+                wd_logger 2 "Found ${log_file_last_printed} file, so some of log lines in ${log_file} have been printed"
+                new_log_lines=$(grep -A20 "$(cat ${log_file_last_printed})" ${log_file} | tail -n +2 )
+            fi
+            if [[ -z "${new_log_lines}" ]]; then
+                wd_logger 2 "There are no lines or no new lines in ${log_file} to be printed"
+            else
+                local new_log_lines_count=$( wc -l <<< "${new_log_lines}" )
+                wd_logger 2 "There are new lines to be printed"
+                local new_last_printed_line=$(tail -1 <<< "${new_log_lines}")
+                echo "${new_last_printed_line}" > ${log_file_last_printed}
+                local new_lines_to_print=$(awk "{print \"${log_file}: \" \$0}" <<< "${new_log_lines}")
+                wd_logger 1 "New log lines:  \n${new_lines_to_print}"
+            fi
+        fi
+    done
+}
+
 function wd_logger() {
+    if [[ $# -ne 2 ]]; then
+        local prefix_str=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}()")
+        local bad_args="$@"
+        echo "${prefix_str} called from function ${FUNCNAME[1]} in file ${BASH_SOURCE[1]} line #${BASH_LINENO[0]} with bad number of arguments: '${bad_args}'"
+        return 1
+    fi
     local log_at_level=$1
     [[ ${verbosity} -lt ${log_at_level} ]] && return
 
