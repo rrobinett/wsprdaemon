@@ -298,6 +298,8 @@ function validate_configured_schedule()
 {
     local found_error="no"
     local sched_index
+
+    wd_logger 2 "Starting"
     for sched_index in $(seq 0 $((${#WSPR_SCHEDULE[*]} - 1 )) ); do
         local sched_line=(${WSPR_SCHEDULE[${sched_index}]})
         local sched_line_index_max=${#sched_line[@]}
@@ -305,12 +307,13 @@ function validate_configured_schedule()
             echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields"
             exit 1
         fi
-        [[ $verbosity -ge 5 ]] && echo "testing schedule line ${sched_line[@]}"
         local job_time=${sched_line[0]}
+        wd_logger 2 "Job for time '${job_time}' has at least two RX:BAND specifications"
+        ### NOTE: all of the receivers must be in the same time zone.
         local index
         for index in $(seq 1 $(( ${#sched_line[@]} - 1 )) ); do
             local job=${sched_line[${index}]}
-            [[ $verbosity -ge 5 ]] && echo "testing job $job"
+            wd_logger 2 "Testing job $job"
             local -a job_elements=(${job//,/ })
             local    job_elements_count=${#job_elements[@]}
             if [[ $job_elements_count -ne 2 ]]; then

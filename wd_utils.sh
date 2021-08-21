@@ -19,13 +19,13 @@
 
 shopt -s -o nounset                               ### bash stops with error if undeclared variable is referenced
 
-declare -i verbosity=${verbosity:-0}              ### default to level 2, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
+declare -i verbosity=${verbosity:-1}              ### default to level 1, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
 
 export TZ=UTC                                                    ### Log lines use FMT below, but legacy $(date) will printout 12H UTC
 
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
-declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-100000}        ### Limit log files to 100 KBytes
+declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
 lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
 if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then

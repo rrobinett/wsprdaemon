@@ -172,7 +172,7 @@ declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_WSPRNET_ROOT_DIR}/upload_spot_file_
 function upload_wsprnet_create_spot_file_list_file()
 {
     local wspr_spots_files="$@"         ### i.e. a list of spot files in the format:  /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_BAND_wspr_spots.txt
-    [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() starting with list '${wspr_spots_files}'"
+    wd_logger 1 "starting with list '${wspr_spots_files}'"
 
     local wspr_spots_files_count=$(wc -w <<< "${wspr_spots_files}")
     local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
@@ -182,7 +182,7 @@ function upload_wsprnet_create_spot_file_list_file()
           wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID
     local cycles_list=$(echo "${wspr_spots_files}" | tr ' ' '\n' | sed 's;.*/;;' | cut -c 1-11 | sort -u )
     local cycles_count=$(echo "${cycles_list}" | wc -l)
-    [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() under '${wspr_spots_root_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
+    wd_logger 1 "under '${wspr_spots_root_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
 
     local spots_file_list=""
     local spots_file_list_count=0
@@ -190,21 +190,21 @@ function upload_wsprnet_create_spot_file_list_file()
     local file_spots_count=0
     for cycle in ${cycles_list} ; do
         local cycle_root_name="${wspr_spots_root_path}/*/*/${cycle}"  ### e.g.: /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/*/*/YYMMDD_HHMM
-        [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
+        wd_logger 1 "checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
 
         local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_root_path
-        [[ $verbosity -ge 3 ]] && printf "$(date): upload_wsprnet_create_spot_file_list_file() checking for number of spots in \n%s\n" "${cycle_files}"
+        wd_logger 2 "Checking for number of spots in '${cycle_files}'"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
-        [[ $verbosity -ge 3 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found ${cycle_spots_count} spots in cycle ${cycle}"
+        wd_logger 1 "Found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
         if [[ ${cycle_spots_count} -eq 0 ]]; then
-            [[ $verbosity -ge 1 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
+            wd_logger 1 "Found the complete set of files in cycle ${cycle_root_name} contain no spots.  So flush those files"
             rm ${cycle_files}
         else
             if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-                [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+                wd_logger 1 "Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
                 echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
                 return
             fi
@@ -212,7 +212,7 @@ function upload_wsprnet_create_spot_file_list_file()
             spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
        fi
    done
-   [[ $verbosity -ge 2 ]] && echo "$(date): upload_wsprnet_create_spot_file_list_file() found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
+   wd_logger 1 "Found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
    echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
 }
 
@@ -336,7 +336,8 @@ function upload_to_wsprnet_daemon()
                     rm -f ${all_spots_file_list[@]}
                 else
                     ### Upload all the spots for one CALL_GRID in one curl transaction 
-                    [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.\n"
+                    local wd_arg=$(printf "Uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.")
+                    wd_logger 1 "${wd_arg}"
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
                     echo "curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}.cmd 2>&1
                     curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
@@ -361,7 +362,8 @@ function upload_to_wsprnet_daemon()
                             else
                                 ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
                                 ### Assume we are done attempting to transfer those spots
-                                [[ ${verbosity} -ge 1 ]] && printf "$(date): upload_to_wsprnet_daemon() successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
+                                local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
+                                wd_logger 1 "${wd_arg}"
                             fi
                             [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${all_spots_file_list[@]}'"
                             rm -f ${all_spots_file_list[@]}
@@ -381,66 +383,62 @@ function spawn_upload_to_wsprnet_daemon()
 {
     local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     mkdir -p ${uploading_pid_file_path%/*}
+    wd_logger 2 "Starting in ${uploading_pid_file_path%/*}"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            [[ $verbosity -ge 3 ]] && echo "$(date): spawn_upload_to_wsprnet_daemon() INFO: uploading job with pid ${uploading_pid} is already running"
-            return
+            wd_logger 2 "Uploading job with pid ${uploading_pid} is already running"
+            return 0
         else
-            echo "$(date): WARNING: spawn_upload_to_wsprnet_daemon() found a stale uploading.pid file with pid ${uploading_pid}. Deleting file ${uploading_pid_file_path}"
+            wd_logger 1 "Found a stale uploading.pid file with pid ${uploading_pid}. Deleting file ${uploading_pid_file_path}"
             rm -f ${uploading_pid_file_path}
         fi
     fi
+    wd_logger 1 "Spawning new upload_to_wsprnet_daemon()"
     mkdir -p ${UPLOADS_WSPRNET_LOGFILE_PATH%/*}
-    upload_to_wsprnet_daemon > ${UPLOADS_WSPRNET_LOGFILE_PATH} 2>&1 &
+    WD_LOGFILE=${UPLOADS_WSPRNET_LOGFILE_PATH} upload_to_wsprnet_daemon &
     echo $! > ${uploading_pid_file_path}
-    [[ $verbosity -ge 1 ]] && echo "$(date): spawn_upload_to_wsprnet_daemon() Spawned new uploading job with PID '$!'"
+    wd_logger 1 "Spawned new uploading job with PID '$!'"
+    return 0
 }
 
 function kill_upload_to_wsprnet_daemon()
 {
+    wd_logger 1 "Starting"
     local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
-    if [[ -f ${uploading_pid_file_path} ]]; then
+    if [[ ! -f ${uploading_pid_file_path} ]]; then
+        wd_logger 1 "Found no uploading.pid file ${uploading_pid_file_path}"
+    else
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            [[ $verbosity -ge 3 ]] && echo "$(date): kill_upload_to_wsprnet_daemon() killing active upload_to_wsprnet_daemon() with pid ${uploading_pid}"
+            wd_logger 1 "Killing active upload_to_wsprnet_daemon() with pid ${uploading_pid}"
             kill ${uploading_pid}
         else
-            [[ $verbosity -ge 1 ]] && echo "$(date): kill_upload_to_wsprnet_daemon() found a stale uploading.pid file with pid ${uploading_pid}"
+            wd_logger 1 "Found a stale uploading.pid file with pid ${uploading_pid}"
         fi
         rm -f ${uploading_pid_file_path}
-    else
-        [[ $verbosity -ge 3 ]] && echo "$(date): kill_upload_to_wsprnet_daemon() found no uploading.pid file ${uploading_pid_file_path}"
     fi
+    wd_logger 1 "Finished"
 }
 
 function upload_to_wsprnet_daemon_status()
 {
+    local ret_code=0
     local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
+    wd_logger 2 "Starting.  Checking for ${uploading_pid_file_path}"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            if [[ $verbosity -eq 0 ]] ; then
-                echo "The wsprnet.org    spots uploading daemon is running"
-            else
-                echo "$(date): upload_to_wsprnet_daemon_status() with pid ${uploading_pid} id running"
-            fi
+            wd_logger 0 "The wsprnet.org spots uploading daemon with pid ${uploading_pid} is running"
         else
-            if [[ $verbosity -eq 0 ]] ; then
-                echo "Wsprnet Uploading daemon pid file records pid '${uploading_pid}', but that pid is not running"
-            else
-                echo "$(date): upload_to_wsprnet_daemon_status() found a stale uploading.pid file with pid ${uploading_pid}"
-            fi
-            return 1
+            wd_logger 0  "Wsprnet Uploading daemon pid file records pid '${uploading_pid}', but that pid is not running"
+            ret_code=1
         fi
     else
-        if [[ $verbosity -eq 0 ]] ; then
-            echo "No wsprnet.org upload daemon is running"
-        else
-            echo "$(date): upload_to_wsprnet_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
-        fi
+       wd_logger 0 "No wsprnet.org upload daemon is running"
     fi
-    return 0
+    wd_logger 2 "Finished"
+    return ${ret_code}
 }
 
 declare TS_HOSTNAME=logs.wsprdaemon.org
@@ -579,13 +577,14 @@ function upload_to_wsprdaemon_daemon() {
 
     mkdir -p ${source_root_dir}
     cd ${source_root_dir}
+    wd_logger 1 "Starting in '${source_root_dir}'"
     while true; do
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
+        wd_logger 2 " upload_to_wsprdaemon_daemon() checking for files to upload under '${source_root_dir}/*/*'"
         shopt -s nullglob    ### * expands to NULL if there are no file matches
         local call_grid_path
         for call_grid_path in $(ls -d ${source_root_dir}/*/) ; do
             call_grid_path=${call_grid_path%/*}      ### Chop off the trailing '/'
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() checking for files under call_grid_path directory '${call_grid_path}'" 
+            wd_logger 2 "Checking for files under call_grid_path directory '${call_grid_path}'" 
             ### Spots from all recievers with the same call/grid are put into this one directory
             local call_grid=${call_grid_path##*/}
             call_grid=${call_grid/=/\/}         ### Restore the '/' in the reporter call sign
@@ -595,41 +594,41 @@ function upload_to_wsprdaemon_daemon() {
             unset all_upload_files
             local all_upload_files=( $(echo ${call_grid_path}/*/*/*.txt) )
             if [[ ${#all_upload_files[@]} -eq 0  ]] ; then
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() found no files to  upload under '${my_call_sign}_${my_grid}'"
+                wd_logger 2 "Found no files to  upload under '${my_call_sign}_${my_grid}'"
             else
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() found upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
+                wd_logger 2 "Found upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
                 local upload_file
                 for upload_file in ${all_upload_files[@]} ; do
-                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting to upload '${upload_file}"
+                    wd_logger 2 "Starting to upload '${upload_file}"
                     local xfer_success=yes
                     local upload_line
                     while read upload_line; do
                         ### Parse the spots.txt or noise.txt line to determine the curl URL and arg`
-                        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() starting curl upload from '${upload_file}' of line ${upload_line}"
+                        wd_logger 2 "Starting curl upload from '${upload_file}' of line ${upload_line}"
                         upload_line_to_wsprdaemon ${upload_file} "${upload_line}" 
                         local ret_code=$?
                         if [[ ${ret_code} -eq 0 ]]; then
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprdaemon_daemon() upload_line_to_wsprdaemon()  eports successful upload of line '${upload_line}'"
+                            wd_logger 2 "Successful upload of line '${upload_line}'"
                         else
-                            [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() curl reports failed upload of line '${upload_line}'"
+                            wd_logger 2 "curl reports failed upload of line '${upload_line}'"
                             xfer_success=no
                         fi
                     done < ${upload_file}
 
                     if [[ ${xfer_success} == yes ]]; then
-                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() sucessfully uploaded all the lines from '${upload_file}', delete the file"
+                        wd_logger 2 "Sucessfully uploaded all the lines from '${upload_file}', delete the file"
                     else 
-                        [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() failed to  upload all the lines from '${upload_file}', delete the file"
+                        wd_logger 2 "Failed to  upload all the lines from '${upload_file}', delete the file"
                     fi
                     rm ${upload_file}
                 done ## for upload_file in ${all_upload_files[@]} ; do
-                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprdaemon_daemon() finished upload files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
+                wd_logger 1 "finished upload of files under '${my_call_sign}_${my_grid}': '${all_upload_files[@]}'"
             fi  ### 
         done
 
         ### Sleep until 10 seconds before the end of the current two minute WSPR cycle by which time all of the previous cycle's spots will have been decoded
         local sleep_secs=5
-        [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprdaemon_daemon() sleeping for ${sleep_secs} seconds"
+        wd_logger 1 "sleeping for ${sleep_secs} seconds"
         sleep ${sleep_secs}
     done
 }
@@ -812,65 +811,66 @@ function spawn_ftp_upload_to_wsprdaemon_daemon() {
     local uploading_log_file_path=${UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH}
     local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
 
-    if [[ -f ${uploading_pid_file_path} ]]; then
-        local uploading_pid=$(cat ${uploading_pid_file_path})
+    wd_logger 1 "Starting. uploading_log_file_path=${UPLOADS_WSPRDAEMON_FTP_LOGFILE_PATH}, uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}"
+    local uploading_pid=-1
+    if [[ ! -f ${uploading_pid_file_path} ]]; then
+        wd_logger 1 "Found no pid file ${uploading_pid_file_path}"
+    else
+        uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            [[ $verbosity -ge 3 ]] && echo "$(date): spawn_ftp_upload_to_wsprdaemon_daemon() INFO: uploading job for '${uploading_root_dir}' with pid ${uploading_pid} is already running"
-            return
+            wd_logger 1 "Uploading job for '${uploading_root_dir}' with pid ${uploading_pid} is already running"
         else
-            echo "$(date): WARNING: spawn_ftp_upload_to_wsprdaemon_daemon() found a stale file '${uploading_pid_file_path}' with pid ${uploading_pid}, so deleting it"
+            wd_logger 1 "Found a stale file '${uploading_pid_file_path}' with pid ${uploading_pid}, so deleting it"
+            uploading_pid=-1
             rm -f ${uploading_pid_file_path}
         fi
     fi
-    ftp_upload_to_wsprdaemon_daemon > ${uploading_log_file_path} 2>&1 &
-    echo $! > ${uploading_pid_file_path}
-    [[ $verbosity -ge 1 ]] && echo "$(date): spawn_ftp_upload_to_wsprdaemon_daemon() Spawned new uploading job  with PID '$!'"
+    if [[ ${uploading_pid} -lt 0 ]] ; then
+        ftp_upload_to_wsprdaemon_daemon > ${uploading_log_file_path} 2>&1 &
+        uploading_pid=$!
+        echo ${uploading_pid} > ${uploading_pid_file_path}
+        wd_logger 1 "Spawned new uploading job with PID ${uploading_pid}"
+    fi
+    wd_logger 1 "Finished"
 }
 
 function kill_ftp_upload_to_wsprdaemon_daemon()
 {
     local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
-    if [[ -f ${uploading_pid_file_path} ]]; then
+    wd_logger 1 "Starting. uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}"
+    if [[ ! -f ${uploading_pid_file_path} ]]; then
+        wd_logger 1 "Found no file ${uploading_pid_file_path}"
+    else
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            [[ $verbosity -ge 3 ]] && echo "$(date): kill_ftp_upload_to_wsprdaemon_daemon() killing active upload_to_wsprdaemon_daemon() with pid ${uploading_pid}"
+            wd_logger 1 "Killing active upload_to_wsprdaemon_daemon() with pid ${uploading_pid}"
             kill ${uploading_pid}
         else
-            [[ $verbosity -ge 1 ]] && echo "$(date): kill_ftp_upload_to_wsprdaemon_daemon() found a stale uploading.pid file with pid ${uploading_pid}"
+           wd_logger 1 "Found a stale uploading.pid file with pid ${uploading_pid}"
         fi
-        rm -f ${uploading_pid_file_path}
-    else
-        [[ $verbosity -ge 3 ]] && echo "$(date): ftp_kill_upload_to_wsprdaemon_daemon() found no uploading.pid file ${uploading_pid_file_path}"
+        rm ${uploading_pid_file_path}
     fi
+    wd_logger 1 "Finished"
 }
 function ftp_upload_to_wsprdaemon_daemon_status()
 {
+    local ret_code=0
     local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
+    wd_logger 2 "Starting. Checking for ${uploading_pid_file_path}"
     if [[ -f ${uploading_pid_file_path} ]]; then
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
-            if [[ $verbosity -eq 0 ]] ; then
-                echo "The wsprdaemon.org uploading daemon is running"
-            else
-                echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() with pid ${uploading_pid} id running"
-            fi
+            wd_logger 0 "wsprdaemon.org uploading daemon with pid ${uploading_pid} id running"
         else
-            if [[ $verbosity -eq 0 ]] ; then
-                echo "The wsprdemon.org uploading daemon pid file ${uploading_pid_file_path}' records pid '${uploading_pid}', but that pid is not running"
-            else
-                echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
-            fi
+            wd_logger 0 "found a stale pid file '${uploading_pid_file_path}'with pid ${uploading_pid}"
             rm -f ${uploading_pid_file_path}
-            return 1
+            ret_code=1
         fi
     else
-        if [[ $verbosity -eq 0 ]] ; then
-            echo "No wsprdaemon.org uploading daemon is running"
-        else
-            echo "$(date): ftp_upload_to_wsprdaemon_daemon_status() found no uploading.pid file ${uploading_pid_file_path}"
-        fi
+        wd_logger 2 "found no uploading.pid file ${uploading_pid_file_path}"
     fi
-    return 0
+    wd_logger 2 "Finished"
+    return ${ret_code}
 }
 
 ############## Top level which spawns/kill/shows status of all of the upload daemons
@@ -883,11 +883,12 @@ function spawn_upload_daemons() {
 }
 
 function kill_upload_daemons() {
-    [[ ${verbosity} -ge 3 ]] && echo "$(date): kill_upload_daemons() start"
+    wd_logger 1 "Starting"
     kill_upload_to_wsprnet_daemon
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]]; then
         kill_ftp_upload_to_wsprdaemon_daemon
     fi
+    wd_logger 1 "Finished"
 }
 
 function upload_daemons_status(){

@@ -334,6 +334,9 @@ function check_for_needed_utilities()
                 # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.tar.gz
                 ;;
+            aarch64)
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
+                ;;
             *)
                 echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
                 exit 1
