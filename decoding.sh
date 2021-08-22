@@ -271,22 +271,26 @@ function decoding_daemon()
 
             # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
             local pre_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-            wd_logger 3 "raw   pre_tx_levels  levels '${pre_tx_levels[@]}'"
+            local wd_arg=$(printf "raw   pre_tx_levels  levels '${pre_tx_levels[@]}'")
+            wd_logger 3 "${wd_arg}"
             local i
             for i in $(seq 0 $(( ${#pre_tx_levels[@]} - 1 )) ); do
                 pre_tx_levels[${i}]=$(bc <<< "scale = 2; (${pre_tx_levels[${i}]} + ${rms_adjust})/1")           ### '/1' forces bc to use the scale = 2 setting
             done
-            wd_logger 3 "fixed pre_tx_levels  levels '${pre_tx_levels[@]}'"
+            local wd_arg=$(printf "fixed pre_tx_levels  levels '${pre_tx_levels[@]}'")
+            wd_logger 3 "${wd_arg}"
             local tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_TX_SEC} ${SIGNAL_LEVEL_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
             for i in $(seq 0 $(( ${#tx_levels[@]} - 1 )) ); do
                 tx_levels[${i}]=$(bc <<< "scale = 2; (${tx_levels[${i}]} + ${rms_adjust})/1")                   ### '/1' forces bc to use the scale = 2 setting
             done
             local post_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-            wd_logger 3 "raw   post_tx_levels levels '${post_tx_levels[@]}'"
+            local_wd_arg=$(printf "raw   post_tx_levels levels '${post_tx_levels[@]}'")
+            wd_logger 3 "${wd_arg}"
             for i in $(seq 0 $(( ${#post_tx_levels[@]} - 1 )) ); do
                 post_tx_levels[${i}]=$(bc <<< "scale = 2; (${post_tx_levels[${i}]} + ${rms_adjust})/1")         ### '/1' forces bc to use the scale = 2 setting
             done
-            wd_logger 3 "fixed post_tx_levels levels '${post_tx_levels[@]}'"
+            local wd_arg=$(printf "fixed post_tx_levels levels '${post_tx_levels[@]}'")
+            wd_logger 3 "${wd_arg}"
 
             local rms_value=${pre_tx_levels[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
             if [[  $(bc --mathlib <<< "${post_tx_levels[3]} < ${pre_tx_levels[3]}") -eq "1" ]]; then
