@@ -36,10 +36,10 @@ fi
 function wd_logger_flush_all_logs {
     wd_logger 2 "Flushing printed files"
     local printed_files=( $( find -name '*printed' ) )
-    rm ${printed_files[@]}
+    [[ ${#printed_files[@]} -gt 0 ]] && rm ${printed_files[@]}
     wd_logger 2 "Flushing log files"
     local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
-    rm ${log_files[@]}
+    [[ ${#log_files[@]} -gt 0 ]] && rm ${log_files[@]}
 }
 
 function wd_logger_check_all_logs {
