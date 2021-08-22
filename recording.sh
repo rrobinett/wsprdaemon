@@ -370,7 +370,7 @@ function kiwi_recording_daemon()
                     wd_logger 1 "Found 'kiwi_recorder.log' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
                 else
                     local ov_event_count=$(( "${new_ov_count}" - "${old_ov_count}" ))
-                    wd_logger 1 "Found ${new_ov_count}" new - "${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
+                    wd_logger 1 "Found ${new_ov_count} new - ${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
                 fi
             fi
             ### In there have been OV events, then every 10 minutes printout the count and mark the most recent line in ov.log as PRINTED
@@ -503,12 +503,11 @@ function spawn_recording_daemon() {
         local recording_pid=$(cat recording.pid)
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
-            [[ $verbosity -ge 3 ]] && echo "$(date): spawn_recording_daemon() INFO: recording job with pid ${recording_pid} is already running=> '${ps_output}'"
+            local wd_arg=$(printf "A recording job with pid ${recording_pid} is already running=> '${ps_output}'")
+            wd_logger 2 "${wd_arg}"
             return
         else
-            if [[ $verbosity -ge 1 ]]; then
-                echo "$(date): WARNING: spawn_recording_daemon() found a stale recording job '${receiver_name},${receiver_rx_band}'"
-            fi
+            wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
             rm -f recording.pid
         fi
     fi

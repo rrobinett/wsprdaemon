@@ -174,7 +174,8 @@ function posting_daemon()
             ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
              wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
 
-            wd_logger 1 "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}"
+            local wd_arg=$(printf "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}")
+            wd_logger 1 "${wd_arg}"
 
             ### Get a list of all calls found in all of the receiver's decodes
             local posting_call_list=$( cat ${wsprd_spots_all_file_path} | awk '{print $7}'| sort -u )

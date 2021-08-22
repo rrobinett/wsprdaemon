@@ -19,7 +19,8 @@ function check_kiwi_wspr_channels() {
         wd_logger 2 " Kiwi '${kiwi_name}' not reporting users status or there are no active rx channels on it.  So nothing to do"
         return
     fi
-    wd_logger 4 "Kiwi '%s' active listeners:\n%s\n" "${kiwi_name}" "${active_receivers_list}"
+    local wd_arg=$(printf "Kiwi ${kiwi_name} has active listeners:\n${active_receivers_list}")
+    wd_logger 4 "${wd_arg}"
 
     if ! ${GREP_CMD} -q "wsprdaemon" <<< "${active_receivers_list}" ; then
         wd_logger 2 "Kiwi ${kiwi_name} has no active WD listeners"

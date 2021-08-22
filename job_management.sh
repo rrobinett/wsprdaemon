@@ -283,7 +283,7 @@ function show_running_jobs() {
         if [[ ${found_job} == "yes" ]]; then
             (( ++running_jobs_count ))
             if [[ "${show_target}" == "all" ]]; then
-                wd_logger 1 "${running_jobs_count} recording jobs are running"
+                wd_logger 2 "job #${running_jobs_count} is running"
             else
                 wd_logger 1 "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
             fi
@@ -588,14 +588,14 @@ function update_running_jobs_to_match_expected_jobs() {
         local running_reciever=${running_job%,*}
         local running_band=${running_job#*,}
         local found_it="no"
-        wd_logger 1 "Checking status of job $running_job"
+        wd_logger 2 "Checking status of job $running_job"
         for index_schedule_jobs in $( seq 0 $(( ${#EXPECTED_JOBS[*]} - 1)) ) ; do
             if [[ ${running_job} == ${EXPECTED_JOBS[$index_schedule_jobs]} ]]; then
                 found_it="yes"
                 ### Verify that it is still running
                 local status
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
-                    wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
+                    wd_logger 2 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
                     wd_logger 1 "Found dead posting_daemon() job '%s,%s'. get_recording_status() returned '%s', so starting job"  \
                         ${running_reciever} ${running_band} "$status"
