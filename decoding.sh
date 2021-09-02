@@ -31,15 +31,19 @@ declare C2_FFT_CMD=${WSPRDAEMON_ROOT_DIR}/c2_noise.py
 function decoding_daemon() 
 {
     local real_receiver_name=$1                ### 'real' as opposed to 'merged' receiver
-    local real_receiver_rx_band=${2}
-    local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_rx_band})
+    local real_receiver_band=${2}
+    local real_receiver_modes=${3}
+
+    wd_logger 1 "Starting with args ${real_receiver_name} ${real_receiver_band} ${real_receiver_modes}"
+
+    local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_band})
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     ### Since they are not CPU intensive, always calculate sox RMS and C2 FFT stats
     local real_receiver_maidenhead=$(get_my_maidenhead)
 
     ### Store the signal level logs under the ~/wsprdaemon/... directory where it won't be lost due to a reboot or power cycle.
-    SIGNAL_LEVELS_LOG_DIR=${WSPRDAEMON_ROOT_DIR}/signal_levels/${real_receiver_name}/${real_receiver_rx_band}
+    SIGNAL_LEVELS_LOG_DIR=${WSPRDAEMON_ROOT_DIR}/signal_levels/${real_receiver_name}/${real_receiver_band}
     mkdir -p ${SIGNAL_LEVELS_LOG_DIR}
     ### these could be modified from these default values by declaring them in the .conf file.
     SIGNAL_LEVEL_PRE_TX_SEC=${SIGNAL_LEVEL_PRE_TX_SEC-.25}
@@ -58,7 +62,7 @@ function decoding_daemon()
         printf "${date_str}: %20s %-55s %-55s %-55s FFT\n" "" "${pre_tx_header}" "${tx_header}" "${post_tx_header}"   >  ${SIGNAL_LEVELS_LOG_FILE}
         printf "${date_str}: %s %s %s\n" "${field_descriptions}" "${field_descriptions}" "${field_descriptions}"   >> ${SIGNAL_LEVELS_LOG_FILE}
     fi
-    local wspr_band_freq_khz=$(get_wspr_band_freq ${real_receiver_rx_band})
+    local wspr_band_freq_khz=$(get_wspr_band_freq ${real_receiver_band})
     local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
     local wspr_band_freq_hz=$(                     bc <<< "scale = 0; ${wspr_band_freq_khz}*1000.0/1" )
 
@@ -81,7 +85,7 @@ function decoding_daemon()
         ### Don't adjust Kiwi's af when fed by transverter
         kiwi_amplitude_versus_frequency_correction=0
     fi
-    local antenna_factor_adjust=$(get_af_db ${real_receiver_name} ${real_receiver_rx_band})
+    local antenna_factor_adjust=$(get_af_db ${real_receiver_name} ${real_receiver_band})
     local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${real_receiver_name})
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
     local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
@@ -95,7 +99,7 @@ function decoding_daemon()
     local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
     wd_logger 2 "c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
 
-    wd_logger 2 "Starting daemon to record '${real_receiver_name},${real_receiver_rx_band}'"
+    wd_logger 2 "Starting daemon to record '${real_receiver_name},${real_receiver_band}'"
     local decoded_spots=0        ### Maintain a running count of the total number of spots_decoded
     local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
@@ -105,7 +109,7 @@ function decoding_daemon()
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
         wd_logger 3 "Checking recording process is running in $PWD"
-        spawn_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
+        spawn_wav_recording_daemon ${real_receiver_name} ${real_receiver_band} 120
         wd_logger 3 "Checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
         ### Wait for a wav file and synthisize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails
@@ -128,26 +132,32 @@ function decoding_daemon()
             local next_start_time_string=$(sleep_until_next_even_minute)
         done
         for wav_file_name in *.wav; do
-            wd_logger 2 "Monitoring size of wav file '${wav_file_name}'"
+           if [[ ${DECODE_USE_OLD_KIWI_WAV_RECORDING--no} == "yes" ]]; then
+                wd_logger 2 "Monitoring size of wav file '${wav_file_name}'"
 
-            ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writting this 2 minutes of capture and has moved to the next wav_file_name
-            local old_wav_file_size=0
-            local new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
-            while [[ -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
-                old_wav_file_size=${new_wav_file_size}
-                sleep ${WAV_FILE_POLL_SECONDS}
-                new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
-                wd_logger 4 "Old size ${old_wav_file_size}, new size ${new_wav_file_size}"
-            done
-            if [[ -z "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; then
-                wd_logger 2 "wav file size loop terminated due to no posting.d subdir"
-                break
-            fi
-            wd_logger 2 "Wav file '${wav_file_name}' stabilized at size ${new_wav_file_size}."
-            if  [[ ${new_wav_file_size} -lt ${WSPRD_WAV_FILE_MIN_VALID_SIZE} ]]; then
-                wd_logger 2 "wav file '${wav_file_name}' size ${new_wav_file_size} is too small to be processed by wsprd.  Delete this file and go to next wav file."
-                rm -f ${wav_file_name}
-                continue
+                ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writting this 2 minutes of capture and has moved to the next wav_file_name
+                local old_wav_file_size=0
+                local new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
+                while [[ -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
+                    old_wav_file_size=${new_wav_file_size}
+                    sleep ${WAV_FILE_POLL_SECONDS}
+                    new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
+                    wd_logger 4 "Old size ${old_wav_file_size}, new size ${new_wav_file_size}"
+                done
+                if [[ -z "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; then
+                    wd_logger 2 "wav file size loop terminated due to no posting.d subdir"
+                    break
+                fi
+                wd_logger 2 "Wav file '${wav_file_name}' stabilized at size ${new_wav_file_size}."
+                if  [[ ${new_wav_file_size} -lt ${WSPRD_WAV_FILE_MIN_VALID_SIZE} ]]; then
+                    wd_logger 2 "wav file '${wav_file_name}' size ${new_wav_file_size} is too small to be processed by wsprd.  Delete this file and go to next wav file."
+                    rm -f ${wav_file_name}
+                    continue
+                fi
+            else
+                wd_logger 1 "Waiting for wav file(s)"
+                wav_get_next_file 
+                wd_logger 1 "Waiting for wav file(s)"
             fi
 
             local wspr_decode_capture_date=${wav_file_name/T*}
@@ -186,7 +196,7 @@ function decoding_daemon()
             refresh_local_hashtable  ## In case we are using a hashtable created by merging hashes from other bands
             ln ${wav_file_name} ${wsprd_input_wav_filename}
             local wsprd_cmd_flags=${WSPRD_CMD_FLAGS}
-            #if [[ ${real_receiver_rx_band} =~ 60 ]]; then
+            #if [[ ${real_receiver_band} =~ 60 ]]; then
             #    wsprd_cmd_flags=${WSPRD_CMD_FLAGS/-o 4/-o 3}   ## At KPH I found that wsprd takes 90 seconds to process 60M wav files. This speeds it up for those bands
             #fi
             local start_time=${SECONDS}
@@ -366,7 +376,7 @@ function decoding_daemon()
             rm -f ${wav_file_name} ${wsprd_input_wav_filename}  ### We have completed processing the wav file, so delete both names for it
 
             ### 'wsprd' appends the new decodes to ALL_WSPR.TXT, but we are going to post only the new decodes which it puts in the file 'wspr_spots.txt'
-            update_hashtable_archive ${real_receiver_name} ${real_receiver_rx_band}
+            update_hashtable_archive ${real_receiver_name} ${real_receiver_band}
 
             ### Forward the recording's date_time_freqHz spot file to the posting daemon which is polling for it.  Do this here so that it is after the very slow sox FFT calcs are finished
             local new_spots_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_spots.txt
@@ -456,25 +466,26 @@ function decoding_daemon()
         wd_logger 3 "Decoded and posted ALL_WSPR file."
         sleep 1   ###  No need for a long sleep, since recording daemon should be creating next wav file and this daemon will poll on the size of that wav file
     done
-    wd_logger 2 "stopping recording and decoding of '${real_receiver_name},${real_receiver_rx_band}'"
-    kill_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
+    wd_logger 2 "stopping recording and decoding of '${real_receiver_name},${real_receiver_band}'"
+    kill_recording_daemon ${real_receiver_name} ${real_receiver_band}
 }
 
 
 ### 
 function spawn_decode_daemon() {
     local receiver_name=$1
-    local receiver_rx_band=$2
-    local capture_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
+    local receiver_band=$2
+    local receiver_modes=$3
+    wd_logger 1 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
+    local capture_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
-    wd_logger 1 "Starting with args  '${receiver_name},${receiver_rx_band}'"
 
     mkdir -p ${capture_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
     cd ${capture_dir}
     if [[ -f decode.pid ]] ; then
         local decode_pid=$(cat decode.pid)
         if ps ${decode_pid} > /dev/null ; then
-            wd_logger 2 "Finshed. A decode job with pid ${decode_pid} is already running, so nothing to do"
+            wd_logger 2 "A decode job with pid ${decode_pid} is already running, so nothing to do"
             return 0
         else
             wd_logger 1 "Found dead decode job"
@@ -482,18 +493,18 @@ function spawn_decode_daemon() {
         fi
     fi
     wd_logger 1 "Spawning decode daemon in $PWD"
-    WD_LOGFILE=decoding_daemon.log decoding_daemon ${receiver_name} ${receiver_rx_band} &
+    WD_LOGFILE=decoding_daemon.log decoding_daemon ${receiver_name} ${receiver_band} ${receiver_modes} &
     echo $! > decode.pid
     cd - > /dev/null
-    wd_logger 1 ": Finished.  Spawned new decode  job '${receiver_name},${receiver_rx_band}' with PID '$!'"
+    wd_logger 1 ": Finished.  Spawned new decode  job '${receiver_name},${receiver_band},${receiver_modes}' with PID '$!'"
     return 0
 }
 
 ###
 function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
-    local get_decoding_status_receiver_rx_band=$2
-    local get_decoding_status_receiver_decoding_dir=$(get_recording_dir_path ${get_decoding_status_receiver_name} ${get_decoding_status_receiver_rx_band})
+    local get_decoding_status_receiver_band=$2
+    local get_decoding_status_receiver_decoding_dir=$(get_recording_dir_path ${get_decoding_status_receiver_name} ${get_decoding_status_receiver_band})
     local get_decoding_status_receiver_decoding_pid_file=${get_decoding_status_receiver_decoding_dir}/decode.pid
 
     if [[ ! -d ${get_decoding_status_receiver_decoding_dir} ]]; then

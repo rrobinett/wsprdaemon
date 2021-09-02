@@ -71,7 +71,7 @@ function check_tmp_filesystem()
         fi
     fi
     if df ${WSPRDAEMON_TMP_DIR} | grep -q tmpfs ; then
-        [[ $verbosity -ge 2 ]] && echo "check_tmp_filesystem() found '${WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
+        wd_logger 2 "Found '${WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
     else
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
             echo "WARNING: configured to record to a non-ram file system"

@@ -263,6 +263,10 @@ function upload_to_wsprnet_daemon()
     while true; do
         [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for spot files to upload in all running jobs directories"
         local all_call_grid_list=()
+        while ! [[ -f ${RUNNING_JOBS_FILE} ]]; do
+            wd_logger 1 "Waiting for ${RUNNING_JOBS_FILE} to appear"
+            sleep 5
+        done
         source ${RUNNING_JOBS_FILE}
         local job
         for job in ${RUNNING_JOBS[@]} ; do
@@ -403,10 +407,10 @@ function spawn_upload_to_wsprnet_daemon()
 
 function kill_upload_to_wsprnet_daemon()
 {
-    wd_logger 1 "Starting"
+    wd_logger 2 "Starting"
     local uploading_pid_file_path=${UPLOADS_WSPRNET_PIDFILE_PATH}
     if [[ ! -f ${uploading_pid_file_path} ]]; then
-        wd_logger 1 "Found no uploading.pid file ${uploading_pid_file_path}"
+        wd_logger 2 "Found no uploading.pid file ${uploading_pid_file_path}"
     else
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -417,7 +421,7 @@ function kill_upload_to_wsprnet_daemon()
         fi
         rm -f ${uploading_pid_file_path}
     fi
-    wd_logger 1 "Finished"
+    wd_logger 2 "Finished"
 }
 
 function upload_to_wsprnet_daemon_status()
@@ -738,7 +742,7 @@ function ftp_upload_to_wsprdaemon_daemon() {
     cd ${source_root_dir}
     while true; do
         ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() starting search for *wspr*.txt files"
+        [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() starting search for *wspr*.txt files"
         local -a file_list
         while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' | head -n ${UPOADS_MAX_FILES} ) ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
             [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
@@ -836,9 +840,9 @@ function spawn_ftp_upload_to_wsprdaemon_daemon() {
 function kill_ftp_upload_to_wsprdaemon_daemon()
 {
     local uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}
-    wd_logger 1 "Starting. uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}"
+    wd_logger 2 "Starting. uploading_pid_file_path=${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH}"
     if [[ ! -f ${uploading_pid_file_path} ]]; then
-        wd_logger 1 "Found no file ${uploading_pid_file_path}"
+        wd_logger 2 "Found no file ${uploading_pid_file_path}"
     else
         local uploading_pid=$(cat ${uploading_pid_file_path})
         if ps ${uploading_pid} > /dev/null ; then
@@ -849,7 +853,7 @@ function kill_ftp_upload_to_wsprdaemon_daemon()
         fi
         rm ${uploading_pid_file_path}
     fi
-    wd_logger 1 "Finished"
+    wd_logger 2 "Finished"
 }
 function ftp_upload_to_wsprdaemon_daemon_status()
 {
@@ -882,12 +886,12 @@ function spawn_upload_daemons() {
 }
 
 function kill_upload_daemons() {
-    wd_logger 1 "Starting"
+    wd_logger 2 "Starting"
     kill_upload_to_wsprnet_daemon
     if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]]; then
         kill_ftp_upload_to_wsprdaemon_daemon
     fi
-    wd_logger 1 "Finished"
+    wd_logger 2 "Finished"
 }
 
 function upload_daemons_status(){

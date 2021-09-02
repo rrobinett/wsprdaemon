@@ -10,8 +10,11 @@ function posting_daemon()
 {
     local posting_receiver_name=${1}
     local posting_receiver_band=${2}
-    local real_receiver_list=(${3})
+    local posting_receiver_modes=${3}
+    local real_receiver_list=($4)
     local real_receiver_count=${#real_receiver_list[@]}
+
+    wd_logger 1 "Starting with args ${posting_receiver_name} ${posting_receiver_band} ${posting_receiver_modes} '${real_receiver_list[*]}'"
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
@@ -24,7 +27,7 @@ function posting_daemon()
 
     ### Create a /tmp/.. dir where this instance of the daemon will process and merge spotfiles.  Then it will copy them to the uploads.d directory in a persistent file system
     local posting_receiver_dir_path=$PWD
-    local no_nl_real_receiver_list=(${real_receiver_list//$'\n'/ /})
+    local no_nl_real_receiver_list=( "${real_receiver_list[*]//$'\n'/ /}")
     wd_logger 1 "Starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${no_nl_real_receiver_list[@]}' to '${wsprnet_upload_dir}"
 
     ### Link the real receivers to this dir
@@ -63,7 +66,7 @@ function posting_daemon()
             for real_receiver_name in ${real_receiver_list[@]} ; do
                 wd_logger 1 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
                 ### '(...) runs in subshell so it can't change the $PWD of this function
-                (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
+                (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
             wd_logger 1 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
@@ -428,11 +431,12 @@ function log_merged_snrs() {
 function spawn_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
+    local receiver_modes=$3
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes}"
     local daemon_status
     if daemon_status=$(get_posting_status $receiver_name $receiver_band) ; then
-        wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running. Finished"
+        wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running"
         return
     fi
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
@@ -449,8 +453,8 @@ function spawn_posting_daemon() {
     local receiver_posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     mkdir -p ${receiver_posting_dir}
     cd ${receiver_posting_dir}
-    wd_logger 1 "Spawning posting job in $PWD"
-    WD_LOGFILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} "${real_receiver_list}" &
+    wd_logger 1 "Spawning posting job ${receiver_name},${receiver_band},${receiver_modes} '${real_receiver_list}' in $PWD"
+    WD_LOGFILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} "${real_receiver_list}" &
     local posting_pid=$!
     echo ${posting_pid} > posting.pid
 
@@ -462,45 +466,45 @@ function spawn_posting_daemon() {
 function kill_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
-    local real_receiver_list=()
-    local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
 
+    local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     if [[ -z "${receiver_address}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: no address(s) found for ${receiver_name}"
+        wd_logger 1 " No address(s) found for ${receiver_name}"
         return 1
     fi
     local posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     if [[ ! -d "${posting_dir}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected posting daemon dir ${posting_dir}"
+        wd_logger 1 "Caan't find expected posting daemon dir ${posting_dir}"
         return 2
     else
         local posting_daemon_pid_file=${posting_dir}/posting.pid
         if [[ ! -f ${posting_daemon_pid_file} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected posting daemon file ${posting_daemon_pid_file}"
+            wd_logger 1 "Can't find expected posting daemon file ${posting_daemon_pid_file}"
             return 3
         else
             local posting_pid=$(cat ${posting_daemon_pid_file})
             if ps ${posting_pid} > /dev/null ; then
                 kill ${posting_pid}
-              [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): killed active pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
+                wd_logger 1 " Killed active pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
             else
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
+                wd_logger 1 "Pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
             fi
             rm -f ${posting_daemon_pid_file}
         fi
     fi
 
+    local real_receiver_list=()
     if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
+        wd_logger 1 "Stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
         real_receiver_list=(${receiver_address//,/ })
     else
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping real rx '${receiver_name}','${receiver_band}'"  
+        wd_logger 1 "Stopping real rx '${receiver_name}','${receiver_band}'"  
         real_receiver_list=(${receiver_name})
     fi
 
     if [[ -z "${real_receiver_list[@]}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected real receiver(s) for '${receiver_name}','${receiver_band}'"
+        wd_logger 1 "Can't find expected real receiver(s) for '${receiver_name}','${receiver_band}'"
         return 3
     fi
     ### Signal all of the real receivers which are contributing ALL_WSPR files to this posting daemon to stop sending ALL_WSPRs by deleting the 
@@ -511,9 +515,9 @@ function kill_posting_daemon() {
     local real_receiver_name
     for real_receiver_name in ${real_receiver_list[@]} ; do
         local real_receiver_posting_dir=$(get_recording_dir_path ${real_receiver_name} ${receiver_band})/${DECODING_CLIENTS_SUBDIR}/${receiver_name}
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
+        wd_logger 1 "Signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: posting directory  ${real_receiver_posting_dir} does not exist"
+            wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: expect posting directory  ${real_receiver_posting_dir} does not exist"
         else 
             rm -f ${posting_suppliers_root_dir}/${real_receiver_name}     ## Remote the posting daemon's link to the source of spots
             rm -rf ${real_receiver_posting_dir}  ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
@@ -522,13 +526,14 @@ function kill_posting_daemon() {
             if [[ ${real_receiver_posting_root_dir_count} -eq 0 ]]; then
                 local real_receiver_stop_file=${real_receiver_posting_root_dir%/*}/recording.stop
                 touch ${real_receiver_stop_file}
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) by creating ${real_receiver_stop_file}"
+                wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) by creating ${real_receiver_stop_file}"
             else
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) a decoding client remains, so didn't signal the recoding and decoding daemons to stop"
+                wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) a decoding client remains, so didn't signal the recoding and decoding daemons to stop"
             fi
         fi
     done
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
+    return 0
 }
 
 ###

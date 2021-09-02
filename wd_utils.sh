@@ -33,6 +33,9 @@ if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "$
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
 fi
 
+### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
+trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
+
 function wd_logger_flush_all_logs {
     wd_logger 2 "Flushing printed files"
     local printed_files=( $( find -name '*printed' ) )
@@ -44,7 +47,7 @@ function wd_logger_flush_all_logs {
 
 function wd_logger_check_all_logs {
     wd_logger 2 "Checking log files"
-    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
+    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log -o -name sdr_recording_job.log -o -name wav_recording_daemon.log \) ) )
     for log_file in ${log_files[@]}; do
         local log_file_last_printed=${log_file}.printed
         if [[ ! -s ${log_file} ]]; then
@@ -55,21 +58,28 @@ function wd_logger_check_all_logs {
             if [[ ! -f ${log_file_last_printed} ]]; then
                 ### None of the log file lines have been printed
                 wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file} (if any) have been printed"
-                new_log_lines=$(cat ${log_file})
+                new_log_lines=$( < ${log_file} )
             else
                 ### Some lines have been previously printed
-                wd_logger 2 "Found ${log_file_last_printed} file, so some of log lines in ${log_file} have been printed"
-                new_log_lines=$(grep -A20 "$(cat ${log_file_last_printed})" ${log_file} | tail -n +2 )
+                local last_printed_line=$( < ${log_file_last_printed} )
+
+                if grep -q "${last_printed_line}" ${log_file} ; then
+                    wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file}, so print only the lines which follow it"
+                    new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file} | tail -n +2 )
+                else
+                    wd_logger 2 "Can't find that the line in ${log_file_last_printed} is in ${log_file}, so print the whole log file"
+                    new_log_lines=$( < ${log_file} )
+                fi
             fi
             if [[ -z "${new_log_lines}" ]]; then
                 wd_logger 2 "There are no lines or no new lines in ${log_file} to be printed"
             else
                 local new_log_lines_count=$( wc -l <<< "${new_log_lines}" )
-                wd_logger 2 "There are new lines to be printed"
+                wd_logger 2 "There are ${new_log_lines_count} new lines to be printed"
                 local new_last_printed_line=$(tail -1 <<< "${new_log_lines}")
                 echo "${new_last_printed_line}" > ${log_file_last_printed}
                 local new_lines_to_print=$(awk "{print \"${log_file}: \" \$0}" <<< "${new_log_lines}")
-                wd_logger 1 "New log lines:  \n${new_lines_to_print}"
+                wd_logger -1 "\n${new_lines_to_print}"
             fi
         fi
     done
@@ -83,11 +93,20 @@ function wd_logger() {
         return 1
     fi
     local log_at_level=$1
+    local no_header="no"
+    if [[ $1 -lt 0 ]]; then
+        no_header="yes"
+        log_at_level=$((- ${log_at_level} )) 
+    fi
     [[ ${verbosity} -lt ${log_at_level} ]] && return
 
     local format_string="$2"
     ### printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() passed FORMAT: %s\n" -1 "${format_string}"
-    local log_line=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() ${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
+    if [[ ${no_header} == "yes" ]]; then
+        local log_line=$(TZ=UTC printf "${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
+    else
+        local log_line=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() ${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
+    fi
     [ -t 0 -a -t 1 -a -t 2 ] &&  printf "${log_line}\n"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session 
     if [[ -n "${WD_LOGFILE-}" ]]; then
         [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
@@ -237,3 +256,32 @@ function truncate_file() {
         [[ $verbosity -ge 1 ]] && echo "$(date): truncate_file() '${file_path}' of original size ${file_size} bytes / ${file_lines} lines now is ${truncated_file_size} bytes"
     fi
 }
+
+###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
+function get_pid_from_file(){
+    local pid_var_name=$1   ### Where to return the PID found in $2 file
+    local pid_file_name=$2
+    
+    eval ${pid_var_name}=0
+    if [[ ! -f ${pid_file_name} ]]; then
+        wd_logger 1 "pid file ${pid_file_name} does not exist"
+        return 1
+    fi
+    local pid_val=$(< ${pid_file_name})
+    if [[ -z "${pid_val}" ]] || [[ "${pid_val}" -ne "${pid_val}" ]] || [[ "${pid_val}" -eq 0 ]]  2> /dev/null ; then
+        wd_logger 1 "pid file ${pid_file_name} contains invalid value '${pid_val}'"
+        return 2
+    fi
+    ps ${pid_val} >& /dev/null
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "Got pid from ${pid_file_name}. ps ${pid_val} => ${ret_code}, so pid isn't running"
+        rm ${pid_file_name}
+        return 3
+    fi
+    wd_logger 1 "Got running pid ${pid_val} from ${pid_file_name}"
+    eval ${pid_var_name}=${pid_val}
+    return 0
+}
+
+

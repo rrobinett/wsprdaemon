@@ -392,7 +392,7 @@ function kiwi_recording_daemon()
             local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} kiwi_recorder.log )
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
-                wd_logger 1 "kiwi_recorder.log has grown too large (${ov_file_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
+                wd_logger 1 "kiwi_recorder.log has grown too large (${kiwi_recorder_log_size} bytes), so killing the recorder. Let the decoding_daemon restart us"
                 touch recording.stop
             fi
             if [[ ! -f recording.stop ]]; then

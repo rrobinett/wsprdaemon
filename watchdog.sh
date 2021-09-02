@@ -30,7 +30,7 @@ function watchdog_daemon()
             check_kiwi_rx_channels
             check_kiwi_gps
             print_new_ov_lines          ## 
-            wd_logger 1 "Finished odd minute processing"
+            wd_logger 2 "Finished odd minute processing"
         fi
         last_minute=${current_minute}
         local sleep_secs=${WATCHDOG_POLL_SECONDS}
@@ -98,23 +98,23 @@ function kill_watchdog() {
 
     local watchdog_pid_file=${PATH_WATCHDOG_PID}
     local watchdog_file_dir=${watchdog_pid_file%/*}
-    wd_logger 1 "Starting. watchdog_pid_file=${PATH_WATCHDOG_PID}, watchdog_file_dir=${watchdog_pid_file%/*}"
+    wd_logger 2 "Starting. watchdog_pid_file=${PATH_WATCHDOG_PID}, watchdog_file_dir=${watchdog_pid_file%/*}"
 
     if [[ ! -f ${watchdog_pid_file} ]]; then
-        wd_logger 1 "Watchdog pid file '${watchdog_pid_file}' doesn't exist"
+        wd_logger 2 "Watchdog pid file '${watchdog_pid_file}' doesn't exist"
     else
         local watchdog_pid=$(cat ${watchdog_pid_file})    ### show_watchog returns only if this file is valid
 
-        wd_logger 1 "Found ${watchdog_pid_file} which contains pid ${watchdog_pid}"
+        wd_logger 2 "Found ${watchdog_pid_file} which contains pid ${watchdog_pid}"
         if ! ps ${watchdog_pid} > /dev/null ; then
-            wd_logger 1 "Watchdog deamon with pid '${watchdog_pid}' not running"
+            wd_logger 2 "Watchdog deamon with pid '${watchdog_pid}' not running"
         else
             kill ${watchdog_pid}
             wd_logger 1 "Killed watchdog with pid '${watchdog_pid}'"
         fi
         rm ${watchdog_pid_file}
     fi
-    wd_logger 1 "Finished"
+    wd_logger 2 "Finished"
 }
 
 #### -w [i,a,z] command

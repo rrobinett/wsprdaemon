@@ -126,6 +126,12 @@ function get_receiver_grid_from_name() {
     echo ${receiver_info[3]}
 }
 
+function get_receiver_password_from_name() {
+    local receiver_name=$1
+    local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
+    echo ${receiver_info[4]}
+}
+
 function get_receiver_af_list_from_name() {
     local receiver_name=$1
     local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
@@ -316,7 +322,7 @@ function validate_configured_schedule()
             wd_logger 2 "Testing job $job"
             local -a job_elements=(${job//,/ })
             local    job_elements_count=${#job_elements[@]}
-            if [[ $job_elements_count -ne 2 ]]; then
+            if [[ $job_elements_count -lt 2 ]]; then
                 echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' doesn't have the form 'RECEIVER,BAND'"
                 exit 1
             fi
