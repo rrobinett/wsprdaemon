@@ -279,7 +279,7 @@ function get_pid_from_file(){
         rm ${pid_file_name}
         return 3
     fi
-    wd_logger 1 "Got running pid ${pid_val} from ${pid_file_name}"
+    wd_logger 2 "Got running pid ${pid_val} from ${pid_file_name}"
     eval ${pid_var_name}=${pid_val}
     return 0
 }

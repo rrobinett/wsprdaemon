@@ -30,20 +30,44 @@ declare C2_FFT_CMD=${WSPRDAEMON_ROOT_DIR}/c2_noise.py
 
 function decoding_daemon() 
 {
-    local real_receiver_name=$1                ### 'real' as opposed to 'merged' receiver
-    local real_receiver_band=${2}
-    local real_receiver_modes=${3}
+    local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
+    local receiver_band=${2}
+    local receiver_modes=${3}
 
-    wd_logger 1 "Starting with args ${real_receiver_name} ${real_receiver_band} ${real_receiver_modes}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes}"
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
-    local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_band})
+    if [[ ${receiver_modes} == "DEFAULT" ]]; then
+        ### Translate DEFAULT mode to a list of modes for this band
+        local default_modes
+        get_default_modes_for_band default_modes ${receiver_band}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "Error ${ret_code} returned while searching for DEFAULT modes using:  get_default_modes_for_band default_modes ${receiver_band}"
+            sleep 1
+            return ${ret_code}
+        fi
+        wd_logger 1 "Translated decode mode '${receiver_modes}' to '${default_modes}'"
+        receiver_modes=${default_modes}
+    fi
+    ### Validate the mode list
+    is_valid_mode_list ${receiver_modes} 
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]] ; then
+        wd_logger 1 "Error ${ret_code} was returned by is_valid_mode_list ${receiver_modes}, so aborting"
+        return 1
+    fi
+    ### Put the list of configured decoding modes into the array receiver_modes_list[]
+    local receiver_modes_list=( ${receiver_modes//:/ } ) 
+    wd_logger 1 "Got a list of ${#receiver_modes_list[*]} modes to be decoded from the wav files: '${receiver_modes_list[*]}'"
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+
     ### Since they are not CPU intensive, always calculate sox RMS and C2 FFT stats
-    local real_receiver_maidenhead=$(get_my_maidenhead)
+    local receiver_maidenhead=$(get_my_maidenhead)
 
     ### Store the signal level logs under the ~/wsprdaemon/... directory where it won't be lost due to a reboot or power cycle.
-    SIGNAL_LEVELS_LOG_DIR=${WSPRDAEMON_ROOT_DIR}/signal_levels/${real_receiver_name}/${real_receiver_band}
+    SIGNAL_LEVELS_LOG_DIR=${WSPRDAEMON_ROOT_DIR}/signal_levels/${receiver_name}/${receiver_band}
     mkdir -p ${SIGNAL_LEVELS_LOG_DIR}
     ### these could be modified from these default values by declaring them in the .conf file.
     SIGNAL_LEVEL_PRE_TX_SEC=${SIGNAL_LEVEL_PRE_TX_SEC-.25}
@@ -62,7 +86,7 @@ function decoding_daemon()
         printf "${date_str}: %20s %-55s %-55s %-55s FFT\n" "" "${pre_tx_header}" "${tx_header}" "${post_tx_header}"   >  ${SIGNAL_LEVELS_LOG_FILE}
         printf "${date_str}: %s %s %s\n" "${field_descriptions}" "${field_descriptions}" "${field_descriptions}"   >> ${SIGNAL_LEVELS_LOG_FILE}
     fi
-    local wspr_band_freq_khz=$(get_wspr_band_freq ${real_receiver_band})
+    local wspr_band_freq_khz=$(get_wspr_band_freq ${receiver_band})
     local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
     local wspr_band_freq_hz=$(                     bc <<< "scale = 0; ${wspr_band_freq_khz}*1000.0/1" )
 
@@ -85,8 +109,8 @@ function decoding_daemon()
         ### Don't adjust Kiwi's af when fed by transverter
         kiwi_amplitude_versus_frequency_correction=0
     fi
-    local antenna_factor_adjust=$(get_af_db ${real_receiver_name} ${real_receiver_band})
-    local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${real_receiver_name})
+    local antenna_factor_adjust=$(get_af_db ${receiver_name} ${receiver_band})
+    local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
     local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
     local rms_adjust=$(bc -l <<< "${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
     local fft_adjust=$(bc -l <<< "${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}" )  ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
@@ -99,21 +123,40 @@ function decoding_daemon()
     local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
     wd_logger 2 "c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
 
-    wd_logger 2 "Starting daemon to record '${real_receiver_name},${real_receiver_band}'"
+    wd_logger 1 "Starting daemon to record '${receiver_name},${receiver_band}'"
     local decoded_spots=0        ### Maintain a running count of the total number of spots_decoded
     local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
-    cd ${real_recording_dir}
+    cd ${recording_dir}
     local old_kiwi_ov_lines=0
     rm -f *.raw *.wav
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        wd_logger 3 "Checking recording process is running in $PWD"
-        spawn_wav_recording_daemon ${real_receiver_name} ${real_receiver_band} 120
+        wd_logger 1 "Getting a list of MODE:WAVE_FILE... with get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}"
+        local -a mode_wav_file_list=()
+        get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. Sleep and retry"
+             sleep 10
+             continue
+        fi
+        wd_logger 1 "'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned '${mode_wav_file_list[*]}'"
+        sleep 3
+        continue
+
         wd_logger 3 "Checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
         ### Wait for a wav file and synthisize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails
-        local -a wav_file_list
+
+        local -a wav_file_list=()
+        get_wav_file_list wav_file_list ${receiver_modes} 
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "Error ${ret_code} returned by get_wav_files wav_file_list ${real_receiver_name} ${real_receiver_band} '${real_receiver_modes}'"
+            sleep 1
+            continue
+        fi
         while wav_file_list=( *.wav) && [[ ${#wav_file_list[@]} -eq 0 ]]; do
             ### recording daemon isn't outputing a wav file, so post a zero length spot file in order to signal the posting daemon to process other real receivers in a MERGed group 
             local wspr_spots_filename

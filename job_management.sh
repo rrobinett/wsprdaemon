@@ -615,7 +615,7 @@ function update_running_jobs_to_match_expected_jobs() {
                 ### Verify that it is still running
                 local status
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
-                    wd_logger 2 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
+                    wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
                     wd_logger 1 "Found dead posting_daemon() job '%s,%s'. get_recording_status() returned '%s', so starting job"  \
                         ${running_reciever} ${running_band} "$status"
