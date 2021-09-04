@@ -46,9 +46,9 @@ function spawn_wav_recording_daemon() {
     local ret_code
     local wav_recording_daemon_pid=-1
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band}"
+    wd_logger 2 "Starting with args ${receiver_name} ${receiver_band}"
     if get_pid_from_file wav_recording_daemon_pid ${WAV_RECORDING_DAEMON_PID_FILE} ; then
-       wd_logger 1 "wav recording daemon is running with pid ${wav_recording_daemon_pid}"
+       wd_logger 2 "wav recording daemon is running with pid ${wav_recording_daemon_pid}"
        return 0
     fi
 
@@ -222,42 +222,33 @@ function get_wav_file_list() {
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
     spawn_wav_recording_daemon ${receiver_name} ${receiver_band}     ### Make sure the wav recorder is running
-    return 1
 
     while [[ ! -f ${WAV_RECORDING_DAEMON_STOP_FILE} ]]; do
         local ret_code
 
-        local wav_recording_daemon_pid=0
-        if get_pid_from_file wav_recording_daemon_pid ${WAV_RECORDING_DAEMON_PID_FILE} ; then
-            wd_logger 1 "Found sdr_recording_daemon with pid ${wav_recording_daemon_pid} is running"
-        else
-            wd_logger 1 "Spawning new SDR_Recording_Daemon job"
-            spawn_sdr_recording_daemon ${sdr_device} ${tuning_frequency} 
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: spawn_sdr_recording_daemon() => ${ret_code}"
-            fi
-        fi
         shopt -s nullglob
-        local minute_raw_file_list=( minute-*.raw )
+        local minute_raw_file_list=( minute-*.raw *_usb.wav)
         shopt -u nullglob
 
+        wd_logger 1 "Got raw/wav files '${minute_raw_file_list[*]}'"
         case ${#minute_raw_file_list[@]} in
             0 )
-                 wd_logger 1 "SDR_Recording_Daemon is running or was spawned, but there is no raw file. Sleep 5, then go to top, check for running SDR_Recording_Daemon and spawn again if needed."
+                wd_logger 1 "There is no raw file. Sleep "
                 sleep 5
-                continue
+                return 1
                 ;;
             1 )
-                 wd_logger 1 "SDR_Recording_Daemon is running or was spawned, but there is only one raw file, so wait until there are two files"
+                wd_logger 1 "There is only 1 raw/wav file and all modes need at least 2 minutes. Sleep "
                 sleep_until_raw_file_is_full ${minute_raw_file_list[-1]}
-                continue
+                return 2
                 ;;
             *)
                  wd_logger 1 "found ${#minute_raw_file_list[@]} files. Wait until the last file is full, then proceed to process the list."
                 sleep_until_raw_file_is_full ${minute_raw_file_list[-1]}
                 ;;
         esac
+
+        break
 
         ### We now have a list of two or more full size raw files
         local first_minute_raw_file_epoch=$(stat -c %Y ${minute_raw_file_list[0]})
@@ -388,6 +379,7 @@ function get_wav_file_list() {
        wd_logger 1 "Finished processing all wav file lengths"
     done    ### with:  while [[ ! -f ${WAV_RECORDING_DAEMON_STOP_FILE} ]]; do
 
+    return 1
     ### We have been instructed to terminate...
     if [[ ${wav_recording_daemon_pid} -ne 0 ]]; then
         kill ${wav_recording_daemon_pid}
