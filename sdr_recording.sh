@@ -364,7 +364,7 @@ function get_wav_file_list() {
         fi
     fi
     wd_logger 1 "Returning ${#return_list[@]} wav file lists: '${return_list[*]}'"
-    eval ${return_variable_name}="${return_list[*]}"
+    eval ${return_variable_name}=\"${return_list[*]}\"
     return 0
  }
 
