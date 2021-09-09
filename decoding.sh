@@ -59,7 +59,7 @@ function decoding_daemon()
     fi
     ### Put the list of configured decoding modes into the array receiver_modes_list[]
     local receiver_modes_list=( ${receiver_modes//:/ } ) 
-    wd_logger 1 "Got a list of ${#receiver_modes_list[*]} modes to be decoded from the wav files: '${receiver_modes_list[*]}'"
+    wd_logger 2 "Got a list of ${#receiver_modes_list[*]} modes to be decoded from the wav files: '${receiver_modes_list[*]}'"
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
@@ -123,26 +123,35 @@ function decoding_daemon()
     local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
     wd_logger 2 "c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
 
-    wd_logger 1 "Starting daemon to record '${receiver_name},${receiver_band}'"
+    wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
     local decoded_spots=0        ### Maintain a running count of the total number of spots_decoded
     local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
     cd ${recording_dir}
     local old_kiwi_ov_lines=0
-    rm -f *.raw *.wav
+    rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        wd_logger 1 "Getting a list of MODE:WAVE_FILE... with get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}"
-        local -a mode_wav_file_list=()
-        get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}
+        wd_logger 1 "\nGetting a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
+        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
              wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. Sleep and retry"
              sleep 10
              continue
         fi
+        local -a mode_wav_file_list=(${mode_seconds_files})
         wd_logger 1 "'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned '${mode_wav_file_list[*]}'"
-        sleep 3
+        local returned_files
+        for   returned_files in ${mode_wav_file_list[@]}; do
+            local returned_seconds=${returned_files%:*}
+            local comma_seperated_files=${returned_files#*:}
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds, got list of files ${comma_seperated_files}"
+            local wav_files=${comma_seperated_files//,/ }
+            wd_logger 1 "Processed files '${wav_files}' for WSPR packet of length ${returned_seconds} seconds"
+        done
+        sleep 1
         continue
 
         wd_logger 3 "Checking for *.wav' files in $PWD"

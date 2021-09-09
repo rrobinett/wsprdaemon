@@ -43,11 +43,17 @@ function posting_daemon()
         local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
         ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
         mkdir -p ${real_receiver_posting_dir_path}
+
         ### Now create a symlink from under here to the directory where spots will apper
-        local this_rx_local_dir_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
-        [[ ! -f ${this_rx_local_dir_name} ]] && ln -s ${real_receiver_posting_dir_path} ${this_rx_local_dir_name}
-        posting_source_dir_list+=(${this_rx_local_dir_name})
-        wd_logger 1 "Created a symlink from ${this_rx_local_dir_name} to ${real_receiver_posting_dir_path}"
+        local this_rx_local_link_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
+        if [[ -L ${this_rx_local_link_name} ]]; then
+            wd_logger 1 "Link from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path} already exists"
+        else
+            wd_logger 1 "Creating a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
+            ln -s ${real_receiver_posting_dir_path} ${this_rx_local_link_name}
+        fi
+        posting_source_dir_list+=(${this_rx_local_link_name})
+        wd_logger 1 "Created a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
     done
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches

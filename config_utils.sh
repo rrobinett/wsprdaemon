@@ -66,14 +66,14 @@ function is_valid_mode_list() {
     local test_mode_entry=$1
     local test_mode_entry_list=( ${test_mode_entry//:/ } )
 
-    wd_logger 1 "Starting validation of '${test_mode_entry}'"
+    wd_logger 2 "Starting validation of '${test_mode_entry}'"
     for mode_entry in ${test_mode_entry_list[@]} ; do
         if ! [[ " ${VALID_MODE_LIST[@]} " =~ " ${mode_entry} " ]]; then
             wd_logger 1 "Error: ${mode_entry} is not a member of '${VALID_MODE_LIST[*]}'"
             return 1
         fi
     done
-    wd_logger 1 "All modes in '${test_mode_entry}' are valid"
+    wd_logger 2 "All modes in '${test_mode_entry}' are valid"
     return 0
  }
 

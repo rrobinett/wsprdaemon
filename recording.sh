@@ -189,7 +189,7 @@ function rtl_biast_setup() {
 declare  WAV_FILE_CAPTURE_SECONDS=115
 
 ######
-declare -r MAX_WAV_FILE_AGE_SECS=240
+declare -r MAX_WAV_FILE_AGE_SECS=1800    ### Purge wav files which are older than 30 minutes
 function flush_stale_wav_files()
 {
     shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
@@ -690,7 +690,7 @@ function purge_stale_recordings() {
             for wav_file in ${recording_dir}/*.wav ; do
                 local wav_file_time=$($GET_FILE_MOD_TIME_CMD ${wav_file} )
                 if [[ ! -z "${wav_file_time}" ]] &&  [[ $(( $(date +"%s") - ${wav_file_time} )) -gt ${MAX_WAV_FILE_AGE_SECS} ]]; then
-                    printf "$(date): WARNING: purging stale recording file %s\n" "${wav_file}"
+                    wd_logger 1 "Purging stale recording file ${wav_file}"
                     rm -f ${wav_file}
                 fi
             done
