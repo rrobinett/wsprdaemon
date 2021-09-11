@@ -49,22 +49,25 @@ function decoding_daemon()
         fi
         wd_logger 1 "Translated decode mode '${receiver_modes}' to '${default_modes}'"
         receiver_modes=${default_modes}
-    fi
-    ### Validate the mode list
-    is_valid_mode_list ${receiver_modes} 
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]] ; then
-        wd_logger 1 "Error ${ret_code} was returned by is_valid_mode_list ${receiver_modes}, so aborting"
-        return 1
-    fi
-    ### Put the list of configured decoding modes into the array receiver_modes_list[]
-    local receiver_modes_list=( ${receiver_modes//:/ } ) 
-    wd_logger 2 "Got a list of ${#receiver_modes_list[*]} modes to be decoded from the wav files: '${receiver_modes_list[*]}'"
+        fi
+        ### Validate the mode list
+        is_valid_mode_list ${receiver_modes} 
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]] ; then
+            wd_logger 1 "Error ${ret_code} was returned by is_valid_mode_list ${receiver_modes}, so aborting"
+            return 1
+        fi
+        ### Put the list of configured decoding modes into the array receiver_modes_list[]
+        local receiver_modes_list=( ${receiver_modes//:/ } ) 
+        wd_logger 2 "Got a list of ${#receiver_modes_list[*]} modes to be decoded from the wav files: '${receiver_modes_list[*]}'"
 
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+        local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
     ### Since they are not CPU intensive, always calculate sox RMS and C2 FFT stats
     local receiver_maidenhead=$(get_my_maidenhead)
+
+    local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})    ### used by wsprd
+    wd_logger 2 "Setup rx_khz_offset=${rx_khz_offset}"
 
     ### Store the signal level logs under the ~/wsprdaemon/... directory where it won't be lost due to a reboot or power cycle.
     SIGNAL_LEVELS_LOG_DIR=${WSPRDAEMON_ROOT_DIR}/signal_levels/${receiver_name}/${receiver_band}
@@ -102,10 +105,10 @@ function decoding_daemon()
     local cal_threshold=${cal_vals[5]-13.1}
     local cal_c2_correction=${cal_vals[6]--187.7}
 
-    local kiwi_amplitude_versus_frequency_correction="$(bc <<< "scale = 10; -1 * ( (2.2474 * (10 ^ -7) * (${wspr_band_freq_mhz} ^ 6)) - (2.1079 * (10 ^ -5) * (${wspr_band_freq_mhz} ^ 5)) + \
-                                                                                     (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
-                                                                                     (1.0013 * (10 ^ -1) * (${wspr_band_freq_mhz} ^ 2)) - (3.7796 * (10 ^ -1) *  ${wspr_band_freq_mhz}     ) - (9.1509 * (10 ^ -1)))" )"
-    if [[ $(bc <<< "${wspr_band_freq_mhz} > 30") -eq 1 ]]; then
+   local kiwi_amplitude_versus_frequency_correction="$(bc <<< "scale = 10; -1 * ( (2.2474 * (10 ^ -7) * (${wspr_band_freq_mhz} ^ 6)) - (2.1079 * (10 ^ -5) * (${wspr_band_freq_mhz} ^ 5)) + \
+                                                                                    (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
+                                                                                    (1.0013 * (10 ^ -1) * (${wspr_band_freq_mhz} ^ 2)) - (3.7796 * (10 ^ -1) *  ${wspr_band_freq_mhz}     ) - (9.1509 * (10 ^ -1)))" )"
+   if [[ $(bc <<< "${wspr_band_freq_mhz} > 30") -eq 1 ]]; then
         ### Don't adjust Kiwi's af when fed by transverter
         kiwi_amplitude_versus_frequency_correction=0
     fi
@@ -120,7 +123,7 @@ function decoding_daemon()
             fft_adjust=${fft_adjust} comes from ${cal_fft_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db} + ${cal_fft_band} + ${cal_threshold}
             rms_adjust and fft_adjust will be ADDed to the raw dB levels"
     ## G3ZIL implementation of algorithm using the c2 file by Christoph Mayer
-    local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
+   local c2_FFT_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")   # comes from a configured value.  'scale = 2; (var * 100)/100' forces bc to ouput only 2 digits after decimal
     wd_logger 2 "c2_FFT_nl_adjust = ${c2_FFT_nl_adjust} from 'local c2_FFT_nl_adjust=\$(bc <<< 'var=${cal_c2_correction};var+=${total_correction_db};var')"  # value estimated
 
     wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
@@ -132,28 +135,91 @@ function decoding_daemon()
     rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        wd_logger 1 "\nGetting a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        wd_logger 1 "Getting a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. Sleep and retry"
-             sleep 10
+             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
+             sleep 1
              continue
         fi
         local -a mode_wav_file_list=(${mode_seconds_files})
-        wd_logger 1 "'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned '${mode_wav_file_list[*]}'"
+        wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned '${mode_wav_file_list[*]}'"
+
+        > decodes_cache.txt             ## Create or truncate to zero length a file which stores the decodes from all modes
         local returned_files
-        for   returned_files in ${mode_wav_file_list[@]}; do
+        for returned_files in ${mode_wav_file_list[@]}; do
             local returned_seconds=${returned_files%:*}
             local comma_seperated_files=${returned_files#*:}
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds, got list of files ${comma_seperated_files}"
             local wav_files=${comma_seperated_files//,/ }
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds, got list of files ${comma_seperated_files}. 'sleep 2'"
+            sleep 2
+
+            local decode_mode
+            for decode_mode in ${receiver_modes_list[@]}; do
+                wd_logger 1 "See if decoding of mode ${decode_mode:0:1} is configured for WSPR packets of length ${returned_seconds} seconds from files '${comma_seperated_files}'"
+                case ${decode_mode:0:1} in
+                    W )
+                        if [[ ${returned_seconds} -eq 120 ]] || [[ ${returned_seconds} -eq 900 ]] ; then
+                           local wav_file_list=( ${wav_files} )
+                           local wsprd_input_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+                           local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
+                                 wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
+
+                            wd_logger 1 "Decode ${returned_seconds} second WSPR mode spots in wav files '${comma_seperated_files}' by combining them into one wav file '${wsprd_input_filename}' to be processed by 'wsprd'"
+
+                            sox ${wav_file_list[@]} ${wsprd_input_filename}
+
+                            decode_wpsr_wav_file ${wsprd_input_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
+                            local ret_code=$?
+                            if [[ ${ret_code} -ne 0 ]]; then
+                                wd_logger 1 "ERROR: For mode ${decode_mode}: 'decode_wpsr_wav_file ${wsprd_input_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
+                            else
+                                wd_logger 1 "For mode ${decode_mode}: command 'decode_wpsr_wav_file ${wsprd_input_filename} wsprd_stdout.txt' decoded:  $(cat wsprd_stdout.txt)"
+                            fi
+                        else
+                            wd_logger 1 "Config file specifed WSPR decode of a ${returned_seconds} second wav file.  This is not a valid WSPR packet length"
+                            fi
+                            ;;
+                        F )
+                        wd_logger 1 "Files of ${returned_seconds} will be processed by jt9"
+                        ;;
+                    * )
+                        wd_logger 1 "Invalid mode ${decode_mode} was specified in the the config file"
+                        ;;
+                esac
+            done
             wd_logger 1 "Processed files '${wav_files}' for WSPR packet of length ${returned_seconds} seconds"
         done
         sleep 1
-        continue
+    done
+}
 
+function decode_wpsr_wav_file() {
+    local wav_file_name=$1
+    local wspr_decode_capture_freq_hz=$2
+    local rx_khz_offset=$3
+    local stdout_file=$4
+
+    wd_logger 1 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}"
+    local wsprd_cmd_flags=${WSPRD_CMD_FLAGS}
+    local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
+          wspr_decode_capture_freq_hzx=${wspr_decode_capture_freq_hz%_*}    ### Remove the _usb.wav
+    local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
+    local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
+
+    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
+    fi
+    return ${ret_code}
+}
+ 
+ old_decode_daemon() {
+
+    while true; do
         wd_logger 3 "Checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
         ### Wait for a wav file and synthisize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails

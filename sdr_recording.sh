@@ -77,7 +77,7 @@ function spawn_wav_recording_daemon() {
                  echo ${wav_recording_daemon_pid} > kiwi_recorder.pid
                  ## Initialize the file which logs the date (in epoch seconds, and the number of OV errors st that time
                  printf "$(date +%s) 0" > ov.log
-                 wd_logger 1 "My PID $$ spawned kiwrecorder PID ${wav_recording_daemon_pid}"
+                 wd_logger 2 "My PID $$ spawned kiwrecorder PID ${wav_recording_daemon_pid}"
             fi
             ;;
         SDR*)
@@ -200,7 +200,7 @@ function sleep_until_raw_file_is_full() {
         wd_logger 1 "ERROR: file ${filename} disappeared after ${loop_seconds} seconds"
         return 1
     fi
-    wd_logger 1 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
+    wd_logger 2 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
     return 0
 }
 
@@ -229,7 +229,7 @@ function get_wav_file_list() {
     wd_logger 2 "Found raw/wav files '${raw_file_list[*]}'"
     case ${#raw_file_list[@]} in
         0 )
-            wd_logger 1 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
+            wd_logger 2 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
             shopt -s nullglob
             local timeout=0
             while raw_file_list=( minute-*.raw *_usb.wav) && [[ ${#raw_file_list[@]} -eq 0 ]] && [[ ${timeout} -lt 10 ]]; do
@@ -240,27 +240,28 @@ function get_wav_file_list() {
             if [[ ${#raw_file_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Timeout after ${timeout} seconds while waiting for the first wav file to appear"
             else
-                wd_logger 1 "First file appeared after waiting ${timeout} seconds"
+                wd_logger 2 "First file appeared after waiting ${timeout} seconds"
             fi
             return 1
             ;;
         1 )
-            wd_logger 1 "There is only 1 raw file ${raw_file_list[0]} and all modes need at least 2 minutes. So wait for this file to be filled"
+            wd_logger 2 "There is only 1 raw file ${raw_file_list[0]} and all modes need at least 2 minutes. So wait for this file to be filled"
             sleep_until_raw_file_is_full ${raw_file_list[0]}
-            local second_from_file_name=${raw_file_list[0]:13:2}
-            if [[ 10#${second_from_file_name} -ne 0 ]]; then
-                wd_logger 1 "Raw file '${raw_file_list[0]}' name says this file recording start at second ${second_from_file_name}, not at second 0, so flushing it"
-                rm ${raw_file_list[0]}
-            fi
             return 2
             ;;
-        *)
-            wd_logger 1 "Found ${#raw_file_list[@]} files, so we *may* have enough 1 minute wav files to make up a WSPR pkt. Wait until the last file is full, then proceed to process the list."
+       * )
+            wd_logger 2 "Found ${#raw_file_list[@]} files, so we *may* have enough 1 minute wav files to make up a WSPR pkt. Wait until the last file is full, then proceed to process the list."
+            local second_from_file_name=${raw_file_list[0]:13:2}
+            if [[ 10#${second_from_file_name} -ne 0 ]]; then
+                wd_logger 2 "Raw file '${raw_file_list[0]}' name says the first file recording starts at second ${second_from_file_name}, not at second 0, so flushing it"
+                rm ${raw_file_list[0]}
+                return 3
+            fi
             sleep_until_raw_file_is_full ${raw_file_list[-1]}
             ;;
     esac
 
-    wd_logger 1 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
+    wd_logger 2 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
     ### We now have a list of two or more full size raw files
     local epoch_of_first_raw_file=$(stat -c %Y ${raw_file_list[0]})
     local index_of_first_file_which_needs_to_be_saved=${#raw_file_list[@]}                         ### Presume we will need to keep none of the raw files
@@ -269,11 +270,11 @@ function get_wav_file_list() {
     local seconds_in_wspr_pkt
     for seconds_in_wspr_pkt in  ${target_seconds_list[@]} ; do
         local raw_files_in_wav_file_count=$((seconds_in_wspr_pkt / 60))
-        wd_logger 1 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
+        wd_logger 2 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
 
         local epoch_of_first_raw_file=$( stat -c %Y ${raw_file_list[0]})
         local minute_of_first_raw_file=$( date -r ${raw_file_list[0]} +%M )   ### Could b derived from epoch, I guess
-        wd_logger 1 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
+        wd_logger 2 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
 
         ### Check to see if we have previously returned some of these files in a previous call to this function
         shopt -s nullglob
@@ -283,7 +284,7 @@ function get_wav_file_list() {
         local index_of_first_unreported_raw_file
         local index_of_last_unreported_file
         if [[ ${#wav_raw_pkt_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no wav_secs files for wspr pkts of this length, so there were no previously reported packets of this length. So find index of first raw file that would start a wav file of this many seconds"
+            wd_logger 2 "Found no wav_secs files for wspr pkts of this length, so there were no previously reported packets of this length. So find index of first raw file that would start a wav file of this many seconds"
             local minute_of_first_raw_sample=$(( 10#${minute_of_first_raw_file}))
             if [[ ${receiver_name} =~ "SDR" ]]; then
                 $(( --minute_of_first_raw_sample ))
@@ -295,17 +296,17 @@ function get_wav_file_list() {
 
             local first_minute_raw_wspr_pkt_index=$(( minute_of_first_raw_sample % raw_files_in_wav_file_count ))
             index_of_first_unreported_raw_file=$(( (raw_files_in_wav_file_count - first_minute_raw_wspr_pkt_index) % raw_files_in_wav_file_count ))
-            wd_logger 1 "Raw_file ${raw_file_list[0]} of minute ${minute_of_first_raw_sample} is raw pkt #${first_minute_raw_wspr_pkt_index} of a ${seconds_in_wspr_pkt} second long wspr packet. So start of next wav_raw will be found at raw_file index ${index_of_first_unreported_raw_file}"
+            wd_logger 2 "Raw_file ${raw_file_list[0]} of minute ${minute_of_first_raw_sample} is raw pkt #${first_minute_raw_wspr_pkt_index} of a ${seconds_in_wspr_pkt} second long wspr packet. So start of next wav_raw will be found at raw_file index ${index_of_first_unreported_raw_file}"
         else
-            wd_logger 1 "Found that we previously returned ${#wav_raw_pkt_list[@]} wav files of this length"
+            wd_logger 2 "Found that we previously returned ${#wav_raw_pkt_list[@]} wav files of this length"
             
             if [[ ${#wav_raw_pkt_list[@]} -eq 1 ]]; then
-                wd_logger 1 "There is only one wav_raw pkt ${wav_raw_pkt_list[@]}, so leave it alone"
+                wd_logger 2 "There is only one wav_raw pkt ${wav_raw_pkt_list[@]}, so leave it alone"
             else
                 local flush_count=$(( ${#wav_raw_pkt_list[@]} - 1 ))
                 local flush_list=( ${wav_raw_pkt_list[@]:0:${flush_count}} )
                 if [[ ${#flush_list[*]} -gt 0 ]]; then
-                    wd_logger 1 "Flushing ${#flush_list[@]} files '${flush_list[*]}' leaving only ${wav_raw_pkt_list[-1]}"
+                    wd_logger 2 "Flushing ${#flush_list[@]} files '${flush_list[*]}' leaving only ${wav_raw_pkt_list[-1]}"
                     rm ${flush_list[*]}
                 else
                     wd_logger 1 "ERROR: wav_raw_pkt_list[] has ${#wav_raw_pkt_list[@]} files, but flush_list[] is empty"
@@ -317,10 +318,10 @@ function get_wav_file_list() {
             local index_of_first_reported_raw_file=$(( ( epoch_of_latest_wav_raw_file - epoch_of_first_raw_file ) / 60 ))
             index_of_first_unreported_raw_file=$(( index_of_first_reported_raw_file + raw_files_in_wav_file_count ))
 
-            wd_logger 1 "Latest wav_raw ${filename_of_latest_wav_raw} has epoch ${epoch_of_latest_wav_raw_file}. epoch_of_first_raw_file == ${epoch_of_first_raw_file}.  So index_of_first_unreported_raw_file = ${index_of_first_unreported_raw_file}"
+            wd_logger 2 "Latest wav_raw ${filename_of_latest_wav_raw} has epoch ${epoch_of_latest_wav_raw_file}. epoch_of_first_raw_file == ${epoch_of_first_raw_file}.  So index_of_first_unreported_raw_file = ${index_of_first_unreported_raw_file}"
         fi
         if [[ ${index_of_first_unreported_raw_file} -ge ${#raw_file_list[@]} ]]; then
-            wd_logger 1 "The first first raw file of a wav_raw file is not yet in the list of minute_raw[] files.  So continue to search for the next WSPR pkt length"
+            wd_logger 2 "The first first raw file of a wav_raw file is not yet in the list of minute_raw[] files.  So continue to search for the next WSPR pkt length"
             continue
         fi
 
@@ -330,40 +331,40 @@ function get_wav_file_list() {
         if [[ ${index_of_last_raw_file_for_this_wav_file} -ge ${#raw_file_list[@]} ]]; then
             ### The last file isn't present
             if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
-                wd_logger 1 "The first unsaved file is at index ${index_of_first_unreported_raw_file}, but the last index is not yet present. Adjust index_of_first_file_which_needs_to_be_saved to ${index_of_first_file_which_needs_to_be_saved}"
+                wd_logger 2 "The first unsaved file is at index ${index_of_first_unreported_raw_file}, but the last index is not yet present. Adjust index_of_first_file_which_needs_to_be_saved to ${index_of_first_file_which_needs_to_be_saved}"
                 index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
             fi
-            wd_logger 1 "The first unreported ${seconds_in_wspr_pkt} seconds raw file is at index ${index_of_first_unreported_raw_file}, but the last raw file is not yet present, so we can't yet create a wav file. So continue to search for the next WSPR pkt length"
+            wd_logger 2 "The first unreported ${seconds_in_wspr_pkt} seconds raw file is at index ${index_of_first_unreported_raw_file}, but the last raw file is not yet present, so we can't yet create a wav file. So continue to search for the next WSPR pkt length"
             continue
          fi
          ### There is a run of files which together form a wav file of this seconds in length
          local this_seconds_files="${seconds_in_wspr_pkt}:${raw_file_list[*]:${index_of_first_unreported_raw_file}:${raw_files_in_wav_file_count} }"
          local this_seconds_comma_separated_file=${this_seconds_files// /,}
          return_list+=( ${this_seconds_comma_separated_file} )
-         wd_logger 1 "Added file list for ${seconds_in_wspr_pkt} second long wav file to return list from index [${index_of_first_unreported_raw_file}:${index_of_last_raw_file_for_this_wav_file}] => ${this_seconds_comma_separated_file}"
+         wd_logger 2 "Added file list for ${seconds_in_wspr_pkt} second long wav file to return list from index [${index_of_first_unreported_raw_file}:${index_of_last_raw_file_for_this_wav_file}] => ${this_seconds_comma_separated_file}"
 
          local wav_list_returned_file=${raw_file_list[${index_of_first_unreported_raw_file}]}.${seconds_in_wspr_pkt}-secs
          shopt -s nullglob
          local flush_list=( *.${seconds_in_wspr_pkt}-secs )
          shopt -u nullglob
          if [[ ${#flush_list[@]} -gt 0 ]]; then
-             wd_logger 1 "Flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
+             wd_logger 2 "Flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
              rm -f ${flush_list[@]}    ### We only need to remember this new wav_raw file, so flush all older ones.
          fi
          touch -r ${raw_file_list[${index_of_first_unreported_raw_file}]} ${wav_list_returned_file}
          
-         wd_logger 1 "Remembered that this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
+         wd_logger 2 "Remembered that this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
     done
     
     if [[ ${index_of_first_file_which_needs_to_be_saved} -lt ${#raw_file_list[@]} ]] ; then
         local count_of_raw_files_to_flush=$(( index_of_first_file_which_needs_to_be_saved ))
-        wd_logger 1 "After searching for all requested wav file lengths, found file [${index_of_first_file_which_needs_to_be_saved}] '${raw_file_list[${index_of_first_file_which_needs_to_be_saved}]}' is the oldest file which needs to be saved" 
+        wd_logger 2 "After searching for all requested wav file lengths, found file [${index_of_first_file_which_needs_to_be_saved}] '${raw_file_list[${index_of_first_file_which_needs_to_be_saved}]}' is the oldest file which needs to be saved" 
         if [[ ${count_of_raw_files_to_flush} -gt 0 ]]; then
-            wd_logger 1 "So purging files '${raw_file_list[*]:0:${count_of_raw_files_to_flush}}'"
+            wd_logger 2 "So purging files '${raw_file_list[*]:0:${count_of_raw_files_to_flush}}'"
             rm ${raw_file_list[@]:0:${count_of_raw_files_to_flush}}
         fi
     fi
-    wd_logger 1 "Returning ${#return_list[@]} wav file lists: '${return_list[*]}'"
+    wd_logger 2 "Returning ${#return_list[@]} wav file lists: '${return_list[*]}'"
     eval ${return_variable_name}=\"${return_list[*]}\"
     return 0
  }
