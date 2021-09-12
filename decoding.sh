@@ -206,40 +206,50 @@ function decoding_daemon()
             wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds, got list of files ${comma_seperated_files}. 'sleep 2'"
             sleep 2
 
+            local wsprd_input_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+            local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
+                  wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
+
             local decode_mode
             for decode_mode in ${receiver_modes_list[@]}; do
+                local decode_dir=${decode_mode}_${returned_seconds}
+                mkdir -p ${decode_dir}
+                sox ${wav_file_list[@]} ${decode_dir}/${wsprd_input_filename}       ### TODO: don't make so many copies and perhaps use list of files as input to jt9
+
                 wd_logger 1 "See if decoding of mode ${decode_mode:0:1} is configured for WSPR packets of length ${returned_seconds} seconds from files '${comma_seperated_files}'"
                 case ${decode_mode:0:1} in
                     W )
                         if [[ ${returned_seconds} -eq 120 ]] || [[ ${returned_seconds} -eq 900 ]] ; then
-                           local wsprd_input_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
-                           local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
-                                 wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
-
                             wd_logger 1 "Decode ${returned_seconds} second WSPR mode spots in wav files '${comma_seperated_files}' by combining them into one wav file '${wsprd_input_filename}' to be processed by 'wsprd'"
 
-                            sox ${wav_file_list[@]} ${wsprd_input_filename}
-
+                            cd ${decode_dir}
+                            local start_time=${SECONDS}
                             decode_wpsr_wav_file ${wsprd_input_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
                             local ret_code=$?
-                            if [[ ${ret_code} -ne 0 ]]; then
-                                wd_logger 1 "ERROR: For mode ${decode_mode}: 'decode_wpsr_wav_file ${wsprd_input_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
-                            else
-                                wd_logger 1 "For mode ${decode_mode}: command 'decode_wpsr_wav_file ${wsprd_input_filename} wsprd_stdout.txt' decoded:  $(cat wsprd_stdout.txt)"
-                            fi
                             rm ${wsprd_input_filename}
+                            cd - >& /dev/null
+                            if [[ ${ret_code} -ne 0 ]]; then
+                                wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode ${decode_mode}: 'decode_wpsr_wav_file ${wsprd_input_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
+                            else
+                                wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode ${decode_mode}: command 'decode_wpsr_wav_file ${wsprd_input_filename} wsprd_stdout.txt' decoded:  $(cat ${decode_dir}/wsprd_stdout.txt)"
+                            fi
                         else
                             wd_logger 1 "Config file specifed WSPR decode of a ${returned_seconds} second wav file.  This is not a valid WSPR packet length"
                             fi
                             ;;
                         F )
                             wd_logger 1 "Files of ${returned_seconds} will be processed by cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w ${wav_files}'"
-                            ${JT9_CMD} -p ${returned_seconds} --fst4w ${wav_file_list[*]} >& jt9_output.txt
+
+                            cd ${decode_dir}
+                            local start_time=${SECONDS}
+                            ${JT9_CMD} -p ${returned_seconds} --fst4w ${wsprd_input_filename} >& jt9_output.txt
                             local ret_code=$?
+                            rm ${wsprd_input_filename}
+                            cd - >& /dev/null
                             if [[ ${ret_code} -eq 0 ]]; then
-                                wd_logger 1 "cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${wav_file_list[*]} >& jt9_output.txt' printed $(cat jt9_output.txt)"
+                                wd_logger 1 "After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${wsprd_input_filename} >& jt9_output.txt' printed $(cat ${decode_dir}/jt9_output.txt)"
                             else
-                                wd_logger 1 "ERROR: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${wav_file_list[*]} >& jt9_output.txt' => ${ret_code} and printed $(cat jt9_output.txt)"
+                                wd_logger 1 "After $(( SECONDS - start_time )) seconds: ERROR: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${wsprd_input_filename} >& jt9_output.txt' => ${ret_code} and printed $(cat jt9_output.txt)"
                             fi
                         ;;
                     * )
