@@ -39,7 +39,7 @@ function get_decode_mode_list() {
     temp_receiver_modes=${receiver_modes_arg}
     if [[ ${receiver_modes_arg} == "DEFAULT" ]]; then
         ### Translate DEFAULT mode to a list of modes for this band
-        local default_modes
+        local default_modes=""
         get_default_modes_for_band  default_modes ${receiver_band}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then

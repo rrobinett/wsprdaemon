@@ -81,16 +81,19 @@ function get_default_modes_for_band() {
     local return_var_name=$1
     local search_for_band=$2
     
-    wd_logger 1 "Got args ${return_var_name} ${band}"
+    wd_logger 2 "Got args ${return_var_name} ${search_for_band}"
 
     local band_entry
-    for band_entry in ${WSPR_BAND_LIST[*]}; do
+    for band_entry in "${WSPR_BAND_LIST[@]}"; do
         local band_entry_list=( ${band_entry} )
         local entry_band=${band_entry_list[0]}
+
+        wd_logger 2 "Checking for band ${search_for_band} in '${band_entry_list[*]}'"
         if [[ ${band_entry_list} == ${search_for_band} ]]; then
-            local default_modes=${band_entry_list[2]}
-            wd_logger 1 "Returning default modes for band ${search_for_band} => ${default_modes}"
-            eval ${return_var_name}=${default_modes}
+            local local_default_modes=${band_entry_list[2]}
+
+            wd_logger 2 "Returning default modes for band ${search_for_band} => ${local_default_modes}"
+            eval ${return_var_name}=${local_default_modes}
             return 0
         fi
     done
