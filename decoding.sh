@@ -74,7 +74,7 @@ function setup_signal_levels_log_file() {
     eval ${return_signal_levels_log_file_variable_name}=${local_signal_levels_log_file}
 
     if [[ -f ${local_signal_levels_log_file} ]]; then
-        wd_logger 1 "Signal Level log file '${local_signal_levels_log_file}' exists, so leave it alone"
+        wd_logger 2 "Signal Level log file '${local_signal_levels_log_file}' exists, so leave it alone"
         return 0
     fi
     ### these could be modified from these default values by declaring them in the .conf file.
@@ -247,16 +247,12 @@ function decoding_daemon()
                 local start_time=${SECONDS}
                 decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
                 local ret_code=$?
-                if [[ -f ${decoder_input_wav_filename} ]]; then
-                    rm ${decoder_input_wav_filename}
-                else
-                    wd_logger 1 "ERROR: WSPR decode failed to find ${decoder_input_wav_filename} to be removed"
-                fi
+                rm ${decoder_input_wav_filename}
                 cd - >& /dev/null
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
                 else
-                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: command 'decode_wpsr_wav_file ${decoder_input_wav_filename} wsprd_stdout.txt' decoded:  $(cat ${decode_dir}/wsprd_stdout.txt)"
+                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: command 'decode_wpsr_wav_file ${decoder_input_wav_filename} wsprd_stdout.txt' decoded:\n$(cat ${decode_dir}/ALL_WSPR.TXT.new)"
                 fi
                 processed_wav_files="yes"
             fi
@@ -295,8 +291,13 @@ function decoding_daemon()
                 wd_logger 1 "Processed files '${wav_files}' for WSPR packet of length ${returned_seconds} seconds"
             fi
         done
+        queue_decoded_spots
         sleep 1
     done
+}
+
+function queue_decoded_spots() {
+    wd_logger 1 "Queue spots for processing by the posting_daemon()"
 }
 
 function decode_wpsr_wav_file() {
@@ -308,15 +309,27 @@ function decode_wpsr_wav_file() {
     wd_logger 1 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}"
     local wsprd_cmd_flags=${WSPRD_CMD_FLAGS}
     local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
-          wspr_decode_capture_freq_hzx=${wspr_decode_capture_freq_hz%_*}    ### Remove the _usb.wav
+    wspr_decode_capture_freq_hzx=${wspr_decode_capture_freq_hz%_*}    ### Remove the _usb.wav
     local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
     local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
+
+    if [[ ! -s ALL_WSPR.TXT ]]; then
+        touch ALL_WSPR.TXT
+    fi
+    local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
+    if [[ ${all_wspr_size} -gt ${MAX_ALL_WSPR_SIZE} ]]; then
+        wd_logger 1 "ALL_WSPR.TXT has grown too large, so truncating it"
+        tail -n 1000 ALL_WSPR.TXT > ALL_WSPR.tmp
+        mv ALL_WSPR.tmp ALL_WSPR.TXT
+    fi
+    local last_line=$(tail -n 1 ALL_WSPR.TXT) 
 
     timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
     fi
+    grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.new
     return ${ret_code}
 }
  
