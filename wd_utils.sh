@@ -275,7 +275,7 @@ function get_pid_from_file(){
     ps ${pid_val} >& /dev/null
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "Got pid from ${pid_file_name}. ps ${pid_val} => ${ret_code}, so pid isn't running"
+        wd_logger 2 "Got pid from ${pid_file_name}. ps ${pid_val} => ${ret_code}, so pid isn't running"
         rm ${pid_file_name}
         return 3
     fi

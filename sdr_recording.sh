@@ -331,7 +331,7 @@ function get_wav_file_list() {
         if [[ ${index_of_last_raw_file_for_this_wav_file} -ge ${#raw_file_list[@]} ]]; then
             ### The last file isn't present
             if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
-                wd_logger 2 "The first unsaved file is at index ${index_of_first_unreported_raw_file}, but the last index is not yet present. Adjust index_of_first_file_which_needs_to_be_saved to ${index_of_first_file_which_needs_to_be_saved}"
+                wd_logger 1 "For ${seconds_in_wspr_pkt} second packet, the first unreported file '${raw_file_list[${index_of_first_unreported_raw_file}]}' is at index ${index_of_first_unreported_raw_file}, so adjust the current index_of_first_file_which_needs_to_be_saved from ${index_of_first_file_which_needs_to_be_saved} down to that index"
                 index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
             fi
             wd_logger 2 "The first unreported ${seconds_in_wspr_pkt} seconds raw file is at index ${index_of_first_unreported_raw_file}, but the last raw file is not yet present, so we can't yet create a wav file. So continue to search for the next WSPR pkt length"
@@ -348,19 +348,23 @@ function get_wav_file_list() {
          local flush_list=( *.${seconds_in_wspr_pkt}-secs )
          shopt -u nullglob
          if [[ ${#flush_list[@]} -gt 0 ]]; then
-             wd_logger 2 "Flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
+             wd_logger 1 "For ${seconds_in_wspr_pkt} second packet, flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
              rm -f ${flush_list[@]}    ### We only need to remember this new wav_raw file, so flush all older ones.
          fi
          touch -r ${raw_file_list[${index_of_first_unreported_raw_file}]} ${wav_list_returned_file}
-         
-         wd_logger 2 "Remembered that this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
+
+         if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
+             wd_logger 1 "Added a new report list to be returned and remembering to save the files in it by changing the current index_of_first_file_which_needs_to_be_saved=${index_of_first_file_which_needs_to_be_saved} to index_of_first_unreported_raw_file=${index_of_first_unreported_raw_file}"
+             index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
+         fi
+         wd_logger 2 "For ${seconds_in_wspr_pkt} packet, Remembered that a list for this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
     done
     
     if [[ ${index_of_first_file_which_needs_to_be_saved} -lt ${#raw_file_list[@]} ]] ; then
         local count_of_raw_files_to_flush=$(( index_of_first_file_which_needs_to_be_saved ))
-        wd_logger 2 "After searching for all requested wav file lengths, found file [${index_of_first_file_which_needs_to_be_saved}] '${raw_file_list[${index_of_first_file_which_needs_to_be_saved}]}' is the oldest file which needs to be saved" 
+        wd_logger 1 "After searching for all requested wav file lengths, found file [${index_of_first_file_which_needs_to_be_saved}] '${raw_file_list[${index_of_first_file_which_needs_to_be_saved}]}' is the oldest file which needs to be saved" 
         if [[ ${count_of_raw_files_to_flush} -gt 0 ]]; then
-            wd_logger 2 "So purging files '${raw_file_list[*]:0:${count_of_raw_files_to_flush}}'"
+            wd_logger 1 "So purging files '${raw_file_list[*]:0:${count_of_raw_files_to_flush}}'"
             rm ${raw_file_list[@]:0:${count_of_raw_files_to_flush}}
         fi
     fi

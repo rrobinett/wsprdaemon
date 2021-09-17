@@ -184,17 +184,18 @@ function decoding_daemon()
     rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        wd_logger 1 "Getting a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
+            wd_logger 2 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
             sleep 1
             continue
         fi
-        local -a mode_wav_file_list=(${mode_seconds_files})
-        wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned '${mode_wav_file_list[*]}'"
+        local -a mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
+        wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
+
 
         > decodes_cache.txt             ## Create or truncate to zero length a file which stores the decodes from all modes
         local returned_files
@@ -204,7 +205,29 @@ function decoding_daemon()
             local comma_seperated_files=${returned_files#*:}
             local wav_files=${comma_seperated_files//,/ }
             local wav_file_list=( ${wav_files} )
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds, got list of files ${comma_seperated_files}"
+            local wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
+
+            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
+
+            ### This is a block of diagnostic code 
+            local found_all_files="yes"
+            local index
+            for (( index=0; index < ${#wav_file_list[@]}; ++index )); do
+                local file_to_test=${wav_file_list[${index}]}
+                 wav_time_list+=( ${file_to_test:11:2} )
+                if ! [[ -f ${file_to_test} ]]; then
+                    wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_file_list[${index}] does not exist"
+                    found_all_files="no"
+                fi
+            done
+            if [[ ${found_all_files} == "no" ]]; then
+               wd_logger 1 "ERROR: one or more wav files returned by get_wav_file_list are missing, so skip processing minute ${returned_minutes} wav files"
+               continue
+            fi
+
+            local wd_string="${wav_time_list[*]}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_seperated_files}"
+            ### Enf of diagnostic code
 
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             sox ${wav_file_list[@]} ${decoder_input_wav_filename}       ### TODO: don't make so many copies and perhaps use list of files as input to jt9
@@ -224,7 +247,11 @@ function decoding_daemon()
                 local start_time=${SECONDS}
                 decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
                 local ret_code=$?
-                rm ${decoder_input_wav_filename}
+                if [[ -f ${decoder_input_wav_filename} ]]; then
+                    rm ${decoder_input_wav_filename}
+                else
+                    wd_logger 1 "ERROR: WSPR decode failed to find ${decoder_input_wav_filename} to be removed"
+                fi
                 cd - >& /dev/null
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
@@ -234,7 +261,7 @@ function decoding_daemon()
                 processed_wav_files="yes"
             fi
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
-                wd_logger 1 "Decode a ${returned_seconds} wave file for FST4W spots by running cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w ${wav_files}'"
+                wd_logger 1 "Decode a ${returned_seconds} wave file for FST4W spots by running cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename}'"
 
                 local decode_dir="F_${returned_seconds}"
                 mkdir -p ${decode_dir}
@@ -244,7 +271,11 @@ function decoding_daemon()
                 local start_time=${SECONDS}
                 ${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename} >& jt9_output.txt
                 local ret_code=$?
-                rm ${decoder_input_wav_filename}
+                if [[ -f ${decoder_input_wav_filename} ]]; then
+                    rm ${decoder_input_wav_filename}
+                else
+                    wd_logger 1 "ERROR: FST4W  decode failed to find ${decoder_input_wav_filename} to be removed"
+                fi
                 cd - >& /dev/null
                 if [[ ${ret_code} -eq 0 ]]; then
                     wd_logger 1 "After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename} >& jt9_output.txt' printed $(cat ${decode_dir}/jt9_output.txt)"
@@ -253,7 +284,11 @@ function decoding_daemon()
                 fi
                 processed_wav_files="yes"
             fi
-            rm ${decoder_input_wav_filename}
+            if [[ -f ${decoder_input_wav_filename} ]]; then
+                rm ${decoder_input_wav_filename}
+            else
+                wd_logger 1 "ERROR: after WSPR and FST4W processing, decode loop failed to find ${decoder_input_wav_filename} to be removed"
+            fi
             if [[ ${processed_wav_files} == "no" ]]; then 
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"
             else
