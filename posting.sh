@@ -304,7 +304,7 @@ function posting_daemon()
                 mkdir -p ${upload_wsprdaemon_noise_dir}
 
                 mv ${noise_files_list[@]} ${upload_wsprdaemon_noise_dir}   ### The TIME_FREQ is already part of the noise file name
-                wd_logger 1 "Moved noise file(s) '${noise_files_list[@]}' to '${upload_wsprdaemon_noise_dir}'"
+                wd_logger 1 "Moved noise file(s) '${noise_files_list[*]}' to '${upload_wsprdaemon_noise_dir}'"
             fi
         done
         ### We have uploaded all the spot and noise files

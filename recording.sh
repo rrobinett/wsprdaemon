@@ -797,28 +797,4 @@ function update_master_hashtable()
     fi
 }
         
-##########
-function get_af_db() {
-    local local real_receiver_name=$1                ### 'real' as opposed to 'merged' receiver
-    local real_receiver_rx_band=${2}
-    local default_value=0
-
-    local af_info_field="$(get_receiver_af_list_from_name ${real_receiver_name})"
-    if [[ -z "${af_info_field}" ]]; then
-        echo ${default_value}
-        return
-    fi
-    local af_info_list=(${af_info_field//,/ })
-    for element in ${af_info_list[@]}; do
-        local fields=(${element//:/ })
-        if [[ ${fields[0]} == "DEFAULT" ]]; then
-            default_value=${fields[1]}
-        elif [[ ${fields[0]} == ${real_receiver_rx_band} ]]; then
-            echo ${fields[1]}
-            return
-        fi
-    done
-    echo ${default_value}
-}
-
 
