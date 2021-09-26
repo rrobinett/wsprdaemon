@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 ##########################################################################################################################################################
 ########## Section which implements the job control system  ########################################################################################################
 ##########################################################################################################################################################
@@ -10,7 +12,6 @@ function start_stop_job() {
     wd_logger 1 "Begining '${action}' for ${receiver_name} on band ${receiver_band}"
     case ${action} in
         a) 
-            spawn_upload_daemons     ### Ensure there are upload daemons to consume the spots and noise data
             spawn_posting_daemon        ${receiver_name} ${receiver_band} ${receiver_modes}
             ;;
         z)
@@ -359,18 +360,19 @@ function add_remove_jobs_in_running_file() {
         wd_logger 1 "Creating new ${RUNNING_JOBS_FILE}"
     fi
     source ${RUNNING_JOBS_FILE}
+    wd_logger 1 "RUNNING_JOBS='${RUNNING_JOBS[*]}'"
     case $action in
         a)
-            if [[ " ${job} " =~ "${RUNNING_JOBS[@]}" ]]; then
+            if [[ "${RUNNING_JOBS[@]}" =~ " ${job} " ]]; then
                 ### We come here when restarting a dead capture jobs, so this condition is already printed out
-                wd_logger 1 "Starting job '${job}' but found it is already in ${RUNNING_JOBS_FILE}"
+                wd_logger 1 "Starting job '${job}' but found it is already in ${RUNNING_JOBS_FILE}='${RUNNING_JOBS[*]}'"
                 return 1
             fi
             wd_logger 1 "Adding '${job}' to ${RUNNING_JOBS_FILE}"
             RUNNING_JOBS+=( ${job} )
             ;;
         z)
-            if ! [[ " ${job} " =~ "${RUNNING_JOBS[@]}" ]]; then
+            if ! [[ "${RUNNING_JOBS[@]}" =~ " ${job} " ]]; then
                 wd_logger 1 "Stoppng job '${job}', but is not in ${RUNNING_JOBS_FILE}"
                 return 1
             fi
@@ -383,7 +385,7 @@ function add_remove_jobs_in_running_file() {
             wd_logger 1 "Job '${job}' should no longer be in '${RUNNING_JOBS[@]}'"
             ;;
         *)
-            echo "$(date): add_remove_jobs_in_running_file(): ERROR: action ${action} invalid"
+            wd_logger 1 "ERROR: action ${action} invalid"
             return 2
     esac
     if [[ ${#RUNNING_JOBS[@]} -gt 0 ]]; then
@@ -393,6 +395,7 @@ function add_remove_jobs_in_running_file() {
         unset IFS
     fi
     echo "RUNNING_JOBS=( ${RUNNING_JOBS[*]-} )" > ${RUNNING_JOBS_FILE}
+    wd_logger 1 "Wrote new ${RUNNING_JOBS_FILE}: '${RUNNING_JOBS[*]-}'"
 }
 
 ###
@@ -581,23 +584,24 @@ function setup_expected_jobs_file () {
 
 ### Read the expected.jobs and running.jobs files and terminate and/or add jobs so that they match
 function update_running_jobs_to_match_expected_jobs() {
-    wd_logger 1 "Starting"
 
     setup_expected_jobs_file
     source ${EXPECTED_JOBS_FILE}
+    wd_logger 1 "EXPECTED_JOBS= ${EXPECTED_JOBS[*]}}"
 
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
     fi
     source ${RUNNING_JOBS_FILE}
     local temp_running_jobs=( ${RUNNING_JOBS[*]-} )
+    wd_logger 1 "RUNNING_JOBS=${RUNNING_JOBS[*]-}"
 
     ### Check that posting jobs which should be running are still running, and terminate any jobs currently running which will no longer be running 
     ### posting_daemon() will ensure that decoding_daemon() and recording_deamon()s are running
     local running_job
     local schedule_change="no"
     for running_job in ${temp_running_jobs[*]}; do
-        local running_job_fields=( ${running_job//, } )
+        local running_job_fields=( ${running_job//,/ } )
         if [[ ${#running_job_fields[@]} -lt 2 ]]; then
             wd_logger 1 "Error in running job '${running_job}'.  It has less than the minimun 2 fields of RX,BAND[,MODES,...]"
             continue
@@ -617,8 +621,7 @@ function update_running_jobs_to_match_expected_jobs() {
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
                     wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
-                    wd_logger 1 "Found dead posting_daemon() job '%s,%s'. get_recording_status() returned '%s', so starting job"  \
-                        ${running_reciever} ${running_band} "$status"
+                    wd_logger 1 "Found dead posting_daemon() job '${running_reciever},${running_band}'. get_recording_status() returned '$status', so starting job"
                     start_stop_job a ${running_reciever} ${running_band} ${running_modes}
                 fi
                 break    ## No need to look further

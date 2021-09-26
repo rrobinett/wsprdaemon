@@ -14,7 +14,7 @@ function watchdog_daemon()
     wd_logger_flush_all_logs
     wd_logger 1 "Starting in $PWD as pid $$"
     while true; do
-        wd_logger_check_all_logs
+#        wd_logger_check_all_logs
         local current_minute=$(( 10#$(printf "%(%M)T") % 2 ))    ### '10#...' strips leading zeros resulting in: 0 st=> we are in an even minute, 1 => we are in an odd minute
         if [[ ${last_minute} -lt 0 || ( ${last_minute} == 0  && ${current_minute} == 1 ) ]]; then
             wd_logger 1 "Starting odd minute, do all watching functions"

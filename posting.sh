@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 #############################################################
 ################ Posting ####################################
 #############################################################
@@ -70,12 +72,12 @@ function posting_daemon()
             ### Start or keep alive decoding daemons for each real receiver
             local real_receiver_name
             for real_receiver_name in ${real_receiver_list[@]} ; do
-                wd_logger 1 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
+                wd_logger 2 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
                 ### '(...) runs in subshell so it can't change the $PWD of this function
                 (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            wd_logger 1 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
+            wd_logger 2 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
@@ -135,7 +137,7 @@ function posting_daemon()
                 done
             fi
             if [[  ${waiting_for_decodes} == "yes" ]]; then
-                wd_logger 1 "Is waiting for files. Sleeping..."
+                wd_logger 2 "Is waiting for files. Sleeping for ${WAV_FILE_POLL_SECONDS} seconds..."
                 sleep ${WAV_FILE_POLL_SECONDS}
             else
                 wd_logger 1 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
@@ -248,8 +250,7 @@ function posting_daemon()
                 ### There is one spot file for this rx
                 local real_receiver_wspr_spots_file=${real_receiver_wspr_spots_file_list[0]}
                 local filtered_receiver_wspr_spots_file="filtered_spots.txt"   ### Remove all but the strongest SNR for each CALL
-                rm -f ${filtered_receiver_wspr_spots_file}
-                touch ${filtered_receiver_wspr_spots_file}    ### In case there are no spots in the real rx
+                >  ${filtered_receiver_wspr_spots_file}                        ### creates or trucates the file
                 if [[ ! -s ${real_receiver_wspr_spots_file} ]]; then
                     wd_logger 1 "This spot file has no spots, but copy it to the upload directory so upload_daemon knows that this wspr cycle decode has been completed"
                 else
@@ -321,7 +322,7 @@ function posting_daemon()
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=20                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file() {
@@ -339,12 +340,12 @@ function create_enhanced_spots_file() {
         local spot_line_list_count=${#spot_line_list[@]}
         local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise   ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode  ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Type 2 spots have no grid
+            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Type 2 spots have no grid
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
@@ -352,7 +353,7 @@ function create_enhanced_spots_file() {
         fi
         ### G3ZIL 
         ### April 2020 V1    add azi
-        wd_logger 1 "'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
+        wd_logger 2 "'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
         add_derived ${spot_grid} ${my_grid} ${spot_freq}
         if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
             wd_logger 1 "spots.txt ${DERIVED_ADDED_FILE} file not found"

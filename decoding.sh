@@ -313,14 +313,14 @@ function queue_decoded_spots() {
     ### Forward the recording's date_time_freqHz spot file to the posting daemon which is polling for it.  Do this here so that it is after the very slow sox FFT calcs are finished
     local spot_queue_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_spots.txt
     > ${spot_queue_file}   ### create or truncate file which will be queued
-    if [[ ! -f ${wsprd_spots_file} ]] || [[ ! -s ]${wsprd_spots_file} ]]; then
+    if [[ ! -f ${wsprd_spots_file} ]] || [[ ! -s ${wsprd_spots_file} ]]; then
         ### A zero length spots file signals the posting daemon that decodes are complete but no spots were found
         wd_logger 1 "no spots were found.  Queuing zero length spot file '${spot_queue_file}'"
     else
         ###  Spots were found. We want to add the noise level fields to the end of each spot
         local spot_for_wsprnet=0         ### the posting_daemon() will fill in this field
 
-        wd_logger 1 "$( wc -l < ${wsprd_spot_count}) spots were found.  Add noise levels to the end of each spot line"
+        wd_logger 2 "$( wc -l < ${wsprd_spots_file}) spots were found.  Add noise levels to the end of each spot line while creating ${spot_queue_file}"
         
         local WSPRD_2_2_FIELD_COUNT=17   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
         local WSPRD_2_2_WITHOUT_GRID_FIELD_COUNT=16   ## wsprd in wsjt-x v2.2 outputs 17 fields in a slightly different order than the 15 fields output by wsprd v2.1
@@ -336,29 +336,31 @@ function queue_decoded_spots() {
             local other_fields_list=( ${other_fields} )
             local other_fields_list_count=${#other_fields_list[@]}
 
-            local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=11
-            local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITHOUT_GRID=10
+            local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID=12
+            local ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITHOUT_GRID=11
             local got_valid_line="yes"
+            local spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric spot_mode
             if [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-                read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric spot_mode <<< "${other_fields}"
                 wd_logger 2 "this V2.2 type 1 ALL_WSPR.TXT line has GRID: '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' '${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
             elif [[ ${other_fields_list_count} -eq ${ALL_WSPR_OTHER_FIELDS_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
                 spot_grid=""
-                read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric <<< "${other_fields}"
+                read spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_osd_decode spot_nhardmin spot_decode_cycles spot_metric spot_mode <<< "${other_fields}"
                 wd_logger 2 "this V2.2 type 2 ALL_WSPR.TXT line has no GRID: '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_decode_cycles}' '${spot_jitter}' ${spot_blocksize}'  '${spot_metric}' '${spot_osd_decode}'"
             else
-                wd_logger 0 "WARNING: tossing  a corrupt (not the expected 15 or 16 fields) ALL_WSPR.TXT spot line"
+                wd_logger 0 "WARNING: tossing  a corrupt (not the expected 15 or 16 fields) ALL_WSPR.TXT spot line: ${other_fields}"
                 got_valid_line="no"
             fi
             if [[ ${got_valid_line} == "yes" ]]; then
                 #                              %6s %4s   %3d %3.0f %5.2f %11.7f %-22s          %2d %5u %4d  %4d %4d %2u\n"       ### fprintf() line from wsjt-x.  The %22s message field appears to include power
                 #local extended_line=$( printf "%4s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4d, %2d %5d %2d %2d %3d %2d\n" \
-                local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d %s %s\n" \
-                    "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}" "${rms_nl}"  "${fft_nl}")
-                                                    extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
+                local extended_line=$( printf "%6s %4s %5.2f %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d %s %s %s\n" \
+                    "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" \
+                    "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}" "${rms_nl}" "${fft_nl}" "${spot_mode}")
+                extended_line="${extended_line//[$'\r\n\t']}"  ### //[$'\r\n'] strips out the CR and/or NL which were introduced by the printf() for reasons I could not diagnose
                 echo "${extended_line}" >> ${spot_queue_file}
             fi
-        done <<< "${wsprd_spots_file}"
+        done < ${wsprd_spots_file}
 
         wd_logger 1 "Created enhanced spot file:\n$(cat ${spot_queue_file})\n"
     fi
@@ -368,8 +370,9 @@ function queue_decoded_spots() {
     for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
         ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
         wd_logger 1 "copying ${spot_queue_file} and ${new_noise_file} to ${dir}/ monitored by a posting daemon" 
-        cp -p ${spot_queue_file} ${new_noise_file} ${dir}/
+        ln ${spot_queue_file} ${new_noise_file} ${dir}/
     done
+    rm ${spot_queue_file} ${new_noise_file}
     wd_logger 1 "Queued the new spots and noise lines for the posting daemon"
 }
 
@@ -419,7 +422,7 @@ function decoding_daemon()
     rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
-        wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
         local ret_code=$?
@@ -521,7 +524,7 @@ function decoding_daemon()
                         old_kiwi_ov_lines=${current_kiwi_ov_lines}
                     fi
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: command 'decode_wpsr_wav_file ${decoder_input_wav_filename} wsprd_stdout.txt' measured FFT noise = ${fft_nl_cal}, RMS noise = ${rms_nl}"
-                    cat ${decode_dir}/ALL_WSPR.TXT.new >> decodes_cache.txt
+                   sed "s/\$/  ${returned_minutes}/" ${decode_dir}/ALL_WSPR.TXT.new >> decodes_cache.txt          ### Add the wspr packet mode '2' or mode '15' to each line.  this will be recorded by wsprdaemon.org 
                 fi
                 rm ${decode_dir}/${decoder_input_wav_filename}   ### wait until now to delete it so RMS and C2 cacluations wd_logger lines go to logfile in this directory
 
@@ -572,7 +575,7 @@ function spawn_decode_daemon() {
     local receiver_name=$1
     local receiver_band=$2
     local receiver_modes=$3
-    wd_logger 1 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
+    wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
     local capture_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
 

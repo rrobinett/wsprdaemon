@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 ##########################################################################################################################################################
 ########## Section which manaages creating and later/remote uploading of the spot and noise level caches ##################################################
 ##########################################################################################################################################################
@@ -254,125 +256,100 @@ function get_wsprnet_uploading_job_dir_path(){
     echo ${receiver_posting_path}
 }
 
+declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-30}       ### By default wait for the oldest spot file to be 30 seconds old before starting an upload of it and all newer spotfiles
 
 function upload_to_wsprnet_daemon()
 {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+
     mkdir -p ${UPLOADS_WSPRNET_SPOTS_DIR}
-    shopt -s nullglob    ### * expands to NULL if there are no file matches
+    cd ${UPLOADS_WSPRNET_SPOTS_DIR}
+    
+    wd_logger 1 "Starting in $PWD"
     while true; do
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() checking for spot files to upload in all running jobs directories"
-        local all_call_grid_list=()
-        while ! [[ -f ${RUNNING_JOBS_FILE} ]]; do
-            wd_logger 1 "Waiting for ${RUNNING_JOBS_FILE} to appear"
+        wd_logger 2 "Checking for CALL/GRID directories"
+        local call_grid_dirs_list
+        call_grid_dirs_list=( $(find . -mindepth 1 -maxdepth 1 -type d) )
+        call_grid_dirs_list=(${call_grid_dirs_list[@]#./})       ### strip the './' off the front of each element
+        if [[ ${#call_grid_dirs_list[@]} -eq 0 ]]; then
+            wd_logger 1 "Found no CALL/GRID directories.  'sleep 5' and search again"
             sleep 5
-        done
-        source ${RUNNING_JOBS_FILE}
-        local job
-        for job in ${RUNNING_JOBS[@]} ; do
-            [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() check to see if job ${job} should be added to \$all_call_grid_list[@]"
-            local call_grid=$( get_call_grid_from_receiver_name ${job%,*} )
-            if [[ ! ${all_call_grid_list[@]} =~ ${call_grid} ]]; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() adding '${call_grid}' to list of CALL_GRIDs to be searched for spot files to upload"
-                all_call_grid_list+=(${call_grid})
-            else 
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() call_grid '${call_grid}' is already in \$all_call_grid_list+[@]"
+            continue
+        fi
+        wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
+
+       ### All spots in an upload to wspr.org must come from a single CALL/GRID
+       for call_grid_dir in ${call_grid_dirs_list[@]} ; do
+           wd_logger 2 "Checking ${call_grid_dir}"
+
+           local spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
+
+           if [[ ${#spots_files_list[@]} -eq 0 ]]; then
+               wd_logger 2 "Found no '*_wspr_spots.txt' files for ${call_grid_dir}"
+               continue
+           fi
+           local oldest_spot_file_epoch=${spots_files_list[0]%%.*}
+           local current_time_epoch=$(printf "%(%s)T\n" -1)
+           local oldest_spotfile_seconds=$(( current_time_epoch - oldest_spot_file_epoch))
+
+           if [[ ${oldest_spotfile_seconds} -lt ${MAX_SPOTFILE_SECONDS} ]]; then
+               wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds}, so wait for more files"
+               continue
+           fi
+           wd_logger 1 "Found ${#spots_files_list[@]} spot files, the oldest is ${oldest_spotfile_seconds} seconds old"
+
+           local all_spots_file_list=( ${spots_files_list[@]#*,} )
+           upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
+           local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
+           wd_logger 1 "Uploading spots from ${#wspr_spots_files[@]} files"
+
+            ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
+            cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
+            if [[ ${spots_to_xfer} -eq 0 ]]; then
+                wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
+                rm ${all_spots_file_list[@]}
+                continue
             fi
-        done
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${#all_call_grid_list[@]} CALL_GRIDS to search for uploads: '${all_call_grid_list[@]}'"
+            if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
+                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots.  Flushing ${#spots_files_list[@]} spot files"
+                rm ${all_spots_file_list[@]}
+                continue
+            fi
+            ### Upload all the spots for one CALL_GRID in one curl transaction 
+            local call=${call_grid_dir%_*}
+            local grid=${call_grid_dir#*_}
 
-        for call_grid in ${all_call_grid_list[@]} ; do
-            local call=${call_grid%_*}
-            local grid=${call_grid#*_}
-
-            ### Get a list of all bands which are reported with this CALL_GRID.  Frequently bands are on differnet Kiwis
-            local call_grid_job_list=()
-            local call_grid_band_list=()
-            for job in ${RUNNING_JOBS[@]} ; do
-                local job_rx=${job%,*}
-                local job_band=${job#*,}
-                local job_call_grid=$( get_call_grid_from_receiver_name ${job_rx} )
-                local job_call=${job_call_grid%_*}
-                local job_grid=${job_call_grid#*_}
-                if [[ ${job_call} == ${call} ]] && [[ ${job_grid} == ${grid} ]]; then
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() adding band '${job_band}' to list for call ${call} grid ${grid}"
-                    call_grid_band_list+=( ${job_band} )
-                    call_grid_job_list+=( ${job} )
-                else
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() job '${job}' is not uploaded with call ${call} grid ${grid}"
-                fi
-            done
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() '${call_grid}' reports on bands '${call_grid_band_list[@]}' from jobs '${call_grid_job_list[@]}'"
-
-            ### Check to see that spot files are present for all bands for this CALL_GRID before uploading.  This results in time and frequency ordered printouts from wsprnet.org 
-            local all_spots_file_list=()
-            local missing_job_spots="no"
-            for job in ${call_grid_job_list[@]} ; do
-                local call_grid_rx_band_path=$( get_wsprnet_uploading_job_dir_path ${job} )
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() checking running job '${job}' spot directory ${call_grid_rx_band_path}"
-                local job_spot_file_list=(${call_grid_rx_band_path}/*.txt)
-                if [[ ${#job_spot_file_list[@]} -eq 0 ]]; then
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() found no spot files in ${call_grid_rx_band_path}"
-                    missing_job_spots="yes"
-                else
-                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${#job_spot_file_list[@]} spot files in ${call_grid_rx_band_path}"
-                    all_spots_file_list+=( ${job_spot_file_list[@]} )
-                fi
-            done
-
-            if [[ ${missing_job_spots} == "yes" ]]; then
-                [[ ${verbosity} -ge 3 ]] && echo "$(date): upload_to_wsprnet_daemon() found some job dirs have no spots, so wait for all job dirs to have at least one spot file"
+            wd_logger 1 "Uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
+                    
+            curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+            local ret_code=$?
+            if [[ $ret_code -ne 0 ]]; then
+                wd_logger 1 "curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
+                continue
+            fi
+            local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
+            if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
+                [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 2 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})So presume no spots were recorded and the our spots queued for the next upload attempt."
+                [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' into '${spot_xfer_counts[@]}' from curl log, so presume no spots were recorded and try again:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\n"
             else
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() found ${#all_spots_file_list[@]} spot files in '\${all_spots_file_list}'.  Create file with at most ${MAX_UPLOAD_SPOTS_COUNT} spots for upload"
-                upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
-                local wspr_spots_files=( $(cat ${UPLOAD_SPOT_FILE_LIST_FILE})  )
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() uploading spots from ${#wspr_spots_files[@]} files"
-
-                ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
-                cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
-                local    spots_to_xfer=$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l)
-                if [[ ${spots_to_xfer} -eq 0 ]] || [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
-                    if [[ ${spots_to_xfer} -eq 0 ]] ; then
-                        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() no spots to upload in the ${#wspr_spots_files[@]} spot files.  Purging '${wspr_spots_files[@]}'"
-                    else
-                        [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() in proxy upload mode, so don't upload to wsprnet.org.  Purging '${wspr_spots_files[@]}'"
-                    fi
-                    rm -f ${all_spots_file_list[@]}
-                else
-                    ### Upload all the spots for one CALL_GRID in one curl transaction 
-                    local wd_arg=$(printf "Uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with $(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} | wc -l) spots in it.")
-                    wd_logger 1 "${wd_arg}"
-                    [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
-                    curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
-                    local ret_code=$?
-                    if [[ $ret_code -ne 0 ]]; then
-                        [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
-                    else
-                        local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
-                        if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
-                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 2 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})So presume no spots were recorded and the our spots queued for the next upload attempt."
-                            [[ ${verbosity} -ge 2 ]] && echo -e "$(date): upload_to_wsprnet_daemon() couldn't extract 'spots added' into '${spot_xfer_counts[@]}' from curl log, so presume no spots were recorded and try again:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\n"
-                        else
-                            local spots_xfered=${spot_xfer_counts[0]}
-                            local spots_offered=${spot_xfer_counts[1]}
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
-                            if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
-                                [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() UNEXPECTED ERROR: spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
-                            fi
-                            local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
-                            if [[ ${spots_xfered} -eq 0 ]]; then
-                                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() the curl upload was successful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
-                            else
-                                ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
-                                ### Assume we are done attempting to transfer those spots
-                                local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
-                                wd_logger 1 "${wd_arg}"
-                            fi
-                            [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${all_spots_file_list[@]}'"
-                            rm -f ${all_spots_file_list[@]}
-                        fi
-                    fi
+                local spots_xfered=${spot_xfer_counts[0]}
+                local spots_offered=${spot_xfer_counts[1]}
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
+                if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
+                    [[ ${verbosity} -ge 1 ]] && echo "$(date): upload_to_wsprnet_daemon() UNEXPECTED ERROR: spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
                 fi
+                local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
+                if [[ ${spots_xfered} -eq 0 ]]; then
+                    [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() the curl upload was successful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
+                else
+                    ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
+                    ### Assume we are done attempting to transfer those spots
+                    local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
+                    wd_logger 1 "${wd_arg}"
+                fi
+                [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${all_spots_file_list[@]}'"
+                rm -f ${all_spots_file_list[@]}
             fi
         done
         ### Pole every 10 seconds for a complete set of wspr_spots.txt files
@@ -397,7 +374,7 @@ function spawn_upload_to_wsprnet_daemon()
             rm -f ${uploading_pid_file_path}
         fi
     fi
-    wd_logger 1 "Spawning new upload_to_wsprnet_daemon()"
+    wd_logger 1 "Spawning new upload_to_wsprnet_daemon(). Logging to ${UPLOADS_WSPRNET_LOGFILE_PATH} "
     mkdir -p ${UPLOADS_WSPRNET_LOGFILE_PATH%/*}
     WD_LOGFILE=${UPLOADS_WSPRNET_LOGFILE_PATH} upload_to_wsprnet_daemon &
     echo $! > ${uploading_pid_file_path}
