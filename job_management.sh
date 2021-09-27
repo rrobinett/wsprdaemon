@@ -291,8 +291,7 @@ function show_running_jobs() {
             fi
         fi
     done
-    wd_logger 1 "Found ${running_jobs_count} running decode jobs"
-    wd_logger 2 "Finished"
+    wd_logger 1 "Found ${running_jobs_count} running jobs"
 }
 
 ##############################################################
@@ -518,12 +517,12 @@ function update_hhmm_sched_file() {
     echo -n "declare HHMM_SCHED=(" > ${HHMM_SCHED_FILE}
     local sched_line
     for sched_line in "${job_array_temp[*]}"  ; do
-        wd_logger 1 "Processing sched line ${sched_line}"
-
         local job_line_list=(${sched_line})
         local job_time=${job_line_list[0]}
 
-        ### Add the ',MODE' to the jobs defined for this time
+        wd_logger 1 "Processing sched line '${sched_line}', job_time=${job_time}"
+
+        ### If needed, ddd the ',MODE' to the jobs defined for this time
         local output_jobs_list=(${job_time})   ### First element is the time
 
         ### Look at each job defined for this time
@@ -536,15 +535,16 @@ function update_hhmm_sched_file() {
                 ### conf file job doesn't have a ',MODE' field
                 job_list[2]="DEFAULT"
             fi
+            local output_schedule_job="${job_list[*]}"
+                  output_schedule_job="${output_schedule_job// /,}"
+            output_jobs_list+=( ${output_schedule_job} )
+            wd_logger 1 "Added processed job ${output_schedule_job} to schedule for time ${output_jobs_list[0]}"
         done
-        wd_logger 1 "Processed sched line into '${job_list[*]}'"
+        wd_logger 1 "Processed sched line into '${output_jobs_list[*]}'"
 
         ### Done processing one schedule time line
-        local output_jobs="${job_list[*]}"
-              output_jobs=${output_jobs// /,}
-        local output_line="${job_time} ${output_jobs}"
-        wd_logger 1 "Appending '${output_line}' to ${HHMM_SCHED_FILE}"
-        echo -n " \"${output_line}\" " >> ${HHMM_SCHED_FILE}
+        wd_logger 1 "Appending '${output_jobs_list[*]}' to ${HHMM_SCHED_FILE}"
+        echo -n " \"${output_jobs_list[*]}\" " >> ${HHMM_SCHED_FILE}
     done
     echo ")" >> ${HHMM_SCHED_FILE}
     wd_logger 1 "Finished updating HHMM_SCHED_FILE"
