@@ -703,6 +703,7 @@ function update_running_jobs_to_match_expected_jobs() {
 function stop_running_jobs() {
     local stop_receiver=$1
     local stop_band=${2-all}    ## BAND or no arg if $1 == 'all'
+    local stop_modes=${3-DEFAULT}
 
     wd_logger 2 "Start with args: $1,${2-} => ${stop_receiver},${stop_band}"
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
@@ -721,14 +722,13 @@ function stop_running_jobs() {
     ### Terminate any jobs currently running which will no longer be running 
     local running_job
     for running_job in ${temp_running_jobs[@]} ; do
-        echo "${running_job}"
         local running_job_fields=(${running_job//,/ } )
         local running_reciever=${running_job_fields[0]}
         local running_band=${running_job_fields[1]}
-        local running_modes=${running_job_fields[2]-ALL}       ### The mode field is optional and will not be present in legacy config files
-        wd_logger 1 "Compare against running job '${running_job_fields[*]}' => ${running_reciever},${running_band}[,${running_modes}]"
-        if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_reciever} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
-            wd_logger 1 "Terminating running  job ${running_reciever},${running_band}"
+        local running_modes=${running_job_fields[2]}       ### The mode field is optional and will not be present in legacy config files
+        wd_logger 1 "Compare the against running job '${running_job_fields[*]}' with stop target ${running_reciever},${running_band}[,${running_modes}]"
+        if [[ ${stop_receiver} == "all" || ( ${stop_receiver} == ${running_reciever} && ${stop_band} == ${running_band} && ${stop_modes} == ${running_modes} ) ]]  ; then
+            wd_logger 1 "Terminating running  job ${running_reciever},${running_band},${running_modes}"
             start_stop_job z ${running_reciever} ${running_band} ${running_modes}      ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
         else
             wd_logger 1 "does not match running job '${running_job}'"
