@@ -658,7 +658,7 @@ function get_recording_status() {
     local get_recording_status_name=$1
     local get_recording_status_rx_band=$2
     local get_recording_status_name_receiver_recording_dir=$(get_recording_dir_path ${get_recording_status_name} ${get_recording_status_rx_band})
-    local get_recording_status_name_receiver_recording_pid_file=${get_recording_status_name_receiver_recording_dir}/recording.pid
+    local get_recording_status_name_receiver_recording_pid_file=${get_recording_status_name_receiver_recording_dir}/wav_recording_daemon.pid
 
     if [[ ! -d ${get_recording_status_name_receiver_recording_dir} ]]; then
         [[ $verbosity -ge 0 ]] && echo "Never ran"

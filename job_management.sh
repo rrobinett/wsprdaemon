@@ -237,8 +237,7 @@ function show_running_jobs() {
     local show_target=${args_array[0]}
     local show_band=${args_array[1]:-}
     if [[ "${show_target}" != "all" ]] && [[ -z "${show_band}" ]]; then
-        wd_logger 0 "missing RECEIVER,BAND argument"
-        wd_logger 2 "Finished"
+        wd_logger 1 "ERROR: missing RECEIVER,BAND argument"
         exit 1
     fi
     local receiver_name_list=()
@@ -246,11 +245,16 @@ function show_running_jobs() {
     local receiver_band
     local found_job="no"
 
-    if [[ ! -f ${RUNNING_JOBS_FILE} ]] || ! source ${RUNNING_JOBS_FILE} || [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger 1 "There is no RUNNING_JOBS_FILE '${RUNNING_JOBS_FILE}' or it is empty"
+    if [[ ! -f ${RUNNING_JOBS_FILE} ]] ; then
+        wd_logger 1 "ERROR: There is no RUNNING_JOBS_FILE '${RUNNING_JOBS_FILE}'"
         return 1
+    elif ! source ${RUNNING_JOBS_FILE}; then
+        wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
+        return 2
+    elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
+        wd_logger 1 "ERROR: RUNNING_JOBS[] is not declared or is empty"
+        return 3
     fi
-    source ${RUNNING_JOBS_FILE}
 
     local job_info
     local running_jobs_count=0
@@ -258,22 +262,23 @@ function show_running_jobs() {
         local job_info_fields=( ${job_info//,/ } )
         local receiver_name=${job_info_fields[0]}
         local receiver_band=${job_info_fields[1]}
+        local receiver_modes=${job_info_fields[2]}
         if [[ ${receiver_name} =~ ^MERG ]]; then
             ### For merged rx devices, there is only one posting pid, but one or more recording and decoding pids
             local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
             receiver_name_list=(${receiver_address//,/ })
-            printf "%2s: %12s,%-4s merged posting  %s (%s)\n" ${job_info} ${receiver_name} ${receiver_band} "$(get_posting_status ${receiver_name} ${receiver_band})" "${receiver_address}"
+            printf "%2s: %12s,%-4s merged posting    %s (%s)\n" ${job_info} ${receiver_name} ${receiver_band} "$(get_posting_status ${receiver_name} ${receiver_band})" "${receiver_address}"
         else
             ### For a simple rx device, the recording, decdoing and posting pids are all in the same directory
             receiver_name_list=(${receiver_name})
-            local print_string=$(printf "%2s: %12s,%-4s posting  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
+            local print_string=$(printf "%2s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
             wd_logger 0 "\n${print_string}"
             #printf "%2s: %12s,%-4s posting  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})"
         fi
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
-                printf "%2s: %12s,%-4s capture  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
-                printf "%2s: %12s,%-4s decode   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s recoarding  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
                 found_job="yes"
             fi
         done
