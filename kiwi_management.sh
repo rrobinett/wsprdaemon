@@ -19,7 +19,7 @@ function check_kiwi_wspr_channels() {
         wd_logger 2 " Kiwi '${kiwi_name}' not reporting users status or there are no active rx channels on it.  So nothing to do"
         return
     fi
-    local wd_arg=$(printf "Kiwi ${kiwi_name} has active listeners:\n${active_receivers_list}")
+    local wd_arg=$(echo "Kiwi ${kiwi_name} has active listeners:\n${active_receivers_list}")
     wd_logger 4 "${wd_arg}"
 
     if ! ${GREP_CMD} -q "wsprdaemon" <<< "${active_receivers_list}" ; then
@@ -93,7 +93,7 @@ function let_kiwi_get_gps_lock() {
     fi
     declare GPS_MIN_GOOD_COUNT=4
     if [[ ${kiwi_gps_good_count} -lt ${GPS_MIN_GOOD_COUNT} ]]; then
-        wd_logger 1 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is less than the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is bad on this Kiwi"
+        wd_logger 2 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is less than the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is bad on this Kiwi"
         ### TODO: don't perturb the Kiwi too often if it doesn't have GPS lock
     else
         wd_logger 3 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is greater than or equal to the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is OK on this Kiwi"

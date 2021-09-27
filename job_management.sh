@@ -510,8 +510,7 @@ function update_hhmm_sched_file() {
     wd_logger 1 "Created job_array_temp[]='${job_array_temp[*]}'"
 
     ### Save the sorted schedule strting with 00:00 and with only HH:MM jobs to ${HHMM_SCHED_FILE}
-    echo -n "declare HHMM_SCHED=( \\" > ${HHMM_SCHED_FILE}
-    set +x
+    echo -n "declare HHMM_SCHED=(" > ${HHMM_SCHED_FILE}
     local sched_line
     for sched_line in "${job_array_temp[*]}"  ; do
         wd_logger 1 "Processing sched line ${sched_line}"
@@ -538,11 +537,11 @@ function update_hhmm_sched_file() {
         ### Done processing one schedule time line
         local output_jobs="${job_list[*]}"
               output_jobs=${output_jobs// /,}
-        wd_logger 1 "Appending '\"${output_jobs}\" to ${HHMM_SCHED_FILE}"
-        echo -n "\"${output_jobs}\" \\" >> ${HHMM_SCHED_FILE}
+        local output_line="${job_time} ${output_jobs}"
+        wd_logger 1 "Appending '${output_line}' to ${HHMM_SCHED_FILE}"
+        echo -n " \"${output_line}\" " >> ${HHMM_SCHED_FILE}
     done
     echo ")" >> ${HHMM_SCHED_FILE}
-    set +x
     wd_logger 1 "Finished updating HHMM_SCHED_FILE"
 }
 
