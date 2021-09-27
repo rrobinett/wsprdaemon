@@ -46,16 +46,33 @@ function spawn_wav_recording_daemon() {
     local ret_code
     local wav_recording_daemon_pid=-1
 
-    wd_logger 2 "Starting with args ${receiver_name} ${receiver_band}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band}"
     if get_pid_from_file wav_recording_daemon_pid ${WAV_RECORDING_DAEMON_PID_FILE} ; then
        wd_logger 2 "wav recording daemon is running with pid ${wav_recording_daemon_pid}"
        return 0
     fi
 
     local  tuning_frequency=$(get_wspr_band_freq ${receiver_band}) 
-    wd_logger 2 "Spawning wav recording job on SDR ${receiver_name} in band ${receiver_band} by tuning to frequency ${tuning_frequency}"
+    wd_logger 1 "Spawning wav recording job on SDR ${receiver_name} in band ${receiver_band} by tuning to frequency ${tuning_frequency}"
     case ${receiver_name} in
-        KIWI*)
+        AUDIO*)
+            wd_logger 1 "ERROR: AUDIO SDR input devices not yet supported in this version"
+            ;;
+        SDR*)
+            local sdr_device="TODO"   ### TODO: get address of the device which can be understood by sdrTest
+            local center_frequency=$(( ${tuning_frequency} - ${ATSC_CENTER_OFFSET_HZ} ))
+            (sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -dumpbyminute  > ${WAV_RECORDING_DAEMON_LOG_FILE} 2>&1) &
+            ret_code=$?
+            if [[ ${ret_code} -eq 0 ]]; then
+                wav_recording_daemon_pid=$!
+                wd_logger 1 "sdrTest daemon was spawned with pid ${wav_recording_daemon_pid}"
+            else
+                 wd_logger 1 "ERROR: sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -timeout ${SDR_SAMPLE_TIME}... => ${ret_code}"
+            fi
+            sleep 1
+            ;;
+        *)
+            ### Assume any other receiver name describes a KiwiSDR
             #local tuning_frequency_khz=$(bc <<< "scale=2; ${tuning_frequency} / 1000")
             local tuning_frequency_khz=${tuning_frequency}  ## $(bc <<< "scale=2; ${tuning_frequency} / 1000")
             local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
@@ -79,23 +96,6 @@ function spawn_wav_recording_daemon() {
                  printf "$(date +%s) 0" > ov.log
                  wd_logger 2 "My PID $$ spawned kiwrecorder PID ${wav_recording_daemon_pid}"
             fi
-            ;;
-        SDR*)
-            local sdr_device="TODO"   ### TODO: get address of the device which can be understood by sdrTest
-            local center_frequency=$(( ${tuning_frequency} - ${ATSC_CENTER_OFFSET_HZ} ))
-            (sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -dumpbyminute  > ${WAV_RECORDING_DAEMON_LOG_FILE} 2>&1) &
-            ret_code=$?
-            if [[ ${ret_code} -eq 0 ]]; then
-                wav_recording_daemon_pid=$!
-                wd_logger 1 "sdrTest daemon was spawned with pid ${wav_recording_daemon_pid}"
-            else
-                 wd_logger 1 "ERROR: sdrTest -f ${tuning_frequency} -fc ${center_frequency} -usb -device ${sdr_device} -faudio ${SDR_AUDIO_SPS} -timeout ${SDR_SAMPLE_TIME}... => ${ret_code}"
-            fi
-            sleep 1
-            ;;
-        *)
-            wd_logger 1 "ERROR: SDR named ${receiver_name} is not supported"
-            exit 1
             ;;
     esac
     if [[ ${wav_recording_daemon_pid} -le 0 ]]; then

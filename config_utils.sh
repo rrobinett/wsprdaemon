@@ -1,3 +1,5 @@
+#!/bin/bash
+
 ### Config file exists, now validate it.    
 
 ### Validation requries that we have a list of valid BANDs
@@ -347,22 +349,30 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
 function validate_configured_schedule()
 {
     local found_error="no"
-    local sched_index
+    local sched_line
 
+    if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
+        echo "ERROR: WSPR_SCHEDULE[] is not defined in the conf file"
+        exti 1
+    fi
+    if [[ ${#WSPR_SCHEDULE[@]} -lt 1 ]]; then
+        echo "ERROR: WSPR_SCHEDULE[] is defined in the conf file but has no schedule entries"
+        exit 1
+    fi
     wd_logger 2 "Starting"
-    for sched_index in $(seq 0 $((${#WSPR_SCHEDULE[*]} - 1 )) ); do
-        local sched_line=(${WSPR_SCHEDULE[${sched_index}]})
-        local sched_line_index_max=${#sched_line[@]}
-        if [[ ${sched_line_index_max} -lt 2 ]]; then
-            echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields"
+    for sched_line in "${WSPR_SCHEDULE[@]}" ; do
+        wd_logger 2 "Checking line ${sched_line}"
+
+        local sched_line_list=( ${sched_line} )
+        if [[ ${#sched_line_list[@]} -lt 2 ]]; then
+            echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields. Remember that each schedule entry must have the form \"HH:MM RECEIVER,BAND[,MODES]... \""
             exit 1
         fi
-        local job_time=${sched_line[0]}
-        wd_logger 2 "Job for time '${job_time}' has at least two RX:BAND specifications"
+        local job_time=${sched_line_list[0]}
+        wd_logger 2 "Job for time '${job_time}' has at least one RX:BAND specifications"
         ### NOTE: all of the receivers must be in the same time zone.
-        local index
-        for index in $(seq 1 $(( ${#sched_line[@]} - 1 )) ); do
-            local job=${sched_line[${index}]}
+        local job
+        for job in ${sched_line_list[@]:1}; do
             wd_logger 2 "Testing job $job"
             local -a job_elements=(${job//,/ })
             local    job_elements_count=${#job_elements[@]}
