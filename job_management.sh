@@ -91,10 +91,8 @@ function check_for_zombies() {
             local receiver_band=${running_job_fields[1]}
             local receiver_modes=${running_job_fields[2]-ALL}
             
-            local posting_dir_path=$(get_posting_dir_path ${receiver_name} ${receiver_band})
-            local posting_daemon_pid_file=${posting_dir_path}/posting.pid
-
-            if [[ ! -f ${posting_daemon_pid_file} ]]; then
+            local posting_daemon_pid_file
+            if ! get_posting_pid_file_path posting_daemon_pid_file ${receiver_name} ${receiver_band} ; then
                 wd_logger 1 "Found no posting_daemon pid file ${posting_daemon_pid_file} for running_job=${running_job}"
                 add_remove_jobs_in_running_file z "${running_job}"
             else
@@ -163,7 +161,7 @@ function check_for_zombies() {
 
             local rx_dir_path=$(get_recording_dir_path ${receiver_name} ${receiver_band})
             shopt -s nullglob
-            local rx_pid_file_list=( $( ls ${rx_dir_path}/{kiwi_recorder,recording,decode}.pid  2> /dev/null | tr '\n' ' ') )
+            local rx_pid_file_list=( ${rx_dir_path}/*pid )
             shopt -u nullglob
 
             local expected_pid_files=3
@@ -252,7 +250,7 @@ function show_running_jobs() {
         wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
         return 2
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger 1 "ERROR: RUNNING_JOBS[] is not declared or is empty"
+        wd_logger 1 "RUNNING_JOBS[] is  empty"
         return 3
     fi
 
@@ -662,9 +660,8 @@ function update_running_jobs_to_match_expected_jobs() {
     if [[ ${schedule_change} == "yes" ]]; then
         ### A schedule change deleted a job.  Since it could be either a MERGED or REAL job, we can't be sure if there was a real job terminated.  
         ### So just wait 10 seconds for the 'running.stop' files to appear and then wait for all of them to go away
-        sleep ${STOPPING_MIN_WAIT_SECS:-30}            ### Wait a minimum of 30 seconds to be sure the Kiwi to terminates rx sessions 
+        sleep ${STOPPING_MIN_WAIT_SECS:-10}            ### Wait a minimum of 30 seconds to be sure the Kiwi to terminates rx sessions 
         wd_logger 1 "Schedule has changed"
-        #wait_for_all_stopping_recording_daemons
     fi
 
     ### Find any jobs which will be new and start them

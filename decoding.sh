@@ -571,7 +571,9 @@ function decoding_daemon()
     done
 }
 
-function spawn_decode_daemon() {
+declare DECODING_DAEMON_PID_FILE=decoding_daemon.pid
+declare DECODING_DAEMON_LOG_FILE=decoding_daemon.log
+function spawn_decoding_daemon() {
     local receiver_name=$1
     local receiver_band=$2
     local receiver_modes=$3
@@ -581,19 +583,20 @@ function spawn_decode_daemon() {
 
     mkdir -p ${capture_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
     cd ${capture_dir}
-    if [[ -f decode.pid ]] ; then
-        local decode_pid=$(cat decode.pid)
-        if ps ${decode_pid} > /dev/null ; then
-            wd_logger 2 "A decode job with pid ${decode_pid} is already running, so nothing to do"
+    local decoding_pid
+    if [[ -f ${DECODING_DAEMON_PID_FILE} ]] ; then
+        local decoding_pid=$(< ${DECODING_DAEMON_PID_FILE})
+        if ps ${decoding_pid} > /dev/null ; then
+            wd_logger 2 "A decode job with pid ${decoding_pid} is already running, so nothing to do"
             return 0
         else
             wd_logger 1 "Found dead decode job"
-            rm -f decode.pid
+            rm -f ${DECODING_DAEMON_PID_FILE}
         fi
     fi
     wd_logger 1 "Spawning decode daemon in $PWD"
-    WD_LOGFILE=decoding_daemon.log decoding_daemon ${receiver_name} ${receiver_band} ${receiver_modes} &
-    echo $! > decode.pid
+    WD_LOGFILE=${DECODING_DAEMON_LOG_FILE}  decoding_daemon ${receiver_name} ${receiver_band} ${receiver_modes} &
+    echo $! > ${DECODING_DAEMON_PID_FILE}
     cd - > /dev/null
     wd_logger 1 "Finished.  Spawned new decode  job '${receiver_name},${receiver_band},${receiver_modes}' with PID '$!'"
     return 0
@@ -604,7 +607,7 @@ function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
     local get_decoding_status_receiver_band=$2
     local get_decoding_status_receiver_decoding_dir=$(get_recording_dir_path ${get_decoding_status_receiver_name} ${get_decoding_status_receiver_band})
-    local get_decoding_status_receiver_decoding_pid_file=${get_decoding_status_receiver_decoding_dir}/decode.pid
+    local get_decoding_status_receiver_decoding_pid_file=${get_decoding_status_receiver_decoding_dir}/${DECODING_DAEMON_PID_FILE}
 
     if [[ ! -d ${get_decoding_status_receiver_decoding_dir} ]]; then
         [[ $verbosity -ge 0 ]] && echo "Never ran"
@@ -614,7 +617,7 @@ function get_decoding_status() {
         [[ $verbosity -ge 0 ]] && echo "No pid file"
         return 2
     fi
-    local get_decoding_status_decode_pid=$(cat ${get_decoding_status_receiver_decoding_pid_file})
+    local get_decoding_status_decode_pid=$( < ${get_decoding_status_receiver_decoding_pid_file})
     if ! ps ${get_decoding_status_decode_pid} > /dev/null ; then
         [[ $verbosity -ge 0 ]] && echo "Got pid '${get_decoding_status_decode_pid}' from file, but it is not running"
         return 3

@@ -17,9 +17,6 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-declare WAV_RECORDING_DAEMON_PID_FILE="./wav_recording_daemon.pid"
-declare WAV_RECORDING_DAEMON_LOG_FILE="./wav_recording_daemon.log"
-declare WAV_RECORDING_DAEMON_STOP_FILE="./wav_recording_daemon.stop"
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -27,6 +24,7 @@ declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 
+echo > /dev/null <<'EOF'
 function wav_recording_daemon_sig_handler() {
     local wav_recording_daemon_pid_file=$1
 
@@ -91,7 +89,7 @@ function spawn_wav_recording_daemon() {
                  sleep 1
              else
                  wav_recording_daemon_pid=$!
-                 echo ${wav_recording_daemon_pid} > kiwi_recorder.pid
+                 echo ${wav_recording_daemon_pid} > ${WAV_RECORDING_DAEMON_PID_FILE}
                  ## Initialize the file which logs the date (in epoch seconds, and the number of OV errors st that time
                  printf "$(date +%s) 0" > ov.log
                  wd_logger 2 "My PID $$ spawned kiwrecorder PID ${wav_recording_daemon_pid}"
@@ -109,48 +107,7 @@ function spawn_wav_recording_daemon() {
    return ${ret_code}
 
 }
-
-function kill_wav_recording() {
-    wd_logger 1 "killing daemon"
-
-    local wav_recording_daemon_pid=0
-    if ! get_pid_from_file wav_recording_daemon_pid ${WAV_RECORDING_DAEMON_PID_FILE} ]]; then
-        wd_logger 1 "No ${WAV_RECORDING_DAEMON_PID_FILE} or no job with that pid is running, so nothing to do"
-        return 0
-    fi
-
-    kill ${wav_recording_daemon_pid}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger 1 "Killed ${wav_recording_daemon_pid} found in '${WAV_RECORDING_DAEMON_PID_FILE}'"
-    else
-        wd_logger 1 "Error ${ret_code} was returned when executing 'kill ${wav_recording_daemon_pid}' found in '${WAV_RECORDING_DAEMON_PID_FILE}'"
-    fi
-    return ${ret_code}
-    
-    ### TODO: If this is an AUDIO device, then single that recording daemon for a clean shudown
-
-    wd_logger 1 "Signaling deamon with pid ${wav_recording_daemon_pid} to stop by creating '${WAV_RECORDING_DAEMON_STOP_FILE}'"
-    touch ${WAV_RECORDING_DAEMON_STOP_FILE}
-    local loop_count
-    for (( loop_count=10; loop_count > 0; --loop_count ))  ; do
-        wd_logger 1 "Waiting for deamon to stop"
-        if [[ ! -f ${WAV_RECORDING_DAEMON_STOP_FILE} ]]; then
-            wd_logger 1 "'${WAV_RECORDING_DAEMON_STOP_FILE}' disappeared while waiting for deamon to stop, so this is a clean exit"
-            break
-        fi
-        sleep 1
-    done
-    if [[ ${loop_count} -eq 0 ]]; then
-        wd_logger 1 "Timeout waiting for daemon to stop, so killing pid ${wav_recording_daemon_pid}, and also 'killall SDR_Recording_Daemon'"
-        kill ${wav_recording_daemon_pid}
-        killall sdrTest
-    else
-        wd_logger 1 "Deamon stopped on its own"
-    fi
-    rm -f ${WAV_RECORDING_DAEMON_STOP_FILE} ${WAV_RECORDING_DAEMON_PID_FILE}
-    return 0
-}
+EOF
 
 declare flush_zombie_raw_files="no"
 function flush_zombie_raw_files {
@@ -164,7 +121,7 @@ function flush_zombie_raw_files {
     shopt -u nullglob
     local current_epoch=$(date +%s)
     local oldest_file_epoch=$(( ${current_epoch} - ${oldest_file_needed} ))
-     wd_logger 2 "current epoch is ${current_epoch}, so flushing files older than ${oldest_file_epoch} from list of ${#wav_file_list[@]} minute-*raw files in $PWD"
+    wd_logger 2 "current epoch is ${current_epoch}, so flushing files older than ${oldest_file_epoch} from list of ${#wav_file_list[@]} minute-*raw files in $PWD"
 
     local index
     for (( index=0 ; index < ${#wav_file_list[@]}; ++index )); do
@@ -185,6 +142,10 @@ declare RAW_FILE_FULL_SIZE=1440000   ### Approximate number of bytes in a full s
 ### If the wav recording daemon is running, we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
 function sleep_until_raw_file_is_full() {
     local filename=$1
+    if [[ ! -f ${filename} ]]; then
+        wd_logger 1 "ERROR: ${filename} doesn't exist"
+        return 1
+    fi
     local old_file_size=$(stat -c %s ${filename})
     local new_file_size
     local start_seconds=${SECONDS}
@@ -218,7 +179,11 @@ function get_wav_file_list() {
     wd_logger 2 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
-    spawn_wav_recording_daemon ${receiver_name} ${receiver_band}     ### Make sure the wav recorder is running
+    if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
+        local ret_code=$?
+        wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${ret_code}"
+        return ${ret_code}
+    fi
 
     local ret_code
 

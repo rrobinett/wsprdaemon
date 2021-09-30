@@ -5,6 +5,17 @@
 #############################################################
 
 declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting deamon directory which contains symlinks to the decoding deamon(s) subdirs where spots for this daemon are copied
+declare -r WAV_FILE_POLL_SECONDS=5            ### How often to poll for the 2 minute .wav record file to be filled
+
+function get_posting_dir_path(){
+    local receiver_name=$1
+    local receiver_rx_band=$2
+    local receiver_posting_path="${WSPRDAEMON_TMP_DIR}/posting.d/${receiver_name}/${receiver_rx_band}"
+
+    echo ${receiver_posting_path}
+}
+
+
 
 ### This daemon creates links from the posting dirs of all the $3 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
@@ -74,7 +85,7 @@ function posting_daemon()
             for real_receiver_name in ${real_receiver_list[@]} ; do
                 wd_logger 2 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
                 ### '(...) runs in subshell so it can't change the $PWD of this function
-                (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
+                (spawn_decoding_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
             wd_logger 2 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
@@ -434,6 +445,10 @@ function log_merged_snrs() {
     done
 }
  
+
+declare -r POSTING_DAEMON_PID_FILE="posting_daemon.pid"
+declare -r POSTING_DAEMON_LOG_FILE="posting_daemon.log"
+
 ###
 function spawn_posting_daemon() {
     local receiver_name=$1
@@ -444,7 +459,7 @@ function spawn_posting_daemon() {
     local daemon_status
     if daemon_status=$(get_posting_status $receiver_name $receiver_band) ; then
         wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running"
-        return
+        return 0
     fi
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     local real_receiver_list=""
@@ -461,12 +476,18 @@ function spawn_posting_daemon() {
     mkdir -p ${receiver_posting_dir}
     cd ${receiver_posting_dir}
     wd_logger 1 "Spawning posting job ${receiver_name},${receiver_band},${receiver_modes} '${real_receiver_list}' in $PWD"
-    WD_LOGFILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} "${real_receiver_list}" &
+    WD_LOGFILE=${POSTING_DAEMON_LOG_FILE} posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} "${real_receiver_list}" &
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} ${real_receiver_list}' => ${ret_code}"
+        return 1
+    fi
     local posting_pid=$!
-    echo ${posting_pid} > posting.pid
+    echo ${posting_pid} > ${POSTING_DAEMON_PID_FILE}
 
     cd - > /dev/null
     wd_logger 1 "Finished"
+    return 0
 }
 
 ###
@@ -484,7 +505,7 @@ function kill_posting_daemon() {
         wd_logger 1 "Caan't find expected posting daemon dir ${posting_dir}"
         return 2
     else
-        local posting_daemon_pid_file=${posting_dir}/posting.pid
+        local posting_daemon_pid_file=${posting_dir}/${POSTING_DAEMON_PID_FILE}
         if [[ ! -f ${posting_daemon_pid_file} ]]; then
             wd_logger 1 "Can't find expected posting daemon file ${posting_daemon_pid_file}"
             return 3
@@ -530,12 +551,14 @@ function kill_posting_daemon() {
             rm -rf ${real_receiver_posting_dir}                          ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
-            if [[ ${real_receiver_posting_root_dir_count} -eq 0 ]]; then
-                local real_receiver_stop_file=${real_receiver_posting_root_dir%/*}/recording.stop
-                touch ${real_receiver_stop_file}
-                wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) by creating ${real_receiver_stop_file}"
-            else
+            if [[ ${real_receiver_posting_root_dir_count} -gt 0 ]]; then
                 wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) a decoding client remains, so didn't signal the recoding and decoding daemons to stop"
+            else
+                if kill_recording_daemon ${receiver_name} ${receiver_band}; then
+                    wd_logger 1 "'kill_recording_daemon ${receiver_name} ${receiver_band}"
+                else
+                    wd_logger 1 "ERROR: 'kill_recording_daemon ${receiver_name} ${receiver_band} => $?"
+                fi
             fi
         fi
     done
@@ -543,28 +566,27 @@ function kill_posting_daemon() {
     return 0
 }
 
-###
-function get_posting_status() {
-    local get_posting_status_receiver_name=$1
-    local get_posting_status_receiver_rx_band=$2
-    local get_posting_status_receiver_posting_dir=$(get_posting_dir_path ${get_posting_status_receiver_name} ${get_posting_status_receiver_rx_band})
-    local get_posting_status_receiver_posting_pid_file=${get_posting_status_receiver_posting_dir}/posting.pid
+#
 
-    if [[ ! -d ${get_posting_status_receiver_posting_dir} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "Never ran"
-        return 1
+##
+function get_posting_status() {
+    local rx_name=$1
+    local rx_band=$2
+
+    local posting_dir=$(get_posting_dir_path ${rx_name} ${rx_band})
+    local pid_file=${posting_dir}/${POSTING_DAEMON_PID_FILE}
+
+    if [[ ! -f ${pid_file} ]]; then
+       [[ $verbosity -ge 0 ]] && echo "No pid file"
+       return 2
     fi
-    if [[ ! -f ${get_posting_status_receiver_posting_pid_file} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "No pid file"
-        return 2
-    fi
-    local get_posting_status_decode_pid=$(cat ${get_posting_status_receiver_posting_pid_file})
-    if ! ps ${get_posting_status_decode_pid} > /dev/null ; then
-        [[ $verbosity -ge 0 ]] && echo "Got pid '${get_posting_status_decode_pid}' from file, but it is not running"
+
+    local posting_pid=$(< ${pid_file})
+    if ! ps ${posting_pid} > /dev/null ; then
+        [[ $verbosity -ge 0 ]] && echo "Got pid '${posting_pid}' from file, but it is not running"
         return 3
     fi
-    echo "Pid = ${get_posting_status_decode_pid}"
+    echo "Pid = ${posting_pid}"
     return 0
 }
-
 
