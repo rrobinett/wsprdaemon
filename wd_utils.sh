@@ -37,17 +37,14 @@ fi
 trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
 
 function wd_logger_flush_all_logs {
-    wd_logger 2 "Flushing printed files"
-    local printed_files=( $( find -name '*printed' ) )
-    [[ ${#printed_files[@]} -gt 0 ]] && rm ${printed_files[@]}
-    wd_logger 2 "Flushing log files"
-    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log \) ) )
-    [[ ${#log_files[@]} -gt 0 ]] && rm ${log_files[@]}
+    wd_logger 2 "Flushing all .log and .printed files"
+    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.log' -exec rm {} ;
+    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.printed' -exec rm {} ;
 }
 
 function wd_logger_check_all_logs {
     wd_logger 2 "Checking log files"
-    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} \( -name recording.log -o -name decoding_daemon.log -o -name posting_daemon.log -o -name uploads.log -o -name sdr_recording_job.log -o -name wav_recording_daemon.log \) ) )
+    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.log' ) )
     for log_file in ${log_files[@]}; do
         local log_file_last_printed=${log_file}.printed
         if [[ ! -s ${log_file} ]]; then

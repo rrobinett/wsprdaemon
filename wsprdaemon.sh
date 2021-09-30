@@ -73,7 +73,6 @@ source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 check_for_needed_utilities
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
-source ${WSPRDAEMON_ROOT_DIR}/sdr_recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
