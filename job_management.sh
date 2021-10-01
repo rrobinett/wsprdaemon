@@ -627,13 +627,13 @@ function update_running_jobs_to_match_expected_jobs() {
             wd_logger 1 "Error in running job '${running_job}'.  It has less than the minimun 2 fields of RX,BAND[,MODES,...]"
             continue
         else
-           wd_logger 1 "Found job '${running_job}' has MODE field"
+           wd_logger 2 "Found job '${running_job}' has MODE field"
         fi
         local running_reciever=${running_job_fields[0]}
         local running_band=${running_job_fields[1]}
         local running_modes=${running_job_fields[2]-DEFAULT}
         local found_it="no"
-        wd_logger 1 "Checking status of job ${running_job}"
+        wd_logger 2 "Checking status of job ${running_job}"
         for index_schedule_jobs in $( seq 0 $(( ${#EXPECTED_JOBS[*]} - 1)) ) ; do
             if [[ ${running_job} == ${EXPECTED_JOBS[$index_schedule_jobs]} ]]; then
                 found_it="yes"
