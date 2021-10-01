@@ -853,33 +853,7 @@ function kill_decoding_daemon() {
     wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
 }
 
-declare KILL_TIMEOUT_MAX_SECS=${KILL_TIMEOUT_MAX_SECS-10}
-
-function kill_and_wait_for_death() {
-    local pid_to_kill=$1
-
-    if ! ps ${pid_to_kill} > /dev/null ; then
-        wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
-        return 1
-    fi
-    kill ${pid_to_kill}
-
-    local timeout=0
-    while [[ ${timeout} < ${KILL_TIMEOUT_MAX_SECS} ]] && ps ${pid_to_kill} > /dev/null ; do
-        (( ++timeout ))
-        sleep 1
-    done
-    if ps ${pid_to_kill} > /dev/null; then
-         wd_logger 1 "ERROR: timeout after ${timeout} seconds while waiting for pid ${pid_to_kill} is already dead"
-        return 1
-    fi
-    wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
-    return 0
-}
-
-
-#
-##
+# ##
 function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
     local get_decoding_status_receiver_band=$2

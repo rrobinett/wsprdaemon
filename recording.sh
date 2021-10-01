@@ -179,24 +179,6 @@ function rtl_biast_setup() {
 
 ###
 declare  WAV_FILE_CAPTURE_SECONDS=115
-
-######
-declare -r MAX_WAV_FILE_AGE_SECS=1800    ### Purge wav files which are older than 30 minutes
-function flush_stale_wav_files()
-{
-    shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
-    local wav_file
-    for wav_file in *.wav ; do
-        [[ $verbosity -ge 4 ]] && echo "$(date): flush_stale_wav_files() checking age of wav file '${wav_file}'"
-        local wav_file_time=$($GET_FILE_MOD_TIME_CMD ${wav_file} )
-        if [[ ! -z "${wav_file_time}" ]] &&  [[ $(( $(date +"%s") - ${wav_file_time} )) -gt ${MAX_WAV_FILE_AGE_SECS} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): flush_stale_wav_files() flushing stale wav file '${wav_file}'"
-            rm -f ${wav_file}
-        fi
-    done
-}
-
-######
 declare  SAMPLE_RATE=32000
 declare  DEMOD_RATE=32000
 declare  RTL_FREQ_ADJUSTMENT=0
@@ -293,7 +275,6 @@ function audio_recording_daemon()
         if [[ $verbosity -ge 1 ]] ; then
             printf "$(date): stats for '${wav_file_name}':\n${sox_stats}\n"
         fi
-        flush_stale_wav_files
     done
 }
 
@@ -380,9 +361,6 @@ function kiwirecorder_manager_daemon()
             continue
         fi
             
-        wd_logger 2 "Checking for stale wav files"
-        flush_stale_wav_files   ## ### Ensure that the file system is not filled up with zombie wav files
-
         local current_time=$(printf "%(%s)T" -1 )
         if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
             ### there are new OV events.  
@@ -596,8 +574,18 @@ function get_recording_status() {
 }
 
 #############################################################
-###  
+declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
 function purge_stale_recordings() {
+    local find_output=$(find ${WSPRDAEMON_TMP_DIR} -type f -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} -print -exec rm {} \;)
+    if [[ -n "${find_output}" ]]; then
+        wd_logger 1 "Found stale wav files:\n${find_output}"
+    else
+        wd_logger 2 "Found no stale wav files"
+    fi
+    return 0
+}
+
+function old_purge_stale_recordings() {
     local show_recordings_receivers
     local show_recordings_band
 
