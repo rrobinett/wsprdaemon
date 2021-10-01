@@ -640,7 +640,7 @@ function update_running_jobs_to_match_expected_jobs() {
                 ### Verify that it is still running
                 local status
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
-                    wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
+                    wd_logger 2 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
                     wd_logger 1 "Found dead posting_daemon() job '${running_reciever},${running_band}'. get_recording_status() returned '$status', so starting job"
                     start_stop_job a ${running_reciever} ${running_band} ${running_modes}
@@ -691,7 +691,7 @@ function update_running_jobs_to_match_expected_jobs() {
     if [[ $schedule_change == "yes" ]]; then
         wd_logger 1 "The schedule has changed so a new schedule has been applied: '${EXPECTED_JOBS[*]}'"
     else
-        wd_logger 1 "Checked the schedule and found that no jobs need to be changed"
+        wd_logger 2 "Checked the schedule and found that no jobs need to be changed"
     fi
 }
 
