@@ -293,7 +293,7 @@ function upload_to_wsprnet_daemon()
            local oldest_spotfile_seconds=$(( current_time_epoch - oldest_spot_file_epoch))
 
            if [[ ${oldest_spotfile_seconds} -lt ${MAX_SPOTFILE_SECONDS} ]]; then
-               wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds}, so wait for more files"
+               wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds} seconds, so wait for more files"
                continue
            fi
            wd_logger 1 "Found ${#spots_files_list[@]} spot files, the oldest is ${oldest_spotfile_seconds} seconds old"
@@ -318,9 +318,10 @@ function upload_to_wsprnet_daemon()
             fi
             ### Upload all the spots for one CALL_GRID in one curl transaction 
             local call=${call_grid_dir%_*}
+                  call=${call//=//}              ### Since CALL is part of a linux directory name, it can't contain the very common '/' in call signs.  So we have replaced '/' in diretory name with '='.  Now restore the '/'
             local grid=${call_grid_dir#*_}
 
-            wd_logger 1 "Uploading ${call}_${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
+            wd_logger 1 "Uploading ${call} at ${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
                     
             curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
