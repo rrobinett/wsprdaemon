@@ -1,3 +1,4 @@
+#!/bin/bash
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
@@ -53,14 +54,6 @@ declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
 source ${WSPRDAEMON_PROXY_UTILS_FILE}
 proxy_connection_manager      
 
-################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
-declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
-if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
-    ### Legacy name for /tmp file system.  Leave it alone
-    true
-else
-    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
-fi
 function check_tmp_filesystem()
 {
     if [[ ! -d ${WSPRDAEMON_TMP_DIR} ]]; then
@@ -175,15 +168,6 @@ if ! check_for_kiwirecorder_cmd ; then
     exit 1
 fi
 
-
-################################### Noise level logging 
-declare -r SIGNAL_LEVELS_WWW_DIR=/var/www/html
-declare -r SIGNAL_LEVELS_WWW_INDEX_FILE=${SIGNAL_LEVELS_WWW_DIR}/index.html
-declare -r NOISE_GRAPH_FILENAME=noise_graph.png
-declare -r SIGNAL_LEVELS_NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/${NOISE_GRAPH_FILENAME}          ## If configured, this is the png graph copied to the graphs.wsprdaemon.org site and displayed by the local Apache server
-declare -r SIGNAL_LEVELS_TMP_NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/wd_tmp.png                   ## If configured, this is the file created by the python graphing program
-declare -r SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE=${SIGNAL_LEVELS_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache serivce running to locally display noise graphs, then this will be a symbolic link to ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
-declare -r SIGNAL_LEVELS_TMP_CSV_FILE=${WSPRDAEMON_TMP_DIR}/wd_log.csv
 
 function ask_user_to_install_sw() {
     local prompt_string=$1
@@ -392,66 +376,7 @@ function check_for_needed_utilities()
             fi
         fi
     fi
-    if [[ ${SIGNAL_LEVEL_SOX_FFT_STATS:-no} == "yes" ]]; then
-        local tmp_wspr_captures__file_system_size_1k_blocks=$(df ${WSPRDAEMON_TMP_DIR}/ | awk '/tmpfs/{print $2}')
-        if [[ ${tmp_wspr_captures__file_system_size_1k_blocks} -lt 307200 ]]; then
-            echo " WARNING: the ${WSPRDAEMON_TMP_DIR}/ file system is ${tmp_wspr_captures__file_system_size_1k_blocks} in size"
-            echo "   which is less than the 307200 size needed for an all-WSPR band system"
-            echo "   You should consider increasing its size by editing /etc/fstab and remounting ${WSPRDAEMON_TMP_DIR}/"
-        fi
-    fi
-    if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS-no} == "yes" ]] ; then
-        ### Get the Python packages needed to create the graphs.png
-        if !  [[ ${dpkg_list} =~ " python3-matplotlib " ]] ; then
-            # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some Python libraries be added to this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install python3-matplotlib --assume-yes
-        fi
-        if !  [[ ${dpkg_list} =~ " python3-scipy " ]] ; then
-            # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes and/or SIGNAL_LEVEL_UPLOAD_GRAPHS=yes require that some more Python libraries be added to this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install python3-scipy --assume-yes
-        fi
-        if [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS-no} == "yes" ]] ; then
-            ## Ensure that Apache is installed and running
-            if !  [[ ${dpkg_list} =~ " apache2 " ]]; then
-                # ask_user_to_install_sw "SIGNAL_LEVEL_LOCAL_GRAPHS=yes requires that the Apache web service be added to this server"
-                [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install apache2 -y --fix-missing
-            fi
-            local index_tmp_file=${WSPRDAEMON_TMP_DIR}/index.html
-            cat > ${index_tmp_file} <<EOF
-<html>
-<header><title>This is title</title></header>
-<body>
-<img src="${NOISE_GRAPH_FILENAME}" alt="Noise Graphics" >
-</body>
-</html>
-EOF
-            if ! diff ${index_tmp_file} ${SIGNAL_LEVELS_WWW_INDEX_FILE} > /dev/null; then
-                sudo cp -p  ${SIGNAL_LEVELS_WWW_INDEX_FILE} ${SIGNAL_LEVELS_WWW_INDEX_FILE}.orig
-                sudo mv     ${index_tmp_file}               ${SIGNAL_LEVELS_WWW_INDEX_FILE}
-            fi
-            if [[ ! -f ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE} ]]; then
-                ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
-                touch        ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
-                sudo  cp -p  ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}  ${SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE}
-            fi
-        fi
-    fi ## [[ ${SIGNAL_LEVEL_LOCAL_GRAPHS} == "yes" ]] || [[ ${SIGNAL_LEVEL_UPLOAD_GRAPHS} == "yes" ]] ; then
-    if ! python3 -c "import astral" 2> /dev/null ; then
-        if ! sudo apt-get install python3-astral -y ; then
-            if !  pip3 install astral ; then
-                if ! sudo apt-get install python-pip3 -y ; then
-                    echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip3' needed to install the Python 'astral' library"
-                else
-                    if !  pip3 install astral ; then
-                        echo "$(date) check_for_needed_utilities() ERROR: pip can't install the Python 'astral' library used to calculate sunup/sunset times"
-                    fi
-                fi
-            fi
-        fi
-    fi
+    setup_noise_graphs
 }
 
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites

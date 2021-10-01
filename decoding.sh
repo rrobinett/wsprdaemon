@@ -75,6 +75,10 @@ function setup_signal_levels_log_file() {
     local receiver_name=$2
     local receiver_band=$3
 
+    if [[ ${receiver_name} =~ / ]]; then
+        wd_logger 1 "Replacing all the '/' in ${receiver_name} with '='"
+        receiver_name=${receiver_name//\//=}
+    fi
     local signal_level_logs_dir=${WSPRDAEMON_ROOT_DIR}/signal_levels/${receiver_name}/${receiver_band}
     mkdir -p ${signal_level_logs_dir}
 
