@@ -587,7 +587,7 @@ function decoding_daemon_kill_handler() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
 
-    echo "$(date): decoding_daemon_kill_handler() with pid $$ is processing SIGTERM to stop decoding on ${receiver_name},${receiver_band}" > decoding_daemon_kill_handler.log
+    echo "$(date): decoding_daemon_kill_handler() running in $PWD with pid $$ is processing SIGTERM to stop decoding on ${receiver_name},${receiver_band}" > decoding_daemon_kill_handler.log
     kill_wav_recording_daemon ${receiver_name} ${receiver_band}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
@@ -841,29 +841,45 @@ function kill_decoding_daemon() {
         return 2
     fi
     local decoding_pid=$( < ${DECODING_DAEMON_PID_FILE} )
-    kill ${decoding_pid}
-    local ret_code=$?
-    rm ${DECODING_DAEMON_PID_FILE}
     cd - > /dev/null
+
+    kill_and_wait_for_death  ${decoding_pid}
+    local ret_code=$?
 
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'kill ${decoding_pid} => ${ret_code}"
         return 3
     fi
     wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
-
-    for (( timeout=0; timeout < 10 ; ++timeout )); do
-        if ! ps ${decoding_pid} > /dev/null; then
-            wd_logger 1 "decoding_daemon() died after ${timeout} seconds"
-            return 0
-        fi
-        sleep 1
-    done
-    wd_logger 1 "ERROR: timeout after ${timeout} seconds while waiting for decoding_daemon() to die"
-    return 1
 }
 
-###
+declare KILL_TIMEOUT_MAX_SECS=${KILL_TIMEOUT_MAX_SECS-10}
+
+function kill_and_wait_for_death() {
+    local pid_to_kill=$1
+
+    if ! ps ${pid_to_kill} > /dev/null ; then
+        wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
+        return 1
+    fi
+    kill ${pid_to_kill}
+
+    local timeout=0
+    while [[ ${timeout} < ${KILL_TIMEOUT_MAX_SECS} ]] && ps ${pid_to_kill} > /dev/null ; do
+        (( ++timeout ))
+        sleep 1
+    done
+    if ps ${pid_to_kill} > /dev/null; then
+         wd_logger 1 "ERROR: timeout after ${timeout} seconds while waiting for pid ${pid_to_kill} is already dead"
+        return 1
+    fi
+    wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
+    return 0
+}
+
+
+#
+##
 function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
     local get_decoding_status_receiver_band=$2
