@@ -513,7 +513,7 @@ function kill_posting_daemon() {
             local posting_pid=$(cat ${posting_daemon_pid_file})
             if ps ${posting_pid} > /dev/null ; then
                 kill ${posting_pid}
-                wd_logger 1 " Killed active pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
+                wd_logger 1 "Killed active posting_daemon() pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
             else
                 wd_logger 1 "Pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
             fi
@@ -552,12 +552,12 @@ function kill_posting_daemon() {
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
             if [[ ${real_receiver_posting_root_dir_count} -gt 0 ]]; then
-                wd_logger 1 "kill_posting_daemon(${receiver_name},${receiver_band}) a decoding client remains, so didn't signal the recoding and decoding daemons to stop"
+                wd_logger 1 "Found that decoding_daemon for ${receiver_name},${receiver_band} has other posting clients, so didn't signal the recoding and decoding daemons to stop"
             else
-                if kill_recording_daemon ${receiver_name} ${receiver_band}; then
-                    wd_logger 1 "'kill_recording_daemon ${receiver_name} ${receiver_band}"
+                if kill_decoding_daemon ${receiver_name} ${receiver_band}; then
+                    wd_logger 1 "Killed with 'kill_decoding_daemon ${receiver_name} ${receiver_band}' => $?"
                 else
-                    wd_logger 1 "ERROR: 'kill_recording_daemon ${receiver_name} ${receiver_band} => $?"
+                    wd_logger 1 "ERROR: 'kill_decoding_daemon ${receiver_name} ${receiver_band} => $?"
                 fi
             fi
         fi

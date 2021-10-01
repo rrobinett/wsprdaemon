@@ -300,19 +300,22 @@ function audio_recording_daemon()
 ###
 declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is on longer a client and frees that rx2...7 channel
 
+### NOTE: This function assumes it is executing in the KIWI/BAND directory of the job to be killed
 function kiwirecorder_manager_daemon_kill_handler() {
     if [[ ! -f ${KIWI_RECORDER_PID_FILE} ]]; then
         echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
     else
         local kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE} )
+        rm ${KIWI_RECORDER_PID_FILE}
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no pid in ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
         else
             kill ${kiwi_recorder_pid}
             wd_logger 1 "Killed kiwi_recorder_pid=${kiwi_recorder_pid}"
-            echo "$(date): kiwirecorder_manager_daemon_kill_handler() killed kiwi_recorder_pid=${kiwi_recorder_pid}" > kiwirecorder_manager_daemon_kill_handler.log
+            echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ killed kiwi_recorder_pid=${kiwi_recorder_pid}" > kiwirecorder_manager_daemon_kill_handler.log
         fi
     fi
+    rm ${WAV_RECORDING_DAEMON_PID_FILE}
     exit
 }
 
@@ -526,21 +529,17 @@ function spawn_wav_recording_daemon() {
         fi
     fi
     echo $! > ${WAV_RECORDING_DAEMON_PID_FILE}
-    wd_logger 1 "Spawned new recording job '${receiver_name},${receiver_rx_band}' with PID '$!'"
+    wd_logger 1 "Spawned new wav recording job '${receiver_name},${receiver_rx_band}' with PID '$!'"
     return 0
 }
 
 ###
-function kill_recording_daemon() 
+### This will be called by the decoding_daemon_kill_handler() 
+function kill_wav_recording_daemon() 
 {
-    source ${WSPRDAEMON_CONFIG_FILE}   ### Get RECEIVER_LIST[*]
     local receiver_name=$1
     local receiver_rx_band=$2
-    local receiver_list_index=$(get_receiver_list_index_from_name ${receiver_name})
-    if [[ -z "${receiver_list_index}" ]]; then
-        wd_logger 1 "ERROR: '${receiver_name}' is an invalid receiver name"
-        return 1
-    fi
+
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
     if [[ ! -d ${recording_dir} ]]; then
@@ -561,7 +560,9 @@ function kill_recording_daemon()
         wd_logger 1 "pid '${recording_pid}' is not active"
         return 0
     fi
-    if kill ${recording_pid}; then
+    kill ${recording_pid}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: kill ${recording_pid} => $?"
         return 1
     fi

@@ -38,8 +38,8 @@ trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} 
 
 function wd_logger_flush_all_logs {
     wd_logger 2 "Flushing all .log and .printed files"
-    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.log'     -exec rm {} ;
-    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.printed' -exec rm {} ;
+    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.log'     -exec rm {} \;
+    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.printed' -exec rm {} \;
 }
 
 function wd_logger_check_all_logs {

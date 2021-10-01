@@ -271,7 +271,6 @@ function show_running_jobs() {
             receiver_name_list=(${receiver_name})
             local print_string=$(printf "%2s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
             wd_logger 0 "\n${print_string}"
-            #printf "%2s: %12s,%-4s posting  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})"
         fi
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
@@ -723,7 +722,7 @@ function stop_running_jobs() {
         local running_reciever=${running_job_fields[0]}
         local running_band=${running_job_fields[1]}
         local running_modes=${running_job_fields[2]}       ### The mode field is optional and will not be present in legacy config files
-        wd_logger 1 "Compare the against running job '${running_job_fields[*]}' with stop target ${running_reciever},${running_band}[,${running_modes}]"
+        wd_logger 1 "Compare the running job '${running_job_fields[*]}' with stop target ${running_reciever},${running_band}[,${running_modes}]"
         if [[ ${stop_receiver} == "all" || ( ${stop_receiver} == ${running_reciever} && ${stop_band} == ${running_band} && ${stop_modes} == ${running_modes} ) ]]  ; then
             wd_logger 1 "Terminating running  job ${running_reciever},${running_band},${running_modes}"
             start_stop_job z ${running_reciever} ${running_band} ${running_modes}      ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}

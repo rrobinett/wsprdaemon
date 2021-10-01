@@ -583,15 +583,30 @@ function get_wav_file_list() {
     return 0
 }
 
+function decoding_daemon_kill_handler() {
+    local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
+    local receiver_band=${2}
 
-function decoding_daemon() 
-{
+    echo "$(date): decoding_daemon_kill_handler() with pid $$ is processing SIGTERM to stop decoding on ${receiver_name},${receiver_band}" > decoding_daemon_kill_handler.log
+    kill_wav_recording_daemon ${receiver_name} ${receiver_band}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        echo "$(date): ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?" >> decoding_daemon_kill_handler.log
+    else
+        echo "$(date): Successful: 'kill_wav_recording_daemon running as pid $$ for ${receiver_name} ${receiver_band} => $?" >> decoding_daemon_kill_handler.log
+    fi
+    rm ${DECODING_DAEMON_PID_FILE}
+    exit
+}
+
+function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
     local receiver_modes_arg=${3}
 
     wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}"
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
+    trap "decoding_daemon_kill_handler ${receiver_name} ${receiver_band}" SIGTERM
 
     local receiver_modes
     get_decode_mode_list  receiver_modes ${receiver_modes_arg} ${receiver_band}
@@ -786,11 +801,10 @@ function spawn_decoding_daemon() {
     local receiver_band=$2
     local receiver_modes=$3
     wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
-    local capture_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
-
-    mkdir -p ${capture_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
-    cd ${capture_dir}
+    mkdir -p ${recording_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
+    cd ${recording_dir}
     local decoding_pid
     if [[ -f ${DECODING_DAEMON_PID_FILE} ]] ; then
         local decoding_pid=$(< ${DECODING_DAEMON_PID_FILE})
@@ -799,7 +813,7 @@ function spawn_decoding_daemon() {
             return 0
         else
             wd_logger 1 "Found dead decode job"
-            rm -f ${DECODING_DAEMON_PID_FILE}
+            rm ${DECODING_DAEMON_PID_FILE}
         fi
     fi
     wd_logger 1 "Spawning decode daemon in $PWD"
@@ -808,6 +822,45 @@ function spawn_decoding_daemon() {
     cd - > /dev/null
     wd_logger 1 "Finished.  Spawned new decode  job '${receiver_name},${receiver_band},${receiver_modes}' with PID '$!'"
     return 0
+}
+
+function kill_decoding_daemon() {
+    local receiver_name=$1
+    local receiver_band=$2
+    wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
+    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+
+    if [[ ! -d ${recording_dir} ]]; then
+        wd_logger 1 "ERROR: ${recording_dir} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
+        return 1
+    fi
+    cd ${recording_dir}
+    if [[ ! -f ${DECODING_DAEMON_PID_FILE} ]] ; then
+        wd_logger 1 "ERROR: Decoding pid file '${DECODING_DAEMON_PID_FILE} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
+        cd - > /dev/null
+        return 2
+    fi
+    local decoding_pid=$( < ${DECODING_DAEMON_PID_FILE} )
+    kill ${decoding_pid}
+    local ret_code=$?
+    rm ${DECODING_DAEMON_PID_FILE}
+    cd - > /dev/null
+
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'kill ${decoding_pid} => ${ret_code}"
+        return 3
+    fi
+    wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
+
+    for (( timeout=0; timeout < 10 ; ++timeout )); do
+        if ! ps ${decoding_pid} > /dev/null; then
+            wd_logger 1 "decoding_daemon() died after ${timeout} seconds"
+            return 0
+        fi
+        sleep 1
+    done
+    wd_logger 1 "ERROR: timeout after ${timeout} seconds while waiting for decoding_daemon() to die"
+    return 1
 }
 
 ###
