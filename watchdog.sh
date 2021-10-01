@@ -5,6 +5,7 @@
 declare -r    PATH_WATCHDOG_PID=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.pid
 declare -r    PATH_WATCHDOG_LOG=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.log
 declare       WATCHDOG_POLL_SECONDS=5      ## How often the watchdog wakes up to check for all the log files for new lines and at the beginning of each odd minute run zombie checks, create noise graphs, etc....
+declare       WATCHDOG_PRINT_ALL_LOGS=${WATCHDOG_PRINT_ALL_LOGS-no}
 
 ### Wake up every odd minute and verify that the system is running properly
 function watchdog_daemon() 
@@ -12,9 +13,12 @@ function watchdog_daemon()
     local last_minute=-1
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     wd_logger_flush_all_logs
+    rm -f hhmm.sched running.jobs
     wd_logger 1 "Starting in $PWD as pid $$"
     while true; do
-#        wd_logger_check_all_logs
+        if [[ ${WATCHDOG_PRINT_ALL_LOGS} == "yes" ]]; then
+            wd_logger_check_all_logs
+        fi
         local current_minute=$(( 10#$(printf "%(%M)T") % 2 ))    ### '10#...' strips leading zeros resulting in: 0 st=> we are in an even minute, 1 => we are in an odd minute
         if [[ ${last_minute} -lt 0 || ( ${last_minute} == 0  && ${current_minute} == 1 ) ]]; then
             wd_logger 1 "Starting odd minute, do all watching functions"
