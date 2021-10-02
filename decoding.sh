@@ -395,12 +395,12 @@ function sleep_until_raw_file_is_full() {
         wd_logger 1 "ERROR: ${filename} doesn't exist"
         return 1
     fi
-    local old_file_size=$(stat -c %s ${filename})
+    local old_file_size=$( ${GET_FILE_SIZE_CMD} ${filename} )
     local new_file_size
     local start_seconds=${SECONDS}
 
     sleep 2
-    while [[ -f ${filename} ]] && new_file_size=$(stat -c %s ${filename}) && [[ ${new_file_size} -gt ${old_file_size} ]]; do
+    while [[ -f ${filename} ]] && new_file_size=$( ${GET_FILE_SIZE_CMD} ${filename}) && [[ ${new_file_size} -gt ${old_file_size} ]]; do
         wd_logger 3 "Waiting for file ${filename} to stop growing in size. old_file_size=${old_file_size}, new_file_size=${new_file_size}"
         old_file_size=${new_file_size}
         sleep 2
@@ -477,7 +477,9 @@ function get_wav_file_list() {
 
     wd_logger 2 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
     ### We now have a list of two or more full size raw files
-    local epoch_of_first_raw_file=$(stat -c %Y ${raw_file_list[0]})
+    local epoch_of_first_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${raw_file_list[0]})
+    local minute_of_first_raw_file=$( printf "%(%M)T" ${epoch_of_first_raw_file}  ) 
+    wd_logger 1 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
     local index_of_first_file_which_needs_to_be_saved=${#raw_file_list[@]}                         ### Presume we will need to keep none of the raw files
 
     local return_list=()
@@ -486,9 +488,9 @@ function get_wav_file_list() {
         local raw_files_in_wav_file_count=$((seconds_in_wspr_pkt / 60))
         wd_logger 2 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
 
-        local epoch_of_first_raw_file=$( stat -c %Y ${raw_file_list[0]})
-        local minute_of_first_raw_file=$( date -r ${raw_file_list[0]} +%M )   ### Could b derived from epoch, I guess
-        wd_logger 2 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
+ #       local epoch_of_first_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${raw_file_list[0]})
+ #       local minute_of_first_raw_file=$( printf "%(%M)T" ${epoch_of_first_raw_file}  ) 
+ #       wd_logger 2 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
 
         ### Check to see if we have previously returned some of these files in a previous call to this function
         shopt -s nullglob
@@ -528,7 +530,7 @@ function get_wav_file_list() {
             fi
 
             local filename_of_latest_wav_raw=${wav_raw_pkt_list[-1]}
-            local epoch_of_latest_wav_raw_file=$( stat -c %Y ${filename_of_latest_wav_raw} )
+            local epoch_of_latest_wav_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${filename_of_latest_wav_raw} )
             local index_of_first_reported_raw_file=$(( ( epoch_of_latest_wav_raw_file - epoch_of_first_raw_file ) / 60 ))
             index_of_first_unreported_raw_file=$(( index_of_first_reported_raw_file + raw_files_in_wav_file_count ))
 

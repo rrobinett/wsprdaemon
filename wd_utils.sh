@@ -107,7 +107,7 @@ function wd_logger() {
     [ -t 0 -a -t 1 -a -t 2 ] &&  printf "${log_line}\n"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session 
     if [[ -n "${WD_LOGFILE-}" ]]; then
         [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
-        local logfile_size=$(stat -c %s ${WD_LOGFILE} )
+        local logfile_size=$( ${GET_FILE_SIZE_CMD} ${WD_LOGFILE} )
         if [[ ${logfile_size} -ge ${WD_LOGFILE_SIZE_MAX} ]]; then
             local logfile_lines=$(wc -l < ${WD_LOGFILE})
             local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
