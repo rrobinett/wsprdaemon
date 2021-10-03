@@ -471,7 +471,7 @@ function spawn_wav_recording_daemon() {
         local recording_pid=$(< ${WAV_RECORDING_DAEMON_PID_FILE} )
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
-            wd_logger 1 "A recording job with pid ${recording_pid} is already running"
+            wd_logger 2 "A recording job with pid ${recording_pid} is already running"
             return 0
         else
             wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
@@ -511,7 +511,7 @@ function spawn_wav_recording_daemon() {
     else
         local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
         local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
-	wd_logger 1 "Sapwning iwav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
+	wd_logger 1 "Spawning wav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} &
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
