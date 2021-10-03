@@ -193,7 +193,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.3.0}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.0}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -316,7 +316,7 @@ function check_for_needed_utilities()
                 ;;
             armv7l)
                 # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
-                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.tar.gz
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
                 ;;
             aarch64)
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
