@@ -695,9 +695,6 @@ function decoding_daemon() {
             wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_seperated_files}"
             ### Enf of diagnostic code
 
-            local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
-            sox ${wav_file_list[@]} ${decoder_input_wav_filename}       ### TODO: don't make so many copies and perhaps use list of files as input to jt9
-
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
 
@@ -705,14 +702,16 @@ function decoding_daemon() {
             local signal_level_line=""
             > decodes_cache.txt             ## Create or truncate to zero length a file which stores the decodes from all modes
             if [[ " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
+                wd_logger 1 "WSPR decode ${returned_seconds} second wav file"
+
                 local decode_dir="W_${returned_seconds}"
                 mkdir -p ${decode_dir}
-                ln ${decoder_input_wav_filename} ${decode_dir}/
-
-                wd_logger 1 "Decode ${returned_seconds} second wav file for WSPR mode spots"
-
-                ### Perform decoding for each mode in its own sub directory
                 cd ${decode_dir}
+
+                ### The 'wsprd' cmd requires a single 2/15 wav file, so use 'sox to create one from 2/15 one minute wav files
+                local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+                sox ${wav_file_list[@]} ${decoder_input_wav_filename} 
+
                 local start_time=${SECONDS}
                 decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
                 local ret_code=$?
@@ -760,7 +759,7 @@ function decoding_daemon() {
                 processed_wav_files="yes"
             fi
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
-                wd_logger 1 "Decode a ${returned_seconds} wave file for FST4W spots by running cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename}'"
+                wd_logger 1 "Decode a ${returned_seconds} wave file for FST4W spots by running cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 "${wav_file_list[*]}" >& jt9_output.txt'"
 
                 local decode_dir="F_${returned_seconds}"
                 mkdir -p ${decode_dir}
@@ -768,25 +767,15 @@ function decoding_daemon() {
 
                 cd ${decode_dir}
                 local start_time=${SECONDS}
-                ${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename} >& jt9_output.txt
+                ${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 "${wav_file_list[@]}" >& jt9_output.txt
                 local ret_code=$?
-                if [[ -f ${decoder_input_wav_filename} ]]; then
-                    rm ${decoder_input_wav_filename}
-                else
-                    wd_logger 1 "ERROR: FST4W  decode failed to find ${decoder_input_wav_filename} to be removed"
-                fi
                 cd - >& /dev/null
-                if [[ ${ret_code} -eq 0 ]]; then
-                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename} >& jt9_output.txt' printed $(cat ${decode_dir}/jt9_output.txt)"
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}"
                 else
-                    wd_logger 2 "After $(( SECONDS - start_time )) seconds: ERROR: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w ${decoder_input_wav_filename} >& jt9_output.txt' => ${ret_code} and printed $(cat jt9_output.txt)"
+                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}:\n$(< ${decode_dir}/decoded.txt)"
                 fi
                 processed_wav_files="yes"
-            fi
-            if [[ -f ${decoder_input_wav_filename} ]]; then
-                rm ${decoder_input_wav_filename}
-            else
-                wd_logger 1 "ERROR: after WSPR and FST4W processing, decode loop failed to find ${decoder_input_wav_filename} to be removed"
             fi
             if [[ ${processed_wav_files} == "no" ]]; then 
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"

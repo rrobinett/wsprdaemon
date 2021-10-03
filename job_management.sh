@@ -271,7 +271,7 @@ function show_running_jobs() {
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
                 printf "%2s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
-                printf "%2s: %12s,%-4s recoarding  %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s recording   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
                 found_job="yes"
             fi
         done
@@ -378,11 +378,12 @@ function add_remove_jobs_in_running_file() {
     esac
     if [[ ${#RUNNING_JOBS[@]} -gt 0 ]]; then
         ### Sort RUNNING_JOBS by ascending band frequency
-        IFS=$'\n'
-        RUNNING_JOBS=( $(sort --field-separator=, -k 2,2n <<< "${RUNNING_JOBS[*]-}") )    ### TODO: this doesn't sort.  
-        unset IFS
+        ## IFS=$'\n'
+        ### RUNNING_JOBS=( $(sort --field-separator=, -k 2,2n <<< "${RUNNING_JOBS[@]-}") )       ### I tried everyting I know to get this to work
+        ## unset IFS
+        RUNNING_JOBS=( $( local element; for element in ${RUNNING_JOBS[@]}; do echo ${element}; done | sort -t , -k 2,2nr ) )
     fi
-    echo "RUNNING_JOBS=( ${RUNNING_JOBS[*]-} )" > ${RUNNING_JOBS_FILE}
+    echo "declare RUNNING_JOBS=( ${RUNNING_JOBS[*]-} )" > ${RUNNING_JOBS_FILE}
     wd_logger 1 "Wrote new ${RUNNING_JOBS_FILE}: '${RUNNING_JOBS[*]-}'"
 }
 
@@ -459,13 +460,13 @@ function update_hhmm_sched_file() {
             local job_time=${job_line[0]}
             if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
                 ### I don't think that get_index_time() can return a bad time for a sunrise/sunset job, but this is to be sure of that
-                echo "$(date): ERROR: in update_hhmm_sched_file(): found and invalid configured sunrise/sunset job time '${job_line[0]}' in wsprdaemon.conf, so skipping this job."
+                wd_logger 1 "ERROR: Found and invalid configured sunrise/sunset job time '${job_line[0]}' in wsprdaemon.conf, so skipping this job."
                 continue ## to the next index
             fi
         fi
         if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
             ### validate all lines, whether a computed sunrise/sunset or simple HH:MM
-            echo "$(date): ERROR: in update_hhmm_sched_file(): invalid job time '${job_line[0]}' in wsprdaemon.conf, expecting HH:MM so skipping this job."
+            wd_logger 1 "ERROR: invalid job time '${job_line[0]}' in wsprdaemon.conf, expecting HH:MM so skipping this job."
             continue ## to the next index
         fi
         job_array_temp[${job_array_temp_index}]="${job_line[*]}"
@@ -524,7 +525,7 @@ function update_hhmm_sched_file() {
             ### Look at one job
             wd_logger 1 "Processing schedule_job ${schedule_job}"
             local job_list=(${schedule_job//,/ })
-            if [[ ${#job_list[@]} -le 3 ]]; then
+            if [[ ${#job_list[@]} -lt 3 ]]; then
                 ### conf file job doesn't have a ',MODE' field
                 job_list[2]="DEFAULT"
             fi
@@ -565,7 +566,7 @@ function setup_expected_jobs_file () {
         local receiver_grid="$(get_receiver_grid_from_name ${receiver_name})"
         index_time=$(get_index_time ${hhmm_job[0]} ${receiver_grid})  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
         if [[ ! ${index_time} =~ ^[0-9]+ ]]; then
-            echo "$(date): setup_expected_jobs_file() ERROR: invalid configured job time '${index_time}'"
+            wd_logger 1 "ERROR: invalid configured job time '${index_time}'"
             continue ## to the next index
         fi
         index_time=$((10#${index_time}))  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
@@ -574,25 +575,23 @@ function setup_expected_jobs_file () {
             expected_jobs=(${expected_jobs[*]:1})          ### Chop off first array element which is the scheudle start time
             index_now=index                                ### Remember the index of the HHMM job which should be active at this time
             index_now_time=$index_time                     ### And the time of that HHMM job
-            if [[ $verbosity -ge 3 ]] ; then
-                echo "$(date): INFO: setup_expected_jobs_file(): current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so expected_jobs[*] ="
-                echo "         '${expected_jobs[*]}'"
-            fi
+            wd_logger 1 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so expected_jobs[*] =${expected_jobs[*]}'"
         fi
     done
     if [[ -z "${expected_jobs[*]}" ]]; then
-        echo "$(date): setup_expected_jobs_file() ERROR: couldn't find a schedule"
+        wd_logger 1 "ERROR: couldn't find a schedule"
         return 
     fi
 
     if [[ ! -f ${EXPECTED_JOBS_FILE} ]]; then
         echo "EXPECTED_JOBS=()" > ${EXPECTED_JOBS_FILE}
+        wd_logger 1 "Creating new ${EXPECTED_JOBS_FILE}"
     fi
     source ${EXPECTED_JOBS_FILE}
     if [[ "${EXPECTED_JOBS[*]-}" == "${expected_jobs[*]}" ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_expected_jobs_file(): at time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
+        wd_logger 1 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
     else
-        [[ $verbosity -ge 2 ]] && echo "$(date): setup_expected_jobs_file(): a new schedule from EXPECTED_JOBS[] for time ${current_time} is needed for current time ${current_time}"
+        wd_logger 1 "A new schedule from EXPECTED_JOBS[] for time ${current_time} is needed for current time ${current_time}"
 
         ### Save the new schedule to be read by the calling function and for use the next time this function is run
         printf "EXPECTED_JOBS=( ${expected_jobs[*]} )\n" > ${EXPECTED_JOBS_FILE}
@@ -604,7 +603,7 @@ function update_running_jobs_to_match_expected_jobs() {
 
     setup_expected_jobs_file
     source ${EXPECTED_JOBS_FILE}
-    wd_logger 1 "EXPECTED_JOBS= ${EXPECTED_JOBS[*]}"
+    wd_logger 1 "EXPECTED_JOBS='${EXPECTED_JOBS[*]}'"
 
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
@@ -687,7 +686,7 @@ function update_running_jobs_to_match_expected_jobs() {
     if [[ $schedule_change == "yes" ]]; then
         wd_logger 1 "The schedule has changed so a new schedule has been applied: '${EXPECTED_JOBS[*]}'"
     else
-        wd_logger 2 "Checked the schedule and found that no jobs need to be changed"
+        wd_logger 1 "Checked the schedule and found that no jobs need to be changed"
     fi
 }
 
