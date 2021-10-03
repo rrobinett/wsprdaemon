@@ -198,13 +198,9 @@ function check_for_zombies() {
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     wd_logger 1 "Checking all pids for kiwirecorder.py programs"
     local kill_pid_list=()
-    local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ && !/derived_calc.py/ && !/curl/ && !/avahi-daemon/ && !/frpc/ {print $2}' <<< "${ps_output_lines}" )
+    local running_kiwirecorder_pid_list=( $(ps aux | awk '/kiwiclient\/kiwirecorder.py/{print $2}' ) )
     
-    local print_string=$(printf "filtered 'ps usxf' output:\n'${ps_output_lines//%/ }'\n\nTo get running list:\n'${ps_running_list}'")    ### //%/ strips out % characters from ps which confuse printf
-    wd_logger 2 "${print_string}"
-    
-    for running_pid in ${ps_running_list} ; do
+    for running_pid in ${running_kiwirecorder_pid_list[@]} ; do
        if [[ " ${expected_and_running_pids[*]} " =~  " ${running_pid} " ]]; then
            wd_logger 1 "Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids[*]}'"
        else

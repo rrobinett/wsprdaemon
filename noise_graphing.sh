@@ -19,11 +19,11 @@ declare    NOISE_GRAPHS_UPLOAD_FTP_PASSWORD="${NOISE_GRAPHS_UPLOAD_FTP_PASSWORD-
 function setup_noise_graphs() {
     if [[ -n "${SIGNAL_LEVEL_LOCAL_GRAPHS-}" ]]; then
         NOISE_GRAPHS_LOCAL_ENABLED=${SIGNAL_LEVEL_LOCAL_GRAPHS}
-        wd_logger 1 "Local display of noise graphs set to SIGNAL_LEVEL_LOCAL_GRAPHS=${SIGNAL_LEVEL_LOCAL_GRAPHS} in WD.conf file"
+        wd_logger 1 "Local display of noise graphs set by SIGNAL_LEVEL_LOCAL_GRAPHS=${SIGNAL_LEVEL_LOCAL_GRAPHS} in WD.conf file"
     fi
     if [[ -n "${SIGNAL_LEVEL_UPLOAD_GRAPHS-}" ]]; then
         NOISE_GRAPHS_UPLOAD_ENABLED=${SIGNAL_LEVEL_UPLOAD_GRAPHS}
-        wd_logger 1 "Upload of noise graphs set to SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
+        wd_logger 2 "Upload of noise graphs set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
    if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] || [[ ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "yes" ]] ; then
         ### Get the Python packages needed to create the graphs.png

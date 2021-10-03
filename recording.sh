@@ -292,8 +292,21 @@ function kiwirecorder_manager_daemon_kill_handler() {
             echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no pid in ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
         else
             kill ${kiwi_recorder_pid}
-            wd_logger 1 "Killed kiwi_recorder_pid=${kiwi_recorder_pid}"
-            echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ killed kiwi_recorder_pid=${kiwi_recorder_pid}" > kiwirecorder_manager_daemon_kill_handler.log
+            local timeout
+            for (( timeout=0; timeout < ${KIWIRECORDER_KILL_WAIT_SECS}; ++timeout )); do
+                if ! ps ${kiwi_recorder_pid} > /dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+            if ps ${kiwi_recorder_pid} > /dev/null; then
+                wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${timeout} seconds.  Trying 'kill -9 ${kiwi_recorder_pid}"
+                kill -9 ${kiwi_recorder_pid}
+                echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ timed out after ${timeout} seconds after waiting for kiwi_recorder_pid=${kiwi_recorder_pid}, so ran 'kill -9'" > kiwirecorder_manager_daemon_kill_handler.log
+            else
+                wd_logger 1 "Killed kiwi_recorder_pid=${kiwi_recorder_pid}"
+                echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ found kiwi_recorder_pid=${kiwi_recorder_pid} died as expected after ${timeout} seconds" > kiwirecorder_manager_daemon_kill_handler.log
+            fi
         fi
     fi
     rm ${WAV_RECORDING_DAEMON_PID_FILE}
