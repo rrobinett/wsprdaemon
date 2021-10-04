@@ -1,3 +1,5 @@
+#!/bin/bash
+
 ### Config file exists, now validate it.    
 
 ### Validation requries that we have a list of valid BANDs
@@ -25,37 +27,81 @@
 #           23cm-----------1296.500000------------1296.501500 (+- 100Hz)
 
 ### These are the 'dial frequency' in KHz.  The actual wspr tx frequenecies are these values + 1400 to 1600 Hz
+### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-seperated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
+###       e.g. "W2" == classic WSPR decode by the wsprd of a 2 minute long wav file
+
+declare VALID_MODE_LIST=( W2 F2 F5 F15 F30 )
+
 declare WSPR_BAND_LIST=(
-"2200     136.0"
-"630      474.2"
-"160     1836.6"
-"80      3568.6"
-"80eu    3592.6"
-"60      5287.2"
-"60eu    5364.7"
-"40      7038.6"
-"30     10138.7"
-"20     14095.6"
-"17     18104.6"
-"15     21094.6"
-"12     24924.6"
-"10     28124.6"
-"6      50293.0"
-"4      70091.0"
-"2     144489.0"
-"1     432300.0"
-"0    1296500.0"
-"WWVB      58.5"
-"WWV_2_5 2498.5"
-"WWV_5   4998.5"
-"WWV_10  9998.5"
-"WWV_15 14998.5"
-"WWV_20 19998.5"
-"WWV_25 24998.5"
-"CHU_3   3328.5"
-"CHU_7   7848.5"
-"CHU_14 14668.5"
+"2200     136.0   W2"
+"630      474.2   W2"
+"160     1836.6   W2"
+"80      3568.6   W2"
+"80eu    3592.6   W2"
+"60      5287.2   W2"
+"60eu    5364.7   W2"
+"40      7038.6   W2"
+"30     10138.7   W2"
+"20     14095.6   W2"
+"17     18104.6   W2"
+"15     21094.6   W2"
+"12     24924.6   W2"
+"10     28124.6   W2"
+"6      50293.0   W2"
+"4      70091.0   W2"
+"2     144489.0   W2"
+"1     432300.0   W2"
+"0    1296500.0   W2"
+"WWVB      58.5   W2"
+"WWV_2_5 2498.5   W2"
+"WWV_5   4998.5   W2"
+"WWV_10  9998.5   W2"
+"WWV_15 14998.5   W2"
+"WWV_20 19998.5   W2"
+"WWV_25 24998.5   W2"
+"CHU_3   3328.5   W2"
+"CHU_7   7848.5   W2"
+"CHU_14 14668.5   W2"
 )
+
+function is_valid_mode_list() {
+    local test_mode_entry=$1
+    local test_mode_entry_list=( ${test_mode_entry//:/ } )
+
+    wd_logger 2 "Starting validation of '${test_mode_entry}'"
+    for mode_entry in ${test_mode_entry_list[@]} ; do
+        if ! [[ " ${VALID_MODE_LIST[@]} " =~ " ${mode_entry} " ]]; then
+            wd_logger 1 "Error: ${mode_entry} is not a member of '${VALID_MODE_LIST[*]}'"
+            return 1
+        fi
+    done
+    wd_logger 2 "All modes in '${test_mode_entry}' are valid"
+    return 0
+ }
+
+function get_default_modes_for_band() {
+    local return_var_name=$1
+    local search_for_band=$2
+    
+    wd_logger 2 "Got args ${return_var_name} ${search_for_band}"
+
+    local band_entry
+    for band_entry in "${WSPR_BAND_LIST[@]}"; do
+        local band_entry_list=( ${band_entry} )
+        local entry_band=${band_entry_list[0]}
+
+        wd_logger 2 "Checking for band ${search_for_band} in '${band_entry_list[*]}'"
+        if [[ ${band_entry_list} == ${search_for_band} ]]; then
+            local local_default_modes=${band_entry_list[2]}
+
+            wd_logger 2 "Returning default modes for band ${search_for_band} => ${local_default_modes}"
+            eval ${return_var_name}=${local_default_modes}
+            return 0
+        fi
+    done
+    wd_logger 1 "Failed to find entry for band ${search_for_band}"
+    return 1
+}
 
 function get_wspr_band_name_from_freq_hz() {
     local band_freq_hz=$1
@@ -124,6 +170,12 @@ function get_receiver_grid_from_name() {
     local receiver_name=$1
     local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
     echo ${receiver_info[3]}
+}
+
+function get_receiver_password_from_name() {
+    local receiver_name=$1
+    local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
+    echo ${receiver_info[4]}
 }
 
 function get_receiver_af_list_from_name() {
@@ -297,26 +349,34 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
 function validate_configured_schedule()
 {
     local found_error="no"
-    local sched_index
+    local sched_line
 
+    if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
+        echo "ERROR: WSPR_SCHEDULE[] is not defined in the conf file"
+        exti 1
+    fi
+    if [[ ${#WSPR_SCHEDULE[@]} -lt 1 ]]; then
+        echo "ERROR: WSPR_SCHEDULE[] is defined in the conf file but has no schedule entries"
+        exit 1
+    fi
     wd_logger 2 "Starting"
-    for sched_index in $(seq 0 $((${#WSPR_SCHEDULE[*]} - 1 )) ); do
-        local sched_line=(${WSPR_SCHEDULE[${sched_index}]})
-        local sched_line_index_max=${#sched_line[@]}
-        if [[ ${sched_line_index_max} -lt 2 ]]; then
-            echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields"
+    for sched_line in "${WSPR_SCHEDULE[@]}" ; do
+        wd_logger 2 "Checking line ${sched_line}"
+
+        local sched_line_list=( ${sched_line} )
+        if [[ ${#sched_line_list[@]} -lt 2 ]]; then
+            echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields. Remember that each schedule entry must have the form \"HH:MM RECEIVER,BAND[,MODES]... \""
             exit 1
         fi
-        local job_time=${sched_line[0]}
-        wd_logger 2 "Job for time '${job_time}' has at least two RX:BAND specifications"
+        local job_time=${sched_line_list[0]}
+        wd_logger 2 "Job for time '${job_time}' has at least one RX:BAND specifications"
         ### NOTE: all of the receivers must be in the same time zone.
-        local index
-        for index in $(seq 1 $(( ${#sched_line[@]} - 1 )) ); do
-            local job=${sched_line[${index}]}
+        local job
+        for job in ${sched_line_list[@]:1}; do
             wd_logger 2 "Testing job $job"
             local -a job_elements=(${job//,/ })
             local    job_elements_count=${#job_elements[@]}
-            if [[ $job_elements_count -ne 2 ]]; then
+            if [[ $job_elements_count -lt 2 ]]; then
                 echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' doesn't have the form 'RECEIVER,BAND'"
                 exit 1
             fi

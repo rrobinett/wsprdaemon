@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 ##########################################################################################################################################################
 ########## Section which implements the job control system  ########################################################################################################
 ##########################################################################################################################################################
@@ -5,12 +7,12 @@ function start_stop_job() {
     local action=$1
     local receiver_name=$2
     local receiver_band=$3
+    local receiver_modes=$4
 
     wd_logger 1 "Begining '${action}' for ${receiver_name} on band ${receiver_band}"
     case ${action} in
         a) 
-            spawn_upload_daemons     ### Ensure there are upload daemons to consume the spots and noise data
-            spawn_posting_daemon        ${receiver_name} ${receiver_band}
+            spawn_posting_daemon        ${receiver_name} ${receiver_band} ${receiver_modes}
             ;;
         z)
             kill_posting_daemon        ${receiver_name} ${receiver_band}
@@ -20,7 +22,7 @@ function start_stop_job() {
             exit 1
             ;;
     esac
-    add_remove_jobs_in_running_file ${action} ${receiver_name},${receiver_band}
+    add_remove_jobs_in_running_file ${action} ${receiver_name},${receiver_band},${receiver_modes}
 }
 
 
@@ -50,183 +52,175 @@ function check_for_zombies() {
     local receiver_name
     local receiver_band
     local found_job="no"
-    local expected_and_running_pids=""
+    local expected_and_running_pids=()
 
-    wd_logger 0 "Starting"
+    wd_logger 2 "Starting"
     if [[ ${ZOMBIE_CHECKING_ENABLED} != "yes" ]]; then
-        wd_logger 0 "Checking has been disabled"
+        wd_logger 1 "Checking has been disabled"
         return 0
     fi
     ### First check if the watchdog and the upload daemons are running
-    local PID_FILE_LIST="${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} 
-                       ${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH} ${WSPRDAEMON_PROXY_PID_FILE}"
+    local PID_FILE_LIST="${PATH_WATCHDOG_PID} ${UPLOADS_WSPRNET_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH} ${UPLOADS_WSPRDAEMON_FTP_PIDFILE_PATH} ${WSPRDAEMON_PROXY_PID_FILE}"
     for pid_file_path in ${PID_FILE_LIST}; do
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
-            expected_and_running_pids="${expected_and_running_pids} ${daemon_pid}"
+            expected_and_running_pids+=( ${daemon_pid} )
             wd_logger 1 "Adding pid ${daemon_pid} of daemon '${pid_file_path}' to the expected pid list"
         else
-            wd_logger 1 "Found no pid for daemon '${pid_file_path}'"
+            wd_logger 2 "Found no pid for daemon '${pid_file_path}'"
         fi
     done
 
     ### Next check that all of the pids associated with RUNNING_JOBS are active
-    ### Create ${running_rx_list} with  all the expected real rx devices. If there are MERGED jobs, then ensure that the real rx they depend upon is in ${running_rx_list}
-    source ${RUNNING_JOBS_FILE}        ### populates the array RUNNING_JOBS()
-    local running_rx_list=""           ### remember the rx rx devices
-    for job_index in $(seq 0 $(( ${#RUNNING_JOBS[*]} - 1 )) ) ; do
-        local job_info=(${RUNNING_JOBS[job_index]/,/ } )
-        local receiver_name=${job_info[0]}
-        local receiver_band=${job_info[1]}
-        local job_id=${receiver_name},${receiver_band}
-             
-        if [[ ! "${receiver_name}" =~ ^MERG ]]; then
-            ### This is a KIWI,AUDIO or SDR reciever
-            if [[ ${running_rx_list} =~ " ${job_id} " ]] ; then
-                wd_logger 1 "Real rx job ${job_id}' is already listed in '${running_rx_list}'"
+    if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
+        wd_logger 1 "${RUNNING_JOBS_FILE} doesn't exist so skip checking for jobs"
+    elif !  source ${RUNNING_JOBS_FILE} ; then
+        local ret_code=$?
+        wd_logger 1 "'ERROR: source ${RUNNING_JOBS_FILE}' => ${ret_code}, so skip checking for jobs"
+    elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
+        wd_logger 1 "No entries in RUNNING_JOBS[@], so skip checking for jobs"
+    else
+        ### There are jobs in ${#RUNNING_JOBS[@]} to be checked
+
+        ### Verify there is a posting job for each logical reciever
+        local running_job
+        for running_job in ${RUNNING_JOBS[@]} ; do
+            wd_logger 1 "Check that there is a posting job for ${running_job}"
+            local running_job_fields=( ${running_job//,/ } )
+            local receiver_name=${running_job_fields[0]}
+            local receiver_band=${running_job_fields[1]}
+            local receiver_modes=${running_job_fields[2]-ALL}
+            
+            local posting_daemon_pid_file
+            if ! get_posting_pid_file_path posting_daemon_pid_file ${receiver_name} ${receiver_band} ; then
+                wd_logger 1 "Found no posting_daemon pid file ${posting_daemon_pid_file} for running_job=${running_job}"
+                add_remove_jobs_in_running_file z "${running_job}"
             else
-                wd_logger 1 "real rx job ${job_id}' is not listed in running_rx_list ${running_rx_list}', so add it"
-                ### Add it to the rx list
-                running_rx_list="${running_rx_list} ${job_id}"
-                ### Verify that pid files exist for it
-                local rx_dir_path=$(get_recording_dir_path ${receiver_name} ${receiver_band})
-                local posting_dir_path=$(get_posting_dir_path ${receiver_name} ${receiver_band})
-                shopt -s nullglob
-                local rx_pid_files=$( ls ${rx_dir_path}/{kiwi_recorder,recording,decode}.pid ${posting_dir_path}/posting.pid 2> /dev/null | tr '\n' ' ')
-                shopt -u nullglob
-                local expected_pid_files=4
-                if [[ ${receiver_name} =~ ^AUDIO ]]; then
-                    expected_pid_files=3
-                elif [[ ${receiver_name} =~ ^SDR ]]; then
-                    expected_pid_files=3
-                fi
-                if [[ $(wc -w <<< "${rx_pid_files}") -eq ${expected_pid_files}  ]]; then
-                    wd_logger 1 "Adding the ${expected_pid_files} expected real rx ${receiver_name}' recording pid files"
-                    local pid_file
-                    for pid_file in ${rx_pid_files} ; do
-                        local pid_value=$(cat ${pid_file})
-                        if ps ${pid_value} > /dev/null; then
-                            wd_logger 1 "rx pid ${pid_value} found in '${pid_file}'is active"
-                            expected_and_running_pids="${expected_and_running_pids} ${pid_value}"
-                        else
-                            wd_logger 1 "rx pid ${pid_value} found in '${pid_file}' is not active, so deleting that pid file"
-                            rm -f ${pid_file}
-                        fi
-                    done
+                local posting_daemon_pid=$(< ${posting_daemon_pid_file})
+                
+                if ! [[ "${posting_daemon_pid}" =~ ^[0-9]+$ ]]; then
+                    wd_logger 1 "ERROR: pid file ${posting_daemon_pid_file} exists but its contents '${posting_daemon_pid}' is not an integer number, so delete that pid file"
+                    rm ${posting_daemon_pid_file}
                 else
-                    wd_logger 1 "real rx ${receiver_name}' recording dir missing some or all of the expeted 4 pid files.  Found only: '${rx_pid_files}'"
+                    ps ${posting_daemon_pid} > /dev/null
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: pid file ${posting_daemon_pid_file} exists and contains pid '${posting_daemon_pid}', but that pid is not running, so delete that pid file"
+                        rm ${posting_daemon_pid_file}
+                    else
+                        wd_logger 1 "pid file ${posting_daemon_pid_file} exists and contains expected and running pid '${posting_daemon_pid}'"
+                        expected_and_running_pids+=( ${posting_daemon_pid} )
+                    fi
                 fi
             fi
-        else  ### A MERGED device
-            local merged_job_id=${job_id}
-            ### This is a MERGED device.  Get its posting.pid
-            local rx_dir_path=$(get_posting_dir_path ${receiver_name} ${receiver_band})
-            local posting_pid_file=${rx_dir_path}/posting.pid
-            if [[ ! -f ${posting_pid_file} ]]; then
-                wd_logger 1 "merged job '${merged_job_id}' has no pid file '${posting_pid_file}'"
-            else ## Has a posting.od file
-                local pid_value=$(cat ${posting_pid_file})
-                if ! ps  ${pid_value} > /dev/null ; then
-                    wd_logger 1 "merged job '${merged_job_id}'  pid '${pid_value}' is dead from pid file '${posting_pid_file}'"
-                else ### posting.pid is active
-                    ### Add the postind.pid to the list and check the real rx devices 
-                    wd_logger 1 "merged job '${merged_job_id}'  pid '${pid_value}' is active  from file '${posting_pid_file}'"
-                    expected_and_running_pids="${expected_and_running_pids} ${pid_value}"
+        done
 
-                    ### Check the MERGED device's real rx devices are in the list
-                    local merged_receiver_address=$(get_receiver_ip_from_name ${receiver_name})   ### In a MERGed rx, the real rxs feeding it are in a comma-seperated list in the IP column
-                    local merged_receiver_name_list=${merged_receiver_address//,/ }
-                    local rx_device 
-                    for rx_device in ${merged_receiver_name_list}; do  ### Check each real rx
-                        ### Check each real rx
-                        job_id=${rx_device},${receiver_band}
-                        if ${GREP_CMD} -wq ${job_id} <<< "${running_rx_list}" ; then 
-                            wd_logger 1 "merged job '${merged_job_id}' is fed by real job '${job_id}' which is already listed in '${running_rx_list}'"
-                        else ### Add new real rx
-                            wd_logger 1 "merged job '${merged_job_id}' is fed by real job '${job_id}' which needs to be added to '${running_rx_list}'"
-                            running_rx_list="${running_rx_list} ${rx_device}"
-                            ### Verify that pid files exist for it
-                            local rx_dir_path=$(get_recording_dir_path ${rx_device} ${receiver_band})
-                            shopt -s nullglob
-                            local rx_pid_files=$( ls ${rx_dir_path}/{kiwi_recorder,recording,decode}.pid 2> /dev/null | tr '\n' ' ' )
-                            shopt -u nullglob
-                            local expected_pid_files=3
-                            if [[ ${rx_device} =~ ^AUDIO ]]; then
-                                expected_pid_files=2
-                            elif [[ ${rx_device} =~ ^SDR ]]; then
-                                expected_pid_files=2
-                            fi
-                            if [[ $(wc -w <<< "${rx_pid_files}") -ne  ${expected_pid_files} ]]; then
-                                wd_logger 1 "WARNING: real rx ${rx_device}' recording dir missing some or all of the expeted 3 pid files.  Found only: '${rx_pid_files}'"
-                            else  ### Check all 3 pid files 
-                                wd_logger 1 "adding the 3 expected real rx ${rx_device}' pid files"
-                                local pid_file
-                                for pid_file in ${rx_pid_files} ; do ### Check one pid 
-                                    local pid_value=$(cat ${pid_file})
-                                    if ps ${pid_value} > /dev/null; then ### Is pid active
-                                        wd_logger 1 "rx pid ${pid_value} found in '${pid_file}'is active"
-                                        expected_and_running_pids="${expected_and_running_pids} ${pid_value}"
-                                    else
-                                        wd_logger 1 "rx pid ${pid_value} found in '${pid_file}' is not active, so deleting that pid file"
-                                        rm -f ${pid_file}
-                                    fi ### Is pid active
-                                done ### Check one pid
-                            fi ### Check all 3 pid files
-                        fi ### Add new real rx
-                    done ### Check each real rx
-                fi ### posting.pid is active
-            fi ## Has a posting.od file
-        fi ## A MERGED device
-    done
+        ### Create ${running_rx_list[]} with  all the expected real rx devices. If there are MERGED jobs, then ensure that the real rx they depend upon is in ${running_rx_list}
+        local real_rx_list=()
+        for running_job in ${RUNNING_JOBS[@]} ; do
+            if [[ ! "${running_job}" =~ ^MERG ]]; then
+                if [[ " ${real_rx_list[*]} " =~ " ${running_job} " ]]; then
+                    wd_logger 1 "Real rx job ${running_job} has already been added to real_rx_list[]='${real_rx_list[*]}'"
+                else
+                    real_rx_list+=( ${running_job} )
+                    wd_logger 1 "Real rx job ${running_job} has been added to real_rx_list[]='${real_rx_list[*]}'"
+                fi
+            else
+                ### This is a MERGed job
+                local running_job_fields=( ${running_job//,/ } )
+                local receiver_name=${running_job_fields[0]}
+                local receiver_band=${running_job_fields[1]}
+                local receiver_modes=${running_job_fields[2]-ALL}
+
+                wd_logger 1 "Checking MERGed receiver ${running_job} and adding its real recievers to real_rx_list[]='${real_rx_list[*]}'"
+                ### Check the MERGED device's real rx devices are in the list
+                local merged_receiver_address=$(get_receiver_ip_from_name ${receiver_name})   ### In a MERGed rx, the real rxs feeding it are in a comma-seperated list in the IP column
+                local merged_receiver_name_list=( ${merged_receiver_address//,/ } )
+                local rx_device
+                for rx_device in ${merged_receiver_name_list[@]}; do
+                    ### Check each real rx
+                    local merged_rx_job=${rx_device},${receiver_band},${receiver_modes}
+                    
+                    if [[ " ${real_rx_list[*]} " =~ " ${merged_rx_job} " ]]; then
+                        wd_logger 1 "For MERGed job ${running_job} it's merged_rx_job=${merged_rx_job} has already been added to real_rx_list[]='${real_rx_list[*]}'"
+                    else
+                        real_rx_list+=( ${merged_rx_job} )
+                        wd_logger 1 "For MERGed job ${running_job} added its merged_rx_job=${merged_rx_job} to real_rx_list[]='${real_rx_list[*]}'"
+                    fi
+                done
+            fi
+        done
+
+        ### Check for all the pids expected of real jobs
+        for running_job in ${real_rx_list[@]}; do
+            wd_logger 1 "Checking for real_rx pids for job ${running_job}"
+            local running_job_fields=( ${running_job//,/ } )
+            local receiver_name=${running_job_fields[0]}
+            local receiver_band=${running_job_fields[1]}
+            local receiver_modes=${running_job_fields[2]-ALL}
+
+            local rx_dir_path=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+            shopt -s nullglob
+            local rx_pid_file_list=( ${rx_dir_path}/*pid )
+            shopt -u nullglob
+
+            local expected_pid_files=3
+            if [[ ${receiver_name} =~ ^AUDIO ]]; then
+                expected_pid_files=2
+            elif [[ ${receiver_name} =~ ^SDR ]]; then
+                expected_pid_files=2
+            fi
+            if [[ ${#rx_pid_file_list[@]} -ne ${expected_pid_files}  ]]; then
+                wd_logger 1 "WARNING: real rx_job='${running_job}' recording dir is missing some or all of the expeted ${expected_pid_files} pid files.  Found only: '${#rx_pid_file_list[@]}' pid files"
+            fi
+
+            for pid_file in ${rx_pid_file_list[@]} ; do
+                local pid_val=$(< ${pid_file})
+                
+                if ! [[ "${pid_val}" =~ ^[0-9]+$ ]]; then
+                    wd_logger 1 "ERROR: real_rx pid file ${id_val_file} exists but its contents '${pid_val}' is not an integer number, so delete that pid file"
+                    rm ${pid_file}
+                else
+                    ps ${pid_val} > /dev/null
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: real_rx pid file ${pid_file} exists and contains pid '${pid_val}', but that pid is not running, so delete that pid file"
+                        rm ${pid_file}
+                    else
+                        wd_logger 1 "real_rx pid file ${pid_file} exists and contains expected and running pid '${pid_val}'"
+                        expected_and_running_pids+=( ${pid_val} )
+                    fi
+                fi
+            done
+        done
+    fi    
 
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     wd_logger 1 "Checking all pids for kiwirecorder.py programs"
-    local kill_pid_list=""
-    local ps_output_lines=$(ps auxf)
-    local ps_running_list=$( awk '/wsprdaemon/ && !/vi / && !/ssh/ && !/scp/ && !/-v*[zZ]/ && !/\.log/ && !/wav_window.py/ && !/psql/ && !/derived_calc.py/ && !/curl/ && !/avahi-daemon/ && !/frpc/ {print $2}' <<< "${ps_output_lines}" )
-    local print_string=$(printf "filtered 'ps usxf' output:\n'${ps_output_lines//%/ }'\n\nTo get running list:\n'${ps_running_list}'")    ### //%/ strips out % characters from ps which confuse printf
-    wd_logger 2 "${print_string}"
-    for running_pid in ${ps_running_list} ; do
-       if ${GREP_CMD} -qw ${running_pid} <<< "${expected_and_running_pids}"; then
-           wd_logger 1 "Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'"
+    local kill_pid_list=()
+    local running_kiwirecorder_pid_list=( $(ps aux | awk '/kiwiclient\/kiwirecorder.py/{print $2}' ) )
+    
+    for running_pid in ${running_kiwirecorder_pid_list[@]} ; do
+       if [[ " ${expected_and_running_pids[*]} " =~  " ${running_pid} " ]]; then
+           wd_logger 1 "Found running_pid '${running_pid}' in expected_pids '${expected_and_running_pids[*]}'"
        else
-           if [[ $verbosity -ge 2 ]] ; then
-               printf "$(date): check_for_zombies() WARNING: did not find running_pid '${running_pid}' in expected_pids '${expected_and_running_pids}'"
-               ${GREP_CMD} -w ${running_pid} <<< "${ps_output_lines}"
-           fi
-           if ps ${running_pid} > /dev/null; then
-               wd_logger 1 "adding running  zombie '${running_pid}' to kill list"
-               kill_pid_list="${kill_pid_list} ${running_pid}"
+           local ps_output=$(ps ${running_pid} )
+           local ret_code=$?
+           if [[ ${ret_code} -ne 0 ]]; then
+               wd_logger 1 "Found zombie ${running_pid} which is no longer running"
            else
-               wd_logger 1 "zombie ${running_pid} is phantom which is no longer running"
+               local ps_cmd_info=$( tail -n 1 <<< "${ps_output}" )
+               wd_logger 1 "Adding running zombie '${ps_cmd_info}' to kill list"
+               kill_pid_list+=(${running_pid})
            fi
        fi
     done
-    local ps_running_count=$(wc -w <<< "${ps_running_list}")
-    local ps_expected_count=$(wc -w <<< "${expected_and_running_pids}")
-    local ps_zombie_count=$(wc -w <<< "${kill_pid_list}")
-    if [[ -n "${kill_pid_list}" ]]; then
-        if [[ "${force_kill}" != "yes" ]]; then
-            echo "check_for_zombies() pid $$ expected ${ps_expected_count}, found ${ps_running_count}, so there are ${ps_zombie_count} zombie pids: '${kill_pid_list}'"
-            read -p "Do you want to kill these PIDs? [Yn] > "
-            REPLY=${REPLY:-Y}     ### blank or no response change to 'Y'
-            if [[ ${REPLY^} == "Y" ]]; then
-                force_kill="yes"
-            fi
-        fi
-        if [[ "${force_kill}" == "yes" ]]; then
-            if [[ $verbosity -ge 1 ]]; then
-                echo "$(date): check_for_zombies() killing pids '${kill_pid_list}'"
-                ps ${kill_pid_list}
-            fi
-            kill -9 ${kill_pid_list}
-        fi
-    else
-        ### Found no zombies
-        wd_logger 1 "pid $$ expected ${ps_expected_count}, found ${ps_running_count}, so there are no zombies"
+    wd_logger 1 "Found ${#expected_and_running_pids[*]} expected_and_running_pids[] and ${#kill_pid_list[@]} kill_pid_list[] pids = '${kill_pid_list[*]}'" 
+    if [[ ${#kill_pid_list[@]} -gt 0 ]]; then
+        kill ${kill_pid_list[@]}
+        wd_logger 1 "Killed zombie pids:  '${kill_pid_list[*]}'"
     fi
 }
-
 
 ##############################################################
 ###  -j s cmd   Argument is 'all' OR 'RECEIVER,BAND'
@@ -237,60 +231,60 @@ function show_running_jobs() {
     local show_target=${args_array[0]}
     local show_band=${args_array[1]:-}
     if [[ "${show_target}" != "all" ]] && [[ -z "${show_band}" ]]; then
-        wd_logger 0 "missing RECEIVER,BAND argument"
-        wd_logger 2 "Finished"
+        wd_logger 1 "ERROR: missing RECEIVER,BAND argument"
         exit 1
     fi
-    local job_index
-    local job_info
     local receiver_name_list=()
     local receiver_name
     local receiver_band
     local found_job="no"
 
-    if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
-        wd_logger 0 "There is no RUNNING_JOBS_FILE '${RUNNING_JOBS_FILE}'"
-        wd_logger 2 "Finished"
+    if [[ ! -f ${RUNNING_JOBS_FILE} ]] ; then
+        wd_logger 1 "ERROR: There is no RUNNING_JOBS_FILE '${RUNNING_JOBS_FILE}'"
         return 1
+    elif ! source ${RUNNING_JOBS_FILE}; then
+        wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
+        return 2
+    elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
+        wd_logger 1 "RUNNING_JOBS[] is  empty"
+        return 3
     fi
-    source ${RUNNING_JOBS_FILE}
 
+    local job_info
     local running_jobs_count=0
-    for job_index in $(seq 0 $(( ${#RUNNING_JOBS[*]} - 1 )) ) ; do
-        job_info=(${RUNNING_JOBS[job_index]/,/ } )
-        receiver_band=${job_info[1]}
-        if [[ ${job_info[0]} =~ ^MERG ]]; then
+    for job_info in ${RUNNING_JOBS[*]} ; do
+        local job_info_fields=( ${job_info//,/ } )
+        local receiver_name=${job_info_fields[0]}
+        local receiver_band=${job_info_fields[1]}
+        local receiver_modes=${job_info_fields[2]}
+        if [[ ${receiver_name} =~ ^MERG ]]; then
             ### For merged rx devices, there is only one posting pid, but one or more recording and decoding pids
-            local merged_receiver_name=${job_info[0]}
-            local receiver_address=$(get_receiver_ip_from_name ${merged_receiver_name})
+            local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
             receiver_name_list=(${receiver_address//,/ })
-            printf "%2s: %12s,%-4s merged posting  %s (%s)\n" ${job_index} ${merged_receiver_name} ${receiver_band} "$(get_posting_status ${merged_receiver_name} ${receiver_band})" "${receiver_address}"
+            printf "%2s: %12s,%-4s merged posting    %s (%s)\n" ${job_info} ${receiver_name} ${receiver_band} "$(get_posting_status ${receiver_name} ${receiver_band})" "${receiver_address}"
         else
             ### For a simple rx device, the recording, decdoing and posting pids are all in the same directory
-            receiver_name=${job_info[0]}
             receiver_name_list=(${receiver_name})
-            local print_string=$(printf "%2s: %12s,%-4s posting  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
+            local print_string=$(printf "%2s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
             wd_logger 0 "\n${print_string}"
-            #printf "%2s: %12s,%-4s posting  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})"
         fi
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
-                printf "%2s: %12s,%-4s capture  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
-                printf "%2s: %12s,%-4s decode   %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                printf "%2s: %12s,%-4s recording   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
                 found_job="yes"
             fi
         done
         if [[ ${found_job} == "yes" ]]; then
             (( ++running_jobs_count ))
             if [[ "${show_target}" == "all" ]]; then
-                wd_logger 1 "${running_jobs_count} recording jobs are running"
+                wd_logger 2 "job #${running_jobs_count} is running"
             else
                 wd_logger 1 "No job found for RECEIVER '${show_target}' BAND '${show_band}'"
             fi
         fi
     done
-    wd_logger 1 "Found ${running_jobs_count} running decode jobs"
-    wd_logger 2 "Finished"
+    wd_logger 1 "Found ${running_jobs_count} running jobs"
 }
 
 ##############################################################
@@ -346,42 +340,51 @@ function tail_wspr_decode_job_log() {
 ###
 function add_remove_jobs_in_running_file() {
     local action=$1    ## 'a' or 'z'
-    local job=$2       ## in form RECEIVER,BAND
+    local job=$2       ## in form RECEIVER,BAND[,MODES]
 
+    wd_logger 1 "Start with ${action}, ${job}"
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         echo "RUNNING_JOBS=( )" > ${RUNNING_JOBS_FILE}
+        wd_logger 1 "Creating new ${RUNNING_JOBS_FILE}"
     fi
     source ${RUNNING_JOBS_FILE}
+    wd_logger 1 "RUNNING_JOBS='${RUNNING_JOBS[*]}'"
     case $action in
         a)
-            if ${GREP_CMD} -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
+            if [[ " ${RUNNING_JOBS[@]} " =~ " ${job} " ]]; then
                 ### We come here when restarting a dead capture jobs, so this condition is already printed out
-                [[ $verbosity -ge 2 ]] && \
-                    echo "$(date): add_remove_jobs_in_running_file():  WARNING: found job ${receiver_name},${receiver_band} was already listed in ${RUNNING_JOBS_FILE}"
+                wd_logger 1 "Starting job '${job}' but found it is already in ${RUNNING_JOBS_FILE}='${RUNNING_JOBS[*]}'"
                 return 1
             fi
-            source ${RUNNING_JOBS_FILE}
+            wd_logger 1 "Adding '${job}' to ${RUNNING_JOBS_FILE}"
             RUNNING_JOBS+=( ${job} )
             ;;
         z)
-            if ! ${GREP_CMD} -w ${job} ${RUNNING_JOBS_FILE} > /dev/null; then
-                echo "$(date) WARNING: start_stop_job(remove) found job ${receiver_name},${receiver_band} was already not listed in ${RUNNING_JOBS_FILE}"
-                return 2
+            if ! [[ " ${RUNNING_JOBS[@]} " =~ " ${job} " ]]; then
+                wd_logger 1 "Stoppng job '${job}', but is not in ${RUNNING_JOBS_FILE}"
+                return 1
             fi
             ### The following line is a little obscure, so here is an explanation
             ###  We are deleting the version of RUNNING_JOBS[] to delete one job.  Rather than loop through the array I just use sed to delete it from
             ###  the array declaration statement in the ${RUNNING_JOBS_FILE}.  So this statement redeclares RUNNING_JOBS[] with the delect job element removed 
-            eval $( sed "s/${job}//" ${RUNNING_JOBS_FILE})
+            #eval $( sed "s/${job}//" ${RUNNING_JOBS_FILE})
+            wd_logger 1 "Deleting  job '${job}' from  '${RUNNING_JOBS[*]}'"
+            RUNNING_JOBS=( "${RUNNING_JOBS[@]/${job}}" )     ### Deletes the job from the array
+            wd_logger 1 "Job '${job}' should no longer be in '${RUNNING_JOBS[*]}'"
             ;;
         *)
-            echo "$(date): add_remove_jobs_in_running_file(): ERROR: action ${action} invalid"
+            wd_logger 1 "ERROR: action ${action} invalid"
             return 2
     esac
-    ### Sort RUNNING_JOBS by ascending band frequency
-    IFS=$'\n'
-    RUNNING_JOBS=( $(sort --field-separator=, -k 2,2n <<< "${RUNNING_JOBS[*]-}") )    ### TODO: this doesn't sort.  
-    unset IFS
-    echo "RUNNING_JOBS=( ${RUNNING_JOBS[*]-} )" > ${RUNNING_JOBS_FILE}
+    if [[ ${#RUNNING_JOBS[@]} -gt 0 ]]; then
+        ### Sort RUNNING_JOBS by ascending band frequency
+        ## IFS=$'\n'
+        ### RUNNING_JOBS=( $(sort --field-separator=, -k 2,2n <<< "${RUNNING_JOBS[@]-}") )       ### I tried everyting I know to get this to work
+        ## unset IFS
+        RUNNING_JOBS=( $( local element; for element in ${RUNNING_JOBS[@]}; do echo ${element}; done | sort -t , -k 2,2nr ) )
+    fi
+    echo "declare RUNNING_JOBS=( ${RUNNING_JOBS[*]-} )" > ${RUNNING_JOBS_FILE}
+    wd_logger 1 "Wrote new ${RUNNING_JOBS_FILE}: '${RUNNING_JOBS[*]-}'"
 }
 
 ###
@@ -457,13 +460,13 @@ function update_hhmm_sched_file() {
             local job_time=${job_line[0]}
             if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
                 ### I don't think that get_index_time() can return a bad time for a sunrise/sunset job, but this is to be sure of that
-                echo "$(date): ERROR: in update_hhmm_sched_file(): found and invalid configured sunrise/sunset job time '${job_line[0]}' in wsprdaemon.conf, so skipping this job."
+                wd_logger 1 "ERROR: Found and invalid configured sunrise/sunset job time '${job_line[0]}' in wsprdaemon.conf, so skipping this job."
                 continue ## to the next index
             fi
         fi
         if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
             ### validate all lines, whether a computed sunrise/sunset or simple HH:MM
-            echo "$(date): ERROR: in update_hhmm_sched_file(): invalid job time '${job_line[0]}' in wsprdaemon.conf, expecting HH:MM so skipping this job."
+            wd_logger 1 "ERROR: invalid job time '${job_line[0]}' in wsprdaemon.conf, expecting HH:MM so skipping this job."
             continue ## to the next index
         fi
         job_array_temp[${job_array_temp_index}]="${job_line[*]}"
@@ -502,14 +505,43 @@ function update_hhmm_sched_file() {
         job_array_temp[$job_array_temp_index]="${jobs_sorted[$index]}"
         ((++job_array_temp_index))
     done
+    wd_logger 1 "Created job_array_temp[]='${job_array_temp[*]}'"
 
     ### Save the sorted schedule strting with 00:00 and with only HH:MM jobs to ${HHMM_SCHED_FILE}
-    echo "declare HHMM_SCHED=( \\" > ${HHMM_SCHED_FILE}
-    for index in $(seq 0 $(( ${#job_array_temp[*]} - 1 )) ) ; do
-        echo "\"${job_array_temp[$index]}\" \\" >> ${HHMM_SCHED_FILE}
+    echo -n "declare HHMM_SCHED=(" > ${HHMM_SCHED_FILE}
+    local sched_line
+    for sched_line in "${job_array_temp[*]}"  ; do
+        local job_line_list=(${sched_line})
+        local job_time=${job_line_list[0]}
+
+        wd_logger 1 "Processing sched line '${sched_line}', job_time=${job_time}"
+
+        ### If needed, ddd the ',MODE' to the jobs defined for this time
+        local output_jobs_list=(${job_time})   ### First element is the time
+
+        ### Look at each job defined for this time
+        local schedule_job
+        for schedule_job in "${job_line_list[@]:1}"; do
+            ### Look at one job
+            wd_logger 1 "Processing schedule_job ${schedule_job}"
+            local job_list=(${schedule_job//,/ })
+            if [[ ${#job_list[@]} -lt 3 ]]; then
+                ### conf file job doesn't have a ',MODE' field
+                job_list[2]="DEFAULT"
+            fi
+            local output_schedule_job="${job_list[*]}"
+                  output_schedule_job="${output_schedule_job// /,}"
+            output_jobs_list+=( ${output_schedule_job} )
+            wd_logger 1 "Added processed job ${output_schedule_job} to schedule for time ${output_jobs_list[0]}"
+        done
+        wd_logger 1 "Processed sched line into '${output_jobs_list[*]}'"
+
+        ### Done processing one schedule time line
+        wd_logger 1 "Appending '${output_jobs_list[*]}' to ${HHMM_SCHED_FILE}"
+        echo -n " \"${output_jobs_list[*]}\" " >> ${HHMM_SCHED_FILE}
     done
-    echo ") " >> ${HHMM_SCHED_FILE}
-    wd_logger 1 "Finished updated HHMM_SCHED_FILE"
+    echo ")" >> ${HHMM_SCHED_FILE}
+    wd_logger 1 "Finished updating HHMM_SCHED_FILE"
 }
 
 ###################
@@ -534,7 +566,7 @@ function setup_expected_jobs_file () {
         local receiver_grid="$(get_receiver_grid_from_name ${receiver_name})"
         index_time=$(get_index_time ${hhmm_job[0]} ${receiver_grid})  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
         if [[ ! ${index_time} =~ ^[0-9]+ ]]; then
-            echo "$(date): setup_expected_jobs_file() ERROR: invalid configured job time '${index_time}'"
+            wd_logger 1 "ERROR: invalid configured job time '${index_time}'"
             continue ## to the next index
         fi
         index_time=$((10#${index_time}))  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
@@ -543,25 +575,23 @@ function setup_expected_jobs_file () {
             expected_jobs=(${expected_jobs[*]:1})          ### Chop off first array element which is the scheudle start time
             index_now=index                                ### Remember the index of the HHMM job which should be active at this time
             index_now_time=$index_time                     ### And the time of that HHMM job
-            if [[ $verbosity -ge 3 ]] ; then
-                echo "$(date): INFO: setup_expected_jobs_file(): current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so expected_jobs[*] ="
-                echo "         '${expected_jobs[*]}'"
-            fi
+            wd_logger 1 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so expected_jobs[*] =${expected_jobs[*]}'"
         fi
     done
     if [[ -z "${expected_jobs[*]}" ]]; then
-        echo "$(date): setup_expected_jobs_file() ERROR: couldn't find a schedule"
+        wd_logger 1 "ERROR: couldn't find a schedule"
         return 
     fi
 
     if [[ ! -f ${EXPECTED_JOBS_FILE} ]]; then
         echo "EXPECTED_JOBS=()" > ${EXPECTED_JOBS_FILE}
+        wd_logger 1 "Creating new ${EXPECTED_JOBS_FILE}"
     fi
     source ${EXPECTED_JOBS_FILE}
     if [[ "${EXPECTED_JOBS[*]-}" == "${expected_jobs[*]}" ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_expected_jobs_file(): at time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
+        wd_logger 1 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
     else
-        [[ $verbosity -ge 2 ]] && echo "$(date): setup_expected_jobs_file(): a new schedule from EXPECTED_JOBS[] for time ${current_time} is needed for current time ${current_time}"
+        wd_logger 1 "A new schedule from EXPECTED_JOBS[] for time ${current_time} is needed for current time ${current_time}"
 
         ### Save the new schedule to be read by the calling function and for use the next time this function is run
         printf "EXPECTED_JOBS=( ${expected_jobs[*]} )\n" > ${EXPECTED_JOBS_FILE}
@@ -570,36 +600,45 @@ function setup_expected_jobs_file () {
 
 ### Read the expected.jobs and running.jobs files and terminate and/or add jobs so that they match
 function update_running_jobs_to_match_expected_jobs() {
+
     setup_expected_jobs_file
     source ${EXPECTED_JOBS_FILE}
+    wd_logger 1 "EXPECTED_JOBS='${EXPECTED_JOBS[*]}'"
 
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
     fi
     source ${RUNNING_JOBS_FILE}
     local temp_running_jobs=( ${RUNNING_JOBS[*]-} )
+    wd_logger 1 "RUNNING_JOBS=${RUNNING_JOBS[*]-}"
 
     ### Check that posting jobs which should be running are still running, and terminate any jobs currently running which will no longer be running 
     ### posting_daemon() will ensure that decoding_daemon() and recording_deamon()s are running
-    local index_temp_running_jobs
+    local running_job
     local schedule_change="no"
-    for index_temp_running_jobs in $(seq 0 $((${#temp_running_jobs[*]} - 1 )) ); do
-        local running_job=${temp_running_jobs[${index_temp_running_jobs}]}
-        local running_reciever=${running_job%,*}
-        local running_band=${running_job#*,}
+    for running_job in ${temp_running_jobs[*]}; do
+        local running_job_fields=( ${running_job//,/ } )
+        if [[ ${#running_job_fields[@]} -lt 2 ]]; then
+            wd_logger 1 "Error in running job '${running_job}'.  It has less than the minimun 2 fields of RX,BAND[,MODES,...]"
+            continue
+        else
+           wd_logger 2 "Found job '${running_job}' has MODE field"
+        fi
+        local running_reciever=${running_job_fields[0]}
+        local running_band=${running_job_fields[1]}
+        local running_modes=${running_job_fields[2]-DEFAULT}
         local found_it="no"
-        wd_logger 1 "Checking status of job $running_job"
+        wd_logger 2 "Checking status of job ${running_job}"
         for index_schedule_jobs in $( seq 0 $(( ${#EXPECTED_JOBS[*]} - 1)) ) ; do
             if [[ ${running_job} == ${EXPECTED_JOBS[$index_schedule_jobs]} ]]; then
                 found_it="yes"
                 ### Verify that it is still running
                 local status
                 if status=$(get_posting_status ${running_reciever} ${running_band}) ; then
-                    wd_logger 1 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
+                    wd_logger 2 "Found posting_daemon() job ${running_reciever} ${running_band} is running"
                 else
-                    wd_logger 1 "Found dead posting_daemon() job '%s,%s'. get_recording_status() returned '%s', so starting job"  \
-                        ${running_reciever} ${running_band} "$status"
-                    start_stop_job a ${running_reciever} ${running_band}
+                    wd_logger 1 "Found dead posting_daemon() job '${running_reciever},${running_band}'. get_recording_status() returned '$status', so starting job"
+                    start_stop_job a ${running_reciever} ${running_band} ${running_modes}
                 fi
                 break    ## No need to look further
             fi
@@ -607,7 +646,7 @@ function update_running_jobs_to_match_expected_jobs() {
         if [[ $found_it == "no" ]]; then
             wd_logger 1 "Found Schedule has changed. Terminating posting job '${running_reciever},${running_band}'"
             ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE} and tell the posting_dameon to stop.  Ot polls every 5 seconds and if there are no more clients will signal the recording deamon to stop
-            start_stop_job z ${running_reciever} ${running_band} 
+            start_stop_job z ${running_reciever} ${running_band} ${running_modes}
             schedule_change="yes"
         fi
     done
@@ -615,8 +654,8 @@ function update_running_jobs_to_match_expected_jobs() {
     if [[ ${schedule_change} == "yes" ]]; then
         ### A schedule change deleted a job.  Since it could be either a MERGED or REAL job, we can't be sure if there was a real job terminated.  
         ### So just wait 10 seconds for the 'running.stop' files to appear and then wait for all of them to go away
-        sleep ${STOPPING_MIN_WAIT_SECS:-30}            ### Wait a minimum of 30 seconds to be sure the Kiwi to terminates rx sessions 
-        wait_for_all_stopping_recording_daemons
+        sleep ${STOPPING_MIN_WAIT_SECS:-10}            ### Wait a minimum of 30 seconds to be sure the Kiwi to terminates rx sessions 
+        wd_logger 1 "Schedule has changed"
     fi
 
     ### Find any jobs which will be new and start them
@@ -634,10 +673,12 @@ function update_running_jobs_to_match_expected_jobs() {
             fi
         done
         if [[ ${found_it} == "no" ]]; then
-            wd_logger 1 "found that the schedule has changed. Starting new job '${expected_job}'"
-            local expected_receiver=${expected_job%,*}
-            local expected_band=${expected_job#*,}
-            start_stop_job a ${expected_receiver} ${expected_band}       ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
+            wd_logger 1 "Found that the schedule has changed. Starting new job '${expected_job}'"
+            local expected_job_fields=( ${expected_job//,/ } )
+            local expected_receiver=${expected_job_fields[0]}
+            local expected_band=${expected_job_fields[1]}
+            local expected_modes=${expected_job_fields[2]-DEFAULT}
+            start_stop_job a ${expected_receiver} ${expected_band} ${expected_modes}       ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
             schedule_change="yes"
         fi
     done
@@ -652,32 +693,40 @@ function update_running_jobs_to_match_expected_jobs() {
 ### Read the running.jobs file and terminate one or all jobs listed there
 function stop_running_jobs() {
     local stop_receiver=$1
-    local stop_band=${2-}    ## BAND or no arg if $1 == 'all'
+    local stop_band=${2-all}    ## BAND or no arg if $1 == 'all'
+    local stop_modes=${3-DEFAULT}
 
-    wd_logger 1 "Start with args: ${stop_receiver},${stop_band}"
+    wd_logger 2 "Start with args: $1,${2-} => ${stop_receiver},${stop_band}"
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
-        wd_logger 1 "found no RUNNING_JOBS_FILE, so nothing to do"
-        return
+        wd_logger 1 "Found no RUNNING_JOBS_FILE, so nothing to do"
+        return 0
     fi
     source ${RUNNING_JOBS_FILE}
+    if [[ ${#RUNNING_JOBS[@]} -eq 0 ]]; then
+       wd_logger 1 "No jobs in RUNNING_JOBS[]"
+       return 0
+    fi
 
     ### Since RUNNING_JOBS[] will be shortened by our stopping a job, we need to use a copy of it
-    local temp_running_jobs=( ${RUNNING_JOBS[*]-} )
+    local temp_running_jobs=( ${RUNNING_JOBS[*]} )
 
     ### Terminate any jobs currently running which will no longer be running 
-    local index_running_jobs
-    for index_running_jobs in $(seq 0 $((${#temp_running_jobs[*]} - 1 )) ); do
-        local running_job=(${temp_running_jobs[${index_running_jobs}]/,/ })
-        local running_reciever=${running_job[0]}
-        local running_band=${running_job[1]}
-        wd_logger 1 "Compare against running job ${running_reciever},${running_band}"
-        if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_reciever} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
-            wd_logger 1 "Terminating running  job ${running_reciever},${running_band}"
-            start_stop_job z ${running_reciever} ${running_band}       ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
+    local running_job
+    for running_job in ${temp_running_jobs[@]} ; do
+        local running_job_fields=(${running_job//,/ } )
+        local running_reciever=${running_job_fields[0]}
+        local running_band=${running_job_fields[1]}
+        local running_modes=${running_job_fields[2]}       ### The mode field is optional and will not be present in legacy config files
+        wd_logger 1 "Compare the running job '${running_job_fields[*]}' with stop target ${running_reciever},${running_band}[,${running_modes}]"
+        if [[ ${stop_receiver} == "all" || ( ${stop_receiver} == ${running_reciever} && ${stop_band} == ${running_band} && ${stop_modes} == ${running_modes} ) ]]  ; then
+            wd_logger 1 "Terminating running  job ${running_reciever},${running_band},${running_modes}"
+            start_stop_job z ${running_reciever} ${running_band} ${running_modes}      ### start_stop_job() will fix up the ${RUNNING_JOBS_FILE}
         else
-            wd_logger 1 "does not match running job '${running_job[@]}'"
+            wd_logger 1 "does not match running job '${running_job}'"
         fi
     done
+    return
+
     ### Jobs signal they are terminated after the 40 second timeout when the running.stop files created by the above calls are no longer present
     local -i timeout=0
     local -i timeout_limit=$(( ${KIWIRECORDER_KILL_WAIT_SECS} + 20 ))
@@ -686,10 +735,11 @@ function stop_running_jobs() {
     local found_running_file="yes"
     while [[ "${found_running_file}" == "yes" ]]; do
         found_running_file="no"
-        for index_running_jobs in $(seq 0 $((${#temp_running_jobs[*]} - 1 )) ); do
-            local running_job=(${temp_running_jobs[${index_running_jobs}]/,/ })
-            local running_reciever=${running_job[0]}
-            local running_band=${running_job[1]}
+        for running_job in ${temp_running_jobs[@]} ; do
+            local running_job_fields=(${running_job//,/ } )
+            local running_reciever=${running_job_fields[0]}
+            local running_band=${running_job_fields[1]}
+            local running_modes=${running_job_fields[2]-ALL}       ### The mode field is optional and will not be present in legacy config files
             if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_reciever} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
                 wd_logger 1 "Checking to see if job ${running_reciever},${running_band} is still running"
                 local recording_dir=$(get_recording_dir_path ${running_reciever} ${running_band})
@@ -727,7 +777,7 @@ function start_or_kill_jobs() {
         exit 1
     fi
 
-    wd_logger 1 "Starting with args $action,'$target_arg'"
+    wd_logger 2 "Starting with args $action,'$target_arg'"
     case ${action} in 
         a)
             if [[ ${target_receiver} == "all" ]]; then
@@ -744,7 +794,7 @@ function start_or_kill_jobs() {
             exit
             ;;
     esac
-    wd_logger 1 "Finished"
+    wd_logger 2 "Finished"
 }
 
 ### '-j ...' command

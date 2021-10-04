@@ -1,8 +1,21 @@
+#!/bin/bash 
+
 #############################################################
 ################ Posting ####################################
 #############################################################
 
 declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting deamon directory which contains symlinks to the decoding deamon(s) subdirs where spots for this daemon are copied
+declare -r WAV_FILE_POLL_SECONDS=5            ### How often to poll for the 2 minute .wav record file to be filled
+
+function get_posting_dir_path(){
+    local receiver_name=$1
+    local receiver_rx_band=$2
+    local receiver_posting_path="${WSPRDAEMON_TMP_DIR}/posting.d/${receiver_name}/${receiver_rx_band}"
+
+    echo ${receiver_posting_path}
+}
+
+
 
 ### This daemon creates links from the posting dirs of all the $3 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
@@ -10,8 +23,11 @@ function posting_daemon()
 {
     local posting_receiver_name=${1}
     local posting_receiver_band=${2}
-    local real_receiver_list=(${3})
+    local posting_receiver_modes=${3}
+    local real_receiver_list=($4)
     local real_receiver_count=${#real_receiver_list[@]}
+
+    wd_logger 1 "Starting with args ${posting_receiver_name} ${posting_receiver_band} ${posting_receiver_modes} '${real_receiver_list[*]}'"
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
@@ -24,7 +40,7 @@ function posting_daemon()
 
     ### Create a /tmp/.. dir where this instance of the daemon will process and merge spotfiles.  Then it will copy them to the uploads.d directory in a persistent file system
     local posting_receiver_dir_path=$PWD
-    local no_nl_real_receiver_list=(${real_receiver_list//$'\n'/ /})
+    local no_nl_real_receiver_list=( "${real_receiver_list[*]//$'\n'/ /}")
     wd_logger 1 "Starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${no_nl_real_receiver_list[@]}' to '${wsprnet_upload_dir}"
 
     ### Link the real receivers to this dir
@@ -40,11 +56,17 @@ function posting_daemon()
         local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
         ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
         mkdir -p ${real_receiver_posting_dir_path}
+
         ### Now create a symlink from under here to the directory where spots will apper
-        local this_rx_local_dir_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
-        [[ ! -f ${this_rx_local_dir_name} ]] && ln -s ${real_receiver_posting_dir_path} ${this_rx_local_dir_name}
-        posting_source_dir_list+=(${this_rx_local_dir_name})
-        wd_logger 1 "Created a symlink from ${this_rx_local_dir_name} to ${real_receiver_posting_dir_path}"
+        local this_rx_local_link_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
+        if [[ -L ${this_rx_local_link_name} ]]; then
+            wd_logger 1 "Link from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path} already exists"
+        else
+            wd_logger 1 "Creating a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
+            ln -s ${real_receiver_posting_dir_path} ${this_rx_local_link_name}
+        fi
+        posting_source_dir_list+=(${this_rx_local_link_name})
+        wd_logger 1 "Created a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
     done
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches
@@ -61,12 +83,12 @@ function posting_daemon()
             ### Start or keep alive decoding daemons for each real receiver
             local real_receiver_name
             for real_receiver_name in ${real_receiver_list[@]} ; do
-                wd_logger 1 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
+                wd_logger 2 "Checking or starting decode daemon for real receiver ${real_receiver_name} ${posting_receiver_band}"
                 ### '(...) runs in subshell so it can't change the $PWD of this function
-                (spawn_decode_daemon ${real_receiver_name} ${posting_receiver_band}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
+                (spawn_decoding_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            wd_logger 1 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
+            wd_logger 2 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
@@ -126,7 +148,7 @@ function posting_daemon()
                 done
             fi
             if [[  ${waiting_for_decodes} == "yes" ]]; then
-                wd_logger 1 "Is waiting for files. Sleeping..."
+                wd_logger 2 "Is waiting for files. Sleeping for ${WAV_FILE_POLL_SECONDS} seconds..."
                 sleep ${WAV_FILE_POLL_SECONDS}
             else
                 wd_logger 1 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
@@ -174,7 +196,8 @@ function posting_daemon()
             ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
              wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
 
-            wd_logger 1 "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}"
+            local wd_arg=$(printf "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}")
+            wd_logger 1 "${wd_arg}"
 
             ### Get a list of all calls found in all of the receiver's decodes
             local posting_call_list=$( cat ${wsprd_spots_all_file_path} | awk '{print $7}'| sort -u )
@@ -238,8 +261,7 @@ function posting_daemon()
                 ### There is one spot file for this rx
                 local real_receiver_wspr_spots_file=${real_receiver_wspr_spots_file_list[0]}
                 local filtered_receiver_wspr_spots_file="filtered_spots.txt"   ### Remove all but the strongest SNR for each CALL
-                rm -f ${filtered_receiver_wspr_spots_file}
-                touch ${filtered_receiver_wspr_spots_file}    ### In case there are no spots in the real rx
+                >  ${filtered_receiver_wspr_spots_file}                        ### creates or trucates the file
                 if [[ ! -s ${real_receiver_wspr_spots_file} ]]; then
                     wd_logger 1 "This spot file has no spots, but copy it to the upload directory so upload_daemon knows that this wspr cycle decode has been completed"
                 else
@@ -294,7 +316,7 @@ function posting_daemon()
                 mkdir -p ${upload_wsprdaemon_noise_dir}
 
                 mv ${noise_files_list[@]} ${upload_wsprdaemon_noise_dir}   ### The TIME_FREQ is already part of the noise file name
-                wd_logger 1 "Moved noise file(s) '${noise_files_list[@]}' to '${upload_wsprdaemon_noise_dir}'"
+                wd_logger 1 "Moved noise file(s) '${noise_files_list[*]}' to '${upload_wsprdaemon_noise_dir}'"
             fi
         done
         ### We have uploaded all the spot and noise files
@@ -311,7 +333,7 @@ function posting_daemon()
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=20                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file() {
@@ -329,12 +351,12 @@ function create_enhanced_spots_file() {
         local spot_line_list_count=${#spot_line_list[@]}
         local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise   ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode  ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise <<< "${other_fields}"    ### Type 2 spots have no grid
+            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Type 2 spots have no grid
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
@@ -342,7 +364,7 @@ function create_enhanced_spots_file() {
         fi
         ### G3ZIL 
         ### April 2020 V1    add azi
-        wd_logger 1 "'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
+        wd_logger 2 "'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
         add_derived ${spot_grid} ${my_grid} ${spot_freq}
         if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
             wd_logger 1 "spots.txt ${DERIVED_ADDED_FILE} file not found"
@@ -423,16 +445,21 @@ function log_merged_snrs() {
     done
 }
  
+
+declare -r POSTING_DAEMON_PID_FILE="posting_daemon.pid"
+declare -r POSTING_DAEMON_LOG_FILE="posting_daemon.log"
+
 ###
 function spawn_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
+    local receiver_modes=$3
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes}"
     local daemon_status
     if daemon_status=$(get_posting_status $receiver_name $receiver_band) ; then
-        wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running. Finished"
-        return
+        wd_logger 1 "Daemon for '${receiver_name}','${receiver_band}' is already running"
+        return 0
     fi
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     local real_receiver_list=""
@@ -448,58 +475,64 @@ function spawn_posting_daemon() {
     local receiver_posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     mkdir -p ${receiver_posting_dir}
     cd ${receiver_posting_dir}
-    wd_logger 1 "Spawning posting job in $PWD"
-    WD_LOGFILE=posting_daemon.log posting_daemon ${receiver_name} ${receiver_band} "${real_receiver_list}" &
+    wd_logger 1 "Spawning posting job ${receiver_name},${receiver_band},${receiver_modes} '${real_receiver_list}' in $PWD"
+    WD_LOGFILE=${POSTING_DAEMON_LOG_FILE} posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} "${real_receiver_list}" &
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'posting_daemon ${receiver_name} ${receiver_band} ${receiver_modes} ${real_receiver_list}' => ${ret_code}"
+        return 1
+    fi
     local posting_pid=$!
-    echo ${posting_pid} > posting.pid
+    echo ${posting_pid} > ${POSTING_DAEMON_PID_FILE}
 
     cd - > /dev/null
     wd_logger 1 "Finished"
+    return 0
 }
 
 ###
 function kill_posting_daemon() {
     local receiver_name=$1
     local receiver_band=$2
-    local real_receiver_list=()
-    local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
 
+    local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     if [[ -z "${receiver_address}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: no address(s) found for ${receiver_name}"
+        wd_logger 1 " No address(s) found for ${receiver_name}"
         return 1
     fi
     local posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     if [[ ! -d "${posting_dir}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected posting daemon dir ${posting_dir}"
+        wd_logger 1 "Caan't find expected posting daemon dir ${posting_dir}"
         return 2
     else
-        local posting_daemon_pid_file=${posting_dir}/posting.pid
+        local posting_daemon_pid_file=${posting_dir}/${POSTING_DAEMON_PID_FILE}
         if [[ ! -f ${posting_daemon_pid_file} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected posting daemon file ${posting_daemon_pid_file}"
+            wd_logger 1 "Can't find expected posting daemon file ${posting_daemon_pid_file}"
             return 3
         else
             local posting_pid=$(cat ${posting_daemon_pid_file})
             if ps ${posting_pid} > /dev/null ; then
                 kill ${posting_pid}
-              [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): killed active pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
+                wd_logger 1 "Killed active posting_daemon() pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
             else
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
+                wd_logger 1 "Pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
             fi
             rm -f ${posting_daemon_pid_file}
         fi
     fi
 
+    local real_receiver_list=()
     if [[ "${receiver_name}" =~ ^MERG ]]; then
         ### This is a 'merged == virtual' receiver.  The 'real rx' which are merged to create this rx are listed in the IP address field of the config line
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
+        wd_logger 1 "Stopping merged rx '${receiver_name}' which includes real rx(s) '${receiver_address}'"  
         real_receiver_list=(${receiver_address//,/ })
     else
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: stopping real rx '${receiver_name}','${receiver_band}'"  
+        wd_logger 1 "Stopping real rx '${receiver_name}','${receiver_band}'"  
         real_receiver_list=(${receiver_name})
     fi
 
     if [[ -z "${real_receiver_list[@]}" ]]; then
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): ERROR: can't find expected real receiver(s) for '${receiver_name}','${receiver_band}'"
+        wd_logger 1 "Can't find expected real receiver(s) for '${receiver_name}','${receiver_band}'"
         return 3
     fi
     ### Signal all of the real receivers which are contributing ALL_WSPR files to this posting daemon to stop sending ALL_WSPRs by deleting the 
@@ -510,48 +543,50 @@ function kill_posting_daemon() {
     local real_receiver_name
     for real_receiver_name in ${real_receiver_list[@]} ; do
         local real_receiver_posting_dir=$(get_recording_dir_path ${real_receiver_name} ${receiver_band})/${DECODING_CLIENTS_SUBDIR}/${receiver_name}
-        [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): INFO: signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
+        wd_logger 1 "Signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
-            [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: posting directory  ${real_receiver_posting_dir} does not exist"
+            wd_logger 1 "ERROR: kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: expect posting directory  ${real_receiver_posting_dir} does not exist"
         else 
             rm -f ${posting_suppliers_root_dir}/${real_receiver_name}     ## Remote the posting daemon's link to the source of spots
-            rm -rf ${real_receiver_posting_dir}  ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
+            rm -rf ${real_receiver_posting_dir}                          ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
-            if [[ ${real_receiver_posting_root_dir_count} -eq 0 ]]; then
-                local real_receiver_stop_file=${real_receiver_posting_root_dir%/*}/recording.stop
-                touch ${real_receiver_stop_file}
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) by creating ${real_receiver_stop_file}"
+            if [[ ${real_receiver_posting_root_dir_count} -gt 0 ]]; then
+                wd_logger 1 "Found that decoding_daemon for ${receiver_name},${receiver_band} has other posting clients, so didn't signal the recoding and decoding daemons to stop"
             else
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) a decoding client remains, so didn't signal the recoding and decoding daemons to stop"
+                if kill_decoding_daemon ${receiver_name} ${receiver_band}; then
+                    wd_logger 1 "Killed with 'kill_decoding_daemon ${receiver_name} ${receiver_band}' => $?"
+                else
+                    wd_logger 1 "ERROR: 'kill_decoding_daemon ${receiver_name} ${receiver_band} => $?"
+                fi
             fi
         fi
     done
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
-}
-
-###
-function get_posting_status() {
-    local get_posting_status_receiver_name=$1
-    local get_posting_status_receiver_rx_band=$2
-    local get_posting_status_receiver_posting_dir=$(get_posting_dir_path ${get_posting_status_receiver_name} ${get_posting_status_receiver_rx_band})
-    local get_posting_status_receiver_posting_pid_file=${get_posting_status_receiver_posting_dir}/posting.pid
-
-    if [[ ! -d ${get_posting_status_receiver_posting_dir} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "Never ran"
-        return 1
-    fi
-    if [[ ! -f ${get_posting_status_receiver_posting_pid_file} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "No pid file"
-        return 2
-    fi
-    local get_posting_status_decode_pid=$(cat ${get_posting_status_receiver_posting_pid_file})
-    if ! ps ${get_posting_status_decode_pid} > /dev/null ; then
-        [[ $verbosity -ge 0 ]] && echo "Got pid '${get_posting_status_decode_pid}' from file, but it is not running"
-        return 3
-    fi
-    echo "Pid = ${get_posting_status_decode_pid}"
     return 0
 }
 
+#
+
+##
+function get_posting_status() {
+    local rx_name=$1
+    local rx_band=$2
+
+    local posting_dir=$(get_posting_dir_path ${rx_name} ${rx_band})
+    local pid_file=${posting_dir}/${POSTING_DAEMON_PID_FILE}
+
+    if [[ ! -f ${pid_file} ]]; then
+       [[ $verbosity -ge 0 ]] && echo "No pid file"
+       return 2
+    fi
+
+    local posting_pid=$(< ${pid_file})
+    if ! ps ${posting_pid} > /dev/null ; then
+        [[ $verbosity -ge 0 ]] && echo "Got pid '${posting_pid}' from file, but it is not running"
+        return 3
+    fi
+    echo "Pid = ${posting_pid}"
+    return 0
+}
 

@@ -19,7 +19,8 @@ function check_kiwi_wspr_channels() {
         wd_logger 2 " Kiwi '${kiwi_name}' not reporting users status or there are no active rx channels on it.  So nothing to do"
         return
     fi
-    wd_logger 4 "Kiwi '%s' active listeners:\n%s\n" "${kiwi_name}" "${active_receivers_list}"
+    local wd_arg=$(echo "Kiwi ${kiwi_name} has active listeners:\n${active_receivers_list}")
+    wd_logger 4 "${wd_arg}"
 
     if ! ${GREP_CMD} -q "wsprdaemon" <<< "${active_receivers_list}" ; then
         wd_logger 2 "Kiwi ${kiwi_name} has no active WD listeners"
@@ -29,7 +30,7 @@ function check_kiwi_wspr_channels() {
     local wd_ch_01_listeners_count=$( ${GREP_CMD} "^[01]:.wsprdaemon" <<< "${active_receivers_list}" | wc -l) 
     wd_logger 3 "Kiwi '${kiwi_name}' has ${wd_listeners_count} WD listeners of which ${wd_ch_01_listeners_count} listeners are on ch 0 or ch 1"
     if [[ ${wd_listeners_count} -le 6 && ${wd_ch_01_listeners_count} -gt 0 ]]; then
-        wd_logger 1 "WARNING, Kiwi '${kiwi_name}' configured in 8 channel mode has ${wd_listeners_count} WD listeners.So all of them should be on rx ch 2-7,  but %s isteners are on ch 0 or ch 1: \n%s\n" "${wd_ch_01_listeners_count}" "${active_receivers_list}"
+        wd_logger 1 "WARNING, Kiwi '${kiwi_name}' configured in 8 channel mode has ${wd_listeners_count} WD listeners.So all of them should be on rx ch 2-7,  but  ${wd_ch_01_listeners_count} listeners are on ch 0 or ch 1: \n${active_receivers_list}"
         if ${GREP_CMD} -q ${kiwi_name} <<< "${RUNNING_JOBS[@]}"; then
             wd_logger 1 " found '${kiwi_name}' is in use by this instance of WD, so add code to clean up the RX channels used"
             ### TODO: recover from listener on rx 0/1 code here 
@@ -92,7 +93,7 @@ function let_kiwi_get_gps_lock() {
     fi
     declare GPS_MIN_GOOD_COUNT=4
     if [[ ${kiwi_gps_good_count} -lt ${GPS_MIN_GOOD_COUNT} ]]; then
-        wd_logger 1 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is less than the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is bad on this Kiwi"
+        wd_logger 2 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is less than the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is bad on this Kiwi"
         ### TODO: don't perturb the Kiwi too often if it doesn't have GPS lock
     else
         wd_logger 3 "kiwi '${kiwi_name}' reports '${kiwi_gps_good_count}' good GPS which is greater than or equal to the min of ${GPS_MIN_GOOD_COUNT} we require.  So GPS is OK on this Kiwi"
@@ -145,7 +146,7 @@ function let_kiwi_get_gps_lock() {
         touch ${kiwi_gps_log_file}
         return
     fi
-    wd_logger 2 "this is supposed to no longer be needed, but it appears that we terminate active users on Kiwi '${kiwi_name}' so it can get GPS lock: \n%s\n" "${active_receivers_list}"
+    wd_logger 2 "This is supposed to no longer be needed, but it appears that we terminate active users on Kiwi '${kiwi_name}' so it can get GPS lock: \n${active_receivers_list}"
 }
 
 

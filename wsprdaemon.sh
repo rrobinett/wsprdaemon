@@ -68,13 +68,21 @@ if [[ $USER == "root" ]]; then
 fi
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
+declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
+    ### Legacy name for /tmp file system.  Leave it alone
+    true
+else
+    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
+fi
 
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 check_for_needed_utilities
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
-source ${WSPRDAEMON_ROOT_DIR}/sdr_recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
@@ -83,7 +91,6 @@ source ${WSPRDAEMON_ROOT_DIR}/upload_server_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/kiwi_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
-source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 
 [[ -z "$*" ]] && usage
