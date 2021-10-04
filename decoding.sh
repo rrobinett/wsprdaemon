@@ -776,9 +776,14 @@ function decoding_daemon() {
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}"
                 else
                     if [[ -s ${decode_dir}/decoded.txt ]]; then
-                        wd_logger 1 "FST4W found spots after $(( SECONDS - start_time )) seconds:\n$( < ${decode_dir}/decoded.txt)"
+                        local spot_date="${wav_file_list[0]:2:6}"
+                        local spot_time="${wav_file_list[0]:9:4}"
+                        awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz} '{printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 3\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32)}' \
+                            ${decode_dir}/decoded.txt > ${decode_dir}/fst4w_spots.txt
+                        wd_logger 1 "FST4W found spots after $(( SECONDS - start_time )) seconds:\n$( < ${decode_dir}/decoded.txt)\nconverted to uploadable lines:\n$( < ${decode_dir}/fst4w_spots.txt )"
+                        cat ${decode_dir}/fst4w_spots.txt >> decodes_cache.txt
                     else
-                        wd_logger 1 "FST4W found no after $(( SECONDS - start_time )) seconds"
+                        wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     fi
                 fi
                 processed_wav_files="yes"
