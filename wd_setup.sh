@@ -312,7 +312,7 @@ function check_for_needed_utilities()
         local wsjtx_pkg=""
         case ${cpu_arch} in
             x86_64)
-                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.tar.gz
+                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
                 ;;
             armv7l)
                 # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb

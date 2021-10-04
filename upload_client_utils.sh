@@ -348,7 +348,6 @@ function upload_to_wsprnet_daemon()
                     ### Assume we are done attempting to transfer those spots
                     local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
                     wd_logger 1 "${wd_arg}"
-<<<<<<< HEAD
                     [[ ${verbosity} -ge 3 ]] && printf "$(date): upload_to_wsprnet_daemon() uploading spot file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})\n"
                     echo "curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php" > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}.cmd 2>&1
                     curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
@@ -380,8 +379,6 @@ function upload_to_wsprnet_daemon()
                             rm -f ${all_spots_file_list[@]}
                         fi
                     fi
-=======
->>>>>>> ab7dbcd282d828fbfc3e08fc3dab33d1b6d418a2
                 fi
                 [[ ${verbosity} -ge 2 ]] && echo "$(date): upload_to_wsprnet_daemon() flushing spot files '${all_spots_file_list[@]}'"
                 rm -f ${all_spots_file_list[@]}
