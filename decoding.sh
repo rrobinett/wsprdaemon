@@ -760,11 +760,12 @@ function decoding_daemon() {
                 processed_wav_files="yes"
             fi
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
-                wd_logger 1 "FST4W decode a ${returned_seconds} wav file by running cmd: '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 \"${wav_file_list[*]}\" >& jt9_output.txt'"
+                wd_logger 1 "FST4W decode a ${returned_seconds} wav file by running cmd: '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 \"${wav_file_list[*]}\" >& jt9_output.txt'"
 
                 local decode_dir="F_${returned_seconds}"
                 mkdir -p ${decode_dir}
                 ln ${wav_file_list[*]} ${decode_dir}     ### Create links so that jt8 refers to $CWD files
+                rm -f ${decode_dir}/decoded.txt
                 ### NOTE; wd_logger output will go to log file in that directory
                 cd ${decode_dir}
                 local start_time=${SECONDS}
@@ -773,7 +774,7 @@ function decoding_daemon() {
                 rm ${wav_file_list[@]}   ### Flush the links we just used
                 cd - >& /dev/null
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}"
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}"
                 else
                     if [[ -s ${decode_dir}/decoded.txt ]]; then
                         local spot_date="${wav_file_list[0]:2:6}"
