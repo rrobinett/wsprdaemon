@@ -327,7 +327,7 @@ function kiwirecorder_manager_daemon()
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
     trap kiwirecorder_manager_daemon_kill_handler SIGTERM
 
-    wd_logger 1 "Starting.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
+    wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
 
     while true ; do
         local kiwi_recorder_pid=""
@@ -336,7 +336,7 @@ function kiwirecorder_manager_daemon()
             local ps_output=$( ps ${kiwi_recorder_pid} )
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
+                wd_logger 1 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
                 wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n${ps_output}"
                 kiwi_recorder_pid=""
@@ -346,6 +346,7 @@ function kiwirecorder_manager_daemon()
 
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
+            wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
             printf "%(%s)T 0\n" -1  > ${OVERLOADS_LOG_FILE}
@@ -354,7 +355,7 @@ function kiwirecorder_manager_daemon()
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                 --OV --user=${recording_client_name}  --password=${my_receiver_password} \
-                --agc-gain=60 --quiet --no_compression --modulation=usb  :%s/kiwi_recorder.log--lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
+                --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  sleep and retry"

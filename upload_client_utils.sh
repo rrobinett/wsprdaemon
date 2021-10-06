@@ -350,7 +350,7 @@ function upload_to_wsprnet_daemon() {
             fi
         done
         ### Pole every 10 seconds for a complete set of wspr_spots.txt files
-        wd_logger 1 "Sleeping for ${UPLOAD_SLEEP_SECONDS} seconds"
+        wd_logger 2 "Sleeping for ${UPLOAD_SLEEP_SECONDS} seconds"
         sleep ${UPLOAD_SLEEP_SECONDS}
     done
 }
