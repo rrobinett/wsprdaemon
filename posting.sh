@@ -547,20 +547,21 @@ function kill_posting_daemon() {
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
             wd_logger 1 "ERROR: kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: expect posting directory  ${real_receiver_posting_dir} does not exist"
         else 
+            wd_logger 1  "Removing '${posting_suppliers_root_dir}/${real_receiver_name}' and '${real_receiver_posting_dir}'"
             rm -f ${posting_suppliers_root_dir}/${real_receiver_name}     ## Remote the posting daemon's link to the source of spots
             rm -rf ${real_receiver_posting_dir}                          ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
             if [[ ${real_receiver_posting_root_dir_count} -gt 0 ]]; then
-                wd_logger 1 "Found that decoding_daemon for ${receiver_name},${receiver_band} has other posting clients, so didn't signal the recoding and decoding daemons to stop"
+                wd_logger 1 "Found that decoding_daemon for ${real_receiver_name},${receiver_band} has other posting clients, so didn't signal the recoding and decoding daemons to stop"
             else
-                if kill_decoding_daemon ${receiver_name} ${receiver_band}; then
-                    wd_logger 1 "Killed with 'kill_decoding_daemon ${receiver_name} ${receiver_band}' => $?"
+                if kill_decoding_daemon ${real_receiver_name} ${receiver_band}; then
+                    wd_logger 1 "Decoding daemon has no more posting clients, so 'kill_decoding_daemon ${real_receiver_name} ${receiver_band}' => $?"
                 else
-                    wd_logger 1 "ERROR: 'kill_decoding_daemon ${receiver_name} ${receiver_band} => $?"
+                    wd_logger 1 "ERROR: 'kill_decoding_daemon ${real_receiver_name} ${receiver_band} => $?"
                 fi
             fi
-        fi
+       fi
     done
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
     return 0
