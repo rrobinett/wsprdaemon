@@ -209,9 +209,16 @@ function check_for_zombies() {
            if [[ ${ret_code} -ne 0 ]]; then
                wd_logger 1 "Found zombie ${running_pid} which is no longer running"
            else
-               local ps_cmd_info=$( tail -n 1 <<< "${ps_output}" )
-               wd_logger 1 "Adding running zombie '${ps_cmd_info}' to kill list"
-               kill_pid_list+=(${running_pid})
+               sleep 1
+               ps_output=$(ps ${running_pid} )
+               ret_code=$?
+               if [[ ${ret_code} -ne 0 ]]; then
+                   wd_logger 1 "Found zombie ${running_pid} stopped running after running an extra 'sleep 1'"
+               else
+                   local ps_cmd_info=$( tail -n 1 <<< "${ps_output}" )
+                   wd_logger 1 "Adding running zombie '${ps_cmd_info}' to kill list"
+                   kill_pid_list+=(${running_pid})
+               fi
            fi
        fi
     done
