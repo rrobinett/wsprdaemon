@@ -567,6 +567,16 @@ function get_wav_file_list() {
              wd_logger 1 "For ${seconds_in_wspr_pkt} second packet, flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
              rm -f ${flush_list[@]}    ### We only need to remember this new wav_raw file, so flush all older ones.
          fi
+         if [[ ${seconds_in_wspr_pkt} == "120" ]]; then
+             local minute_of_first_unreported_raw_file=${wav_list_returned_file:11:2}
+             local decimal_minute=$(( 10#${minute_of_first_unreported_raw_file} % 2))
+             if [[ ${decimal_minute} -eq 0 ]]; then
+                 wd_logger 1 "For 120 second wav file, returning an even minute start wav file '${wav_list_returned_file}'"
+             else
+                 wd_logger 1 "ERROR: for 120 second wav file, returning an odd minute start wav file '${wav_list_returned_file}'"
+             fi
+         fi
+
          touch -r ${raw_file_list[${index_of_first_unreported_raw_file}]} ${wav_list_returned_file}
 
          if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
