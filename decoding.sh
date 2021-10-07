@@ -414,6 +414,41 @@ function sleep_until_raw_file_is_full() {
     return 0
 }
 
+### Returns the minute and epoch of the first sample in 'filename'.  Variations in CPU and OS make using the file's timestamp a poor choice for the time source.
+### So use the time in the file's name
+function get_file_start_time_info() 
+{
+    local __epoch_return_variable_name=$1
+    local __minute_return_variable_name=$2
+    local file_name=$3
+
+    local epoch_from_file_stat=$( ${GET_FILE_MOD_TIME_CMD} ${file_name})
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: '${GET_FILE_MOD_TIME_CMD} ${file_name}' => ${ret_code}"
+        return 1
+    fi
+    local minute_from_file_epoch=$( printf "%(%M)T" ${epoch_from_file_stat}  )
+
+    local year_from_file_name="${file_name:0:4}"
+    local month_from_file_name=${file_name:4:2}
+    local day_from_file_name=${file_name:6:2}
+    local hour_from_file_name=${file_name:9:2}
+    local minute_from_file_name=${file_name:11:2}
+    local file_spec_for_date_cmd="${month_from_file_name}/${day_from_file_name}/${year_from_file_name} ${hour_from_file_name}:${minute_from_file_name}:00"
+    local epoch_from_file_name=$( date --date="${file_spec_for_date_cmd}" +%s )
+
+    if [[ ${minute_from_file_epoch} != ${minute_from_file_name} ]]; then
+        wd_logger 1 "INFO: minute_from_file_epoch=${minute_from_file_epoch} != minute_from_file_name=${minute_from_file_name}, but always use file_name times"
+    fi
+    
+    wd_logger 1 "File '${file_name}' => epoch_from_file_stat=${epoch_from_file_stat}, epoch_from_file_name=${epoch_from_file_name}, minute_from_file_epoch=${minute_from_file_epoch}, minute_from_file_name=${minute_from_file_name}"
+
+    eval ${__epoch_return_variable_name}=${epoch_from_file_name}
+    eval ${__minute_return_variable_name}=${minute_from_file_name}
+    return 0
+}
+
 ### Waits for wav files needed to decode one or more of the MODEs have been fully recorded
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a sapce-seperated list each element of which is of the form MODE:first.wav[,second.wav,...]
@@ -477,8 +512,13 @@ function get_wav_file_list() {
 
     wd_logger 2 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
     ### We now have a list of two or more full size raw files
-    local epoch_of_first_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${raw_file_list[0]})
-    local minute_of_first_raw_file=$( printf "%(%M)T" ${epoch_of_first_raw_file}  ) 
+    get_file_start_time_info epoch_of_first_raw_file minute_of_first_raw_file ${raw_file_list[0]}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_file_start_time_info epoch_of_first_raw_file minute_of_first_raw_file ${raw_file_list[0]}' => ${ret_code}"
+        return 4
+    fi
+
     wd_logger 1 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
     local index_of_first_file_which_needs_to_be_saved=${#raw_file_list[@]}                         ### Presume we will need to keep none of the raw files
 
@@ -487,10 +527,6 @@ function get_wav_file_list() {
     for seconds_in_wspr_pkt in  ${target_seconds_list[@]} ; do
         local raw_files_in_wav_file_count=$((seconds_in_wspr_pkt / 60))
         wd_logger 2 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
-
- #       local epoch_of_first_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${raw_file_list[0]})
- #       local minute_of_first_raw_file=$( printf "%(%M)T" ${epoch_of_first_raw_file}  ) 
- #       wd_logger 2 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
 
         ### Check to see if we have previously returned some of these files in a previous call to this function
         shopt -s nullglob
@@ -530,7 +566,14 @@ function get_wav_file_list() {
             fi
 
             local filename_of_latest_wav_raw=${wav_raw_pkt_list[-1]}
-            local epoch_of_latest_wav_raw_file=$( ${GET_FILE_MOD_TIME_CMD} ${filename_of_latest_wav_raw} )
+            local epoch_of_latest_wav_raw_file
+            local minute_of_latest_wav_raw_file
+            get_file_start_time_info  epoch_of_latest_wav_raw_file minute_of_latest_wav_raw_file ${filename_of_latest_wav_raw}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'get_file_start_time_info  epoch_of_latest_wav_raw_file minute_of_latest_wav_raw_file ${filename_of_latest_wav_raw}' => ${ret_code}"
+                return 5
+            fi
             local index_of_first_reported_raw_file=$(( ( epoch_of_latest_wav_raw_file - epoch_of_first_raw_file ) / 60 ))
             index_of_first_unreported_raw_file=$(( index_of_first_reported_raw_file + raw_files_in_wav_file_count ))
 
