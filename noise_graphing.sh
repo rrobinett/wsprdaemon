@@ -13,10 +13,18 @@ declare -r NOISE_GRAPHS_WWW_INDEX_FILE=${NOISE_GRAPH_LOCAL_WWW_DIR}/index.html
 declare -r NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/${NOISE_GRAPH_FILENAME}          ## If configured, this is the png graph copied to the graphs.wsprdaemon.org site and displayed by the local Apache server
 declare -r NOISE_GRAPH_WWW_FILE=${NOISE_GRAPH_LOCAL_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache serivce running to locally display noise graphs, then this will be a symbolic link to ${NOISE_GRAPH_FILE}
 declare -r NOISE_GRAPHS_TMP_CSV_FILE=${WSPRDAEMON_TMP_DIR}/wd_log.csv
-
+declare -r NOISE_GRAPHS_INDEX_LINES="
+<html>
+<header><title>This is title</title></header>
+<body>
+<img src=\"${NOISE_GRAPH_FILENAME}\" alt=\"Noise Graphics\" >
+</body>
+</html>"
+ 
 declare    NOISE_GRAPHS_UPLOAD_FTP_PASSWORD="${NOISE_GRAPHS_UPLOAD_FTP_PASSWORD-xahFie6g}"  ## Hopefully this never needs to change 
 
-function setup_noise_graphs() {
+function setup_noise_graphs() 
+{
     if [[ -n "${SIGNAL_LEVEL_LOCAL_GRAPHS-}" ]]; then
         NOISE_GRAPHS_LOCAL_ENABLED=${SIGNAL_LEVEL_LOCAL_GRAPHS}
         wd_logger 1 "Local display of noise graphs set by SIGNAL_LEVEL_LOCAL_GRAPHS=${SIGNAL_LEVEL_LOCAL_GRAPHS} in WD.conf file"
@@ -25,59 +33,40 @@ function setup_noise_graphs() {
         NOISE_GRAPHS_UPLOAD_ENABLED=${SIGNAL_LEVEL_UPLOAD_GRAPHS}
         wd_logger 2 "Upload of noise graphs set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
-   if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] || [[ ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "yes" ]] ; then
-        ### Get the Python packages needed to create the graphs.png
-        if !  [[ ${dpkg_list} =~ " python3-matplotlib " ]] ; then
-            # ask_user_to_install_sw "NOISE_GRAPHS_LOCAL_ENABLED=yes and/or NOISE_GRAPHS_UPLOAD_ENABLED=yes require that some Python libraries be added to this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install python3-matplotlib --assume-yes
+    if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" ]] && [[ ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
+        wd_logger 1 "Noise graphing is disabled, so skip installation of libraries needed for it"
+        return 0
+    fi
+
+    ### Get the Python packages needed to create the graphs.png
+    local package
+    for package in psycopg2 matplotlib scipy ; do
+        install_python_package ${package}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to install Python package ${package}"
+            return ${ret_code}
         fi
-        if !  [[ ${dpkg_list} =~ " python3-scipy " ]] ; then
-            # ask_user_to_install_sw "NOISE_GRAPHS_LOCAL_ENABLED=yes and/or NOISE_GRAPHS_UPLOAD_ENABLED=yes require that some more Python libraries be added to this server"
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install python3-scipy --assume-yes
+    done
+
+    if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] ; then
+        ## Ensure that Apache is installed and running
+        if ! install_debian_package  apache2 ; then
+            wd_logger 1 "ERROR: 'install_debian_package  apache2' => $?"
+            exit 1
         fi
-        if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] ; then
-            ## Ensure that Apache is installed and running
-            if !  [[ ${dpkg_list} =~ " apache2 " ]]; then
-                # ask_user_to_install_sw "NOISE_GRAPHS_LOCAL_ENABLED=yes requires that the Apache web service be added to this server"
-                [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-                sudo apt-get install apache2 -y --fix-missing
-            fi
-            local index_tmp_file=${WSPRDAEMON_TMP_DIR}/index.html
-            cat > ${index_tmp_file} <<EOF
-<html>
-<header><title>This is title</title></header>
-<body>
-<img src="${NOISE_GRAPH_FILENAME}" alt="Noise Graphics" >
-</body>
-</html>
-EOF
-            if ! diff ${index_tmp_file} ${NOISE_GRAPHS_WWW_INDEX_FILE} > /dev/null; then
-                sudo cp -p  ${NOISE_GRAPHS_WWW_INDEX_FILE} ${NOISE_GRAPHS_WWW_INDEX_FILE}.orig
-                sudo mv     ${index_tmp_file}               ${NOISE_GRAPHS_WWW_INDEX_FILE}
-            fi
-            if [[ ! -f ${NOISE_GRAPH_WWW_FILE} ]]; then
-                ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
-                touch        ${NOISE_GRAPH_FILE}
-                sudo  cp -p  ${NOISE_GRAPH_FILE}  ${NOISE_GRAPH_WWW_FILE}
-            fi
+       if ! diff ${index_tmp_file} ${NOISE_GRAPHS_WWW_INDEX_FILE} > /dev/null; then
+            sudo cp -p  ${NOISE_GRAPHS_WWW_INDEX_FILE} ${NOISE_GRAPHS_WWW_INDEX_FILE}.orig
+            sudo mv     ${index_tmp_file}               ${NOISE_GRAPHS_WWW_INDEX_FILE}
         fi
-    fi ## [[ ${NOISE_GRAPHS_LOCAL_ENABLED} == "yes" ]] || [[ ${NOISE_GRAPHS_UPLOAD_ENABLED} == "yes" ]] ; then
-    if ! python3 -c "import astral" 2> /dev/null ; then
-        if ! sudo apt-get install python3-astral -y ; then
-            if !  pip3 install astral ; then
-                if ! sudo apt-get install python-pip3 -y ; then
-                    echo "$(date) check_for_needed_utilities() ERROR: sudo can't install 'pip3' needed to install the Python 'astral' library"
-                else
-                    if !  pip3 install astral ; then
-                        echo "$(date) check_for_needed_utilities() ERROR: pip can't install the Python 'astral' library used to calculate sunup/sunset times"
-                    fi
-                fi
-            fi
+        if [[ ! -f ${NOISE_GRAPH_WWW_FILE} ]]; then
+            ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
+            touch        ${NOISE_GRAPH_FILE}
+            sudo  cp -p  ${NOISE_GRAPH_FILE}  ${NOISE_GRAPH_WWW_FILE}
         fi
     fi
 }
+
 ### This is a hack, but use the maidenhead value of the first receiver as the global locator for signal_level graphs and logging
 function get_my_maidenhead() {
     local first_rx_line=(${RECEIVER_LIST[0]})

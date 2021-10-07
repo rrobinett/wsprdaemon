@@ -309,6 +309,7 @@ function queue_decoded_spots() {
     local wspr_decode_capture_freq_hz=${wav_file_name#*_}
           wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
+    wd_logger 1 "Appending signal level line with 'echo ${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line} >> ${signal_levels_log_file}'"
     echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${signal_levels_log_file}
     
     local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt

@@ -168,7 +168,6 @@ if ! check_for_kiwirecorder_cmd ; then
     exit 1
 fi
 
-
 function ask_user_to_install_sw() {
     local prompt_string=$1
     local is_requried_by_wd=${2:-}
@@ -200,95 +199,77 @@ declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
 declare JT9_DECODE_EANABLED=${JT9_DECODE_EANABLED:-no}
 
-function check_for_needed_utilities()
+declare INSTALLED_DEBIAN_PACKAGES=$(${DPKG_CMD} -l)
+declare APT_GET_UPDATE_HAS_RUN="no"
+
+function install_debian_package(){
+    local package_name=$1
+    local ret_code
+
+    if [[ " ${INSTALLED_DEBIAN_PACKAGES} " =~  " ${package_name} " ]]; then
+        wd_logger 2 "Package ${package_name} has already been installed"
+        return 0
+    fi
+    if [[ ${APT_GET_UPDATE_HAS_RUN} == "no" ]]; then
+        sudo apt-get update --allow-releaseinfo-change
+        ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'udo apt-get update' => ${ret_code}"
+            return ${ret_code}
+        fi
+        APT_GET_UPDATE_HAS_RUN="yes"
+    fi
+    sudo apt-get install ${package_name} --assume-yes
+    ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'sudo apt-get install ${package_name}' => ${ret_code}"
+        return ${ret_code}
+    fi
+    wd_logger 1 "Installed ${package_name}"
+    return 0
+}
+
+function install_python_package()
 {
-    ### TODO: Check for kiwirecorder only if there are kiwis receivers spec
-    local apt_update_done="no"
-    local dpkg_list=$(${DPKG_CMD} -l)
+    local pip_package=$1
 
-    if ! [[ ${dpkg_list} =~ " at " ]] ; then
-        ### Used by the optional wsprd_vpn service
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install at --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'at' which is needed iby the wspd_vpn service"
+   if ! python3 -c "import ${pip_package}" 2> /dev/null; then
+        if !  sudo pip3 install ${pip_package} ; then
+            wd_logger 1 "ERROR: 'sudo pip3 install ${pip_package}' => $?"
             exit 1
         fi
     fi
-    if !  [[ ${dpkg_list} =~ " bc " ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install bc --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'bc' which is needed for floating point frequency calculations"
+    if ! which pip3 > /dev/null; then
+        if ! install_debian_package python3-pip3 ; then
+            wd_logger 1 "ERROR: 'install_debian_package pip3' => $?"
             exit 1
         fi
     fi
-    if ! [[ ${dpkg_list} =~ " curl " ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install curl --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'curl' which is needed for uploading to wsprnet.org and wsprdaemon.org"
-            exit 1
-        fi
+    if python3 -c "import ${pip_package}" > /dev/null ; then
+        wd_logger 2 "Python package ${pip_package} is already installed"
+        return 0
     fi
-    if ! [[ ${dpkg_list} =~ " ntp " ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-        sudo apt-get install ntp --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'ntp' which is needed to ensure synchronization with the 2 minute WSPR cycle"
-            exit 1
-        fi
+    if ! sudo pip3 install ${pip_package} ; then
+        wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
+        exit 1
     fi
-    if !  [[ ${dpkg_list} =~ " postgresql  " ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install postgresql libpq-dev postgresql-client postgresql-client-common --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'postgresql' which is needed for logging spots and noise to wsprdaemon.org"
-            exit 1
-        fi
-    fi
-    if !  [[ ${dpkg_list} =~ " sox  " ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install sox --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'sox' which is needed for RMS noise level calculations"
-            exit 1
-        fi
-    fi
-    ### WD uses the 'wsprd' binary from the WSJT-x package.  The following section insures that one binary we use from that package is installed
-    ### 9/16/20 RR - WSJT-x doesn't yet install on Ubuntu 20.04, so special case that.
-    ### 'wsprd' doesn't report its version number (e.g. with wsprd -V), so on most systems we learn the version from 'dpkt -l'.
-    ### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
-    ### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
-    ### Perhaps I will save the version number of wsprd and use this process on all OSs
+    wd_logger 1 "Installed Python package ${pip_package}"
+    return 0
+}
+
+
+
+### WD uses the 'wsprd' and 'jt9' binaries from the WSJT-x package.  
+### 9/16/20 RR - WSJT-x doesn't yet install on Ubuntu 20.04, so special case that.
+### 'wsprd' doesn't report its version number (e.g. with wsprd -V), so on most systems we learn the version from 'dpkt -l'.
+### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
+### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
+### Perhaps I will save the version number of wsprd and use this process on all OSs
     
-    if !  [[ ${dpkg_list} =~ " libgfortran5:" ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install libgfortran5 --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'libgfortran5' which is needed to run wsprd V2.3.xxxx"
-            exit 1
-        fi
-    fi
-    if !  [[ ${dpkg_list} =~ " qt5-default:" ]] ; then
-        [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-        sudo apt-get install qt5-default --assume-yes
-        local ret_code=$?
-        if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'qt5-default' which is needed to run the 'jt9' copmmand in wsprd V2.3.xxxx"
-            exit 1
-        fi
-    fi
+declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
 
-    ### If wsprd is installed, try to get its version number
-    declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
+function load_wsjtx_commands()
+{
     local wsprd_version=""
     if [[ -x ${WSPRD_VERSION_CMD} ]]; then
         wsprd_version=$( ${WSPRD_VERSION_CMD} )
@@ -360,22 +341,24 @@ function check_for_needed_utilities()
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
         echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
+}
 
-    if ! python3 -c "import psycopg2" 2> /dev/null ; then
-        if !  sudo pip3 install psycopg2 ; then
-            [[ ${apt_update_done} == "no" ]] && sudo apt-get update && apt_update_done="yes"
-            sudo apt-get install python3-pip --assume-yes
-            local ret_code=$?
-            if [[ $ret_code -ne 0 ]]; then
-                echo "FATAL ERROR: Failed to install 'pip3' which is needed for logging spots and noise to wsprdaemon.org"
-                exit 1
-            fi
-            if !  sudo pip3 install psycopg2 ; then
-                echo "FATAL ERROR: ip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
-                exit 1
-            fi
+declare PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf qt5-default:armhf)
+
+function check_for_needed_utilities()
+{
+    local package_needed
+    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        if ! install_debian_package ${package_needed} ; then
+            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
+            exit 1
         fi
+    done
+    if ! install_python_package astral; then
+        wd_logger 1 "ERROR: failed to install Python package 'astral'"
+        exit 1
     fi
+    load_wsjtx_commands
     setup_noise_graphs
 }
 
