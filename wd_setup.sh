@@ -1,5 +1,19 @@
 #!/bin/bash
 
+declare -r CPU_ARCH=$(uname -m)
+case ${CPU_ARCH} in
+    armv7l)
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf qt5-default:armhf)
+        ;;
+    x86_64)
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:amd64 qt5-default:amd64)
+        ;;
+    *)
+        wd_logger 1 "ERROR: wsrpdaemon doesn't know what libraries are needed when running on CPU_ARCH=${CPU_ARCH}"
+        exit 1
+        ;;
+esac
+
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
     ### We are running on a Rasperberry Pi or generic Debian server
@@ -257,8 +271,6 @@ function install_python_package()
     return 0
 }
 
-
-
 ### WD uses the 'wsprd' and 'jt9' binaries from the WSJT-x package.  
 ### 9/16/20 RR - WSJT-x doesn't yet install on Ubuntu 20.04, so special case that.
 ### 'wsprd' doesn't report its version number (e.g. with wsprd -V), so on most systems we learn the version from 'dpkt -l'.
@@ -289,9 +301,9 @@ function load_wsjtx_commands()
             ### can't use 'source /etc/os-release' since the variable names in that conflict with variables in WD
             os_name=$(awk -F = '/^VERSION=/{print $2}' /etc/os-release | sed 's/"//g')
         fi
-        local cpu_arch=$(uname -m)
+
         local wsjtx_pkg=""
-        case ${cpu_arch} in
+        case ${CPU_ARCH} in
             x86_64)
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
                 ;;
@@ -303,7 +315,7 @@ function load_wsjtx_commands()
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
                 ;;
             *)
-                echo "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
+                echo "ERROR: CPU architecture '${CPU_ARCH}' is not supported by this program"
                 exit 1
                 ;;
         esac
@@ -342,8 +354,6 @@ function load_wsjtx_commands()
         echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
 }
-
-declare PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf qt5-default:armhf)
 
 function check_for_needed_utilities()
 {
