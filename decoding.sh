@@ -182,68 +182,110 @@ function calculate_nl_adjustments() {
     eval ${return_fft_corrections_variable_name}="'${calculated_fft_nl_adjust}'"
 }
 
-function get_rms_levels() {
-    local return_var_name=$1
-    local return_string_name=$2
+declare WAV_SAMPLES_LIST=(
+    "${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN}"
+    "${SIGNAL_LEVEL_TX_SEC} ${SIGNAL_LEVEL_TX_LEN}"
+    "${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN}"
+)
+
+function get_wav_levels() 
+{
+    local __return_levels_var=$1
+    local wav_filename=$2
+    local sample_start_sec=$3
+    local sample_length_secs=$4
+    local rms_adjust=$5
+
+    local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
+    if [[ ${#wav_levels_list[@]} -ne 4 ]]; then
+        wd_logger 1 "ERROR: found only ${#wav_levels_list[@]} dB lines, not the four expected dB lines from 'sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs}'"
+        return 1
+    fi
+    wd_logger 2 "Got sox dB values: '${wav_levels_list[*]}'"
+
+    local return_line=""
+    for db_val in ${wav_levels_list[@]}; do
+        local adjusted_val=$(bc <<< "scale = 2; (${db_val} + ${rms_adjust})/1")           ### '/1' forces bc to use the scale = 2 setting
+        return_line="${return_line} ${adjusted_val}"
+    done
+    wd_logger 2 "Returning ajusted dB values: '${return_line}'"
+    eval ${__return_levels_var}=\"${return_line}\"
+    return 0
+}
+
+declare MIN_VALID_WAV_SECCONDS=${MIN_VALID_WAV_SECCONDS-119}
+declare MAX_VALID_WAV_SECONDS=${MAX_VALID_WAV_SECONDS-120}
+
+function get_rms_levels() 
+{
+    local __return_var_name=$1
+    local __return_string_name=$2
     local wav_filename=$3
     local rms_adjust=$4
-    local i
 
-    if [[ ! -s ${wav_filename} ]]; then
+    if [[ ! -f ${wav_filename} ]]; then
         wd_logger 1 "ERROR: no wav file ${wav_filename}"
         return 1
     fi
-
-    # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
-    local raw_pre_tx_levels=($(sox ${wav_filename} -t wav - trim ${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-    local wd_arg=$(printf "Got ${#raw_pre_tx_levels[@]} raw_pre_tx_levels: '${raw_pre_tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-    local pre_tx_levels=()
-    for (( i=0; i < ${#raw_pre_tx_levels[@]} ; ++i )); do 
-        pre_tx_levels[${i}]=$(bc <<< "scale = 2; (${raw_pre_tx_levels[${i}]} + ${rms_adjust})/1")           ### '/1' forces bc to use the scale = 2 setting
-    done
-    local wd_arg=$(printf "Got ${#pre_tx_levels[@]} fixed pre_tx_levels: '${pre_tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-
-    local raw_tx_levels=($(sox ${wav_filename} -t wav - trim ${SIGNAL_LEVEL_TX_SEC} ${SIGNAL_LEVEL_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-    local wd_arg=$(printf "Got ${#raw_tx_levels[@]} raw_tx_levels: '${raw_tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-    local tx_levels=()
-    for (( i=0; i < ${#raw_tx_levels[@]} ; ++i )); do
-        tx_levels[${i}]=$(bc <<< "scale = 2; (${raw_tx_levels[${i}]} + ${rms_adjust})/1")                   ### '/1' forces bc to use the scale = 2 setting
-    done
-    local wd_arg=$(printf "Got ${#tx_levels[@]} fixed tx_levels: '${tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-
-    local raw_post_tx_levels=($(sox ${wav_filename} -t wav - trim ${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
-    local wd_arg=$(printf "Got ${#raw_post_tx_levels[@]} raw_post_tx_levels: '${raw_post_tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-    local post_tx_levels=()
-    for (( i=0; i < ${#raw_post_tx_levels[@]} ; ++i )); do
-        post_tx_levels[${i}]=$(bc <<< "scale = 2; (${raw_post_tx_levels[${i}]} + ${rms_adjust})/1")         ### '/1' forces bc to use the scale = 2 setting
-    done
-    local wd_arg=$(printf "Got ${#post_tx_levels[@]} fixed post_tx_levels levels '${post_tx_levels[*]}'")
-    wd_logger 2 "${wd_arg}"
-
-    if [[ ${#pre_tx_levels[@]} -lt 4 ]] || [[ ${#post_tx_levels[@]} -lt 4 ]]; then
-        wd_logger 1 "ERROR: [[ ${#pre_tx_levels[@]} -lt 4 ]] || [[ ${#post_tx_levels[@]} -lt 4 ]]"
-        eval ${return_var_name}="None"
-        eval ${return_string_name}=\"Failed to get RMS noise data\"
+    if [[ ! -s ${wav_filename} ]]; then
+        wd_logger 1 "ERROR: zero length wav file ${wav_filename}"
         return 1
     fi
+    local wav_stats=$(sox ${wav_filename} -n stats 2>&1 )
+    local ret_code=$?    
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' => ${ret_code}"
+        return 1
+    fi
+    wd_logger 2 "'sox ${wav_filename} -n stats 2>&1' =>\n${wav_stats}"
+    local wav_length_line_list=( $(grep '^Length' <<< "${wav_stats}") )
+    if [[ ${#wav_length_line_list[@]} -ne 3 ]]; then
+        wd_logger 1 "ERROR: can't find wav file 'Length' line in output of 'sox ${wav_filename} -n stats'"
+        return 1
+    fi
+    local wav_length_secs=${wav_length_line_list[2]/.*}
+    if [[ -z "${wav_length_secs}" || ${wav_length_secs} -lt ${MIN_VALID_WAV_SECCONDS} || ${wav_length_secs} -gt ${MAX_VALID_WAV_SECONDS} ]]; then
+        wd_logger 1 "ERROR: can't extract wav packet length from 'sox ${wav_filename} -n stats' output line '${wav_length_line_list[*]}'"
+        return 1
+    fi
+    ### sox outuput shows that wav file is valid length
+    wd_logger 1 "Getting stats on a ${wav_length_secs} seconds long wav file"
 
-    local rms_value=${pre_tx_levels[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
-    if [[  $(bc --mathlib <<< "${post_tx_levels[3]} < ${pre_tx_levels[3]}") -eq "1" ]]; then
-        rms_value=${post_tx_levels[3]}
-        wd_logger 2 "So returning rms_level ${rms_value} which is from post_tx"
+    local output_line=""
+    local sample_info
+    for sample_info in "${WAV_SAMPLES_LIST[@]}"; do
+        local sample_line_list=( ${sample_info} )
+        local sample_start_sec=${sample_line_list[0]}
+        local sample_length_secs=${sample_line_list[1]}
+        local sample_vals
+        get_wav_levels  sample_vals ${wav_filename} ${sample_start_sec} ${sample_length_secs} ${rms_adjust}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'get_wav_levels  sample_vals ${wav_filename} ${sample_start_sec} ${sample_length_secs}' => {ret_code}"
+            return 1
+        fi
+        output_line="${output_line} ${sample_vals}"
+    done
+    local output_line_list=( ${output_line} )
+    if [[ ${#output_line_list[@]} -ne 12 ]]; then
+        wd_logger 1 "ERROR: expected 12 fields of dB info, but got only ${#output_line_list[@]} fields from calls to get_wav_levels()"
+        return 1
+    fi
+    local return_rms_value
+    local pre_rms_value=${output_line_list[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
+    local post_rms_value=${output_line_list[11]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
+    if [[  $(bc --mathlib <<< "${pre_rms_value} <  ${post_rms_value}") -eq "1" ]]; then
+        return_rms_value=${pre_rms_value}
+        wd_logger 2 "So returning rms_level ${return_rms_value} which is from pre_tx"
     else
-        wd_logger 2 "So returning rms_level ${rms_value} which is from pre_tx"
+        return_rms_value=${post_rms_value}
+        wd_logger 2 "So returning rms_level ${return_rms_value} which is from post_tx"
     fi
 
-    local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${rms_value}"
-    eval ${return_var_name}=${rms_value}
-    eval ${return_string_name}=\"${signal_level_line}\"
-    wd_logger 2 "Returning rms_value=${rms_value} and signal_level_line='${signal_level_line}'"
+    local signal_level_line="              ${output_line}   ${return_rms_value}"
+    eval ${__return_var_name}=${return_rms_value}
+    eval ${__return_string_name}=\"${signal_level_line}\"
+    wd_logger 1 "Returning rms_value=${return_rms_value} and signal_level_line='${signal_level_line}'"
     return 0
 }
 
@@ -792,6 +834,11 @@ function decoding_daemon() {
                     local rms_nl
                     local rms_line
                     get_rms_levels  rms_nl rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR:  'get_rms_levels  rms_nl rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
+                        return 1
+                    fi
                     signal_level_line="${rms_line} ${fft_nl_cal}"
                     wd_logger 1 "Added fft_nl_cal to rms_line='${rms_line}'"
                     ### If this is a KiwiSDR, then discover the number of 'ADC OV' events recorded since the last cycle
