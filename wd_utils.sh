@@ -83,6 +83,7 @@ function wd_logger_check_all_logs {
 }
 
 function wd_logger() {
+    set +x
     if [[ $# -ne 2 ]]; then
         local prefix_str=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}()")
         local bad_args="$@"
@@ -90,34 +91,43 @@ function wd_logger() {
         return 1
     fi
     local log_at_level=$1
-    local no_header="no"
+    local printout_string=$2
+
+    local print_time_and_calling_function_name="yes"
     if [[ $1 -lt 0 ]]; then
-        no_header="yes"
+        print_time_and_calling_function_name="no"
         log_at_level=$((- ${log_at_level} )) 
     fi
-    [[ ${verbosity} -lt ${log_at_level} ]] && return
+    [[ ${verbosity} -lt ${log_at_level} ]] && return 0
 
-    local format_string="$2"
     ### printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() passed FORMAT: %s\n" -1 "${format_string}"
-    if [[ ${no_header} == "yes" ]]; then
-        local log_line=$(TZ=UTC printf "${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
-    else
-        local log_line=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() ${format_string}"  -1 ${@:3})          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
+    local time_and_calling_function_name=""
+    if [[ ${print_time_and_calling_function_name} == "yes" ]]; then
+        time_and_calling_function_name=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() "  -1)          ### printf "%(..)T ..." looks at the first -1 argument to signal 'current time'
     fi
-    [ -t 0 -a -t 1 -a -t 2 ] &&  printf "${log_line}\n"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session 
-    if [[ -n "${WD_LOGFILE-}" ]]; then
-        [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
-        local logfile_size=$( ${GET_FILE_SIZE_CMD} ${WD_LOGFILE} )
-        if [[ ${logfile_size} -ge ${WD_LOGFILE_SIZE_MAX} ]]; then
-            local logfile_lines=$(wc -l < ${WD_LOGFILE})
-            local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
-            printf "${WD_TIME_FMT}: ${FUNCNAME[0]}() logfile '${WD_LOGFILE}' size ${logfile_size} and lines ${logfile_lines} has grown too large, so truncating the first ${logfile_lines_to_trim} lines of it\n" >> ${WD_LOGFILE}
-            sed -i "1,${logfile_lines_to_trim} d" ${WD_LOGFILE}
-        fi
-        printf "${log_line}\n" >> ${WD_LOGFILE}
-    else
-        true  ### echo "Not logging"
+    local printout_line="${time_and_calling_function_name}${printout_string}"
+
+    if [ -t 0 -a -t 1 -a -t 2 ]; then
+        ### This program is not a daemon, it is attached to a terminal.  So echo to that termina
+        echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
+
+    if [[ -z "${WD_LOGFILE-}" ]]; then
+        ### No WD_LOGFILE has been defined, so nothing more to do
+        return 0
+    fi
+
+    ### WD_LOGFILE is defined, so truncate if it has grown too large, then append the new log line(s)
+    [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
+    local logfile_size=$( ${GET_FILE_SIZE_CMD} ${WD_LOGFILE} )
+    if [[ ${logfile_size} -ge ${WD_LOGFILE_SIZE_MAX} ]]; then
+        local logfile_lines=$(wc -l < ${WD_LOGFILE})
+        local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
+        printf "${WD_TIME_FMT}: ${FUNCNAME[0]}() logfile '${WD_LOGFILE}' size ${logfile_size} and lines ${logfile_lines} has grown too large, so truncating the first ${logfile_lines_to_trim} lines of it\n" >> ${WD_LOGFILE}
+        sed -i "1,${logfile_lines_to_trim} d" ${WD_LOGFILE}
+    fi
+    echo -e "${printout_line}" >> ${WD_LOGFILE}
+    return 0
 }
 
 #############################################
