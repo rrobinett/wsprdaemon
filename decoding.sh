@@ -239,13 +239,25 @@ function get_rms_levels()
     fi
     wd_logger 2 "'sox ${wav_filename} -n stats 2>&1' =>\n${wav_stats}"
     local wav_length_line_list=( $(grep '^Length' <<< "${wav_stats}") )
+    if [[ ${#wav_length_line_list[@]} -eq 0 ]]; then
+         wd_logger 1 "ERROR: can't find wav file 'Length' line in output of 'sox ${wav_filename} -n stats'"
+        return 1
+    fi
     if [[ ${#wav_length_line_list[@]} -ne 3 ]]; then
-        wd_logger 1 "ERROR: can't find wav file 'Length' line in output of 'sox ${wav_filename} -n stats'"
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' ouput 'Length' line has ${#wav_length_line_list[@]} fields in it instead of the expected 3 fields"
         return 1
     fi
     local wav_length_secs=${wav_length_line_list[2]/.*}
-    if [[ -z "${wav_length_secs}" || ${wav_length_secs} -lt ${MIN_VALID_WAV_SECCONDS} || ${wav_length_secs} -gt ${MAX_VALID_WAV_SECONDS} ]]; then
-        wd_logger 1 "ERROR: can't extract wav packet length from 'sox ${wav_filename} -n stats' output line '${wav_length_line_list[*]}'"
+    if [[ -z "${wav_length_secs}" ]]; then
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length '${wav_length_line_list[2]}'"
+        return 1
+    fi
+    if [[ ! ${wav_length_secs} =~ ^[0-9]+$ ]]; then
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports wav file length ${wav_length_line_list[2]} which doesn't contain an integer number"
+        return 1
+    fi
+    if [[ ${wav_length_secs} -lt ${MIN_VALID_WAV_SECCONDS} || ${wav_length_secs} -gt ${MAX_VALID_WAV_SECONDS} ]]; then
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length of ${wav_length_secs} seconds"
         return 1
     fi
     ### sox outuput shows that wav file is valid length
