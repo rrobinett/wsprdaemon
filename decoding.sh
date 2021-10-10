@@ -62,46 +62,6 @@ function get_decode_mode_list() {
     return 0
 }
 
-### these could be modified from these default values by declaring them in the .conf file.
-declare    SIGNAL_LEVEL_PRE_TX_SEC=${SIGNAL_LEVEL_PRE_TX_SEC-.25}
-declare    SIGNAL_LEVEL_PRE_TX_LEN=${SIGNAL_LEVEL_PRE_TX_LEN-.5}
-declare    SIGNAL_LEVEL_TX_SEC=${SIGNAL_LEVEL_TX_SEC-1}
-declare    SIGNAL_LEVEL_TX_LEN=${SIGNAL_LEVEL_TX_LEN-109}
-declare    SIGNAL_LEVEL_POST_TX_SEC=${SIGNAL_LEVEL_POST_TX_LEN-113}
-declare    SIGNAL_LEVEL_POST_TX_LEN=${SIGNAL_LEVEL_POST_TX_LEN-5}
-
-function setup_signal_levels_log_file() {
-    local return_signal_levels_log_file_variable_name=$1   ### Return the full path to the log file which will be added to during each wspr packet decode 
-    local receiver_name=$2
-    local receiver_band=$3
-
-    if [[ ${receiver_name} =~ / ]]; then
-        wd_logger 1 "Replacing all the '/' in ${receiver_name} with '='"
-        receiver_name=${receiver_name//\//=}
-    fi
-    local signal_level_logs_dir=${WSPRDAEMON_ROOT_DIR}/signal_levels/${receiver_name}/${receiver_band}
-    mkdir -p ${signal_level_logs_dir}
-
-    local local_signal_levels_log_file=${signal_level_logs_dir}/signal-levels.log
-    eval ${return_signal_levels_log_file_variable_name}=${local_signal_levels_log_file}
-
-    if [[ -f ${local_signal_levels_log_file} ]]; then
-        wd_logger 2 "Signal Level log file '${local_signal_levels_log_file}' exists, so leave it alone"
-        return 0
-    fi
-    local  pre_tx_header="Pre Tx (${SIGNAL_LEVEL_PRE_TX_SEC}-${SIGNAL_LEVEL_PRE_TX_LEN})"
-    local  tx_header="Tx (${SIGNAL_LEVEL_TX_SEC}-${SIGNAL_LEVEL_TX_LEN})"
-    local  post_tx_header="Post Tx (${SIGNAL_LEVEL_POST_TX_SEC}-${SIGNAL_LEVEL_POST_TX_LEN})"
-    local  field_descriptions="    'Pk lev dB' 'RMS lev dB' 'RMS Pk dB' 'RMS Tr dB'    "
-    local  date_str=$(date)
-
-    printf "${date_str}: %20s %-55s %-55s %-55s FFT\n" "" "${pre_tx_header}" "${tx_header}" "${post_tx_header}"   >  ${local_signal_levels_log_file}
-    printf "${date_str}: %s %s %s\n" "${field_descriptions}" "${field_descriptions}" "${field_descriptions}"      >> ${local_signal_levels_log_file}
-
-    wd_logger 1 "Setup header line in a new Signal Level log file '${local_signal_levels_log_file}'"
-    return 0
-}
-
 ##########
 function get_af_db() {
     local return_variable_name=$1
@@ -363,7 +323,7 @@ function queue_decoded_spots() {
     local wspr_decode_capture_freq_hz=${wav_file_name#*_}
           wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
-    wd_logger 1 "Appending signal level line with 'echo ${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line} >> ${signal_levels_log_file}'"
+    wd_logger 1 "Appending signal level line '${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}' to '${signal_levels_log_file}'"
     echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${signal_levels_log_file}
     
     local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
@@ -851,12 +811,16 @@ function decoding_daemon() {
                         wd_logger 1 "ERROR:  'get_rms_levels  rms_nl rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
                         return 1
                     fi
-                    signal_level_line="${rms_line} ${fft_nl_cal}"
-                    wd_logger 1 "Added fft_nl_cal to rms_line='${rms_line}'"
+                    signal_level_line="${rms_line} ${fft_nl_cal} "
+
                     ### If this is a KiwiSDR, then discover the number of 'ADC OV' events recorded since the last cycle
-                    local new_kiwi_ov_count=0
-                    local current_kiwi_ov_lines=0
-                    if [[ -f kiwi_recorder.log ]]; then
+                    if [[ ! -f kiwi_recorder.log ]]; then
+                        ### Append '0' overload events
+                        signal_level_line="${signal_level_line} 0" 
+                        wd_logger 1 "Created signal_level_line='${signal_level_line}' with 0 in the last field since the receive device doesn't report overload events"
+                    else
+                        local new_kiwi_ov_count=0
+                        local current_kiwi_ov_lines=0
                         current_kiwi_ov_lines=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
                         if [[ ${current_kiwi_ov_lines} -lt ${old_kiwi_ov_lines} ]]; then
                             ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
@@ -864,6 +828,8 @@ function decoding_daemon() {
                         fi
                         new_kiwi_ov_count=$(( ${current_kiwi_ov_lines} - ${old_kiwi_ov_lines} ))
                         old_kiwi_ov_lines=${current_kiwi_ov_lines}
+                        signal_level_line="${signal_level_line} ${new_kiwi_ov_count}"
+                        wd_logger 1 "Created signal_level_line='${signal_level_line}' with overlead= ${new_kiwi_ov_count} in the last field"
                     fi
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: command 'decode_wpsr_wav_file ${decoder_input_wav_filename} wsprd_stdout.txt' measured FFT noise = ${fft_nl_cal}, RMS noise = ${rms_nl}"
                    sed "s/\$/  ${returned_minutes}/" ${decode_dir}/ALL_WSPR.TXT.new >> decodes_cache.txt          ### Add the wspr packet mode '2' or mode '15' to each line.  this will be recorded by wsprdaemon.org 

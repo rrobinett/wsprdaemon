@@ -67,6 +67,48 @@ function setup_noise_graphs()
     fi
 }
 
+### these could be modified from these default values by declaring them in the .conf file.
+declare    SIGNAL_LEVEL_PRE_TX_SEC=${SIGNAL_LEVEL_PRE_TX_SEC-.25}
+declare    SIGNAL_LEVEL_PRE_TX_LEN=${SIGNAL_LEVEL_PRE_TX_LEN-.5}
+declare    SIGNAL_LEVEL_TX_SEC=${SIGNAL_LEVEL_TX_SEC-1}
+declare    SIGNAL_LEVEL_TX_LEN=${SIGNAL_LEVEL_TX_LEN-109}
+declare    SIGNAL_LEVEL_POST_TX_SEC=${SIGNAL_LEVEL_POST_TX_LEN-113}
+declare    SIGNAL_LEVEL_POST_TX_LEN=${SIGNAL_LEVEL_POST_TX_LEN-5}
+declare    SIGNAL_LEVEL_LOG_FILE_NAME="signal_levels.txt"
+declare    SIGNAL_LEVEL_CSV_FILE_NAME="signal_levels.csv"
+
+function setup_signal_levels_log_file() {
+    local return_signal_levels_log_file_variable_name=$1   ### Return the full path to the log file which will be added to during each wspr packet decode 
+    local receiver_name=$2
+    local receiver_band=$3
+
+    if [[ ${receiver_name} =~ / ]]; then
+        wd_logger 1 "Replacing all the '/' in ${receiver_name} with '='"
+        receiver_name=${receiver_name//\//=}
+    fi
+    local signal_level_logs_dir=${WSPRDAEMON_ROOT_DIR}/signal_levels/${receiver_name}/${receiver_band}
+    mkdir -p ${signal_level_logs_dir}
+
+    local local_signal_levels_log_file=${signal_level_logs_dir}/${SIGNAL_LEVEL_LOG_FILE_NAME}
+    eval ${return_signal_levels_log_file_variable_name}=${local_signal_levels_log_file}
+
+    if [[ -f ${local_signal_levels_log_file} ]]; then
+        wd_logger 2 "Signal Level log file '${local_signal_levels_log_file}' exists, so leave it alone"
+        return 0
+    fi
+    local  pre_tx_header="Pre Tx (${SIGNAL_LEVEL_PRE_TX_SEC}-${SIGNAL_LEVEL_PRE_TX_LEN})"
+    local  tx_header="Tx (${SIGNAL_LEVEL_TX_SEC}-${SIGNAL_LEVEL_TX_LEN})"
+    local  post_tx_header="Post Tx (${SIGNAL_LEVEL_POST_TX_SEC}-${SIGNAL_LEVEL_POST_TX_LEN})"
+    local  field_descriptions="    'Pk lev dB' 'RMS lev dB' 'RMS Pk dB' 'RMS Tr dB'    "
+    local  date_str=$(date)
+
+    printf "${date_str}: %20s %-55s %-55s %-55s FFT\n" "" "${pre_tx_header}" "${tx_header}" "${post_tx_header}"   >  ${local_signal_levels_log_file}
+    printf "${date_str}: %s %s %s\n" "${field_descriptions}" "${field_descriptions}" "${field_descriptions}"      >> ${local_signal_levels_log_file}
+
+    wd_logger 1 "Setup header line in a new Signal Level log file '${local_signal_levels_log_file}'"
+    return 0
+}
+
 ### This is a hack, but use the maidenhead value of the first receiver as the global locator for signal_level graphs and logging
 function get_my_maidenhead() {
     local first_rx_line=(${RECEIVER_LIST[0]})
@@ -95,6 +137,8 @@ function plot_noise() {
     fi
 
     if [[ ! -f ${noise_calibration_file} ]]; then
+        mkdir -p ${noise_calibration_file}
+
         echo "# Cal file for use with 'wsprdaemon.sh -p'" >${noise_calibration_file}
         echo "# Values are: Nominal bandwidth, noise equiv bandwidth, RMS offset, freq offset, FFT_band, Threshold, see notes for details" >>${noise_calibration_file}
         ## read -p 'Enter nominal kiwirecorder.py bandwidth (500 or 320Hz):' nom_bw
@@ -109,20 +153,21 @@ function plot_noise() {
             local fft_band=-13.9
         fi
         echo $nom_bw","$enb_rms",-50.4,-41.0,"$fft_band",13.1" >> ${noise_calibration_file}
+        wd_logger 1 "Found there was no '${noise_calibration_file}', so created it"
     fi
     # noise records are all 2 min apart so 30 per hour so rows = hours *30. The max number of rows we need in the csv file is (24 *30), so to speed processing only take that number of rows from the log file
     local -i rows_per_day=$((24*30))
 
     ### convert wsprdaemon AI6VN  sox stats format to csv for excel or Python matplotlib etc
     ### Create csv files from log files
-    local signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name signal-levels.log -print ) )
+    local signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) )
     if [[ ${#signal_levels_log_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no signal-levels.log files, so nothing to plot"
         return 0
     fi
 
     for log_file in "${signal_levels_log_list[@]}" ; do
-        local csv_file=${log_file%.log}.csv
+        local csv_file=${log_file%.txt}.csv
         local log_file_data_lines_count=$(( $( wc -l < ${log_file} ) - 2 ))  
         if [[ "${log_file_data_lines_count}" -le 0 ]]; then
             ### The log file has only the two header lines
@@ -140,13 +185,16 @@ function plot_noise() {
         tail -n ${csv_lines} ${log_file} \
             | sed -nr '/^[12]/s/\s+/,/gp' \
             | sed 's=^\(..\)\(..\)\(..\).\(..\)\(..\):=\3/\2/\1 \4:\5=' \
-            | awk -F ',' '{ if (NF == 16) print $0 }'  > ${NOISE_GRAPHS_TMP_CSV_FILE}
+            | awk -F ',' '{ print $0 }'  > ${NOISE_GRAPHS_TMP_CSV_FILE}
 	if [[ -s ${NOISE_GRAPHS_TMP_CSV_FILE} ]]; then
-            mv ${NOISE_GRAPHS_TMP_CSV_FILE} ${log_file%.log}.csv  ### only create .csv if it has at least one line of data
+            mv ${NOISE_GRAPHS_TMP_CSV_FILE} ${csv_file}  ### only create .csv if it has at least one line of data
+            wd_logger 1 "Created '${csv_file}'"
+        else
+            wd_logger 1 "ERROR: failed to create '${csv_file}'"
         fi
     done
 
-    local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name signal-levels.csv -print) )  
+    local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
 
     IFS=$'\n' 
     local sorted_csv_file_list=( $(sort -t / -rn -k 7,7  <<< "${csv_file_list[@]}" | tr '\n' ' ' ) )
@@ -158,12 +206,13 @@ function plot_noise() {
 
     python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${sorted_csv_file_list[@]}"
     local ret_code=$?
+    wd_logger 1 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]}' => ${ret_code}"
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} ...' => ${ret_code}"
         return ${ret_code}
     fi
-
     mv ${NOISE_GRAPH_TMP_FILE} ${NOISE_GRAPH_FILE}
+    wd_logger 1 "Created new '${NOISE_GRAPH_FILE}'"
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]]; then
         wd_logger 1 "Configured for local web page display, so copying ${NOISE_GRAPH_FILE} to ${NOISE_GRAPH_WWW_FILE}"
         sudo  cp -p  ${NOISE_GRAPH_FILE}  ${NOISE_GRAPH_WWW_FILE}
