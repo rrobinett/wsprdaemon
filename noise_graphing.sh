@@ -195,14 +195,15 @@ function plot_noise() {
     done
 
     local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
-
-    local sorted_csv_file_list=( $( local path; for path in ${csv_file_list[@]}; do echo ${path}; done | sort -t / -k 3,3n ) )
+    local sort_field_number=$(( $(awk -F / '{print NF}' <<< "${csv_file_list[0]}") - 1 ))        ### Sort on the .../BAND/... in the path to the .csv file
+    local sorted_csv_file_list=( $( local path; for path in ${csv_file_list[@]}; do echo ${path}; done | sort -n -t / -k ${sort_field_number},${sort_field_number} ) )
     if [[ ${#sorted_csv_file_list[@]} -eq 0 ]] ; then 
         wd_logger 1 "ERROR: no noise log files, so don't plot"  ### , or ${signal_band_count} -ne ${band_file_lines}.  Don't plot"
         return 0 
     fi
 
-    python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${sorted_csv_file_list[@]}"
+    local plot_csv_file_list_string=$( echo ${sorted_csv_file_list[@]} | tr '\n' ' ')
+    python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}"
     local ret_code=$?
     wd_logger 1 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]}' => ${ret_code}"
     if [[ ${ret_code} -ne 0 ]]; then
