@@ -307,12 +307,16 @@ function queue_decoded_spots() {
 
     local rms_nl=0
     local fft_nl=0
-    if [[ ${#signal_level_list[@]} -ne 14 ]]; then
-        wd_logger 1 "ERROR: signal_level_line has ${#signal_level_list[@]} fields, not the expected 14"
+    local overloads_count=0
+    if [[ ${#signal_level_list[@]} -eq 0 ]]; then
+        wd_logger 1 "No noise data for these spots"
+    elif [[ ${#signal_level_list[@]} -ne 15 ]]; then
+        wd_logger 1 "ERROR: signal_level_line has ${#signal_level_list[@]} fields, not the expected 15"
     else
         rms_nl=${signal_level_list[12]}
         fft_nl=${signal_level_list[13]}
-        wd_logger 1 "Adding rms_nl=${rms_nl} and fft_nl=${fft_nl} to each spot line"
+        overloads_count=${signal_level_list[14]}
+        wd_logger 1 "Adding rms_nl=${rms_nl}, fft_nl=${fft_nl} and overloads_count=${overloads_count} to each extended spot line"
     fi
 
     local wspr_decode_capture_date=${wav_file_name/T*}
