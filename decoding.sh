@@ -301,7 +301,7 @@ function queue_decoded_spots() {
     local signal_levels_log_file=$4
     local rx_khz_offset=0           ### only used by RTLs
 
-    wd_logger 1 "Spots found in wav file ${wav_file_name} can be found in ${wsprd_spots_file}. Also recording signal_level_line:\n${signal_level_line}'\n$(cat ${wsprd_spots_file})"
+    wd_logger 1 "Spots found in wav file ${wav_file_name} can be found in ${wsprd_spots_file}"
 
     local signal_level_list=( ${signal_level_line} )
 
@@ -323,8 +323,13 @@ function queue_decoded_spots() {
     local wspr_decode_capture_freq_hz=${wav_file_name#*_}
           wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
-    wd_logger 1 "Appending signal level line '${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}' to '${signal_levels_log_file}'"
-    echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${signal_levels_log_file}
+    if [[ -z "${signal_level_line}" ]]; then
+        ### FST4W 5/15 minute spot lines will never have meaningfull RMS noise levels, and for now none of the FST4W spot reports include FFT or RMS noise
+        wd_logger 1 "Don't plot FST4W spots which don't have FFT or RMS noise measurements associated with them"
+    else
+        wd_logger 1 "Appending signal level line '${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}' to '${signal_levels_log_file}'"
+        echo "${wspr_decode_capture_date}-${wspr_decode_capture_time}: ${signal_level_line}" >> ${signal_levels_log_file}
+    fi
     
     local new_noise_file=${wspr_decode_capture_date}_${wspr_decode_capture_time}_${wspr_decode_capture_freq_hz}_wspr_noise.txt
     echo "${signal_level_line}" > ${new_noise_file}

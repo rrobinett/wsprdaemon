@@ -272,13 +272,13 @@ function show_running_jobs() {
         else
             ### For a simple rx device, the recording, decdoing and posting pids are all in the same directory
             receiver_name_list=(${receiver_name})
-            local print_string=$(printf "%2s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
-            wd_logger 0 "\n${print_string}"
+            local print_string=$(printf "%25s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
+            wd_logger 1 "\n${print_string}"
         fi
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
-                printf "%2s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
-                printf "%2s: %12s,%-4s recording   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
+                printf "%25s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
+                printf "%25s: %12s,%-4s recording   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
                 found_job="yes"
             fi
         done

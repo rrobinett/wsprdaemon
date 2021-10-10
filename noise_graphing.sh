@@ -171,14 +171,14 @@ function plot_noise() {
         local log_file_data_lines_count=$(( $( wc -l < ${log_file} ) - 2 ))  
         if [[ "${log_file_data_lines_count}" -le 0 ]]; then
             ### The log file has only the two header lines
-            wd_logger 1 "Found log file ${log_file} has only the header lines"
+            wd_logger 2 "Found log file ${log_file} has only the header lines"
             rm -f ${csv_file}
             continue
         fi
             
         local csv_lines=${rows_per_day}
         if [[ ${csv_lines} -gt ${log_file_data_lines_count} ]]; then
-            wd_logger 1 "Log file ${log_file} has only ${log_file_data_lines_count} lines in it, which is less than 24 hours of data."
+            wd_logger 2 "Log file ${log_file} has only ${log_file_data_lines_count} lines in it, which is less than 24 hours of data."
             csv_lines=${log_file_data_lines_count}
         fi
         #  format conversion is by Rob AI6VN - could work directly from log file, but nice to have csv files GG using tail rather than cat
@@ -188,7 +188,7 @@ function plot_noise() {
             | awk -F ',' '{ print $0 }'  > ${NOISE_GRAPHS_TMP_CSV_FILE}
 	if [[ -s ${NOISE_GRAPHS_TMP_CSV_FILE} ]]; then
             mv ${NOISE_GRAPHS_TMP_CSV_FILE} ${csv_file}  ### only create .csv if it has at least one line of data
-            wd_logger 1 "Created '${csv_file}'"
+            wd_logger 2 "Created '${csv_file}'"
         else
             wd_logger 1 "ERROR: failed to create '${csv_file}'"
         fi
@@ -196,9 +196,7 @@ function plot_noise() {
 
     local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
 
-    IFS=$'\n' 
-    local sorted_csv_file_list=( $(sort -t / -rn -k 7,7  <<< "${csv_file_list[@]}" | tr '\n' ' ' ) )
-    unset IFS
+    local sorted_csv_file_list=( $( local path; for path in ${csv_file_list[@]}; do echo ${path}; done | sort -t / -k 3,3n ) )
     if [[ ${#sorted_csv_file_list[@]} -eq 0 ]] ; then 
         wd_logger 1 "ERROR: no noise log files, so don't plot"  ### , or ${signal_band_count} -ne ${band_file_lines}.  Don't plot"
         return 0 
