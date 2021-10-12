@@ -173,10 +173,10 @@ function get_wav_levels()
     return 0
 }
 
-declare MIN_VALID_RAW_WAV_SECCONDS=${MIN_VALID_WAV_SECCONDS-59}
-declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_WAV_SECONDS-60}
-declare MIN_VALID_WSPR_WAV_SECCONDS=${MIN_VALID_WAV_SECCONDS-119}
-declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WAV_SECONDS-120}
+declare MIN_VALID_RAW_WAV_SECCONDS=${MIN_VALID_RAW_WAV_SECCONDS-59}
+declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_RAW_WAV_SECONDS-60}
+declare MIN_VALID_WSPR_WAV_SECCONDS=${MIN_VALID_WSPR_WAV_SECCONDS-119}
+declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-120}
 
 function is_valid_wav_file()
 {
@@ -451,7 +451,7 @@ function sleep_until_raw_file_is_full() {
         return 1
     fi
     if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} || ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
-        wd_logger 1 "ERROR: wav file stablized at invalid size ${new_file_size}"
+        wd_logger 2 "ERROR: wav file stablized at invalid size ${new_file_size}"
         return 1
     fi
     wd_logger 2 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
@@ -498,12 +498,17 @@ function cleanup_wav_file_list()
     local __return_clean_files_string_name=$1
     local raw_file_list=( $2 )
 
+    if [[ ${#raw_file_list[@]} -eq 0 ]]; then
+        wd_logger 1 "Was given an empty file list"
+        eval ${__return_clean_files_string_name}=\"\"
+        return 0
+    fi
     wd_logger 1 "Testing list of raw files: '${raw_file_list[*]}'"
 
     local last_file_minute=-1
     local flush_files="no"
     local test_file_name
-    local clean_file_string=""
+    local return_clean_files_string=""
 
     local raw_file_index=$(( ${#raw_file_list[@]} - 1 ))
     while [[ ${raw_file_index} -ge 0 ]]; do
@@ -513,7 +518,7 @@ function cleanup_wav_file_list()
             wd_logger 1 "ERROR: flushing file ${test_file_name}"
             rm ${test_file_name}
         else
-            is_valid_wav_file ${test_file_name} ${MIN_VALID_WAV_SECCONDS} ${MAX_VALID_WAV_SECONDS}
+            is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECCONDS} ${MAX_VALID_RAW_WAV_SECONDS}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: found wav file '${test_file_name}' has invalid size.  Flush it"
@@ -525,15 +530,17 @@ function cleanup_wav_file_list()
                 if [[ 10#${last_file_minute} -lt 0 ]]; then
                     wd_logger 1 "First clean file is at minute ${test_file_minute}"
                     last_file_minute=${test_file_minute}
+                    return_clean_files_string="${test_file_name}"
                 else
-                    if [[ 10#${test_file_minute} -eq 59 ]]; then
-                         last_file_minute=$(( ++last_file_minute ))
-                         wd_logger 1 "Testing a minute 59 file '${test_file_name}', so changed last_file_minute to ${last_file_minute}"
+                    if [[ 10#${last_file_minute} -eq 0 ]]; then
+                         last_file_minute=60
+                         wd_logger 1 "Testing for a minute 59 file '${test_file_name}', so changed last_file_minute to ${last_file_minute}"
                     fi
-                    local minute_difference=$(( 10#${test_file_minute} - 10#${last_file_minute} ))
+                    local minute_difference=$(( 10#${last_file_minute} - 10#${test_file_minute} ))
                     if [[ ${minute_difference} -eq 1 ]]; then
                         wd_logger 1 "'${test_file_name}' size is OK and it is one minute earlier than the next file in the list"
-                        clean_files_string="${test_file_name} ${clean_files_string}"
+                        return_clean_files_string="${test_file_name} ${return_clean_files_string}"
+                        last_file_minute=${test_file_minute}
                     else
                         wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next file in the list ${raw_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
                         rm ${test_file_name}
@@ -545,13 +552,14 @@ function cleanup_wav_file_list()
         wd_logger 1 "Done checking '${test_file_name}' from index ${raw_file_index}"
         (( --raw_file_index ))
     done
-    local clean_files_list=( ${clean_files_string} )
+    local clean_files_list=( ${return_clean_files_string} )
 
     wd_logger 1 "Given raw_file_list[${#raw_file_list[@]}]='${raw_file_list[*]}', returning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
-    if [[ ${#raw_file_list[@]}] -ne ${#clean_files_list[*]} ]]; then
+    if [[ ${#raw_file_list[@]} -ne ${#clean_files_list[*]} ]]; then
         wd_logger 1 "ERROR: cleaned list raw_file_list[${#raw_file_list[@]}]='${raw_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
     fi
-    eval ${__return_clean_files_string_name}=\"${clean_files_list[*]}\"
+    eval ${__return_clean_files_string_name}=\"${return_clean_files_string}\"
+    return 0
 } 
 
 
@@ -566,7 +574,7 @@ function get_wav_file_list() {
     local -ia 'target_seconds_list=( "${target_minutes_list[@]/%/*60}" )' ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
     local oldest_file_needed=${target_seconds_list[-1]}
 
-    wd_logger 2 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
+    wd_logger 1 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
     if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
@@ -575,26 +583,12 @@ function get_wav_file_list() {
         return ${ret_code}
     fi
 
-    local ret_code
-
     shopt -s nullglob
     local raw_file_list=( minute-*.raw *_usb.wav)        ### Get list of the one minute long 'raw' wav files being created by the Kiwi (.wav) or SDR ((.raw)
     shopt -u nullglob
 
-    wd_logger 2 "Found raw/wav files '${raw_file_list[*]}'"
+    wd_logger 1 "Found raw/wav files '${raw_file_list[*]}'"
 
-    local clean_files_string
-    cleanup_wav_file_list  clean_files_string "${raw_file_list[*]}"
-    local clean_file_list=( ${clean_files_string} )
-    if [[ ${#clean_file_list[@]} -ne ${#raw_file_list[@]} ]]; then
-        if [[ ${#clean_file_list[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: clean_file_list[] has no files"
-            return 1
-        fi
-        wd_logger 1 "ERROR: clean_file_list[]='${clean_file_list[*]}' is smaller than raw_file_list[]='${raw_file_list[*]}'}"
-        raw_file_list=( ${clean_file_list[@]} )
-    fi
-  
     case ${#raw_file_list[@]} in
         0 )
             wd_logger 2 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
@@ -617,7 +611,7 @@ function get_wav_file_list() {
             sleep_until_raw_file_is_full ${raw_file_list[0]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
+                wd_logger 1 "Error while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
             fi
             return 2
             ;;
@@ -639,6 +633,22 @@ function get_wav_file_list() {
     esac
 
     wd_logger 2 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
+
+    local clean_files_string
+    cleanup_wav_file_list  clean_files_string "${raw_file_list[*]}"
+    local clean_file_list=( ${clean_files_string} )
+    if [[ ${#clean_file_list[@]} -ne ${#raw_file_list[@]} ]]; then
+        if [[ ${#clean_file_list[@]} -eq 0 ]]; then
+            wd_logger 1 "ERROR: clean_file_list[] has no files"
+            return 1
+        fi
+        if [[ ${#clean_file_list[@]} -lt 2 ]]; then
+            wd_logger 1 "ERROR: clean_file_list[]='${clean_file_list[*]}' has less than the minimum 2 packets needed for the smallest WSPR packet.  So return error and try again to find a good list"
+            return 1
+        fi
+        raw_file_list=( ${clean_file_list[@]} )
+        wd_logger 1 "ERROR: After cleanup, raw_file_list[]='${raw_file_list[*]}' which is enough for a minimm sized WSPR packet"
+    fi
     ### We now have a list of two or more full size raw files
     get_file_start_time_info epoch_of_first_raw_file minute_of_first_raw_file ${raw_file_list[0]}
     local ret_code=$?
@@ -837,7 +847,7 @@ function decoding_daemon() {
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 2 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
+            wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
             sleep 1
             continue
         fi

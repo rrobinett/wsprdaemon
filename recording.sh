@@ -348,9 +348,6 @@ function kiwirecorder_manager_daemon()
             ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
             wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
-            ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
-            printf "%(%s)T 0\n" -1  > ${OVERLOADS_LOG_FILE}
- 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
@@ -374,7 +371,12 @@ function kiwirecorder_manager_daemon()
             sleep ${KIWIRECORDER_KILL_WAIT_SECS}
             continue
         fi
-            
+
+        if [[ ! -f ${OVERLOADS_LOG_FILE} ]]; then
+            ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
+            printf "%(%s)T 0\n" -1  > ${OVERLOADS_LOG_FILE}
+        fi
+
         local current_time=$(printf "%(%s)T" -1 )
         if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
             ### there are new OV events.  

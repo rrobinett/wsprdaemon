@@ -195,10 +195,14 @@ function plot_noise() {
     done
 
     local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
+    if [[ ${#csv_file_list[0]} -eq 0 ]]; then
+        wd_logger 1 "Found no .csv files to plot"
+        return 0
+    fi
     local sort_field_number=$(( $(awk -F / '{print NF}' <<< "${csv_file_list[0]}") - 1 ))        ### Sort on the .../BAND/... in the path to the .csv file
     local sorted_csv_file_list=( $( local path; for path in ${csv_file_list[@]}; do echo ${path}; done | sort -n -t / -k ${sort_field_number},${sort_field_number} ) )
     if [[ ${#sorted_csv_file_list[@]} -eq 0 ]] ; then 
-        wd_logger 1 "ERROR: no noise log files, so don't plot"  ### , or ${signal_band_count} -ne ${band_file_lines}.  Don't plot"
+        wd_logger 1 "ERROR: failed to sort .csv file list"  ### , or ${signal_band_count} -ne ${band_file_lines}.  Don't plot"
         return 0 
     fi
 

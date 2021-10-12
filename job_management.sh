@@ -195,9 +195,16 @@ function check_for_zombies() {
         done
     fi    
 
+    wd_logger 1 "Checking all pids for 'wsprdaemon.sh -a' programs"
+    local kill_pid_list=()
+    local running_wsprdaemon_a_pid_list=( $(ps aux | awk '/wsprdaemon\/wsprdaemon.sh -a/{print $2}' ) )
+    if [[ ${#running_wsprdaemon_a_pid_list[@]} -ne 0 ]]; then
+        wd_logger 1 "Found ${#running_wsprdaemon_a_pid_list[*]} 'wsprdaemon/wsprdaemon.sh -a'.  Kill them"
+        kill ${running_wsprdaemon_a_pid_list[@]}
+    fi
+
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
     wd_logger 1 "Checking all pids for kiwirecorder.py programs"
-    local kill_pid_list=()
     local running_kiwirecorder_pid_list=( $(ps aux | awk '/kiwiclient\/kiwirecorder.py/{print $2}' ) )
     
     for running_pid in ${running_kiwirecorder_pid_list[@]} ; do
