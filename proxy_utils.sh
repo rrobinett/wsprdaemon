@@ -46,7 +46,7 @@ function proxy_connection_manager() {
             kill ${proxy_pid}
             rm ${WSPRDAEMON_PROXY_PID_FILE}
         else
-            wd_logger 1 "Proxy disabled and found no pid file as expected"
+            wd_logger 2 "Proxy disabled and found no pid file as expected"
         fi
         return
     fi

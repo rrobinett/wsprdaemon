@@ -83,7 +83,6 @@ function wd_logger_check_all_logs {
 }
 
 function wd_logger() {
-    set +x
     if [[ $# -ne 2 ]]; then
         local prefix_str=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}()")
         local bad_args="$@"
