@@ -230,11 +230,11 @@ function posting_daemon()
         source ${RUNNING_JOBS_FILE}
         if [[ "${RUNNING_JOBS[@]}" =~ ${posting_receiver_name} ]]; then
             ### Move the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
-            mv ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path} 
-            if [[ -s ${upload_wsprnet_file_path} ]]; then
-                wd_logger 1 "Moved ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})"
+            if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
+                wd_logger 1 "Skip queuing a zero length spots file ${wsprd_spots_best_file_path}"
             else
-                wd_logger 1 " created zero length spot file ${upload_wsprnet_file_path}"
+                mv ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path} 
+                wd_logger 1 "Moved ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})"
             fi
         else
             ### This real rx is a member of a MERGed rx, so its spots are being merged with other real rx

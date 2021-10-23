@@ -167,53 +167,61 @@ function band_center_mhz_from_spot_freq()
 }
 
 ############
+declare MAX_SPOTS_FILES=1000             ### Limit our search for spots to at most these many files, else a very full file tree will cause errors
 declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-999}           ### Limit of number of spots to upload in one curl MEPT upload transaction
-declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
+declare UPLOAD_TMP_ALL_SPOT_FILES_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_all_spot_files_list.txt    ### All the spot.txt files
+declare UPLOAD_TMP_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt              ### Those files from that file which we will upload in the next curl
+declare UPLOAD_TMP_SPOTS_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/cycle_spots.txt                             ### Spot lines from the current cycle
 
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
+### Those files will be deleted only after they have been successfully uploaded to wsprnet.org
 function upload_wsprnet_create_spot_file_list_file()
 {
-    local wspr_spots_files="$@"         ### i.e. a list of spot files in the format:  /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_BAND_wspr_spots.txt
-    wd_logger 1 "starting with list '${wspr_spots_files}'"
+    local start_seconds=$SECONDS
 
-    local wspr_spots_files_count=$(wc -w <<< "${wspr_spots_files}")
-    local wspr_spots_count=$(cat ${wspr_spots_files} | wc -l )
-    local wspr_spots_root_path=$(echo "${wspr_spots_files}" | tr ' ' '\n' | head -1)  ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_FREQ_wspr_spots.txt
-          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND
-          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI
-          wspr_spots_root_path=${wspr_spots_root_path%/*}      ### Get /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID
-    local cycles_list=$(echo "${wspr_spots_files}" | tr ' ' '\n' | sed 's;.*/;;' | cut -c 1-11 | sort -u )
-    local cycles_count=$(echo "${cycles_list}" | wc -l)
-    wd_logger 1 "under '${wspr_spots_root_path}' found ${wspr_spots_count} spots in ${wspr_spots_files_count} files from ${cycles_count} wspr cycles"
+    local all_spot_files_file=$1         ### It should be ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}
+    if [[ ! -s ${all_spot_files_file} ]]; then
+        wd_logger 1 "ERROR: all_spot_files_file=${all_spot_files_file} is empty"
+        return 1
+    fi
+    ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
+    local all_spot_files_list
+    readarray -t all_spot_files_list < ${all_spot_files_file}   ### Read each line of the 
+    if [[ ${#all_spot_files_list} -eq 0 ]]; then
+        wd_logger 1 "ERROR: 'readarray -t all_spot_files_list < ${all_spot_files_file}' => 0 elements in all_spot_files_list[]"
+        return 2
+    fi
+    local cycles_list=( ${all_spot_files_list[@]%_*_wspr_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
+          cycles_list=( ${cycles_list[@]##*/} )
+          cycles_list=( $( for __item in "${cycles_list[@]}" ; do echo ${__item}; done | sort -u)  )  ### Gets us a sorted and unique list of cycles. I could never get the IFS=... method to work
 
-    local spots_file_list=""
-    local spots_file_list_count=0
-    local file_spots=""
-    local file_spots_count=0
-    for cycle in ${cycles_list} ; do
-        local cycle_root_name="${wspr_spots_root_path}/*/*/${cycle}"  ### e.g.: /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/*/*/YYMMDD_HHMM
-        wd_logger 1 "checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
+    wd_logger 1 "Creating a list of spot files from the ${#all_spot_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
 
-        local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_root_path
-        wd_logger 2 "Checking for number of spots in '${cycle_files}'"
+    mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}
+    > ${UPLOAD_TMP_SPOT_FILE_LIST_FILE}               ### Create or truncate the return file ${UPLOAD_TMP_SPOT_FILE_LIST_FILE}
 
-        local cycle_spots_count=$(cat ${cycle_files} | wc -l)
-        if [[ ${cycle_spots_count} -eq 0 ]]; then
-            wd_logger 1 "Found the complete set of files in cycle ${cycle_root_name} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} and let the calling function delete them"
-        fi
+    local out_spot_file_lines_count=0
+    local cycle
+    for cycle in ${cycles_list[@]} ; do
+        wd_logger 1 "checking for spots in cycle ${cycle}"
+
+        local cycle_files_list=( $(grep ${cycle} ${all_spot_files_file}) )        ### Strangely, it is faster to run find than try to extarct the list from wspr_spots_files_list[]
+        wd_logger 1 "Checking for number of spots in the ${#cycle_files_list[@]} files in this cycle"
+
+        cat ${cycle_files_list[@]} > ${UPLOAD_TMP_SPOTS_FILE}
+        local cycle_spots_count=$( wc -l < ${UPLOAD_TMP_SPOTS_FILE} )
+
         wd_logger 1 "Found ${cycle_spots_count} spots in cycle ${cycle}"
 
-        local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-       if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-            wd_logger 1 "Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
-            echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
-            return
+        if [[ $(( cycle_spots_count + out_spot_file_lines_count))  -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+            wd_logger 1 "After $(( SECONDS - start_seconds )) seconds, Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list of $( wc -w < ${UPLOAD_TMP_SPOT_FILE_LIST_FILE}) spot files is complete"
+            return 0   
         fi
-        spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
-        spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
+        echo "${cycle_files_list[@]}" >> ${UPLOAD_TMP_SPOT_FILE_LIST_FILE}
+        (( out_spot_file_lines_count += cycle_spots_count ))
    done
-   wd_logger 1 "Found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
-   echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+   wd_logger 1 "After $(( SECONDS - start_seconds )) seconds, Found that all of the ${out_spot_file_lines_count} spots in the current $( wc -w < ${UPLOAD_TMP_SPOT_FILE_LIST_FILE}) spot files can be uploaded"
+   return 0
 }
 
 function get_call_grid_from_receiver_name() {
@@ -255,7 +263,9 @@ function get_wsprnet_uploading_job_dir_path(){
 }
 
 declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-30}       ### By default wait for the oldest spot file to be 30 seconds old before starting an upload of it and all newer spotfiles
-declare UPLOAD_SLEEP_SECONDS=10
+declare -r UPLOAD_SLEEP_SECONDS=10
+declare -r LINUX_MAX_ARGS=1000                               ### Limit the number of args we pass on the linux cmd line.  The real limit seems to be > 20000
+
 function upload_to_wsprnet_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
 
@@ -268,49 +278,79 @@ function upload_to_wsprnet_daemon() {
         local call_grid_dirs_list
         call_grid_dirs_list=( $(find . -mindepth 1 -maxdepth 1 -type d) )
         call_grid_dirs_list=(${call_grid_dirs_list[@]#./})       ### strip the './' off the front of each element
-            if [[ ${#call_grid_dirs_list[@]} -eq 0 ]]; then
-                wd_logger 1 "Found no CALL/GRID directories.  'sleep ${UPLOAD_SLEEP_SECONDS}' and search again"
-                sleep ${UPLOAD_SLEEP_SECONDS}
+        if [[ ${#call_grid_dirs_list[@]} -eq 0 ]]; then
+            wd_logger 1 "Found no CALL/GRID directories.  'sleep ${UPLOAD_SLEEP_SECONDS}' and search again"
+            sleep ${UPLOAD_SLEEP_SECONDS}
+            continue
+        fi
+        wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
+
+        ### All spots in an upload to wspr.org must come from a single CALL/GRID
+        for call_grid_dir in ${call_grid_dirs_list[@]} ; do
+            wd_logger 2 "Checking ${call_grid_dir}"
+
+            find ${call_grid_dir} -type f -size 0 -exec rm {} \;                                              ### Flush all zero length files
+            find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n > ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}   ### Prepend the epoch of each file to its entry in this list
+
+            if [[ ! -s  ${UPLOAD_TMP_ALL_SPOT_FILES_FILE} ]]; then
+                wd_logger 2 "Found no '*_wspr_spots.txt' files for ${call_grid_dir}"
                 continue
             fi
-            wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
+            local all_spots_files_count=$(wc -l < ${UPLOAD_TMP_ALL_SPOT_FILES_FILE})
+            if [[ ${all_spots_files_count} -gt ${LINUX_MAX_ARGS} ]]; then
+                wd_logger 1 "Found ${all_spots_files_count} spot files which are too many to process in one upload, so look at only the first ${LINUX_MAX_ARGS} files"
+                sed -i ${LINUX_MAX_ARGS}q ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'sed -i ${LINUX_MAX_ARGS}q ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}' => ${ret_code}. Continuing, but failed to truncate ${UPLOAD_TMP_ALL_SPOT_FILES_FILE} so there might be linux errors"
+                fi
+                all_spots_files_count=${LINUX_MAX_ARGS}      ### Not used again, but make it the correct value
+            fi
+            local oldest_spot_file_epoch=$( head -n 1 ${UPLOAD_TMP_ALL_SPOT_FILES_FILE} | sed 's/\..*//' )    ### the 'find ... -print' epoch time is in SECS.MICROSECS.  Chop off the '.MICROSECS....' to get the file timestamp in seconds
+            local current_time_epoch=$(printf "%(%s)T\n" -1)
+            local oldest_spotfile_seconds=$(( current_time_epoch - oldest_spot_file_epoch))
 
-       ### All spots in an upload to wspr.org must come from a single CALL/GRID
-       for call_grid_dir in ${call_grid_dirs_list[@]} ; do
-           wd_logger 2 "Checking ${call_grid_dir}"
+            if [[ ${oldest_spotfile_seconds} -lt ${MAX_SPOTFILE_SECONDS} ]]; then
+                wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds} seconds, so wait for more files"
+                continue
+            fi
+            sed -i 's/^[^,]*,//' ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}                 ### chop off the SECS.MSECS,' timestamp at the begining of each filename line.  -i => make edits and write back to input file
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'sed -i 's/*^[^,]*,//'  ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}' => ${ret_code}. Continuing, but failed to strip off the epoch from each line, there will be errors"
+            fi
+            wd_logger 1 "Found ${all_spots_files_count} spot files, the oldest is ${oldest_spotfile_seconds} seconds old"
 
-           local spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
+            upload_wsprnet_create_spot_file_list_file ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'upload_wsprnet_create_spot_file_list_file ${UPLOAD_TMP_ALL_SPOT_FILES_FILE}' => ${ret_code}, so skip further processing"
+                continue
+            fi
 
-           if [[ ${#spots_files_list[@]} -eq 0 ]]; then
-               wd_logger 2 "Found no '*_wspr_spots.txt' files for ${call_grid_dir}"
-               continue
-           fi
-           local oldest_spot_file_epoch=${spots_files_list[0]%%.*}
-           local current_time_epoch=$(printf "%(%s)T\n" -1)
-           local oldest_spotfile_seconds=$(( current_time_epoch - oldest_spot_file_epoch))
-
-           if [[ ${oldest_spotfile_seconds} -lt ${MAX_SPOTFILE_SECONDS} ]]; then
-               wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds} seconds, so wait for more files"
-               continue
-           fi
-           wd_logger 1 "Found ${#spots_files_list[@]} spot files, the oldest is ${oldest_spotfile_seconds} seconds old"
-
-           local all_spots_file_list=( ${spots_files_list[@]#*,} )
-           upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
-           local wspr_spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#wspr_spots_files[@]} files"
+            local wspr_spots_files_list=( $( < ${UPLOAD_TMP_SPOT_FILE_LIST_FILE} )  )
+            wd_logger 1 "Uploading spots from ${#wspr_spots_files_list[@]} files"
 
             ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
-            cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            cat ${wspr_spots_files_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
-                wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "Found ${#wspr_spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
+                rm ${wspr_spots_files_list[@]}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'rm of ${#wspr_spots_files_list[@]}' empty files failed => ${ret_code}"
+                fi
                 continue
             fi
+            ### upload_wsprnet_create_spot_file_list_file will return ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with no more files than the MAX_LINUX_ARGS, so no need to check for too many args in 'rm' and other calls below 
             if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
-                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots.  Flushing ${#spots_files_list[@]} spot files"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots.  Flushing ${#wspr_spots_files_list[@]} spot files"
+                rm ${wspr_spots_files_list[@]}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'rm ${wspr_spots_files_list[@]}' while flushing spot files bacause we are configured for proxy mode spot uploads => ${ret_code}"
+                fi
                 continue
             fi
             ### Upload all the spots for one CALL_GRID in one curl transaction 
@@ -318,11 +358,11 @@ function upload_to_wsprnet_daemon() {
             call=${call//=//}              ### Since CALL is part of a linux directory name, it can't contain the very common '/' in call signs.  So we have replaced '/' in diretory name with '='.  Now restore the '/'
             local grid=${call_grid_dir#*_}
 
-            wd_logger 1 "Uploading ${call} at ${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
+            wd_logger 1 "Uploading the ${spots_to_xfer} spots from '${call} at ${grid}' which are in '${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}'"
 
             curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
-            if [[ $ret_code -ne 0 ]]; then
+            if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
                 continue
             fi
@@ -343,10 +383,16 @@ function upload_to_wsprnet_daemon() {
                     ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
                     ### Assume we are done attempting to transfer those spots
                     #local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
-                    wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
+                    wd_logger 1 "Successful curl upload has completed in ${curl_msecs} msecs. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org" ### :\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
-                wd_logger 1 "Flushing spot files which have been uploaded: '${all_spots_file_list[*]}'"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "Flushing the ${#wspr_spots_files_list[@]} spot files which have been uploaded"
+                rm ${wspr_spots_files_list[@]}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'rm ${wspr_spots_files_list[@]}' failed after a successful curl upload => ${ret_code}"
+                else
+                    wd_logger 1 "rm of the ${#wspr_spots_files_list[@]} spot files was successful after a successful curl upload"
+                fi
             fi
         done
         ### Pole every 10 seconds for a complete set of wspr_spots.txt files
