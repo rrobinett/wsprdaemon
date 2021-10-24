@@ -137,7 +137,7 @@ function plot_noise() {
     fi
 
     if [[ ! -f ${noise_calibration_file} ]]; then
-        mkdir -p ${noise_calibration_file}
+        mkdir -p ${noise_calibration_file%/*}   ### creates the directory for the file
 
         echo "# Cal file for use with 'wsprdaemon.sh -p'" >${noise_calibration_file}
         echo "# Values are: Nominal bandwidth, noise equiv bandwidth, RMS offset, freq offset, FFT_band, Threshold, see notes for details" >>${noise_calibration_file}
