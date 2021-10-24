@@ -383,7 +383,7 @@ function upload_to_wsprnet_daemon() {
                     ## wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
                     ### Assume we are done attempting to transfer those spots
                     #local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
-                    wd_logger 1 "Successful curl upload has completed in ${curl_msecs} msecs. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org" ### :\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
+                    wd_logger 1 "Successful curl upload has completed in ${curl_msecs} msecs. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
                 wd_logger 1 "Flushing the ${#wspr_spots_files_list[@]} spot files which have been uploaded"
                 rm ${wspr_spots_files_list[@]}
