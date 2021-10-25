@@ -336,7 +336,7 @@ function kiwirecorder_manager_daemon()
             local ps_output=$( ps ${kiwi_recorder_pid} )
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 1 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
+                wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
                 wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n${ps_output}"
                 kiwi_recorder_pid=""
