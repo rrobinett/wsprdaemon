@@ -169,41 +169,39 @@ function band_center_mhz_from_spot_freq()
 ############
 declare MAX_SPOTS_FILES=1000             ### Limit our search for spots to at most these many files, else a very full file tree will cause errors
 declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-999}           ### Limit of number of spots to upload in one curl MEPT upload transaction
-declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
+declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
 
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_wsprnet_create_spot_file_list_file()
 {
-    local wspr_spots_files="$@"         ### i.e. a list of spot files in the format:  /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/KIWI/BAND/YYMMDD_HHMM_BAND_wspr_spots.txt
+    local wspr_spots_files=$( tr ' ' '\n' <<< "$@")         ### Insert newlines so we can grep below for the files
     local wspr_spots_files_list=( ${wspr_spots_files} )
 
+    wd_logger 1 "Got $( wc -l <<< "${wspr_spots_files}") files and saved them in wspr_spots_files_list[]"
+
    ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
-    local wspr_spots_root_path=${wspr_spots_files_list[0]%/*/*/*}                                               ### Chop off KIWI/BAND/YYMMDD_HHMM_FREQ_wspr_spots.txt
     local cycles_list=( ${wspr_spots_files_list[@]%_*_wspr_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
           cycles_list=( $(echo "${cycles_list[@]##*/}" | tr ' ' '\n' |  sort -u )  )
 
-    wd_logger 1 "Creating a list of spot files for CALL_GRID ${wspr_spots_root_path##\//} from the ${#wspr_spots_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
+    wd_logger 1 "Creating a list of spot files for CALL_GRID from the ${#wspr_spots_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
 
     local spots_file_list=""
     local spots_file_list_count=0
     local file_spots=""
-    local file_spots_count=0
+    local file_spots_count=0 
     local cycle
     for cycle in ${cycles_list[@]} ; do
-        local cycle_root_name="${wspr_spots_root_path}/*/*/${cycle}"  ### e.g.: /home/pi/wsprdaemon/uploads.d/wsprnet.d/wspr_spots.d/CALL_GRID/*/*/YYMMDD_HHMM
-        wd_logger 1 "checking for spots in cycle ${cycle} using pattern ${cycle_root_name}"
-
-        local cycle_files=$( ls -1  ${cycle_root_name}_* | sort -u )        ### globbing double expanding some of the files.  This hack supresses that. Probably was due to bug in creating $wspr_spots_root_path
-        wd_logger 2 "Checking for number of spots in '${cycle_files}'"
+        local cycle_files=$( grep ${cycle} <<< "${wspr_spots_files}" )
+        wd_logger 1 "Checking for number of spots in '${cycle}' in the list of ${#wspr_spots_files_list[@]} files passed to us"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
         if [[ ${cycle_spots_count} -eq 0 ]]; then
-            wd_logger 1 "Found the complete set of files in cycle ${cycle_root_name} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} and let the calling function delete them"
+            wd_logger 1 "Found the complete set of files in cycle ${cycle} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} below and leave it to the calling function to delete them"
         fi
         wd_logger 1 "Found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-       if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+        if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
             wd_logger 1 "Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
             echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
             return
