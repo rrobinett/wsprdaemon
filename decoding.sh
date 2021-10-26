@@ -1044,8 +1044,8 @@ function kill_decoding_daemon() {
         return 1
     fi
     cd ${recording_dir}
-    if [[ ! -f ${DECODING_DAEMON_PID_FILE} ]] ; then
-        wd_logger 1 "ERROR: Decoding pid file '${DECODING_DAEMON_PID_FILE} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
+    if [[ ! -s ${DECODING_DAEMON_PID_FILE} ]] ; then
+        wd_logger 1 "ERROR: Decoding pid file '${DECODING_DAEMON_PID_FILE} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist or is empty"
         cd - > /dev/null
         return 2
     fi
