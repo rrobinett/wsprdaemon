@@ -1,8 +1,8 @@
 NF == 15 {
     no_head=FILENAME
 
-    split (FILENAME, path_array, /\//)
-    call_grid=path_array[3]
+    n = split (FILENAME, path_array, /\//)
+    call_grid=path_array[n-3]
 
     split (call_grid, call_grid_array, "_")
     site=call_grid_array[1]

@@ -313,3 +313,100 @@ function kill_and_wait_for_death() {
     wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
     return 0
 }
+
+function spawn_daemon() 
+{
+    local daemon_function_name=$1
+    local daemon_root_dir=$2
+    mkdir -p ${daemon_root_dir}
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
+#    setup_systemctl_deamon "-u a"  "-u z"
+    if [[ -f ${daemon_pid_file_path} ]]; then
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        if ps ${daemon_pid} > /dev/null ; then
+            wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
+            return 0
+        else
+            wd_logger 1 "found a stale file '${daemon_pid_file_path}' with pid ${daemon_pid}, so deleting it"
+            rm -f ${daemon_pid_file_path}
+        fi
+    fi
+    echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
+    WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to spawn 'WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}' => ${ret_code}"
+        return 1
+    fi
+    echo $! > ${daemon_pid_file_path}
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '$!' and recorded the pid to '${daemon_pid_file_path}'"
+    return 0
+}
+
+function kill_daemon() {
+    local daemon_root_dir=$2
+    if [[ ! -d ${daemon_root_dir} ]]; then
+        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        return 1
+    fi
+    local daemon_function_name=$1
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start"
+    if [[ ! -f ${daemon_pid_file_path} ]]; then
+        wd_logger 1 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
+        return 2
+    else
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        rm -f ${daemon_pid_file_path}
+        if ! ps ${daemon_pid} > /dev/null ; then
+            wd_logger 1 "ERROR: ${daemon_function_name} pid file reported pid ${daemon_pid}, but that isn't running"
+            return 3
+        else
+            kill ${daemon_pid}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'kill ${daemon_pid}' failed for active pid ${daemon_pid}"
+                return 4
+            else
+                wd_logger 1 "'kill ${daemon_pid}' was successful"
+            fi
+        fi
+    fi
+    return 0
+}
+
+function get_status_of_daemon() {
+    local daemon_function_name=$1
+    local daemon_root_dir=$2
+    if [[ ! -d ${daemon_root_dir} ]]; then
+        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        return 1
+    fi
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start"
+    if [[ ! -f ${daemon_pid_file_path} ]]; then
+        wd_logger 1 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
+        return 2
+    else
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        ps ${daemon_pid} > /dev/null
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then 
+            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            rm -f ${daemon_pid_file_path}
+            return 3
+        else
+            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+        fi
+    fi
+    return 0
+}
+
+
