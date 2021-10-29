@@ -65,7 +65,7 @@ function tgz_service_daemon()
                     break
                 fi
             else
-                wd_logger 1 "Found invalid tar file ${tbz_file}"
+                wd_logger 2 "Found invalid tar file ${tbz_file}"
                 local file_mod_epoch=0
                 file_mod_epoch=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
                 local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
@@ -81,11 +81,11 @@ function tgz_service_daemon()
             fi
         done
         if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
+            wd_logger 2 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
             sleep 1
             continue
         fi
-        wd_logger 1 "Finished ${#tbz_file_list[@]} raw tar files, so nothing to do"
+        wd_logger 1 "Finished ${#tbz_file_list[@]} raw tar files"
 
         queue_files_for_upload_to_wd1 ${valid_tbz_list[@]}
 
@@ -197,7 +197,9 @@ function tgz_service_daemon()
             rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"    fi
+                wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
+            fi
+        done
         
         ### Record the noise files
         local TS_NOISE_CSV_FILE=ts_noise.csv
@@ -263,7 +265,7 @@ function upload_to_mirror_daemon() {
     wd_logger 1 "Starting in ${UPLOAD_TO_MIRROR_QUEUE_DIR}"
     while true; do
         shopt -s nullglob
-        local files_queued_for_upload_list=( * )
+        local files_queued_for_upload_list=( $(find -type f) )
         if [[ -z "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
             wd_logger 1 "UPLOAD_TO_MIRROR_SERVER_URL is not defined, so nothing for us to do now. 'sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}' and then reread the config file"
             if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
@@ -274,7 +276,7 @@ function upload_to_mirror_daemon() {
             continue
         else
             local parsed_server_url_list=( ${UPLOAD_TO_MIRROR_SERVER_URL//,/ } )
-            if [[ ${#parsed_server_url_list[@]} -ne ${UPLOAD_TO_MIRROR_SERVER_SECS} ]]; then
+            if [[ ${#parsed_server_url_list[@]} -ne  3  ]]; then
                 wd_logger 1 "ERROR: invalid configuration variable UPLOAD_TO_MIRROR_SERVER_URL  = '${UPLOAD_TO_MIRROR_SERVER_URL}'. 'sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}' and then reread the config file"
                 if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
                     wd_logger 1 "ERROR: this mirror server's URL is corrupted and  there are ${#files_queued_for_upload_list[@]} files waiting to be uploaded"
@@ -289,9 +291,9 @@ function upload_to_mirror_daemon() {
         local upload_password=${parsed_server_url_list[2]}
 
         if [[ ${#files_queued_for_upload_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found now files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
+            wd_logger 1 "Found no files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
         else
-            wd_logger 1 "Found {#files_queued_for_upload_list[@]} files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
+            wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
             wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${upload_user}:${upload_password} ftp://${upload_url}'"
@@ -321,7 +323,7 @@ function queue_files_for_upload_to_wd1() {
     local files="$@"
 
     if [[ -z "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
-        wd_logger 1 "Queuing is disabled, so ignoring the $( wc -w <<< "${files}") we were passed'"
+        wd_logger 1 "Queuing is disabled, so ignoring the we were passed"
     else
         local files_path_list=(${files})
         local files_name_list=(${files_path_list[@]##*/})
@@ -331,7 +333,7 @@ function queue_files_for_upload_to_wd1() {
 }
 
 declare -r UPLOAD_DAEMON_LIST=(
-#   "upload_to_mirror_daemon        ${UPLOADS_ROOT_DIR} "
+   "upload_to_mirror_daemon        ${UPLOADS_ROOT_DIR} "
    "tgz_service_daemon             ${UPLOADS_ROOT_DIR} "
 #   "scraper_daemon          ${UPLOADS_ROOT_DIR} "
 #   "noise_graph_daemon      ${UPLOADS_ROOT_DIR} "
