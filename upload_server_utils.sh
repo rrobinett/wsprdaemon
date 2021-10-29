@@ -39,7 +39,7 @@ function tgz_service_daemon()
     shopt -s nullglob
     
     while true; do
-        wd_logger 1 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
+        wd_logger 2 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
         local -a tbz_file_list
         while tbz_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tbz_file_list[@]} -eq 0 ]]; do
             wd_logger 2 "Found no files, so sleep and try again"
@@ -50,9 +50,9 @@ function tgz_service_daemon()
         rm -rf wsprdaemon.d wsprnet.d
         local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
         local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
-        wd_logger 1 "Found ${#tbz_file_list[@]} tar.tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
+        wd_logger 2 "Found ${#tbz_file_list[@]} tar.tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
 
-        wd_logger 1 "Validating and extracting spot and noise files from the tar.tbz list until will fill this file system"
+        wd_logger 2 "Validating and extracting spot and noise files from the tar.tbz list until all are processed or we would approach filling this file system"
         local valid_tbz_list=() 
         local tbz_file 
         for tbz_file in ${tbz_file_list[@]}; do
@@ -71,7 +71,9 @@ function tgz_service_daemon()
                 local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
                 local file_age=$(( ${current_epoch}  - ${file_mod_epoch} ))
                 if [[ ${file_age} -gt ${MAX_TBZ_AGE_SECS-600} ]] ; then
-                    wd_logger 1 "Deleting invalid file ${tbz_file} which is ${file_age} seconds old"
+                    if [[ ! ${tbz_file} =~ K7BIZ ]]; then   ### K7BIZ is running a corrupt config, so don't print that his .tbz files are corrupt
+                        wd_logger 1 "Deleting invalid file ${tbz_file} which is ${file_age} seconds old"
+                    fi
                     rm ${tbz_file}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
@@ -85,16 +87,16 @@ function tgz_service_daemon()
             sleep 1
             continue
         fi
-        wd_logger 1 "Finished ${#tbz_file_list[@]} raw tar files"
+        wd_logger 2 "Finished processing ${#tbz_file_list[@]} raw tar files"
 
         queue_files_for_upload_to_wd1 ${valid_tbz_list[@]}
 
-        wd_logger 1 "Processing spot and noise files from the first ${#valid_tbz_list[@]} valid tbz files of the ${#tbz_file_list[@]} .tbz files in the ftp/uploads directory"
+        wd_logger 2 "Processing spot and noise files from the first ${#valid_tbz_list[@]} valid tbz files of the ${#tbz_file_list[@]} .tbz files in the ftp/uploads directory"
 
         ### Remove frequectly found zero length spot files which are  are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decoded
         local spot_file_list=()
         while spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
-            wd_logger 1 "Flushing ${#spot_file_list[@]} empty spot files"
+            wd_logger 2 "Flushing ${#spot_file_list[@]} empty spot files"
             if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
                 wd_logger 1 "${#spot_file_list[@]} empty spot files are too many to 'rm ..' in one call, so 'rm' the first ${MAX_RM_ARGS} spot files"
                 spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
@@ -174,24 +176,24 @@ function tgz_service_daemon()
                     exit
                 fi
                 local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-                wd_logger 1 "Split ${TS_SPOTS_CSV_FILE} into ${#split_file_list[@]} splitXXX.csv files"
+                wd_logger 2 "Split ${TS_SPOTS_CSV_FILE} into ${#split_file_list[@]} splitXXX.csv files"
                 local split_csv_file
                 for split_csv_file in ${split_file_list[@]} ; do
-                    wd_logger 1 "Recording ${split_csv_file}"
+                    wd_logger 2 "Recording ${split_csv_file}"
                     python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: 'python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file}) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
-                        wd_logger 1 "ERROR: so move the valid_tbz_list[] files which contain this error spot file to ${UPLOADS_ROOT_DIR}}/bad_tbz.d so we can try to proceed"
-                        mkdir -p ${UPLOADS_ROOT_DIR}}/bad_tbz.d
-                        mv  ${valid_tbz_list[@]} ${UPLOADS_ROOT_DIR}}/bad_tbz.d/
-                        exit
+                        local reporters=$( awk -F , '{print $21}' ${split_csv_file} | sort | uniq -c)
+                        local spots_count=$(wc -l < ${split_csv_file})
+                        wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the ${spots_count}  spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
+                        mkdir -p ${UPLOADS_ROOT_DIR}/bad_tbz.d
+                        cp -p  ${split_csv_file} ${UPLOADS_ROOT_DIR}/bad_tbz.d/
                     else
                         wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot files"
                     fi
                     rm ${split_csv_file}
                 done
-                wd_logger 1 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
+                wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
             fi
             wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
             rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
@@ -205,7 +207,7 @@ function tgz_service_daemon()
         local TS_NOISE_CSV_FILE=ts_noise.csv
         local noise_file_list=()
         local max_noise_files=${MAX_RM_ARGS}
-        while noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
+        while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
             if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
                 wd_logger 1 "Truncating  noise_file_list[] to ${max_noise_files} files"
                 noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )
