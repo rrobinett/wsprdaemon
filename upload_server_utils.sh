@@ -15,12 +15,11 @@ declare MAX_RM_ARGS=10000    ### Limit of the number of files in the 'rm ...' cm
 
 ### This deamon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
-function tgz_service_daemon() 
+function tbz_service_daemon() 
 {
     wd_logger 1 "Starting in $PWD, but will run in ${UPLOADS_TMP_ROOT_DIR}"
-    touch tgz_service_daemon.log
 
-    local tgz_service_daemon_root_dir=$1       ### The tbz files are found in permanent storage under ~/wsprdaemon/uploads.d/..., but this daemon does all its work in a /tmp/wsprdaemon/... directory
+    local tbz_service_daemon_root_dir=$1       ### The tbz files are found in permanent storage under ~/wsprdaemon/uploads.d/..., but this daemon does all its work in a /tmp/wsprdaemon/... directory
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
 
@@ -28,9 +27,9 @@ function tgz_service_daemon()
     cd ${UPLOADS_TMP_ROOT_DIR}
 
     ### wd_logger will write to $PWD in UPLOADS_TMP_ROOT_DIR.  We want the log to be kept on a permanet file system, so create a symlink to a log file over there
-    if [[ ! -L tgz_service_daemon.log ]]; then
-        ln -s ${tgz_service_daemon_root_dir}/tgz_service_daemon.log tgz_service_daemon.log       ### Logging for this dameon is in permanent storage
-        wd_logger 1 "Created symlink 'ln -s ${tgz_service_daemon_root_dir}/tgz_service_daemon.log tgz_service_daemon.log'"
+    if [[ ! -L tbz_service_daemon.log ]]; then
+        ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log       ### Logging for this dameon is in permanent storage
+        wd_logger 1 "Created symlink 'ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log'"
     fi
 
     ### Most of the file read/write happens in /tmp/wsprdsaemon
@@ -158,11 +157,12 @@ function tgz_service_daemon()
                     if (NF == 32)  wspr_pkt_mode = "2 ";
                     $7=toupper($7); 
                     if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); 
+                    if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
                     $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); 
                     $23=toupper($23); 
                     n = split(FILENAME, a, "/"); 
                     printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
-            cat awk.out | sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" > ${TS_SPOTS_CSV_FILE}
+            sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${TS_SPOTS_CSV_FILE}
             if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
                 wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
             else
@@ -183,12 +183,8 @@ function tgz_service_daemon()
                     python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
-                        local reporters=$( awk -F , '{print $21}' ${split_csv_file} | sort | uniq -c)
-                        local spots_count=$(wc -l < ${split_csv_file})
                         wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the ${spots_count}  spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
-                        mkdir -p ${UPLOADS_ROOT_DIR}/bad_tbz.d
-                        cp -p  ${split_csv_file} ${UPLOADS_ROOT_DIR}/bad_tbz.d/
-                    else
+                   else
                         wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot files"
                     fi
                     rm ${split_csv_file}
@@ -336,7 +332,7 @@ function queue_files_for_upload_to_wd1() {
 
 declare -r UPLOAD_DAEMON_LIST=(
    "upload_to_mirror_daemon        ${UPLOADS_ROOT_DIR} "
-   "tgz_service_daemon             ${UPLOADS_ROOT_DIR} "
+   "tbz_service_daemon             ${UPLOADS_ROOT_DIR} "
 #   "scraper_daemon          ${UPLOADS_ROOT_DIR} "
 #   "noise_graph_daemon      ${UPLOADS_ROOT_DIR} "
     )
