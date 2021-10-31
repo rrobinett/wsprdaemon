@@ -177,7 +177,7 @@ function upload_wsprnet_create_spot_file_list_file()
     local wspr_spots_files=$( tr ' ' '\n' <<< "$@")         ### Insert newlines so we can grep below for the files
     local wspr_spots_files_list=( ${wspr_spots_files} )
 
-    wd_logger 1 "Got $( wc -l <<< "${wspr_spots_files}") files and saved them in wspr_spots_files_list[]"
+    wd_logger 2 "Got $( wc -l <<< "${wspr_spots_files}") files and saved them in wspr_spots_files_list[]"
 
    ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
     local cycles_list=( ${wspr_spots_files_list[@]%_*_wspr_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
@@ -251,7 +251,7 @@ function get_wsprnet_uploading_job_dir_path(){
     echo ${receiver_posting_path}
 }
 
-declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-30}       ### By default wait for the oldest spot file to be 30 seconds old before starting an upload of it and all newer spotfiles
+declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-40}       ### By default wait for the oldest spot file to be 40 seconds old before starting an upload of it and all newer spotfiles
 declare UPLOAD_SLEEP_SECONDS=10
 function upload_to_wsprnet_daemon() {
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD

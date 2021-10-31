@@ -450,8 +450,15 @@ function sleep_until_raw_file_is_full() {
         wd_logger 1 "ERROR: file ${filename} disappeared after ${loop_seconds} seconds"
         return 1
     fi
-    if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} || ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
-        wd_logger 2 "ERROR: wav file stablized at invalid size ${new_file_size}"
+    if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} ]]; then
+        wd_logger 2 "ERROR: wav file stablized at invalid too small size ${new_file_size}"
+        return 2
+    fi
+    if [[ ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
+        wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be 2 instances of the KWR running.  Looping here so I can look at the log file.  Increment verbosity to get me to proceed"
+        while [[ ${verbosity} -eq 1 ]]; do
+            sleep 1
+        done
         return 1
     fi
     wd_logger 2 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
