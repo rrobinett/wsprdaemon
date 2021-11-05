@@ -70,8 +70,7 @@ function posting_daemon()
     done
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches
-    local daemon_stop="no"
-    while [[ ${daemon_stop} == "no" ]]; do
+    while true; do
         wd_logger 2 "Starting check for all posting subdirs to have a YYMMDD_HHMM_wspr_spots.txt file in them"
         local newest_all_wspr_file_path=""
         local newest_all_wspr_file_name=""
@@ -96,7 +95,6 @@ function posting_daemon()
                 wd_logger 4 "Checking dir ${posting_dir} for wspr_spots.txt files"
                 if [[ ! -d ${posting_dir} ]]; then
                     wd_logger 2 "Expected posting dir ${posting_dir} does not exist, so exiting inner for loop"
-                    daemon_stop="yes"
                     break
                 fi
                 for file in ${posting_dir}/*_wspr_spots.txt; do
@@ -111,11 +109,6 @@ function posting_daemon()
                     fi
                 done
             done
-            if [[ ${daemon_stop} != "no" ]]; then
-                wd_logger 1 " The expected posting dir ${posting_dir} does not exist, so exiting inner while loop"
-                daemon_stop="yes"
-                break
-            fi
             if [[ -z "${newest_all_wspr_file_path}" ]]; then
                 wd_logger 4 "Found no wspr_spots.txt files"
             else
@@ -154,10 +147,6 @@ function posting_daemon()
                 wd_logger 1 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
             fi
         done
-        if [[ ${daemon_stop} != "no" ]]; then
-            wd_logger 3 "Exiting outer while loop"
-            break
-        fi
         ### All of the ${real_receiver_list[@]} directories have *_wspr_spot.txt files with the same time&name
 
         ### Clean out any older *_wspr_spots.txt files
@@ -168,10 +157,10 @@ function posting_daemon()
             cd -P ${posting_source_dir}
             for posting_source_file in *_wspr_spots.txt ; do
                 if [[ ${posting_source_file} -ot ${newest_all_wspr_file_path} ]]; then
-                    wd_logger 3 "Flushing file ${posting_source_file} which is older than the newest complete set of *_wspr_spots.txt files"
+                    wd_logger 1 "Flushing file ${posting_source_dir}/${posting_source_file} which is older than the newest complete set of *_wspr_spots.txt files"
                     rm $posting_source_file
                 else
-                    wd_logger 3 "Preserving file ${posting_source_file} which is same or newer than the newest complete set of *_wspr_spots.txt files"
+                    wd_logger 3 "Preserving file ${posting_source_dir}/${posting_source_file} which is same or newer than the newest complete set of *_wspr_spots.txt files"
                 fi
             done
             cd - > /dev/null
@@ -184,66 +173,19 @@ function posting_daemon()
 
         ### Queue spots (if any) for this real or MERGed receiver to wsprnet.org
         ### Create one spot file containing the best set of CALLS/SNRs for upload to wsprnet.org
-        local newest_list=(${posting_source_dir_list[@]/%/\/${newest_all_wspr_file_name}})
+        local newest_spot_files_list=(${posting_source_dir_list[@]/%/\/${newest_all_wspr_file_name}})
         local wsprd_spots_all_file_path=${posting_receiver_dir_path}/wspr_spots.txt.ALL
-        cat ${newest_list[@]} > ${wsprd_spots_all_file_path}
-        local wsprd_spots_best_file_path
+        cat ${newest_spot_files_list[@]} > ${wsprd_spots_all_file_path}
         if [[ ! -s ${wsprd_spots_all_file_path} ]]; then
             ### The decode daemon of each real receiver signaled it had decoded a wave file with zero spots by creating a zero length spot.txt file 
-            wd_logger 1 "No spots were decoded"
-            wsprd_spots_best_file_path=${wsprd_spots_all_file_path}
-        else
-            ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
-             wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
-
-            local wd_arg=$(printf "Merging and sorting files '${newest_list[@]}' into ${wsprd_spots_all_file_path}")
-            wd_logger 1 "${wd_arg}"
-
-            ### Get a list of all calls found in all of the receiver's decodes
-            local posting_call_list=$( cat ${wsprd_spots_all_file_path} | awk '{print $7}'| sort -u )
-            [[ -n "${posting_call_list}" ]] && wd_logger 3 " found this set of unique calls: '${posting_call_list}'"
-
-            ### For each of those calls, get the decode line with the highest SNR
-            rm -f best_snrs.tmp
-            touch best_snrs.tmp
-            local call
-            for call in ${posting_call_list}; do
-                ${GREP_CMD} " ${call} " ${wsprd_spots_all_file_path} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
-                cat this_calls_best_snr.tmp >> best_snrs.tmp
-                wd_logger 2 "Found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
-            done
-            sed 's/,.*//' best_snrs.tmp | sort -k 6,6n > ${wsprd_spots_best_file_path}   ### Chop off the RMS and FFT fields, then sort by ascending frequency.  
-            rm -f best_snrs.tmp this_calls_best_snr.tmp 
-            ### Now ${wsprd_spots_best_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
-
-            ### If this is a MERGed rx, then log SNR decsions to "merged.log" file
-            if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
-                local merged_log_file="merged.log"
-                log_merged_snrs >> ${merged_log_file}
-                truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
-            fi
-            ### TODO: get a per-rx list of spots so the operation below can mark which real-rx should be uploaded by the proxy upload service on the wsprdaemon.org server
+            wd_logger 1 "No spots were decoded, so flush all the real reciever zero length spot files and go to top of this loop to look for a new set of spot files"
+            rm ${newest_spot_files_list[@]}
+            continue
         fi
 
-        mkdir -p ${wsprnet_upload_dir}
-        local upload_wsprnet_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
-        source ${RUNNING_JOBS_FILE}
-        if [[ "${RUNNING_JOBS[@]}" =~ ${posting_receiver_name} ]]; then
-            ### Move the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
-            if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
-                wd_logger 1 "Skip queuing a zero length spots file ${wsprd_spots_best_file_path}"
-            else
-                mv ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path} 
-                wd_logger 1 "Moved ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})"
-            fi
-        else
-            ### This real rx is a member of a MERGed rx, so its spots are being merged with other real rx
-            wd_logger 1 "Not queuing ${wsprd_spots_best_file_path} for upload to wsprnet.org since this rx is not a member of RUNNING_JOBS '${RUNNING_JOBS[@]}'"
-        fi
- 
-        ###  Queue spots and noise from all real receivers for upload to wsprdaemon.org
+       ###  Add azi info to spots from all real receivers for upload to wsprdaemon.org, then extract the subset of the best SNR spots from those for upload to wsprnet.org
         local real_receiver_band=${PWD##*/}
-        ### For each real receiver, queue any *wspr_spots.txt files containing at least on spot.  there should always be *noise.tx files to upload
+        ### For each real receiver, queue any *wspr_spots.txt files containing at least one spot.  there should always be *noise.tx files to upload
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
@@ -305,21 +247,55 @@ function posting_daemon()
                     fi
                 fi
             fi
- 
-            ### Upload noise file
-            local noise_files_list=( ${real_receiver_dir}/*_wspr_noise.txt )
-            local noise_files_list_count=${#noise_files_list[@]}
-            if [[ ${noise_files_list_count} -lt 1 ]]; then
-                wd_logger 1 "The expected noise.txt file is missing"
-            else
-                local  upload_wsprdaemon_noise_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${my_call_sign//\//=}_${my_grid}/${real_receiver_name}/${real_receiver_band}  ## many ${my_call_sign}s contain '/' which can't be part of a Linux filename, so convert them to '='
-                mkdir -p ${upload_wsprdaemon_noise_dir}
-
-                mv ${noise_files_list[@]} ${upload_wsprdaemon_noise_dir}   ### The TIME_FREQ is already part of the noise file name
-                wd_logger 1 "Moved noise file(s) '${noise_files_list[*]}' to '${upload_wsprdaemon_noise_dir}'"
-            fi
-        done
+       done
         ### We have uploaded all the spot and noise files
+         wd_logger 1 "Merging and sorting spots in files '${newest_spot_files_list[*]}' into ${wsprd_spots_all_file_path}"
+
+        ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
+        local wsprd_spots_best_file_path
+        wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
+
+
+ 
+        ### Get a list of all calls found in all of the receiver's decodes
+        local posting_call_list=$( awk '{print $7}' ${wsprd_spots_all_file_path} | sort -u )
+        [[ -n "${posting_call_list}" ]] && wd_logger 3 " found this set of unique calls: '${posting_call_list}'"
+
+        ### For each of those calls, get the decode line with the highest SNR
+        rm -f best_snrs.tmp
+        touch best_snrs.tmp
+        local call
+        for call in ${posting_call_list}; do
+            ${GREP_CMD} " ${call} " ${wsprd_spots_all_file_path} | sort -k4,4n | tail -n 1 > this_calls_best_snr.tmp  ### sorts by SNR and takes only the highest
+            cat this_calls_best_snr.tmp >> best_snrs.tmp
+            wd_logger 2 "Found the best SNR report for call '${call}' was '$(cat this_calls_best_snr.tmp)'"
+        done
+        sed 's/,.*//' best_snrs.tmp | sort -k 6,6n > ${wsprd_spots_best_file_path}   ### Chop off the RMS and FFT fields, then sort by ascending frequency.  
+        rm -f best_snrs.tmp this_calls_best_snr.tmp 
+        ### Now ${wsprd_spots_best_file_path} contains one decode per call from the highest SNR report sorted in ascending signal frequency
+
+        ### If this is a MERGed rx, then log SNR decsions to "merged.log" file
+        if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+            local merged_log_file="merged.log"
+            log_merged_snrs >> ${merged_log_file}
+            truncate_file ${merged_log_file} ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
+        fi
+
+        mkdir -p ${wsprnet_upload_dir}
+        local upload_wsprnet_file_path=${wsprnet_upload_dir}/${recording_date_time}_${recording_freq_hz}_wspr_spots.txt
+        source ${RUNNING_JOBS_FILE}
+        if [[ "${RUNNING_JOBS[@]}" =~ ${posting_receiver_name} ]]; then
+            ### Move the wspr_spot.tx.BEST file we have just created to a uniquely named file in the uploading directory
+            if [[ ! -s ${wsprd_spots_best_file_path} ]]; then
+                wd_logger 1 "Skip queuing a zero length spots file ${wsprd_spots_best_file_path}"
+            else
+                mv ${wsprd_spots_best_file_path} ${upload_wsprnet_file_path} 
+                wd_logger 1 "Moved ${wsprd_spots_best_file_path} to ${upload_wsprnet_file_path} which contains spots:\n$(cat ${upload_wsprnet_file_path})"
+            fi
+        else
+            ### This real rx is a member of a MERGed rx, so its spots are being merged with other real rx
+            wd_logger 1 "Not queuing ${wsprd_spots_best_file_path} for upload to wsprnet.org since this rx is not a member of RUNNING_JOBS '${RUNNING_JOBS[@]}'"
+        fi
  
         sleep ${WAV_FILE_POLL_SECONDS}
     done
@@ -332,7 +308,7 @@ function posting_daemon()
 ###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
-### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
+### The input spot lines also have 5 fields added by WD:  'RMS_NOISE C2_NOISE OVERLOAD_COUNT WSPR_PKT_MODE and PROXY_UPLOAD'
 declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
@@ -355,12 +331,12 @@ function create_enhanced_spots_file() {
         local spot_line_list_count=${#spot_line_list[@]}
         local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode  ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode  ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise spot_mode <<< "${other_fields}"    ### Type 2 spots have no grid
+            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode <<< "${other_fields}"    ### Type 2 spots have no grid
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
@@ -385,7 +361,7 @@ function create_enhanced_spots_file() {
         echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_ipass} ${spot_nhardmin} ${spot_for_wsprnet} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} ${proxy_upload_mode}" >> ${real_receiver_enhanced_wspr_spots_file} 
 
     done < ${real_receiver_wspr_spots_file}
-    wd_logger 2 "Created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
+    wd_logger 1 "Created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
 }
 
 ################### wsprdaemon uploads ####################################

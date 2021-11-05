@@ -245,7 +245,8 @@ function get_wsprnet_uploading_job_dir_path(){
         [[ ${verbosity} -ge 0 ]] && echo "$(date): ERROR: can't find grid for running job '${job}'"
         exit 1
     fi
-    local call_dir_name=${call/\//=}_${grid}
+    ### Linux directory names can't have the '/' character in them which is so common in ham call signs.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal in call signs
+    local call_dir_name=${call//\//=}_${grid}    
     local receiver_posting_path="${UPLOADS_WSPRNET_SPOTS_DIR}/${call_dir_name}/${receiver_name}/${receiver_rx_band}"
 
     echo ${receiver_posting_path}
