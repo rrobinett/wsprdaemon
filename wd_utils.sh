@@ -263,6 +263,46 @@ function truncate_file() {
     fi
 }
 
+### Because 'kill' and 'debug increment/decrement' traps are only processed by a program at the end of any currently running program,
+### Executing a long sleep command like 'sleep 60' will block processing of 'kill' commands for up to (in that case) 60 seconds
+### By using this command, long 'sleep NN' commands are executed as a series of 'sleep 1's and thus traps will be handled within one second
+function wd_sleep()
+{
+    local sleep_for_secs=$1
+    local start_secs=${SECONDS}
+    local end_secs=$(( start_secs + sleep_for_secs ))
+
+    wd_logger 1 "Starting to sleep for a total of ${sleep_for_secs} seconds"
+    while [[ ${SECONDS} -le ${end_secs} ]]; do
+        sleep 1
+    done
+    wd_logger 1 "Finished sleeping"
+}
+
+function wd_rm()
+{
+    local rm_list=($@)
+
+    wd_logger 1 "Delete ${#rm_list[@]} files: ${rm_list[*]}"
+    local rm_errors=0
+    local rm_file
+    for rm_file in ${rm_list[@]}; do
+        if [[ ! -f ${rm_file} ]]; then
+            wd_logger 1 "ERROR: can't find supplied file ${rm_file}"
+        else
+            rm ${rm_file}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to 'rm ${rm_file}' requested by function"
+                $(( ++ rm_errors ))
+            fi
+        fi
+    done
+    wd_logger 1 "Finished rm of ${#rm_list[@]} files.  Encountered ${rm_errors} rm errors"
+}
+
+################# Daemon management functions ==============================
+###
 ###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
 function get_pid_from_file(){
     local pid_var_name=$1   ### Where to return the PID found in $2 file
@@ -409,4 +449,43 @@ function get_status_of_daemon() {
     return 0
 }
 
+### Given a table of the form:
+### 
+### declare client_upload_daemon_list=(
+###   "upload_to_wsprnet_daemon         ${UPLOADS_WSPRNET_SPOTS_DIR}"
+###   "upload_to_wsprdaemon_daemon      ${UPLOADS_WSPRDAEMON_ROOT_DIR}"
+### )
+function daemons_list_action()
+{
+    local acton_to_perform=$1        ### 'a', 'z', or 's'
+    local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
 
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${daemon_list_name}'"
+
+    for spawn_line in "${daemon_list_name[@]}"; do
+        local daemon_info_list=(${spawn_line})
+        local daemon_function_name=${daemon_info_list[0]}
+        local daemon_home_directory=${daemon_info_list[1]}
+        
+        wd_logger 2 "Execute action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}'"
+        case ${acton_to_perform} in
+            a)
+                spawn_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+            z)
+                kill_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+
+            s)
+                get_status_of_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+            *)
+                wd_logger 1 "ERROR: invalid action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}'"
+                ;;
+        esac
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 2 "ERROR: Running action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}' => ${ret_code}"
+        fi
+    done
+}

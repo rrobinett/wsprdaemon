@@ -2,8 +2,6 @@
 ########## Section which creates and manages the 'top level' watchdog daemon  ############################################################################
 ##########################################################################################################################################################
 
-declare -r    PATH_WATCHDOG_PID=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.pid
-declare -r    PATH_WATCHDOG_LOG=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.log
 declare       WATCHDOG_POLL_SECONDS=5      ## How often the watchdog wakes up to check for all the log files for new lines and at the beginning of each odd minute run zombie checks, create noise graphs, etc....
 declare       WATCHDOG_PRINT_ALL_LOGS=${WATCHDOG_PRINT_ALL_LOGS-no}
 
@@ -38,102 +36,27 @@ function watchdog_daemon()
         last_minute=${current_minute}
         local sleep_secs=${WATCHDOG_POLL_SECONDS}
         wd_logger 2 "Complete.  Sleeping for $sleep_secs seconds."
-        sleep ${sleep_secs}
+        wd_sleep ${sleep_secs}
     done
 }
 
-
-### '-a' and '-w a' cmds run this:
-function spawn_watchdog_daemon(){
-    local watchdog_pid_file=${PATH_WATCHDOG_PID}
-    local watchdog_file_dir=${watchdog_pid_file%/*}
-    local watchdog_pid
-
-    if [[ -f ${watchdog_pid_file} ]]; then
-        watchdog_pid=$(cat ${watchdog_pid_file})
-        if [[ ${watchdog_pid} =~ ^[0-9]+$ ]]; then
-            if ps ${watchdog_pid} > /dev/null ; then
-                echo "Watchdog deamon with pid '${watchdog_pid}' is already running"
-                return
-            else
-                echo "Deleting watchdog pid file '${watchdog_pid_file}' with stale pid '${watchdog_pid}'"
-            fi
-        fi
-        rm -f ${watchdog_pid_file}
-    fi
-    setup_systemctl_deamon
-    wd_logger 1 "Spawning watchdog_daemon"
-    WD_LOGFILE=${PATH_WATCHDOG_LOG} watchdog_daemon  &
-    watchdog_pid=$!
-    echo ${watchdog_pid}  > ${watchdog_pid_file}
-    wd_logger 1 "watchdog_daemon spawned and logging to ${WD_LOGFILE}"
-    echo "Watchdog deamon with pid '${watchdog_pid}' is now running"
-}
+############## Top level which spawns/kill/shows status of all of the watchdog daemons
+declare watchdog_daemon_list=(
+   "watchdog_daemon         ${WSPRDAEMON_ROOT_DIR}"
+)
 
 ### '-w l cmd runs this
 function tail_watchdog_log() {
     less +F ${PATH_WATCHDOG_LOG}
 }
 
-
-### '-w s' cmd runs this:
-function show_watchdog(){
-    local watchdog_pid_file=${PATH_WATCHDOG_PID}
-    local watchdog_file_dir=${watchdog_pid_file%/*}
-
-    wd_logger 2 "Starting.  watchdog_pid_file=${PATH_WATCHDOG_PID}, watchdog_file_dir=${watchdog_pid_file%/*}"
-    if [[ ! -f ${watchdog_pid_file} ]]; then
-        wd_logger 1 "Found no watchdog daemon pid file '${watchdog_pid_file}'"
-    else
-        local watchdog_pid=$(cat ${watchdog_pid_file})
-        if ! ps ${watchdog_pid} > /dev/null ; then
-            wd_logger 1 "Watchdog deamon with pid '${watchdog_pid}' not running"
-            rm ${watchdog_pid_file}
-        else
-            wd_logger 1 "Watchdog daemon with pid ${watchdog_pid} is running"
-        fi
-    fi
-    wd_logger 2 "Finished"
-}
-
-### '-w z' runs this:
-function kill_watchdog() {
-
-    local watchdog_pid_file=${PATH_WATCHDOG_PID}
-    local watchdog_file_dir=${watchdog_pid_file%/*}
-    wd_logger 2 "Starting. watchdog_pid_file=${PATH_WATCHDOG_PID}, watchdog_file_dir=${watchdog_pid_file%/*}"
-
-    if [[ ! -f ${watchdog_pid_file} ]]; then
-        wd_logger 2 "Watchdog pid file '${watchdog_pid_file}' doesn't exist"
-    else
-        local watchdog_pid=$(cat ${watchdog_pid_file})    ### show_watchog returns only if this file is valid
-
-        wd_logger 2 "Found ${watchdog_pid_file} which contains pid ${watchdog_pid}"
-        if ! ps ${watchdog_pid} > /dev/null ; then
-            wd_logger 2 "Watchdog deamon with pid '${watchdog_pid}' not running"
-        else
-            kill ${watchdog_pid}
-            wd_logger 1 "Killed watchdog with pid '${watchdog_pid}'"
-        fi
-        rm ${watchdog_pid_file}
-    fi
-    wd_logger 2 "Finished"
-}
-
-#### -w [i,a,z] command
+#### -w [a,z,s,l] command
 function watchdog_cmd() {
     wd_logger 2 "Executing cmd $1"
     
-    case ${1} in
-        a)
-            spawn_watchdog_daemon
-            ;;
-        z)
-            kill_watchdog
-            kill_upload_daemons
-            ;;
-        s)
-            show_watchdog
+    case $1 in
+        a|z|s)
+            daemons_list_action  $1 watchdog_daemon_list
             ;;
         l)
             tail_watchdog_log

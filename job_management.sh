@@ -260,7 +260,7 @@ function show_running_jobs() {
         wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
         return 2
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger 1 "RUNNING_JOBS[] is  empty"
+        wd_logger 1 "There are no running jobs"
         return 3
     fi
 

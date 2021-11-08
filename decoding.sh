@@ -723,7 +723,7 @@ function decoding_daemon_kill_handler() {
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have 5 fields added by WD:  'RMS_NOISE C2_NOISE OVERLOAD_COUNT WSPR_PKT_MODE and PROXY_UPLOAD'
 declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
-declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1# Lines without a GRID will have one fewer field
+declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon () {
     local real_receiver_wspr_spots_file=$1              ### file with the new spot lines found in ALL_WSPR.TXT
@@ -853,7 +853,7 @@ function decoding_daemon() {
     local wsprdaemon_noise_queue_directory
     get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}
     local ret_code
-    if [[ ${ret_code} -ne 0 ]];; then
+    if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: can't get noise file queue directory 'get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}' => ${ret_code}"
         return ${ret_code}
     fi
@@ -1123,7 +1123,7 @@ function kill_decoding_daemon() {
     wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
 }
 
-# ##
+###
 function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
     local get_decoding_status_receiver_band=$2
@@ -1146,5 +1146,4 @@ function get_decoding_status() {
     echo "Pid = ${get_decoding_status_decode_pid}"
     return 0
 }
-
 
