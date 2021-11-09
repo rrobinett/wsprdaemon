@@ -727,39 +727,39 @@ declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GR
 
 function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
     local real_receiver_wspr_spots_file=$1              ### file with the new spot lines found in ALL_WSPR.TXT
-    local wspr_cycle_rms_noise=$2                       ### The folowing fields are the same for every spot in the wspr cycle
-    local wspr_cycle_fft_noise=$3
-    local wspr_cycle_kiwi_overloads_count=$4
-    local real_receiver_call_sign=$5                    ### For real receivers, these are taken from the conf file line
-    local real_receiver_grid=$6                         ### But for MERGEd receivers, the posting daemon will change them to the call+grid of the MERGEd receiver
+    local spot_file_date=$2              ### These are prepended to the output file name
+    local spot_file_time=$3
+    local wspr_cycle_rms_noise=$4                       ### The folowing fields are the same for every spot in the wspr cycle
+    local wspr_cycle_fft_noise=$5
+    local wspr_cycle_kiwi_overloads_count=$6
+    local real_receiver_call_sign=$7                    ### For real receivers, these are taken from the conf file line
+    local real_receiver_grid=$8                         ### But for MERGEd receivers, the posting daemon will change them to the call+grid of the MERGEd receiver
     local proxy_upload_this_spot=0    ### This is the last field of the enhanced_spot line. If ${SIGNAL_LEVEL_UPLOAD} == "proxy" AND this is the only spot (or best spot among a MERGEd group), 
                                       ### then the posting daemon will modify this last field to '1' to signal to the upload_server to forward this spot to wsprnet.org
+    local cached_spots_file_name="${spot_file_date}_${spot_file_time}_spots.txt"
 
-
-    local real_receiver_enhanced_wspr_spots_file="enhanced_spots.txt"
-
-    wd_logger 2 "Enhance ${real_receiver_wspr_spots_file} into ${real_receiver_enhanced_wspr_spots_file} at ${real_receiver_grid}"
-    > ${real_receiver_enhanced_wspr_spots_file}         ### truncates or creates a zero length file
+    wd_logger 1 "Enhance the spot lines from ALL_WSPR_TXT in ${real_receiver_wspr_spots_file} into ${cached_spots_file_name}"
+    > ${cached_spots_file_name}         ### truncates or creates a zero length file
     local spot_line
     while read spot_line ; do
         wd_logger 3 "Enhance line '${spot_line}'"
         local spot_line_list=(${spot_line/,/})         
         local spot_line_list_count=${#spot_line_list[@]}
-        local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
-        read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
+        read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
+        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin <<< "${other_fields}"    ### Type 2 spots have no grid
+            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric <<< "${other_fields}"    ### Most spot lines have a GRID
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in ALL_WSPR.TXT spot line '${spot_line}'" 
             continue
         fi
         ### G3ZIL April 2020 V1    add azi to each spot line
-        wd_logger 2 "'add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}'"
+        wd_logger 1 "'add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}'"
         add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}
         if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
             wd_logger 1 "spots.txt ${DERIVED_ADDED_FILE} file not found"
@@ -767,22 +767,34 @@ function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
         fi
         local derived_fields=$(cat ${DERIVED_ADDED_FILE} | tr -d '\r')
         derived_fields=${derived_fields//,/ }   ### Strip out the ,s
-        wd_logger 3 "derived_fields='${derived_fields}'"
+        wd_logger 1 "derived_fields='${derived_fields}'"
 
         local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
         read  band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
 
-        ### Output a space-seperated line of enhanced spot data.  The first 14 fields are in the same order as is expected by wsprnet.org, but "none" should be stripped from all lines uploaded to wsprnet.org
+        if [[ ${spot_date} != ${spot_file_date} ]]; then
+            wd_logger 1 "WARNING: the date in spot line ${spot_date} doesn't match the date in the filename: ${spot_file_date}"
+        fi
+        if [[ ${spot_time} != ${spot_file_time} ]]; then
+            wd_logger 1 "WARNING: the time in spot line ${spot_time} doesn't match the time in the filename: ${spot_file_time}"
+        fi
+
+        ### Output a space-seperated line of enhanced spot data.  The first 14 fields are in the same order but with "none" added when the message field with CALL doesn't include a GRID field
         ### Each of these lines should be uploaded to logs.wsprdaemon.org.  If ${SIGNAL_LEVEL_UPLOAD} == "proxy" AND this is the only spot (or best spot among a MERGEd group), then the posting daemon will modify the last field to signal the upload_server to forward this spot to wsprnet.org
-        echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_ipass} ${spot_nhardmin} \
+        ### The first row of printed variables are taken from the ALL_WSPR.TXT file lines and are printed in the same order as they were found there
+        ### The second row are the values added  by our 'add_derived' Python line
+        ### The third row are values taken from WD's  rms_noise, fft_noise, WD.conf call sign and grid, etc.
+        printf "%6s %4s %3.0f %5.2f %10.7f %-22s %2d %5.2f %2d %2d %4d %2d %3d %5u %5d %4d %5d %4d %6.1f %6.1f %4d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6s %12s %4d %1d\n" \
+             ${spot_date} ${spot_time} ${spot_snr} ${spot_dt} ${spot_freq} "${spot_call} ${spot_grid} ${spot_pwr}" ${spot_drift} ${spot_sync_quality} ${spot_ipass} ${spot_blocksize} ${spot_jitter} ${spot_decodetype} ${spot_nhardmin} ${spot_cycles} ${spot_metric} \
               ${band} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} \
-              ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${real_receiver_grid} ${real_receiver_call_sign} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot}" >> ${real_receiver_enhanced_wspr_spots_file} 
+              ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${real_receiver_grid} ${real_receiver_call_sign} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot} >> ${cached_spots_file_name} 
 
     done < ${real_receiver_wspr_spots_file}
-    if [[ ! -s ${real_receiver_enhanced_wspr_spots_file} ]]; then
+
+    if [[ ! -s ${cached_spots_file_name} ]]; then
         wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
     else
-        wd_logger 1 "Created '${real_receiver_enhanced_wspr_spots_file}' of size $(ls -l ${real_receiver_enhanced_wspr_spots_file}):\n$(< ${real_receiver_enhanced_wspr_spots_file})"
+        wd_logger 1 "Created '${cached_spots_file_name}' of size $(ls -l ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
     fi
 
     ### Queue the enhanced_spot file we have just created to all of the posting daemons 
@@ -790,11 +802,16 @@ function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
     local dir
     for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
         ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
-        wd_logger 2 "Creating link from ${real_receiver_enhanced_wspr_spots_file} to ${dir} which is monitored by a posting daemon"
-        ln ${real_receiver_enhanced_wspr_spots_file} ${dir}/
+        local decoding_client_spot_file_name=${dir}/${cached_spots_file_name}
+        if [[ -s ${decoding_client_spot_file_name} ]]; then
+            wd_logger 1 "ERROR: file ${decoding_client_spot_file_name} already exisits, so dropping this new ${cached_spots_file_name}"
+        else
+            wd_logger 1 "Creating link from ${cached_spots_file_name} to ${decoding_client_spot_file_name} which is monitored by a posting daemon"
+            ln ${cached_spots_file_name} ${decoding_client_spot_file_name}
+        fi
     done
-    rm ${real_receiver_enhanced_wspr_spots_file}    ### The links will persist until all the posting daemons delete them
-    wd_logger 1 "Done creating and queuing '${real_receiver_enhanced_wspr_spots_file}'"
+    rm ${cached_spots_file_name}    ### The links will persist until all the posting daemons delete them
+    wd_logger 1 "Done creating and queuing '${cached_spots_file_name}'"
 }
 
 function get_wsprdaemon_noise_queue_directory()
@@ -843,7 +860,7 @@ function decoding_daemon() {
         return 1
     fi
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}"
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     trap "decoding_daemon_kill_handler ${receiver_name} ${receiver_band}" SIGTERM
 
@@ -1084,7 +1101,7 @@ function decoding_daemon() {
             ### Record the spots in decodes_cache.txt to wsprnet.org
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprnet.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_wsprdaemon   decodes_cache.txt ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
+            create_enhanced_spots_file_and_queue_to_wsprdaemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
         done
         sleep 1
     done
