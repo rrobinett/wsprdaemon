@@ -158,9 +158,13 @@ function plot_noise() {
     # noise records are all 2 min apart so 30 per hour so rows = hours *30. The max number of rows we need in the csv file is (24 *30), so to speed processing only take that number of rows from the log file
     local -i rows_per_day=$((24*30))
 
-    ### convert wsprdaemon AI6VN  sox stats format to csv for excel or Python matplotlib etc
-    ### Create csv files from log files
-    local signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) )
+    ### convert wsprdaemon AI6VN sox stats format files to csv for excel or Python matplotlib etc
+    if [[ ! -d ${signal_levels_root_dir} ]]; then
+        wd_logger 1 "'${signal_levels_root_dir}' doesn't exist"
+        return 0
+    fi
+    local signal_levels_log_list=()
+    signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) ) 
     if [[ ${#signal_levels_log_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no signal-levels.log files, so nothing to plot"
         return 0

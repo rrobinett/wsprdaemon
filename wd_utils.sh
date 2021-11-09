@@ -272,11 +272,11 @@ function wd_sleep()
     local start_secs=${SECONDS}
     local end_secs=$(( start_secs + sleep_for_secs ))
 
-    wd_logger 1 "Starting to sleep for a total of ${sleep_for_secs} seconds"
+    wd_logger 2 "Starting to sleep for a total of ${sleep_for_secs} seconds"
     while [[ ${SECONDS} -le ${end_secs} ]]; do
         sleep 1
     done
-    wd_logger 1 "Finished sleeping"
+    wd_logger 2 "Finished sleeping"
 }
 
 function wd_rm()

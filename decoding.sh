@@ -311,8 +311,8 @@ function queue_noise_signal_levels()
 {
     local spot_date=$1
     local spot_time=$2
-    local band_freq_hz=$3
-    local sox_signals_rms_fft_and_overload_info="${4}"
+    local sox_signals_rms_fft_and_overload_info="$3"
+    local band_freq_hz=$4
     local signal_levels_log_file=$5
     local wsprdaemon_noise_directory=$6
  
@@ -809,12 +809,12 @@ function get_wsprdaemon_noise_queue_directory()
     fi
     ### Linux directory names can't have the '/' character in them which is so common in ham call signs.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal in call signs
     local call_dir_name=${receiver_call_grid//\//=}
-    local wsprdaemon_noise_queue_directory=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_band}
+    local noise_directory=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_band}
 
-    mkdir -p ${wsprdaemon_noise_queue_directory}
-    eval ${__return_directory_name_return_variable}=${wsprdaemon_noise_queue_directory}
+    mkdir -p ${noise_directory}
+    eval ${__return_directory_name_return_variable}=${noise_directory}
 
-    wd_logger 1 "Noise files from receiver_name=${receiver_name} receiver_band=${receiver_band} will be queued in ${wsprdaemon_noise_queue_directory}"
+    wd_logger 1 "Noise files from receiver_name=${receiver_name} receiver_band=${receiver_band} will be queued in ${noise_directory}"
     return 0
 }
 
@@ -823,6 +823,21 @@ function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
     local receiver_modes_arg=${3}
+
+    local receiver_call
+    receiver_call=$( get_receiver_call_from_name ${receiver_name} )
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find receiver call from '${receiver_name}"
+        return 1
+    fi
+    local receiver_grid
+    receiver_grid=$( get_receiver_grid_from_name ${receiver_name} )
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find receiver grid 'from ${receiver_name}"
+        return 1
+    fi
 
     wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}"
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
@@ -849,7 +864,7 @@ function decoding_daemon() {
     setup_signal_levels_log_file  signal_levels_log_file ${receiver_name} ${receiver_band} 
     wd_logger 1 "Log signals to '${signal_levels_log_file}'"
     
-    ### The noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
+    ### 4he noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
     local wsprdaemon_noise_queue_directory
     get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}
     local ret_code
@@ -1053,12 +1068,12 @@ function decoding_daemon() {
                   wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
-            queue_noise_signal_levels  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_directory}
+            queue_noise_signal_levels  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt to wsprnet.org
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprnet.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon   decodes_cache.txt ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${real_receiver_call_sign} ${real_receiver_grid}
+            create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon   decodes_cache.txt ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
         done
         sleep 1
     done
