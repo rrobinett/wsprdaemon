@@ -184,8 +184,8 @@ function posting_daemon()
         fi
 
        ###  Add azi info to spots from all real receivers for upload to wsprdaemon.org, then extract the subset of the best SNR spots from those for upload to wsprnet.org
-        local real_receiver_band=${PWD##*/}
-        ### For each real receiver, queue any *wspr_spots.txt files containing at least one spot.  there should always be *noise.tx files to upload
+       ### For each real receiver, queue any *wspr_spots.txt files containing at least one spot.  there should always be *noise.tx files to upload
+       local real_receiver_band=${PWD##*/}
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
@@ -300,68 +300,6 @@ function posting_daemon()
         sleep ${WAV_FILE_POLL_SECONDS}
     done
     wd_logger 1 "Finished"
-}
-
-### Called by the posting_daemon() to create a spot file which will be uploaded to wsprdaemon.org
-###
-### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length  enhanced spot file with tx and rx azi vectors added
-###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
-###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
-###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
-### The input spot lines also have 5 fields added by WD:  'RMS_NOISE C2_NOISE OVERLOAD_COUNT WSPR_PKT_MODE and PROXY_UPLOAD'
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
-declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
-
-function create_enhanced_spots_file() {
-    local real_receiver_wspr_spots_file=$1
-    local real_receiver_enhanced_wspr_spots_file=$2
-    local my_grid=$3
-    local proxy_upload_mode=0           
-    if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
-        proxy_upload_mode=1
-    fi
-
-    wd_logger 2 "Enhance ${real_receiver_wspr_spots_file} into ${real_receiver_enhanced_wspr_spots_file} at ${my_grid}"
-    rm -f ${real_receiver_enhanced_wspr_spots_file}
-    touch ${real_receiver_enhanced_wspr_spots_file}
-    local spot_line
-    while read spot_line ; do
-        wd_logger 3 "Enhance line '${spot_line}'"
-        local spot_line_list=(${spot_line/,/})         
-        local spot_line_list_count=${#spot_line_list[@]}
-        local spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
-        read  spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode  ### the order of the rest of the fields in the spot lines created by decoding_daemon()
-        if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode <<< "${other_fields}"    ### Most spot lines have a GRID
-        elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
-            spot_grid="none"
-            read           spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin spot_for_wsprnet spot_rms_noise spot_c2_noise overload_cound spot_mode <<< "${other_fields}"    ### Type 2 spots have no grid
-        else
-            ### The decoding daemon formated a line we don't recognize
-            wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in wsprnet format spot line '${spot_line}'" 
-            return 1
-        fi
-        ### G3ZIL 
-        ### April 2020 V1    add azi
-        wd_logger 2 "'add_derived ${spot_grid} ${my_grid} ${spot_freq}'"
-        add_derived ${spot_grid} ${my_grid} ${spot_freq}
-        if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
-            wd_logger 1 "spots.txt ${DERIVED_ADDED_FILE} file not found"
-            return 1
-        fi
-        local derived_fields=$(cat ${DERIVED_ADDED_FILE} | tr -d '\r')
-        derived_fields=${derived_fields//,/ }   ### Strip out the ,s
-        wd_logger 3 "derived_fields='${derived_fields}'"
-
-        local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
-        read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
-
-        ### Output a space-seperated line of enhanced spot data.  The first 13/14 fields are in the same order as in the ALL_WSPR.TXT and wspr_spot.txt files created by 'wsprd'
-        echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_ipass} ${spot_nhardmin} ${spot_for_wsprnet} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} ${proxy_upload_mode}" >> ${real_receiver_enhanced_wspr_spots_file} 
-
-    done < ${real_receiver_wspr_spots_file}
-    wd_logger 1 "Created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
 }
 
 ################### wsprdaemon uploads ####################################

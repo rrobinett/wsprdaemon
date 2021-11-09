@@ -779,7 +779,11 @@ function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
               ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${real_receiver_grid} ${real_receiver_call_sign} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot}" >> ${real_receiver_enhanced_wspr_spots_file} 
 
     done < ${real_receiver_wspr_spots_file}
-    wd_logger 1 "Created '${real_receiver_enhanced_wspr_spots_file}':\n'$(cat ${real_receiver_enhanced_wspr_spots_file})'\n========\n"
+    if [[ ! -s ${real_receiver_enhanced_wspr_spots_file} ]]; then
+        wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
+    else
+        wd_logger 1 "Created '${real_receiver_enhanced_wspr_spots_file}' of size $(ls -l ${real_receiver_enhanced_wspr_spots_file}):\n$(< ${real_receiver_enhanced_wspr_spots_file})"
+    fi
 
     ### Queue the enhanced_spot file we have just created to all of the posting daemons 
     shopt -s nullglob    ### * expands to NULL if there are no .wav wav_file
