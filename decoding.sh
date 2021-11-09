@@ -722,10 +722,10 @@ function decoding_daemon_kill_handler() {
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have 5 fields added by WD:  'RMS_NOISE C2_NOISE OVERLOAD_COUNT WSPR_PKT_MODE and PROXY_UPLOAD'
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=21                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=17                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
-function create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon () {
+function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
     local real_receiver_wspr_spots_file=$1              ### file with the new spot lines found in ALL_WSPR.TXT
     local wspr_cycle_rms_noise=$2                       ### The folowing fields are the same for every spot in the wspr cycle
     local wspr_cycle_fft_noise=$3
@@ -739,7 +739,7 @@ function create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon () {
     local real_receiver_enhanced_wspr_spots_file="enhanced_spots.txt"
 
     wd_logger 2 "Enhance ${real_receiver_wspr_spots_file} into ${real_receiver_enhanced_wspr_spots_file} at ${real_receiver_grid}"
-    < ${real_receiver_enhanced_wspr_spots_file}         ### truncates or creates a zero length file
+    > ${real_receiver_enhanced_wspr_spots_file}         ### truncates or creates a zero length file
     local spot_line
     while read spot_line ; do
         wd_logger 3 "Enhance line '${spot_line}'"
@@ -786,10 +786,10 @@ function create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon () {
     local dir
     for dir in ${DECODING_CLIENTS_SUBDIR}/* ; do
         ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
-        wd_logger 2 "copying ${new_spots_file} and ${new_noise_file} to ${dir}/ monitored by a posting daemon"
+        wd_logger 2 "Creating link from ${real_receiver_enhanced_wspr_spots_file} to ${dir} which is monitored by a posting daemon"
         ln ${real_receiver_enhanced_wspr_spots_file} ${dir}/
     done
-    rm ${real_receiver_enhanced_wspr_spots_file}
+    rm ${real_receiver_enhanced_wspr_spots_file}    ### The links will persist until all the posting daemons delete them
     wd_logger 1 "Done creating and queuing '${real_receiver_enhanced_wspr_spots_file}'"
 }
 
@@ -963,6 +963,13 @@ function decoding_daemon() {
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
                 else
+                    if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
+                        wd_logger 1 "wsprd found no spots"
+                    else
+                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
+                        cat ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt
+                    fi
+
                     ### Output a noise line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
                     ###                           Pre Tx                                                        Tx                                                   Post TX
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
@@ -1007,7 +1014,7 @@ function decoding_daemon() {
                     fi
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count}"
 
-                   wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting extended_spots='${sox_signals_rms_fft_and_overload_info}'"
+                   wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
                 rm ${decode_dir}/${decoder_input_wav_filename}   ### wait until now to delete it so RMS and C2 cacluations wd_logger lines go to logfile in this directory
 
@@ -1073,7 +1080,7 @@ function decoding_daemon() {
             ### Record the spots in decodes_cache.txt to wsprnet.org
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprnet.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_wsprnet_and_wsprdaemon   decodes_cache.txt ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
+            create_enhanced_spots_file_and_queue_to_wsprdaemon   decodes_cache.txt ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
         done
         sleep 1
     done

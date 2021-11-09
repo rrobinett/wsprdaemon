@@ -337,26 +337,28 @@ function upload_to_wsprdaemon_daemon() {
     wd_logger "Starting in ${PWD}"   ### Now .log and .pid files are in permanant storge
 
     mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
-    ln -s ${source_root_dir}/upload_to_wsprdaemon_daemon.log ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}    ### So that while running in the /tmp file sytem logging will go to the permanent file sytem
+    rm -f ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}//upload_to_wsprdaemon_daemon.log
+    ln -s ${source_root_dir}/upload_to_wsprdaemon_daemon.log ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}///upload_to_wsprdaemon_daemon.log    ### So that while running in the /tmp file sytem logging will go to the permanent file sytem
+
 
     cd ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 
     while true; do
         ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
-        wd_logger 1 "starting search for *wspr*.txt files"
+        wd_logger 1 "Starting search for *wspr*.txt files"
         local -a file_list
-        while file_list=( $(find ${source_root_dir} -name '*wspr*.txt') ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
-            wd_logger 1 "found no .txt files. sleeping..."
+        while [[ ! -d ${source_root_dir} ]] || file_list=( $(find ${source_root_dir} -name '*wspr*.txt') ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
+            wd_logger 1 "Found no '*wspr*.txt' files, so sleeping"
             wd_sleep 1
         done
-        wd_logger 1 "found ${#file_list[@]} '*wspr*.txt' files. Wait until there are no more new files."
+        wd_logger 1 "Found ${#file_list[@]} '*wspr*.txt' files. Wait until there are no more new files."
         local old_file_count=${#file_list[@]}
         wd_sleep ${UPLOADS_WSPRDAEMON_PAUSE_SECS}
-        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' ) ) && [[ ${#file_list[@]} -ne ${old_file_count} ]]; do
+        while [[ ! -d ${source_root_dir} ]] || file_list=( $(find ${source_root_dir} -name '*wspr*.txt' ) ) && [[ ${#file_list[@]} -ne ${old_file_count} ]]; do
             local new_file_count=${#file_list[@]}
             wd_logger 1 "file count increased from ${old_file_count} to ${new_file_count}. sleep 5 and check again."
             old_file_count=${new_file_count}
-            wd_sleep 5
+            wd_wd_sleep 5
         done
         wd_logger 1 "file count stabilized at ${old_file_count}, so proceed to create tar file and upload"
         if [[ ${#file_list[@]} -gt ${UPOADS_MAX_FILES} ]]; then
