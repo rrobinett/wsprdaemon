@@ -759,15 +759,15 @@ function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
             continue
         fi
         ### G3ZIL April 2020 V1    add azi to each spot line
-        wd_logger 1 "'add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}'"
+        wd_logger 2 "'add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}'"
         add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}
         if [[ ! -f ${DERIVED_ADDED_FILE} ]] ; then
-            wd_logger 1 "spots.txt ${DERIVED_ADDED_FILE} file not found"
+            wd_logger 2 "spots.txt ${DERIVED_ADDED_FILE} file not found"
             return 1
         fi
         local derived_fields=$(cat ${DERIVED_ADDED_FILE} | tr -d '\r')
         derived_fields=${derived_fields//,/ }   ### Strip out the ,s
-        wd_logger 1 "derived_fields='${derived_fields}'"
+        wd_logger 2 "derived_fields='${derived_fields}'"
 
         local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
         read  band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
@@ -1033,7 +1033,7 @@ function decoding_daemon() {
                         old_kiwi_ov_lines=${current_kiwi_ov_lines}
                         wd_logger 1 "The KiwiSDR reported ${new_kiwi_ov_count} overload events in this 2 minute cycle"
                     fi
-                    sox_signals_rms_fft_and_overload_info="${rms_line} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count}"
+                    sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_kiwi_ov_count}"
 
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
