@@ -283,7 +283,7 @@ function wd_rm()
 {
     local rm_list=($@)
 
-    wd_logger 1 "Delete ${#rm_list[@]} files: ${rm_list[*]}"
+    wd_logger 2 "Delete ${#rm_list[@]} files: ${rm_list[*]}"
     local rm_errors=0
     local rm_file
     for rm_file in ${rm_list[@]}; do
@@ -298,7 +298,9 @@ function wd_rm()
             fi
         fi
     done
-    wd_logger 1 "Finished rm of ${#rm_list[@]} files.  Encountered ${rm_errors} rm errors"
+    if [[ ${rm_errors} -gt 0 ]]; then
+        wd_logger 1 "ERROR: Encountered ${rm_errors} errors when executing 'rm ${rm_list[*]}'"
+    fi
 }
 
 ################# Daemon management functions ==============================

@@ -316,15 +316,16 @@ function queue_noise_signal_levels()
     local signal_levels_log_file=$5
     local wsprdaemon_noise_directory=$6
  
+    local noise_line="${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}"
+
+    wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
+    echo "${noise_line}" >> ${signal_levels_log_file}
+
     local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_${band_freq_hz}_wspr_noise.txt
-
-    wd_logger 1 "Adding a noise line '${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}' to ${signal_levels_log_file}"
-    echo "${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}" >> ${signal_levels_log_file}
-
     wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
-    echo "${sox_signals_rms_fft_and_overload_info}" > ${wsprdaemon_noise_file}
+    echo "${noise_line}" > ${wsprdaemon_noise_file}
 
-   wd_logger 1 "Queued the new spots and noise lines for the posting daemon"
+    wd_logger 1 "Queued the new spots and noise lines for the posting daemon"
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
@@ -987,7 +988,7 @@ function decoding_daemon() {
                     if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
                         wd_logger 1 "wsprd found no spots"
                     else
-                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
+                        wd_logger 2 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
                         cat ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt
                     fi
 

@@ -71,7 +71,10 @@ function posting_daemon()
 
     shopt -s nullglob    ### * expands to NULL if there are no file matches
     while true; do
-        wd_logger 2 "Starting check for all posting subdirs to have a YYMMDD_HHMM_wspr_spots.txt file in them"
+
+        local spot_file_times_list=$( find -L ${real_receiver_list[@]/#/${POSTING_SUPPLIERS_SUBDIR}} -type f -name '*_spots.txt' -printf "%f\n" | sed 's/_spots.txt//' | sort -u)
+
+        wd_logger 1 "Starting check for all posting subdirs to have a YYMMDD_HHMM_wspr_spots.txt file in them"
         local newest_all_wspr_file_path=""
         local newest_all_wspr_file_name=""
 
@@ -87,87 +90,87 @@ function posting_daemon()
                 (spawn_decoding_daemon ${real_receiver_name} ${posting_receiver_band} ${posting_receiver_modes}) ### Make sure there is a decode daemon running for this receiver.  A no-op if already running
             done
 
-            wd_logger 2 "Checking for subdirs to have the same *_wspr_spots.txt in them" 
+            wd_logger 1 "Checking for subdirs to have the same *_spots.txt in them" 
             waiting_for_decodes=yes
             newest_all_wspr_file_path=""
             local posting_dir
             for posting_dir in ${posting_source_dir_list[@]}; do
-                wd_logger 4 "Checking dir ${posting_dir} for wspr_spots.txt files"
+                wd_logger 1 "Checking dir ${posting_dir} for wspr_spots.txt files"
                 if [[ ! -d ${posting_dir} ]]; then
-                    wd_logger 2 "Expected posting dir ${posting_dir} does not exist, so exiting inner for loop"
+                    wd_logger 1 "ERROR: Expected posting dir ${posting_dir} does not exist, so exiting inner for loop"
                     break
                 fi
-                for file in ${posting_dir}/*_wspr_spots.txt; do
+                for file in ${posting_dir}/*_spots.txt; do
                     if [[ -z "${newest_all_wspr_file_path}" ]]; then
-                        wd_logger 4 "Found first wspr_spots.txt file ${file}"
+                        wd_logger 1 "Found first wspr_spots.txt file ${file}"
                         newest_all_wspr_file_path=${file}
                     elif [[ ${file} -nt ${newest_all_wspr_file_path} ]]; then
-                        wd_logger 4 "Found ${file} is newer than ${newest_all_wspr_file_path}"
+                        wd_logger 1 "Found ${file} is newer than ${newest_all_wspr_file_path}"
                         newest_all_wspr_file_path=${file}
                     else
-                        wd_logger 4 "Found ${file} is older than ${newest_all_wspr_file_path}"
+                        wd_logger 1 "Found ${file} is older than ${newest_all_wspr_file_path}"
                     fi
                 done
             done
             if [[ -z "${newest_all_wspr_file_path}" ]]; then
-                wd_logger 4 "Found no wspr_spots.txt files"
+                wd_logger 1 "Found no *_spots.txt files"
             else
                 [[ ${verbosity} -ge 3 ]] && printed_waiting=no   ### We have found some spots.txt files, so signal to print 'waiting...' message at the start of the next wait cycle
                 newest_all_wspr_file_name=${newest_all_wspr_file_path##*/}
-                wd_logger 3 "Found newest wspr_spots.txt == ${newest_all_wspr_file_path} => ${newest_all_wspr_file_name}"
-                ### Flush all *wspr_spots.txt files which don't match the name of this newest file
+                wd_logger 1 "Found newest wspr_spots.txt == ${newest_all_wspr_file_path} => ${newest_all_wspr_file_name}"
+                ### Flush all *_spots.txt files which don't match the name of this newest file
                 local posting_dir
                 for posting_dir in ${posting_source_dir_list[@]}; do
                     cd ${posting_dir}
                     local file
-                    for file in *_wspr_spots.txt; do
+                    for file in *_spots.txt; do
                         if [[ ${file} != ${newest_all_wspr_file_name} ]]; then
-                            wd_logger 3 "Flushing file ${posting_dir}/${file} which doesn't match ${newest_all_wspr_file_name}"
+                            wd_logger 1 "Flushing file ${posting_dir}/${file} which doesn't match ${newest_all_wspr_file_name}"
                             rm -f ${file}
                         fi
                     done
                     cd - > /dev/null
                 done
-                ### Check that an wspr_spots.txt with the same date/time/freq is present in all subdirs
+                ### Check that an _spots.txt with the same date/time/freq is present in all subdirs
                 waiting_for_decodes=no
                 local posting_dir
                 for posting_dir in ${posting_source_dir_list[@]}; do
                     if [[ ! -f ${posting_dir}/${newest_all_wspr_file_name} ]]; then
                         waiting_for_decodes=yes
-                        wd_logger 3 "Found no file ${posting_dir}/${newest_all_wspr_file_name}"
+                        wd_logger 1 "Found no file ${posting_dir}/${newest_all_wspr_file_name}, so we need to wait for more _spots.txt files"
                     else
-                        wd_logger 3 "Found    file ${posting_dir}/${newest_all_wspr_file_name}"
+                        wd_logger 1 "Found    file ${posting_dir}/${newest_all_wspr_file_name}"
                     fi
                 done
             fi
             if [[  ${waiting_for_decodes} == "yes" ]]; then
-                wd_logger 2 "Is waiting for files. Sleeping for ${WAV_FILE_POLL_SECONDS} seconds..."
-                sleep ${WAV_FILE_POLL_SECONDS}
+                wd_logger 1 "Waiting for files. Sleeping for ${WAV_FILE_POLL_SECONDS} seconds..."
+                wd_sleep ${WAV_FILE_POLL_SECONDS}
             else
                 wd_logger 1 "Found the required ${newest_all_wspr_file_name} in all the posting subdirs, so can merge and post"
             fi
         done
-        ### All of the ${real_receiver_list[@]} directories have *_wspr_spot.txt files with the same time&name
+        ### All of the ${real_receiver_list[@]} directories have *_spot.txt files with the same time&name
 
-        ### Clean out any older *_wspr_spots.txt files
-        wd_logger 1 "Flushing old *_wspr_spots.txt files"
+        ### Clean out any older *_spots.txt files
+        wd_logger 1 "Flushing old *_spots.txt files"
         local posting_source_dir
-        local posting_source_file
         for posting_source_dir in ${posting_source_dir_list[@]} ; do
             cd -P ${posting_source_dir}
-            for posting_source_file in *_wspr_spots.txt ; do
+            local posting_source_file
+            for posting_source_file in *_spots.txt ; do
                 if [[ ${posting_source_file} -ot ${newest_all_wspr_file_path} ]]; then
                     wd_logger 1 "Flushing file ${posting_source_dir}/${posting_source_file} which is older than the newest complete set of *_wspr_spots.txt files"
                     rm $posting_source_file
                 else
-                    wd_logger 3 "Preserving file ${posting_source_dir}/${posting_source_file} which is same or newer than the newest complete set of *_wspr_spots.txt files"
+                    wd_logger 1 "Preserving file ${posting_source_dir}/${posting_source_file} which is same or newer than the newest complete set of *_wspr_spots.txt files"
                 fi
             done
             cd - > /dev/null
         done
 
         ### The date and time of the spots are prepended to the spots and noise files when they are queued for upload 
-        local recording_info=${newest_all_wspr_file_name/_wspr_spots.txt/}     ### extract the date_time_freq part of the file name
+        local recording_info=${newest_all_wspr_file_name/_spots.txt/}     ### extract the date_time_freq part of the file name
         local recording_freq_hz=${recording_info##*_}
         local recording_date_time=${recording_info%_*}
 
@@ -179,25 +182,24 @@ function posting_daemon()
         if [[ ! -s ${wsprd_spots_all_file_path} ]]; then
             ### The decode daemon of each real receiver signaled it had decoded a wave file with zero spots by creating a zero length spot.txt file 
             wd_logger 1 "No spots were decoded, so flush all the real reciever zero length spot files and go to top of this loop to look for a new set of spot files"
-            rm ${newest_spot_files_list[@]}
+            wd_rm ${newest_spot_files_list[@]}
             continue
         fi
 
-       ###  Add azi info to spots from all real receivers for upload to wsprdaemon.org, then extract the subset of the best SNR spots from those for upload to wsprnet.org
        ### For each real receiver, queue any *wspr_spots.txt files containing at least one spot.  there should always be *noise.tx files to upload
        local real_receiver_band=${PWD##*/}
-        for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
+       for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
             ### Upload spots file
-            local real_receiver_wspr_spots_file_list=( ${real_receiver_dir}/*_wspr_spots.txt )
+            local real_receiver_wspr_spots_file_list=( ${real_receiver_dir}/*_spots.txt )
             local real_receiver_wspr_spots_file_count=${#real_receiver_wspr_spots_file_list[@]}
             if [[ ${real_receiver_wspr_spots_file_count} -ne 1 ]]; then
                 if [[ ${real_receiver_wspr_spots_file_count} -eq 0 ]]; then
-                    wd_logger 1 " INTERNAL ERROR: found real rx dir ${real_receiver_dir} has no *_wspr_spots.txt file."
+                    wd_logger 1 "ERROR: found real rx dir ${real_receiver_dir} has no expected *_spots.txt file."
                 else
-                    wd_logger 1 " INTERNAL ERROR: found real rx dir ${real_receiver_dir} has ${real_receiver_wspr_spots_file_count} spot files. Flushing them."
-                    rm -f ${real_receiver_wspr_spots_file_list[@]}
+                    wd_logger 1 "ERROR: found real rx dir ${real_receiver_dir} has ${real_receiver_wspr_spots_file_count} spot files instead of the 1 file expected. So flushing all of them"
+                    wd_rm -f ${real_receiver_wspr_spots_file_list[@]}
                 fi
             else
                 ### There is one spot file for this rx

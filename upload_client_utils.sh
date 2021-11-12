@@ -337,33 +337,47 @@ function upload_to_wsprdaemon_daemon() {
     wd_logger "Starting in ${PWD}"   ### Now .log and .pid files are in permanant storge
 
     mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
-    rm -f ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}//upload_to_wsprdaemon_daemon.log
-    ln -s ${source_root_dir}/upload_to_wsprdaemon_daemon.log ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}///upload_to_wsprdaemon_daemon.log    ### So that while running in the /tmp file sytem logging will go to the permanent file sytem
-
-
-    cd ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 
     while true; do
-        ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
-        wd_logger 1 "Starting search for *wspr*.txt files"
-        local -a file_list
-        while [[ ! -d ${source_root_dir} ]] || file_list=( $(find ${source_root_dir} -name '*wspr*.txt') ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
-            wd_logger 1 "Found no '*wspr*.txt' files, so sleeping"
-            wd_sleep 1
+        ### find all *.txt files under spots.d and noise.d.
+        wd_logger 1 "Starting search for *wspr_spots.txt files"
+        local -a spot_file_list=()
+        while spot_file_list=( $(find -name '*_wspr_spots.txt') ) && [[ ${#spot_file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
+            wd_logger 2 "Found no '*wspr_spots.txt' files, so sleeping"
+            wd_sleep 2
         done
-        wd_logger 1 "Found ${#file_list[@]} '*wspr*.txt' files. Wait until there are no more new files."
-        local old_file_count=${#file_list[@]}
+        wd_logger 1 "Found ${#spot_file_list[@]} '*wspr_spots.txt' files. Wait until there are no more new files."
+        local old_file_count=${#spot_file_list[@]}
         wd_sleep ${UPLOADS_WSPRDAEMON_PAUSE_SECS}
-        while [[ ! -d ${source_root_dir} ]] || file_list=( $(find ${source_root_dir} -name '*wspr*.txt' ) ) && [[ ${#file_list[@]} -ne ${old_file_count} ]]; do
-            local new_file_count=${#file_list[@]}
-            wd_logger 1 "file count increased from ${old_file_count} to ${new_file_count}. sleep 5 and check again."
+        while spot_file_list=( $(find -name '*_wspr_spots.txt' ) ) && [[ ${#spot_file_list[@]} -ne ${old_file_count} ]]; do
+            local new_file_count=${#spot_file_list[@]}
+            wd_logger 1 "spot file count increased from ${old_file_count} to ${new_file_count}. sleep 5 and check again."
             old_file_count=${new_file_count}
-            wd_wd_sleep 5
+            wd_sleep 5
         done
-        wd_logger 1 "file count stabilized at ${old_file_count}, so proceed to create tar file and upload"
-        if [[ ${#file_list[@]} -gt ${UPOADS_MAX_FILES} ]]; then
-            wd_logger 1 "Found ${#file_list[@]} spot and noise files, which are more than the max ${UPOADS_MAX_FILES} files we can process at onece, so truncate the file_list[]"
-            file_list=(${file_list[@]:0${UPOADS_MAX_FILES}} )
+        wd_logger 1 "spots file count stabilized at ${old_file_count}"
+        if [[ ${#spot_file_list[@]} -gt ${UPOADS_MAX_FILES} ]]; then
+            wd_logger 1 "Found ${#spot_file_list[@]} spot files, which are more than the max ${UPOADS_MAX_FILES} files we can process at onece, so truncate the spot_file_list[]"
+            spot_file_list=(${spot_file_list[@]:0${UPOADS_MAX_FILES}} )
+        fi
+        wd_logger 1 "Get list of noise files"
+        local -a noise_file_list=()
+        noise_file_list=( $(find -name '*_wspr_noise.txt') )
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'noise_file_list=( \$(find -name '*_wspr_noise.txt') )' = ${ret_code}"
+            noise_file_list=()
+        else
+            if [[ ${#noise_file_list[@]} -eq 0 ]]; then
+                wd_logger 1 "Found no noise files to be uploaded"
+            else
+                if [[ ${#noise_file_list[@]} -gt ${UPOADS_MAX_FILES} ]]; then
+                    wd_logger 1 "Found ${#noise_file_list[@]} noise files, which are more than the max ${UPOADS_MAX_FILES} files we can process at onece, so truncate the noise_file_list[]"
+                    noise_file_list=(${noise_file_list[@]:0${UPOADS_MAX_FILES}} )
+                else
+                    wd_logger 1 "Found ${#noise_file_list[@]} noise files"
+                fi
+            fi
         fi
 
        ### Communicate this client's configuraton to the wsprdaemon.org server through lines in ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}
@@ -371,18 +385,20 @@ function upload_to_wsprdaemon_daemon() {
                  UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION}
-                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}  )
+                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no} 
                  $(cat ${RUNNING_JOBS_FILE})" | sed 's/^ *//'                         > ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}         ### sed strips off the leading spaces in each line of the file
         local config_relative_path=${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH#$PWD/}
         wd_logger 1 "created ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}:\n$(cat ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})"
 
-        local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
-        wd_logger 1 "Creating tar file '${tar_file_name}'"
-        if ! tar cfj ${tar_file_name} ${config_relative_path} ${file_list[@]}; then
-            local ret_code=$?
-            wd_logger 1 "ERROR: 'tar cfj ${tar_file_name} \${file_list[@]}' => ret_code ${ret_code}"
+        local source_file_list=( ${spot_file_list[@]} ${noise_file_list[@]} )
+        local tar_file_name="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
+        wd_logger 1 "Creating tar file '${tar_file_name}' with:  'tar cfj ${tar_file_name} ${config_relative_path} ${source_file_list[*]}'"
+        tar cfj ${tar_file_name} ${config_relative_path} ${source_file_list[@]} 
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'tar cfj ${tar_file_name} \${source_file_list[@]}' => ret_code ${ret_code}"
         else
-            wd_logger 1 "Uloading tar file '${tar_file_name}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_name} ) which contains $(cat ${file_list[@]} | wc -c)  bytes from ${#file_list[@]} spot and noise files."
+            wd_logger 1 "Starting curl upload of '${tar_file_name}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_name} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files."
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
@@ -390,7 +406,7 @@ function upload_to_wsprdaemon_daemon() {
             local ret_code=$?
             if [[ ${ret_code} -eq  0 ]]; then
                 wd_logger 1 "curl FTP upload was successful. Deleting wspr*.txt files."
-                wd_rm ${file_list[@]}
+                wd_rm ${spot_file_list[@]}
             else
                 wd_logger 1 "ERROR: curl FTP upload failed =? ${ret_code}, so leave spot and noise files and try again"
             fi
