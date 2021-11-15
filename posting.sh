@@ -72,7 +72,40 @@ function posting_daemon()
     shopt -s nullglob    ### * expands to NULL if there are no file matches
     while true; do
 
-        local spot_file_times_list=$( find -L ${real_receiver_list[@]/#/${POSTING_SUPPLIERS_SUBDIR}} -type f -name '*_spots.txt' -printf "%f\n" | sed 's/_spots.txt//' | sort -u)
+        local spot_file_times_list=()
+        while spot_file_times_list=( $( find -L ${real_receiver_list[@]/#/${POSTING_SUPPLIERS_SUBDIR}/} -type f -name '*_spots.txt' -printf "%f\n" | sed 's/_spots.txt//' | sort -u) ) \
+            && [[ ${#spot_file_times_list[@]} -eq 0 ]] ; do
+            wd_logger 1 "Waiting for *_spots.txt' files"
+            wd_sleep 1
+        done
+
+        local posting_suppliers_subdirs_list=( ${real_receiver_list[@]/#/${POSTING_SUPPLIERS_SUBDIR}/} )
+        local posting_times_ready_list=()
+        local spot_file_time
+        for spot_file_time in ${spot_file_times_list[@]} ; do
+            wd_logger 1 "Check for spots for date_time ${spot_file_time}"
+            local spot_file_list
+            spot_file_list=( $(find -L ${posting_suppliers_subdirs_list[@]} -type f -name ${spot_file_time} ) )
+            if [[ ${#spot_file_list[@]} -eq 0 ]]; then
+                wd_logger 1 "ERROR: found spot file time, but then couldn't find spot file"
+            elif [[ ${#spot_file_list[@]} -ne ${#real_receiver_list[@]} ]]; then
+                wd_logger 1 "Found only ${#spot_file_list[@]} of the ${#real_receiver_list[@]} files needed for this receiver"
+            else
+                wd_logger 1 "Found all ${#spot_file_list[@]} needed in order to post this receiver"
+                posting_times_ready_list+=( ${spot_file_time} )
+            fi
+        done
+
+        if [[ ${#posting_times_ready_list[@]} -eq 0 ]]; then
+            wd_logger 1 "Found no sets of spot_files are ready for posting"
+            wd_sleep 1
+            continue
+        fi
+
+        ### We have found at least one set of spot files ready for posting
+        for spot_file_time in ${posting_times_ready_list[@]} ; do
+            local spot_file_list=( ${posting_suppliers_subdirs_list[@]/%/${spot_file_time}_spots.txt} )
+        done
 
         wd_logger 1 "Starting check for all posting subdirs to have a YYMMDD_HHMM_wspr_spots.txt file in them"
         local newest_all_wspr_file_path=""
