@@ -164,7 +164,8 @@ function get_call_grid_from_receiver_name() {
         local rx_entry_list=( ${rx_entry} )
         local rx_entry_rx_name=${rx_entry_list[0]}
         if [[ "${rx_entry_rx_name}" == "${target_rx}" ]]; then
-            echo "${rx_entry_list[2]}_${rx_entry_list[3]}"
+            local safe_call_name=${rx_entry_list[2]//\//=} ### So that receiver_call_grid can be used as a directory name, any '/' in the receiver call is replaced with '='
+            echo "${safe_call_name}_${rx_entry_list[3]}"
             return 0
         fi
     done
