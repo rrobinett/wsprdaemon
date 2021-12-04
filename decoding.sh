@@ -321,11 +321,14 @@ function queue_noise_signal_levels()
     wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
     echo "${noise_line}" >> ${signal_levels_log_file}
 
-    local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_${band_freq_hz}_wspr_noise.txt
-    wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
-    echo "${noise_line}" > ${wsprdaemon_noise_file}
-
-    wd_logger 1 "Queued the new spots and noise lines for the posting daemon"
+    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
+        wd_logger 1 "Not configured to upload noise, so not queuing a noise file"
+    else
+        local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
+        wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
+        echo "${noise_line}" > ${wsprdaemon_noise_file}
+    fi
+    return 0
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin

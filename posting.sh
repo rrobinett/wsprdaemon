@@ -45,7 +45,7 @@ function posting_daemon()
     wd_logger 1 "Starting to post '${posting_receiver_name},${posting_receiver_band}' in '${posting_receiver_dir_path}' and copy spots from real_rx(s) '${no_nl_real_receiver_list[@]}' to '${wsprnet_upload_dir}"
 
     ### Link the real receivers to this dir
-    local posting_source_dir_list=()
+    local supplier_dirs_list=()
     local real_receiver_name
     mkdir -p ${POSTING_SUPPLIERS_SUBDIR}
     for real_receiver_name in ${real_receiver_list[@]}; do
@@ -61,18 +61,17 @@ function posting_daemon()
         ### Now create a symlink from under here to the directory where spots will apper
         local this_rx_local_link_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
         if [[ -L ${this_rx_local_link_name} ]]; then
-            wd_logger 1 "Link from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path} already exists"
+            wd_logger 1 "Link from ${real_receiver_posting_dir_path} to ${this_rx_local_link_name} already exists"
         else
-            wd_logger 1 "Creating a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
+            wd_logger 1 "Creating a symlink from ${real_receiver_posting_dir_path} to ${this_rx_local_link_name}"
             ln -s ${real_receiver_posting_dir_path} ${this_rx_local_link_name}
         fi
-        posting_source_dir_list+=(${this_rx_local_link_name})
-        wd_logger 1 "Created a symlink from ${this_rx_local_link_name} to ${real_receiver_posting_dir_path}"
+        supplier_dirs_list+=(${this_rx_local_link_name})
     done
 
-    local supplier_dirs_list=(${real_receiver_list[@]/#/${POSTING_SUPPLIERS_SUBDIR}/})
     wd_logger 1 "Searching in subdirs: '${supplier_dirs_list[*]}' for '*_spots.txt' files"
     while true; do
+        wd_logger 1 "Searching for at least ${#supplier_dirs_list[@]} spot files"
         local spot_file_list=()
         while spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
             && [[ ${#spot_file_list[@]} -lt ${#supplier_dirs_list[@]} ]] ; do
@@ -85,19 +84,19 @@ function posting_daemon()
                     wd_logger 1 "ERROR: failed to 'spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes}' => ${ret_code}"
                 fi
             done
-            wd_logger 1 "Found ${#spot_file_list[@]} *_spots.txt' files. Waiting for at least ${#supplier_dirs_list[@]} files"
+            wd_logger 2 "Found ${#spot_file_list[@]} *_spots.txt' files. Waiting for at least ${#supplier_dirs_list[@]} files"
             wd_sleep 1
         done
         ### There are enough spot files that we *may* be able to merge and post.
         local filename_list=( ${spot_file_list[@]##*/} )
         local filetimes_list=(${filename_list[@]%_spots.txt})
         local unique_times_list=( $( echo "${filetimes_list[@]}" | tr ' ' '\n' | sort -n | uniq) )
-        wd_logger 1 "filename_list='${filename_list[*]}', filetimes_list='${filetimes_list[*]}, unique_times_list='${unique_times_list[*]}'"
+        wd_logger 1 "Found ${#spot_file_list[@]} spot files. filename_list='${filename_list[*]}', filetimes_list='${filetimes_list[*]}', unique_times_list='${unique_times_list[*]}'"
 
         local spot_file_time 
         for spot_file_time in ${unique_times_list[@]} ; do
             ### Examine the spot files for each WSPR cycle time and if all are there for a cycle merge into one file to be uploaded to wsprnet.org
-            local spot_file_name=${spotfile_time}_spots.txt
+            local spot_file_name=${spot_file_time}_spots.txt
             local spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
 
             if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
@@ -105,7 +104,7 @@ function posting_daemon()
                     wd_logger 1 "There are only ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for the most recent time ${spot_file_time}, so wait for the rest of the files"
                 else
                     wd_logger 1 "Found ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for older WSPR cycle time ${spot_file_time}, so go ahead and post what we have"
-                    post_files ${spot_file_time} ${spot_file_time_list[@]}
+                    post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
                 fi
             else
                 if [[ ${#spot_file_time_list[@]} -gt ${#supplier_dirs_list[@]} ]]; then
@@ -121,13 +120,19 @@ function posting_daemon()
 function post_files()
 {
     local receiver_band=$1
-    local wsprnet_upload_dir=$2         ### This is derived from the call and grid defined for the MERGEd receiver
+    local wsprnet_uploads_queue_directory=$2   ### This is derived from the call and grid and will differ from the real receiver when we are posting for a MERGEd (i.e.logical) receiver
     local spot_time=$3
-    local spot_file_list=($@:3)         ### We expect that all the spots in the list are from the same WSPR cycle
+    local spot_file_list=(${@:4})         ### The rest of the args are the *_spot.txt files in this WSPR cycle
 
     wd_logger 1 "Post spots from ${#spot_file_list[@]} files: '${spot_file_list[*]}'"
 
     cat ${spot_file_list[@]} > spots.ALL
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'cat ${spot_file_list[*]} > spots.ALL' => ${ret_code}, so sleep 5 and exit"
+        sleep 5
+        exit
+    fi
     if [[ -s spots.ALL ]]; then
         ### There are spots to upload
         ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
@@ -136,12 +141,10 @@ function post_files()
         local calls_list=( $( awk '{print $6}' spots.ALL | sort -u ) )
         local call
         for call in ${calls_list[@]}; do
-            local best_line=( $( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | head -n 1) )
-            local best_file=${best_line[0]}
-            local best_spot=${best_line[@]:1}
-            local best_spot_list=( ${best_spot} )
-            best_spot_list[-1]=1                            ### The last field of an extended spot line is the 'proxy upload' flag: 0= No proxy upoad (default), 1=WD's upload server should upload this spot to wsprnet.org
-            local best_spot_marked="${best_spot_list[*]}"
+            local best_line=$( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | head -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
+            local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
+            local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
+            local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot hich marks whether it could be uploadee by the upload_server with a 1
  
             wd_logger 1 "For call ${call} found the best spot '${best_spot}' in '${best_file}'. Add it to spots.BEST and change the line in the source file ${best_file}"
 
@@ -154,22 +157,25 @@ function post_files()
             fi
         done
         if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+            ### Append to 'merged.log'
             log_merged_snrs  spots.BEST ${spot_file_list[@]}
         fi
 
         if [[ ${SIGNAL_LEVEL_UPLOAD} != "proxy" ]]; then
             ### We are configured to upload the best set of spots directly to wsprnet.org
-            local wsprnet_uploads_queue_directory
+            ### The upload_to_wsprdaemon_client_dameon() could do this, but it would have to regenerate the 'spots.BEST' file.  Since we have that information now, queue spots.BEST for upload to wsprnet.org
             mkdir -p ${wsprnet_uploads_queue_directory}
-            local  wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
+            local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
+            local spots_count=$(wc -l < spots.BEST)
             mv spots.BEST ${wsprnet_uploads_queue_filename}
-            wd_logger 1 "Queued 'spots.BEST' which contains the $( wc -l < spots.BEST ) spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}"
+            wd_logger 1 "Queued 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}"
         fi
     fi
 
     if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
-        ### We are configured to upload to wsprdaemon.org and/or configured for proxy uploads, queue all the spot files for upload to wsprdaemon.org
-        wd_logger 1 "Queuing noise and spot files '${spot_file_list[*]}"
+        ### We are configured to upload extended spots and noise files to wsprdaemon.org and/or configured for proxy uploads
+        ### If confgiured to upload to wsprdaemon, the noise files are queued by the decoding_daemon(), so we need to upload only spot files here
+        wd_logger 1 "Queuing  spot files '${spot_file_list[*]}"
         local spot_file_list=( ${spot_file_list[@]} )
         local spot_file
         for spot_file in ${spot_file_list[@]} ; do
@@ -181,19 +187,8 @@ function post_files()
             mkdir -p ${upload_wsprdaemon_spots_dir}
             mv ${spot_file} ${upload_wsprdaemon_spots_dir}
             wd_logger 1 "Copied ${spot_file} to ${upload_wsprdaemon_spots_dir} which contains spot(s):\n$( cat ${upload_wsprdaemon_spots_dir}/${spot_file##*/})"
-
-            ### The spots.txt file may be empty, but there will always be a noise file to be uploaded
-            local noise_file=${spot_file/spots.txt/noise.txt}
-            if [[ ! -f ${noise_file} ]]; then
-                wd_logger 1 "ERROR: can't find expected noise file ${noise_file}"
-            else
-                local upload_wsprdaemon_noise_dir=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}
-                mkdir -p ${upload_wsprdaemon_noise_dir}
-                mv ${noise_file} ${upload_wsprdaemon_noise_dir}
-                wd_logger 1 "Moved the noise file ${noise_file} to ${upload_wsprdaemon_noise_dir}"
-            fi
-        done
-        wd_logger 1 "Done queuing noise and spot files"
+       done
+       wd_logger 1 "Done queuing noise and spot files"
     fi
     return 0
 }

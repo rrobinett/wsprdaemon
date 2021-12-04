@@ -16,7 +16,7 @@
 ### To achieve that:
 ### Wait for all of the CALL/GRID/BAND jobs in a two minute cycle to complete, 
 ###    then cat all of the wspr_spot.txt files together and sorting them into a single file in time->freq order
-### The posting daemons put the wspr_spots.txt files in ${UPLOADS_WSPRNET_ROOT_DIR}/CALL/..
+### The posting daemons put the spots.txt files in ${UPLOADS_WSPRNET_ROOT_DIR}/CALL/..
 ### There is a potential problem in the way I've implemented this algorithm:
 ###   If all of the wsprds don't complete their decdoing in the 2 minute WSPR cycle, then those tardy band results will be delayed until the following upload
 ###   I haven't seen that problem and if it occurs the only side effect is that a time sorted display of the wsprnet.org database may have bands that don't
@@ -47,7 +47,7 @@ declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 ### wsprnet.org upload daemon files
 declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d
 mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}
-declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/wspr_spots.txt
+declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/_spots.txt
 declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
 declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
 
@@ -117,16 +117,16 @@ declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_f
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_wsprnet_create_spot_file_list_file()
 {
-    local wspr_spots_files=$( tr ' ' '\n' <<< "$@")         ### Insert newlines so we can grep below for the files
-    local wspr_spots_files_list=( ${wspr_spots_files} )
+    local spots_files=$( tr ' ' '\n' <<< "$@")         ### Insert newlines so we can grep below for the files
+    local spots_files_list=( ${spots_files} )
 
-    wd_logger 2 "Got $( wc -l <<< "${wspr_spots_files}") files and saved them in wspr_spots_files_list[]"
+    wd_logger 2 "Got $( wc -l <<< "${spots_files}") files and saved them in spots_files_list[]"
 
    ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
-    local cycles_list=( ${wspr_spots_files_list[@]%_*_wspr_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
+    local cycles_list=( ${spots_files_list[@]%_*_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
           cycles_list=( $(echo "${cycles_list[@]##*/}" | tr ' ' '\n' |  sort -u )  )
 
-    wd_logger 1 "Creating a list of spot files for CALL_GRID from the ${#wspr_spots_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
+    wd_logger 1 "Creating a list of spot files for CALL_GRID from the ${#spots_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
 
     local spots_file_list=""
     local spots_file_list_count=0
@@ -134,8 +134,8 @@ function upload_wsprnet_create_spot_file_list_file()
     local file_spots_count=0 
     local cycle
     for cycle in ${cycles_list[@]} ; do
-        local cycle_files=$( grep ${cycle} <<< "${wspr_spots_files}" )
-        wd_logger 1 "Checking for number of spots in '${cycle}' in the list of ${#wspr_spots_files_list[@]} files passed to us"
+        local cycle_files=$( grep ${cycle} <<< "${spots_files}" )
+        wd_logger 1 "Checking for number of spots in '${cycle}' in the list of ${#spots_files_list[@]} files passed to us"
 
         local cycle_spots_count=$(cat ${cycle_files} | wc -l)
         if [[ ${cycle_spots_count} -eq 0 ]]; then
@@ -224,7 +224,7 @@ function upload_to_wsprnet_daemon() {
            local spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
 
            if [[ ${#spots_files_list[@]} -eq 0 ]]; then
-               wd_logger 2 "Found no '*_wspr_spots.txt' files for ${call_grid_dir}"
+               wd_logger 2 "Found no '*_spots.txt' files for ${call_grid_dir}"
                continue
            fi
            local oldest_spot_file_epoch=${spots_files_list[0]%%.*}
@@ -239,11 +239,11 @@ function upload_to_wsprnet_daemon() {
 
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
-           local wspr_spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#wspr_spots_files[@]} files"
+           local spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
+           wd_logger 1 "Uploading spots from ${#spots_files[@]} files"
 
-            ### sort ascending by fields of wspr_spots.txt: YYMMDD HHMM .. FREQ
-            cat ${wspr_spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            ### sort ascending by fields of spots.txt: YYMMDD HHMM .. FREQ
+            cat ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
                 wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
@@ -291,7 +291,7 @@ function upload_to_wsprnet_daemon() {
                 rm ${all_spots_file_list[@]}
             fi
         done
-        ### Pole every 10 seconds for a complete set of wspr_spots.txt files
+        ### Pole every 10 seconds for a complete set of spots.txt files
         wd_logger 2 "Sleeping for ${UPLOAD_SLEEP_SECONDS} seconds"
         sleep ${UPLOAD_SLEEP_SECONDS}
     done
@@ -341,16 +341,16 @@ function upload_to_wsprdaemon_daemon() {
 
     while true; do
         ### find all *.txt files under spots.d and noise.d.
-        wd_logger 1 "Starting search for *wspr_spots.txt files"
+        wd_logger 1 "Starting search for *_spots.txt files"
         local -a spot_file_list=()
-        while spot_file_list=( $(find -name '*_wspr_spots.txt') ) && [[ ${#spot_file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
-            wd_logger 2 "Found no '*wspr_spots.txt' files, so sleeping"
+        while spot_file_list=( $(find -name '*_spots.txt') ) && [[ ${#spot_file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
+            wd_logger 2 "Found no '*_spots.txt' files, so sleeping"
             wd_sleep 2
         done
-        wd_logger 1 "Found ${#spot_file_list[@]} '*wspr_spots.txt' files. Wait until there are no more new files."
+        wd_logger 1 "Found ${#spot_file_list[@]} '*spots.txt' files. Wait until there are no more new files."
         local old_file_count=${#spot_file_list[@]}
         wd_sleep ${UPLOADS_WSPRDAEMON_PAUSE_SECS}
-        while spot_file_list=( $(find -name '*_wspr_spots.txt' ) ) && [[ ${#spot_file_list[@]} -ne ${old_file_count} ]]; do
+        while spot_file_list=( $(find -name '*_spots.txt' ) ) && [[ ${#spot_file_list[@]} -ne ${old_file_count} ]]; do
             local new_file_count=${#spot_file_list[@]}
             wd_logger 1 "spot file count increased from ${old_file_count} to ${new_file_count}. sleep 5 and check again."
             old_file_count=${new_file_count}
@@ -363,10 +363,10 @@ function upload_to_wsprdaemon_daemon() {
         fi
         wd_logger 1 "Get list of noise files"
         local -a noise_file_list=()
-        noise_file_list=( $(find -name '*_wspr_noise.txt') )
+        noise_file_list=( $(find -name '*_noise.txt') )
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'noise_file_list=( \$(find -name '*_wspr_noise.txt') )' = ${ret_code}"
+            wd_logger 1 "ERROR: 'noise_file_list=( \$(find -name '*_noise.txt') )' = ${ret_code}"
             noise_file_list=()
         else
             if [[ ${#noise_file_list[@]} -eq 0 ]]; then

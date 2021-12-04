@@ -426,7 +426,7 @@ function get_status_of_daemon() {
     local daemon_function_name=$1
     local daemon_root_dir=$2
     if [[ ! -d ${daemon_root_dir} ]]; then
-        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        wd_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
         return 1
     fi
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
