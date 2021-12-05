@@ -139,14 +139,15 @@ function post_files()
         ### If confiugred for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
         > spots.BEST
         local calls_list=( $( awk '{print $6}' spots.ALL | sort -u ) )
+        wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
         local call
         for call in ${calls_list[@]}; do
-            local best_line=$( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | head -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
+            local best_line=$( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
             local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
             local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
             local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot hich marks whether it could be uploadee by the upload_server with a 1
  
-            wd_logger 1 "For call ${call} found the best spot '${best_spot}' in '${best_file}'. Add it to spots.BEST and change the line in the source file ${best_file}"
+            wd_logger 1 "For call ${call} found the best spot '${best_spot}' in '${best_file}'"
 
             echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
             if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
@@ -156,9 +157,17 @@ function post_files()
                 sort -k 5,5n best.TMP > ${best_file}
             fi
         done
-        if [[ ${posting_receiver_name} =~ MERG.* ]] && [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
-            ### Append to 'merged.log'
-            log_merged_snrs  spots.BEST ${spot_file_list[@]}
+        ### Sort the spot lines in spots.BEST by ascending frequency
+        sort -k 5,5n spots.BEST > best.TMP
+        mv best.TMP spots.BEST
+
+        if [[ ${posting_receiver_name} =~ MERG.* ]] ; then
+            wd_logger 1 "Among the spots reported by a set of MERGEd receivers, saved this set of $(wc -l < spots.BEST) spots in file spots.BEST:\n$(cat spots.BEST)"
+            if [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+                ### Append to 'merged.log'
+                wd_logger 1 "Log the MERGEd spot decisions with: 'log_merged_snrs  spots.BEST ${spot_file_list[*]}'"
+                log_merged_snrs  spots.BEST ${spot_file_list[@]}
+            fi
         fi
 
         if [[ ${SIGNAL_LEVEL_UPLOAD} != "proxy" ]]; then
@@ -216,7 +225,8 @@ function add_derived() {
 function log_merged_snrs() 
 {
     local best_snrs_file=$1
-    local all_spot_files_list=( ${@:1} )
+    local all_spot_files_list=( ${@:2} )
+    wd_logger 1 "Generate report about where spots in '${best_snrs_file}' were found in '${all_spot_files_list[*]}'"
 
     local source_file_count=${#all_spot_files_list[@]}
     local source_spots_count=$(cat ${all_spot_files_list[@]} | wc -l)
@@ -226,17 +236,17 @@ function log_merged_snrs()
         return 0
     fi
  
-    local posted_spots_count=$(cat ${wsprd_spots_best_file_path} | wc -l)
-    local posted_calls_list=( $(awk '{print $7}' ${wsprd_spots_best_file_path}) )   ### This list will have already been sorted by frequency
+    local posted_spots_count=$(cat ${best_snrs_file} | wc -l)
+    local posted_calls_list=( $(awk '{print $6}' ${best_snrs_file}) )               ### This list will have already been unique and sorted by frequency
     local posted_spots_count=${#posted_calls_list[@]}                               ### WD posts to wsprnet.org only the spot with the best SNR from each call, so sthe # of spots == #calls
 
-    wd_logger 1 "Log the source of the ${posted_spots_count} posted spots taken from the total ${source_spots_count} spots reported by all the receivers in a MERGEd pool"
-    
-    printf "${WD_TIME_FMT}: %10s %8s %10s" "FREQUENCY" "CALL" "POSTED_SNR" -1  >> merged.log
-
     local real_receiver_list=( ${all_spot_files_list[@]#*/} )
-          real_receiver_list=( ${real_receiver_list%/*}     )
-    local receiver
+          real_receiver_list=( ${real_receiver_list[@]%/*}     )
+ 
+    wd_logger 1 "Log the source of the ${posted_spots_count} posted spots taken from the total ${source_spots_count} spots reported by the ${#real_receiver_list[@]} receivers '${real_receiver_list[*]}' in the MERGEd pool"
+    
+    printf "${WD_TIME_FMT}: %10s %8s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
+   local receiver
     for receiver in ${real_receiver_list[@]}; do
         printf "%12s" ${receiver}                            >> merged.log
     done
@@ -244,13 +254,13 @@ function log_merged_snrs()
 
     local call
     for call in ${posted_calls_list[@]}; do
-        local posted_freq=$(${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $6}')
-        local posted_snr=$( ${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $4}')
+        local posted_freq=$(${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $5}')
+        local posted_snr=$( ${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $3}')
         printf "${WD_TIME_FMT}: %10s %8s %10s" -1 $posted_freq $call $posted_snr            >>  merged.log
         local file
         for file in ${all_spot_files_list[@]}; do
             ### Only pick the strongest SNR from each file which went into the .BEST file
-            local rx_snr=$(${GREP_CMD} -F " $call " $file | sort -k 4,4n | tail -n 1 | awk '{print $4}')
+            local rx_snr=$(${GREP_CMD} -F " $call " $file | sort -k 3,3n | tail -n 1 | awk '{print $3}')
             if [[ -z "$rx_snr" ]]; then
                 printf "%12s" "*"                           >>  merged.log
             elif [[ $rx_snr == $posted_snr ]]; then

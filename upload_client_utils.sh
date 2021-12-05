@@ -242,8 +242,8 @@ function upload_to_wsprnet_daemon() {
            local spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
            wd_logger 1 "Uploading spots from ${#spots_files[@]} files"
 
-            ### sort ascending by fields of spots.txt: YYMMDD HHMM .. FREQ
-            cat ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ
+            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 5,5n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
                 wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
@@ -408,7 +408,7 @@ function upload_to_wsprdaemon_daemon() {
             local ret_code=$?
             if [[ ${ret_code} -eq  0 ]]; then
                 wd_logger 1 "curl FTP upload was successful. Deleting wspr*.txt files."
-                wd_rm ${spot_file_list[@]}
+                wd_rm ${source_file_list[@]}
             else
                 wd_logger 1 "ERROR: 'curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}' faiiled => ${ret_code}, so leave spot and noise files and try again"
             fi
