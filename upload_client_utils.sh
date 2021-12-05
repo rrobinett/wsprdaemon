@@ -276,7 +276,7 @@ function upload_to_wsprnet_daemon() {
                 local spots_offered=${spot_xfer_counts[1]}
                 wd_logger 1 "wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
                 if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
-                    wd_logger 1 "Spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
+                    wd_logger 1 "ERROR: Spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
                 fi
                 local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
                 if [[ ${spots_xfered} -eq 0 ]]; then
