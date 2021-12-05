@@ -392,26 +392,27 @@ function upload_to_wsprdaemon_daemon() {
         wd_logger 1 "created ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}:\n$(cat ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})"
 
         local source_file_list=( ${spot_file_list[@]} ${noise_file_list[@]} )
-        local tar_file_name="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
-        wd_logger 1 "Creating tar file '${tar_file_name}' with:  'tar cfj ${tar_file_name} ${config_relative_path} ${source_file_list[*]}'"
-        tar cfj ${tar_file_name} ${config_relative_path} ${source_file_list[@]} 
+        local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
+        local tar_file_path="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${tar_file_name}"
+        wd_logger 1 "Creating tar file '${tar_file_path}' with:  'tar cfj ${tar_file_path} ${config_relative_path} ${source_file_list[*]}'"
+        tar cfj ${tar_file_path} ${config_relative_path} ${source_file_list[@]} 
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'tar cfj ${tar_file_name} \${source_file_list[@]}' => ret_code ${ret_code}"
+            wd_logger 1 "ERROR: 'tar cfj ${tar_file_path} \${source_file_list[@]}' => ret_code ${ret_code}"
         else
-            wd_logger 1 "Starting curl upload of '${tar_file_name}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_name} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files."
+            wd_logger 1 "Starting curl upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files."
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
-            curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_name} --user ${upload_user}:${upload_password} ftp://${upload_url}
+            curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}
             local ret_code=$?
             if [[ ${ret_code} -eq  0 ]]; then
                 wd_logger 1 "curl FTP upload was successful. Deleting wspr*.txt files."
                 wd_rm ${spot_file_list[@]}
             else
-                wd_logger 1 "ERROR: curl FTP upload failed =? ${ret_code}, so leave spot and noise files and try again"
+                wd_logger 1 "ERROR: 'curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}' faiiled => ${ret_code}, so leave spot and noise files and try again"
             fi
-            wd_rm ${tar_file_name} 
+            wd_rm ${tar_file_path} 
         fi
         wd_logger 1 "sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
         wd_sleep ${UPLOADS_FTP_MODE_SECONDS}
