@@ -834,7 +834,7 @@ function get_wsprdaemon_noise_queue_directory()
     fi
     ### Linux directory names can't have the '/' character in them which is so common in ham call signs.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal in call signs
     local call_dir_name=${receiver_call_grid//\//=}
-    local noise_directory=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_band}
+    local noise_directory=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}
 
     mkdir -p ${noise_directory}
     eval ${__return_directory_name_return_variable}=${noise_directory}
