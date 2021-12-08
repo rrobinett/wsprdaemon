@@ -206,38 +206,8 @@ function tbz_service_daemon()
                 wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
             fi
         done
-        
-        ### Record the noise files
-        local TS_NOISE_CSV_FILE=ts_noise.csv
-        local noise_file_list=()
-        local max_noise_files=${MAX_RM_ARGS}
-        while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
-            if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
-                wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
-                noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )
-            else
-                wd_logger 1 "Found ${#noise_file_list[@]} noise files to be processed"
-            fi
-            awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while recording ${#noise_file_list[@]} noise files, 'awk noise_file_list[@]' => ${ret_code}"
-                exit
-            fi
-            python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Python failed to record $( wc -l < ${TS_NOISE_CSV_FILE}) noise lines to  the wsprdaemon_noise_s table from \${noise_file_list[@]}"
-            else
-                wd_logger 2 "Recorded $( wc -l < ${TS_NOISE_CSV_FILE} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
-            fi
-            wd_rm ${noise_file_list[@]}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while flushing noise files already recorded to TS, 'rm ${spot_file_list[@]}' => ${ret_code}"
-            fi
-        done
-
+     
+        record_noise_files
         wd_logger 1 "Deleting the ${#valid_tbz_list[@]} valid tar files"
         if  true ; then
             local tbz_file
@@ -267,6 +237,41 @@ function tbz_service_daemon()
         sleep 1
     done
 }
+
+function record_noise_files()
+{
+    ### Record the noise files
+    local TS_NOISE_CSV_FILE=ts_noise.csv
+    local noise_file_list=()
+    local max_noise_files=${MAX_RM_ARGS}
+    while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
+        if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
+            wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
+            noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )
+        else
+            wd_logger 1 "Found ${#noise_file_list[@]} noise files to be processed"
+        fi
+        awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: while recording ${#noise_file_list[@]} noise files, 'awk noise_file_list[@]' => ${ret_code}"
+            exit
+        fi
+        python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Python failed to record $( wc -l < ${TS_NOISE_CSV_FILE}) noise lines to  the wsprdaemon_noise_s table from \${noise_file_list[@]}"
+        else
+            wd_logger 2 "Recorded $( wc -l < ${TS_NOISE_CSV_FILE} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
+        fi
+        wd_rm ${noise_file_list[@]}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: while flushing noise files already recorded to TS, 'rm ${spot_file_list[@]}' => ${ret_code}"
+        fi
+    done
+}
+
 
 declare UPLOAD_TO_MIRROR_SERVER_URL="${UPLOAD_TO_MIRROR_SERVER_URL-}"       ### Defaults to blank, so no uploading happens
 
