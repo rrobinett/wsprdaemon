@@ -315,7 +315,7 @@ function load_wsjtx_commands()
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
                 ;;
             *)
-                echo "ERROR: CPU architecture '${CPU_ARCH}' is not supported by this program"
+                wd_logger 1 "ERROR: CPU architecture '${CPU_ARCH}' is not supported by this program"
                 exit 1
                 ;;
         esac
@@ -323,7 +323,7 @@ function load_wsjtx_commands()
         local wsjtx_dpkg_file=${WSPRDAEMON_TMP_DIR}/${wsjtx_pkg}
         wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg} -O ${wsjtx_dpkg_file}
         if [[ ! -f ${wsjtx_dpkg_file} ]] ; then
-            echo "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
+            wd_logger 1 "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
             exit 1
         fi
         local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt
@@ -331,27 +331,37 @@ function load_wsjtx_commands()
         dpkg-deb -x ${wsjtx_dpkg_file} ${dpkg_tmp_dir}
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]] ; then
-            echo "ERROR: on ${os_name} failed to extract files from package file ${wsjtx_pkg_file}"
+            wd_logger 1 "ERROR: on ${os_name} failed to extract files from package file ${wsjtx_pkg_file}"
             exit 1
         fi
         local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
         if [[ ! -x ${dpkg_wsprd_file} ]]; then
-            echo "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
             exit 1
         fi
         cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
         echo "echo ${WSJTX_REQUIRED_VERSION}" > ${WSPRD_VERSION_CMD}
         chmod +x ${WSPRD_VERSION_CMD}
-        echo "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
+        wd_logger 1 "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
 
         local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
-            echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
             exit 1
         fi
         sudo apt install libboost-log1.67.0       ### Needed by jt9
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
-        echo "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
+        wd_logger 1 "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
+    fi
+    local wsjtx_dpkg_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name wsjtx_*.deb ) )
+    if [[ ${#wsjtx_dpkg_file_list[@]} -gt 0 ]]; then
+        wd_logger 1 "Flushing files: '${wsjtx_dpkg_file_list[*]}'"
+        wd_rm ${wsjtx_dpkg_file_list[@]}
+    fi
+    local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt
+    if [[ -d ${dpkg_tmp_dir} ]]; then
+        wd_logger 1 "Flushing ${dpkg_tmp_dir}"
+        rm -r ${dpkg_tmp_dir}
     fi
 }
 

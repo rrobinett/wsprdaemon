@@ -345,8 +345,12 @@ function sleep_until_raw_file_is_full() {
         return 2
     fi
     if [[ ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
-        local ps_output=$
-        wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be 2 instances of the KWR running.  Looping here so I can look at the log file.  Increment verbosity to get me to proceed"
+        local kiwi_freq=${filename#*_}
+              kiwi_freq=${kiwi_freq::4}
+        local ps_output=$(ps au | grep "freq=${kiwi_freq}" | grep -v grep)
+        local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
+        kill ${kiwirecorder_pids[@]}
+        wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'\nLooping here so I can look at the log file.  Increment verbosity to get me to proceed"
         while [[ ${verbosity} -eq 1 ]]; do
             sleep 1
         done
