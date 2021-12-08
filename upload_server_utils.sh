@@ -1,5 +1,4 @@
-
-############## Implents the '-u' cmd which runs only on wsprdaemon.org to process the tar .tbz files uploaded by WD sites
+#!/bin/bash
 
 declare UPLOAD_FTP_PATH=~/ftp/upload       ### Where the FTP server leaves tar.tbz files
 declare UPLOAD_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_upload_batch.py
@@ -149,66 +148,24 @@ function record_spot_files()
         if [[ ${#calls_delivering_jtx_2_2_lines[@]} -ne 0 ]]; then
             wd_logger 2 "Found spots from Calls using WSJT-x V2.2 wsprd: ${calls_delivering_jtx_2_2_lines[@]}"
         fi
-        ###  Format of the extended spot line delivered by WD clients:
-        ###   spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin \
-            ###                                                                       spot_rms_noise spot_c2_noise spot_for_wsprnet band \
-            ###                                                                                        my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon (WD 3.x: wspr_packet_mode) (appended by awk: site_receiver_name)
 
-        ###  Those lines are converted into a .csv file which will be recorded in TS and CH by this awk program:
-        ###  awk 'NF == 32' ${spot_file_list[@]:0:20000}  => filters out corrupt spot lines.  Only lines with 32 fields are fed to TS.  The bash cmd line can process no more than about 23,500 arguments, so pass at most 20,000 txt file names to awk.  If there are more, they will get processed in the next loop iteration
-        ###          
-        ###  sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/;'"s/\"/'/g"
-        ###          s/\S+\s+//18;  => deletes the 18th field, the 'proxy upload this spot to wsprnet.org'
-        ###                        s/ /,/g; => replace all spaces with ','s
-        ###                                   s/,/:/; => change the first two fields from DATE,TIME to DATE:TIME
-        ###                                          s/./&"/11; => add '"' to get DATE:TIME"
-        ###                                                      s/./&:/9; => insert ':' to get YYMMDD:HH:MM"
-        ###                                                                s/./&-/4; s/./&-/2;   => insert ':' to get YY-MM-DD:HH:MM"
-        ###                                                                                   s/^/"20/;  => insert '"20' to get "20YY-MM-DD:HH:MM"
-        ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
-        ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
+        local ts_spots_csv_file=./ts_spots.csv    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
+        format_spot_lines ${ts_spots_csv_file}
 
-        ### WD v2.10* spot lines will have 32 fields, while v3.0a+ spot lines will have 33 fields
-        awk '{printf "%90s:%s\n", FILENAME, $0}' ${spot_file_list[@]} > file_fields.log
-        if [[ -s file_fields.log ]]; then
-            wd_logger 1 "Recording spots from ${#spot_file_list[@]} spot files:\n$(head -n 4 file_fields.log)"
-        fi
-
-        local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
-        awk 'NF != 32 && NF != 33' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
-        if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
-            wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} )  bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
-        fi
-
-        ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
-        ### 9/5/20:   RR: added the site's receiver name to end of each line.  It is extracted from the path of the wsprdaemon_spots.txt file
-        ### 10/26.21: RR: The decoder now inserts 'none' in type 2 spots, so changed this to test only for spots without 32 fields.
-        ###               Added the wspr_packet_mode 'W_2' to spot lines from WD 2.10x which are missing that last field 
-        local TS_SPOTS_CSV_FILE=./ts_spots.csv
-        awk 'NF == 32 { 
-                if (NF == 32)  wspr_pkt_mode = "2 ";
-                $7=toupper($7); 
-                if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); 
-                if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
-                $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); 
-                $23=toupper($23); 
-                n = split(FILENAME, a, "/"); 
-                printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
-        sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${TS_SPOTS_CSV_FILE}
-        if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
+        if [[ ! -s ${ts_spots_csv_file} ]]; then
             wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
         else
             declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
             declare SPLIT_CSV_PREFIX="split_spots_"
             rm -f ${SPLIT_CSV_PREFIX}*
-            split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${TS_SPOTS_CSV_FILE} ${SPLIT_CSV_PREFIX}
+            split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: couldn't split ${TS_SPOTS_CSV_FILE}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${TS_SPOTS_CSV_FILE} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
+                wd_logger 1 "ERROR: couldn't split ${ts_spots_csv_file}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
                 exit
             fi
             local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-            wd_logger 2 "Split ${TS_SPOTS_CSV_FILE} into ${#split_file_list[@]} splitXXX.csv files"
+            wd_logger 2 "Split ${ts_spots_csv_file} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
                 wd_logger 2 "Recording ${split_csv_file}"
@@ -223,13 +180,64 @@ function record_spot_files()
             done
             wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
-        wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-        wd_rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
+        wd_logger 1 "Finished recording ${ts_spots_csv_file}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
+        wd_rm ${ts_spots_csv_file} ${spot_file_list[@]}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
+            wd_logger 1 "ERROR: while flushing ${ts_spots_csv_file} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
         fi
     done
+}
+
+###  Format of the extended spot line delivered by WD clients:
+###   spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin \
+###                                                                       spot_rms_noise spot_c2_noise spot_for_wsprnet band \
+###                                                                                        my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon (WD 3.x: wspr_packet_mode) (appended by awk: site_receiver_name)
+###  Those lines are converted into a .csv file which will be recorded in TS and CH by this awk program:
+###  awk 'NF == 32' ${spot_file_list[@]:0:20000}  => filters out corrupt spot lines.  Only lines with 32 fields are fed to TS.  The bash cmd line can process no more than about 23,500 arguments, so pass at most 20,000 txt file names to awk.  If there are more, they will get processed in the next loop iteration
+###          
+###  sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/;'"s/\"/'/g"
+###          s/\S+\s+//18;  => deletes the 18th field, the 'proxy upload this spot to wsprnet.org'
+###                        s/ /,/g; => replace all spaces with ','s
+###                                   s/,/:/; => change the first two fields from DATE,TIME to DATE:TIME
+###                                          s/./&"/11; => add '"' to get DATE:TIME"
+###                                                      s/./&:/9; => insert ':' to get YYMMDD:HH:MM"
+###                                                                s/./&-/4; s/./&-/2;   => insert ':' to get YY-MM-DD:HH:MM"
+###                                                                                   s/^/"20/;  => insert '"20' to get "20YY-MM-DD:HH:MM"
+###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
+###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
+function format_spot_lines()
+{
+    local fixed_spot_lines_file=$1
+
+    ### WD v2.10* spot lines will have 32 fields, while v3.0a+ spot lines will have 33 fields
+    awk '{printf "%90s:%s\n", FILENAME, $0}' ${spot_file_list[@]} > file_fields.log
+    if [[ -s file_fields.log ]]; then
+        wd_logger 1 "Recording spots from ${#spot_file_list[@]} spot files:\n$(head -n 4 file_fields.log)"
+    fi
+
+    local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
+    awk 'NF != 32 && NF != 33' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
+    if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
+        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} )  bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
+    fi
+
+    ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
+    ### 9/5/20:   RR: added the site's receiver name to end of each line.  It is extracted from the path of the wsprdaemon_spots.txt file
+    ### 10/26.21: RR: The decoder now inserts 'none' in type 2 spots, so changed this to test only for spots without 32 fields.
+    ###               Added the wspr_packet_mode 'W_2' to spot lines from WD 2.10x which are missing that last field 
+    awk 'NF == 32 { 
+                   if (NF == 32)  wspr_pkt_mode = "2 ";
+                   $7=toupper($7); 
+                   if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); 
+                   if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
+                   $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); 
+                   $23=toupper($23); 
+                   n = split(FILENAME, a, "/"); 
+                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
+    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${fixed_spot_lines_file}
+    wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
+    return 0
 }
 
 function record_noise_files()
