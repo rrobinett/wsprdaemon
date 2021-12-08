@@ -392,10 +392,14 @@ function upload_to_wsprdaemon_daemon() {
         wd_logger 1 "created ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}:\n$(cat ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})"
 
         local source_file_list=( ${spot_file_list[@]} ${noise_file_list[@]} )
+        ### In v2.10* the spot and noise file paths were tared from the ~/wsprdaemon/uploads.d directory, so the filenames all start with 'wsprdaemon.d/...
+        ### So to preserve backwards compatibility we will mimic that behavior by executing tar from ..uploads.d and prepending 'wsprdaemon.d' to all the filenames we are tarring
+        local tar_source_file_list=( wsprdaemon.d/${config_relative_path} ${source_file_list[@]/./wsprdaemon.d} )
+
         local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
         local tar_file_path="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${tar_file_name}"
-        wd_logger 1 "Creating tar file '${tar_file_path}' with:  'tar cfj ${tar_file_path} ${config_relative_path} ${source_file_list[*]}'"
-        tar cfj ${tar_file_path} ${config_relative_path} ${source_file_list[@]} 
+        wd_logger 1 "Creating tar file '${tar_file_path}' with:  '( cd ${UPLOADS_ROOT_DIR}; tar cfj ${tar_file_path} ${tar_source_file_list[*]})"
+        ( cd ${UPLOADS_ROOT_DIR}; tar cfj ${tar_file_path} ${tar_source_file_list[*]} )
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'tar cfj ${tar_file_path} \${source_file_list[@]}' => ret_code ${ret_code}"

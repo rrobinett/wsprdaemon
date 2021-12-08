@@ -307,30 +307,6 @@ function decode_wpsr_wav_file() {
     return ${ret_code}
 }
 
-function queue_noise_signal_levels() 
-{
-    local spot_date=$1
-    local spot_time=$2
-    local sox_signals_rms_fft_and_overload_info="$3"
-    local band_freq_hz=$4
-    local signal_levels_log_file=$5
-    local wsprdaemon_noise_directory=$6
- 
-    local noise_line="${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}"
-
-    wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
-    echo "${noise_line}" >> ${signal_levels_log_file}
-
-    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
-        wd_logger 1 "Not configured to upload noise, so not queuing a noise file"
-    else
-        local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
-        wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
-        echo "${noise_line}" > ${wsprdaemon_noise_file}
-    fi
-    return 0
-}
-
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
