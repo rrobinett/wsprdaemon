@@ -11,7 +11,7 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
-declare MAX_RM_ARGS=10000    ### Limit of the number of files in the 'rm ...' cmd line
+declare MAX_RM_ARGS=5000    ### Limit of the number of files in the 'rm ...' cmd line
 
 ### This deamon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
@@ -49,14 +49,17 @@ function tbz_service_daemon()
         rm -rf wsprdaemon.d wsprnet.d
         local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
         local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
-        wd_logger 2 "Found ${#tbz_file_list[@]} tar.tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
+        wd_logger 1 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
 
-        wd_logger 2 "Validating and extracting spot and noise files from the tar.tbz list until all are processed or we would approach filling this file system"
         local valid_tbz_list=() 
         local tbz_file 
         for tbz_file in ${tbz_file_list[@]}; do
             if tar xf ${tbz_file} &> /dev/null ; then
                 wd_logger 2 "Found a valid tar file: ${tbz_file}"
+                if [[ ${tbz_file} =~ AI6VN ]]; then
+                    local tared_files=$(tar tf ${tbz_file})
+                    wd_logger 3 "Tar file ${tbz_file} contains:\n${tared_files}"
+                fi
                 valid_tbz_list+=(${tbz_file})
                 local file_system_usage=$(df . | awk '/^tmpfs/{print $3}')
                 if [[ ${file_system_usage} -gt ${file_system_max_usage} ]]; then
@@ -64,7 +67,7 @@ function tbz_service_daemon()
                     break
                 fi
             else
-                wd_logger 2 "Found invalid tar file ${tbz_file}"
+                wd_logger 1 "Found invalid tar file ${tbz_file}"
                 local file_mod_epoch=0
                 file_mod_epoch=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
                 local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
@@ -82,34 +85,33 @@ function tbz_service_daemon()
             fi
         done
         if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 2 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
+            wd_logger 1 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
             sleep 1
             continue
         fi
-        wd_logger 2 "Finished processing ${#tbz_file_list[@]} raw tar files"
+        local valid_tbz_names_list=( ${valid_tbz_list[@]##*/} )
+        wd_logger 1 "Extracted spot and noise files from the ${#tbz_file_list[@]} raw tar files in the ftp directory. Next  process ${#valid_tbz_list[@]} valid tbz files: '${valid_tbz_names_list[*]:0:4}...'"
 
         queue_files_for_upload_to_wd1 ${valid_tbz_list[@]}
 
-        wd_logger 2 "Processing spot and noise files from the first ${#valid_tbz_list[@]} valid tbz files of the ${#tbz_file_list[@]} .tbz files in the ftp/uploads directory"
-
         ### Remove frequectly found zero length spot files which are  are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decoded
         local spot_file_list=()
-        while spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
-            wd_logger 2 "Flushing ${#spot_file_list[@]} empty spot files"
+        while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
+            wd_logger 1 "Flushing ${#spot_file_list[@]} empty spot files"
             if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
                 wd_logger 1 "${#spot_file_list[@]} empty spot files are too many to 'rm ..' in one call, so 'rm' the first ${MAX_RM_ARGS} spot files"
                 spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
             fi
-            rm ${spot_file_list[@]}
+            wd_rm ${spot_file_list[@]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: while flushing zero length files, 'rm ...' => ${ret_code}"
+                exit
             fi
         done
 
         ### Process non-empty spot files
-        while spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_wspr_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
-            wd_logger 2 "Found ${#spot_file_list[@]} files with spots in them."
+        while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
             if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
                 wd_logger 1 "${#spot_file_list[@]} spot files are too many to process in one pass, so processing the first ${MAX_RM_ARGS} spot files"
                 spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
@@ -142,6 +144,12 @@ function tbz_service_daemon()
             ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
             ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
 
+            ### WD v2.10* spot lines will have 32 fields, while v3.0a+ spot lines will have 33 fields
+            awk '{printf "%90s:%s\n", FILENAME, $0}' ${spot_file_list[@]} > file_fields.log
+            if [[ -s file_fields.log ]]; then
+                wd_logger 1 "Recording spots from ${#spot_file_list[@]} spot files:\n$(head -n 4 file_fields.log)"
+            fi
+
             local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
             awk 'NF != 32 && NF != 33' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
             if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
@@ -153,7 +161,7 @@ function tbz_service_daemon()
             ### 10/26.21: RR: The decoder now inserts 'none' in type 2 spots, so changed this to test only for spots without 32 fields.
             ###               Added the wspr_packet_mode 'W_2' to spot lines from WD 2.10x which are missing that last field 
             local TS_SPOTS_CSV_FILE=./ts_spots.csv
-            awk 'NF == 32 || NF == 33 { 
+            awk 'NF == 32 { 
                     if (NF == 32)  wspr_pkt_mode = "2 ";
                     $7=toupper($7); 
                     if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); 
@@ -164,7 +172,7 @@ function tbz_service_daemon()
                     printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
             sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${TS_SPOTS_CSV_FILE}
             if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
-                wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files."
+                wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
             else
                 declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
                 declare SPLIT_CSV_PREFIX="split_spots_"
@@ -183,16 +191,16 @@ function tbz_service_daemon()
                     python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the ${spots_count}  spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
+                        wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
                    else
                         wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot files"
                     fi
-                    rm ${split_csv_file}
+                    wd_rm ${split_csv_file}
                 done
                 wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
             fi
             wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-            rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
+            wd_rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
@@ -205,10 +213,11 @@ function tbz_service_daemon()
         local max_noise_files=${MAX_RM_ARGS}
         while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
             if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
-                wd_logger 1 "Truncating  noise_file_list[] to ${max_noise_files} files"
+                wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
                 noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )
+            else
+                wd_logger 1 "Found ${#noise_file_list[@]} noise files to be processed"
             fi
-            wd_logger 2 "Processing batch of ${#noise_file_list[@]} files in '{noise_file_list[*]}' into ${TS_NOISE_CSV_FILE}"
             awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
@@ -222,20 +231,39 @@ function tbz_service_daemon()
             else
                 wd_logger 2 "Recorded $( wc -l < ${TS_NOISE_CSV_FILE} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
             fi
-            rm ${noise_file_list[@]}
+            wd_rm ${noise_file_list[@]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: while flushing noise files already recorded to TS, 'rm ${spot_file_list[@]}' => ${ret_code}"
             fi
         done
-        wd_logger 2 "Finished with all noise files. Deleting the ${#valid_tbz_list[@]} valid tar files"
 
-        rm ${valid_tbz_list[@]} 
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: while flushing ${#valid_tbz_list[@]} valid tbz files already recorded to TS, 'rm ...' => ${ret_code}"
+        wd_logger 1 "Deleting the ${#valid_tbz_list[@]} valid tar files"
+        if  true ; then
+            local tbz_file
+            for tbz_file in ${valid_tbz_list[@]} ; do
+                sudo rm ${tbz_file}              ### the tbz files are owned by the user 'noisegraphs' and we can't 'sudo wd_rm...', so 
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: while flushing ${tbz_file} recorded to TS, 'rm ...' => ${ret_code}"
+                fi
+            done
+        else
+            while [[ ${#valid_tbz_list[@]} -gt 0 ]] ; do
+                local rm_list=( ${valid_tbz_list[@]:0:${MAX_RM_ARGS}} )
+                wd_logger 1 "Flushing ${#rm_list[@]} of the ${#valid_tbz_list[@]} valid tbz files which have finished recording"
+                sudo rm ${rm_list[@]}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: while flushing ${#rm_list[@]} valid tbz files already recorded to TS, 'rm ...' => ${ret_code}"
+                fi
+                if [[ -d wsprdaemon.d ]]; then
+                    wd_logger 2 "Found $(du -s wsprdaemon.d) files in wsprdaemon.d after rm of spot and noise files.  Sleeping 10"
+                fi
+                valid_tbz_list=( ${valid_tbz_list[@]:${MAX_RM_ARGS}} )
+            done
         fi
-        wd_logger 2 "Found $(du -s wsprdaemon.d) files in wsprdaemon.d after rm of spot and noise files.  Sleeping 10"
+        wd_logger 1 "Finished deleting the tar files\n"
         sleep 1
     done
 }
@@ -321,7 +349,7 @@ function queue_files_for_upload_to_wd1() {
     local files="$@"
 
     if [[ -z "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
-        wd_logger 1 "Queuing is disabled, so ignoring the we were passed"
+        wd_logger 2 "Queuing is disabled, so ignoring the we were passed"
     else
         local files_path_list=(${files})
         local files_name_list=(${files_path_list[@]##*/})
