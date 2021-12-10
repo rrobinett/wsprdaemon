@@ -341,19 +341,21 @@ function sleep_until_raw_file_is_full() {
         return 1
     fi
     if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} ]]; then
-        wd_logger 2 "ERROR: wav file stablized at invalid too small size ${new_file_size}"
+        wd_logger 1 "The wav file stablized at invalid too small size ${new_file_size} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        wd_rm ${filename}
         return 2
     fi
     if [[ ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
         local kiwi_freq=${filename#*_}
-              kiwi_freq=${kiwi_freq::4}
-        local ps_output=$(ps au | grep "freq=${kiwi_freq}" | grep -v grep)
+              kiwi_freq=${kiwi_freq::3}
+        local ps_output=$(ps au | grep "kiwirecorder.*freq=${kiwi_freq}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
-        kill ${kiwirecorder_pids[@]}
-        wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'\nLooping here so I can look at the log file.  Increment verbosity to get me to proceed"
-        while [[ ${verbosity} -eq 1 ]]; do
-            sleep 1
-        done
+        if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
+            wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, but can't find any kiwirecorder processes which would be creating it"
+        else
+            kill ${kiwirecorder_pids[@]}
+            wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
+        fi
         return 1
     fi
     wd_logger 2 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
