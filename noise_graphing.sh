@@ -239,7 +239,7 @@ function plot_noise() {
 }
 
 declare NOISE_LINE_FIELDS_COUNT=16         ### The graphing program expects that every noise line
-function queue_noise_signal_levels() 
+function queue_noise_signal_levels_to_wsprdeamon() 
 {
     local spot_date=$1
     local spot_time=$2
@@ -252,7 +252,7 @@ function queue_noise_signal_levels()
     local noise_line_list=( ${noise_line} )
 
     if [[ ${#noise_line_list[@]} -ne ${NOISE_LINE_FIELDS_COUNT} ]]; then
-        wd_logger 1 "ERROR: got invalid noise line '${noise_line}'"
+        wd_logger 1 "ERROR: dumping invalid noise line '${noise_line}'"
         return 1
     fi
 

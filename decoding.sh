@@ -711,7 +711,7 @@ function decoding_daemon_kill_handler() {
 declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=17                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
-function create_enhanced_spots_file_and_queue_to_wsprdaemon () {
+function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     local real_receiver_wspr_spots_file=$1              ### file with the new spot lines found in ALL_WSPR.TXT
     local spot_file_date=$2              ### These are prepended to the output file name
     local spot_file_time=$3
@@ -1082,12 +1082,12 @@ function decoding_daemon() {
                   wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
-            queue_noise_signal_levels  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
+            queue_noise_signal_levels_to_wsprdeamon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt to wsprnet.org
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprnet.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_wsprdaemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
         done
         sleep 1
     done
