@@ -783,6 +783,12 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         wd_logger 1 "Created '${cached_spots_file_name}' of size $(ls -l ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
     fi
 
+    if grep "<...>" ${cached_spots_file_name} > bad_spots.txt; then
+        wd_logger 1 "Removing $(wc -l < bad_spots.txt) bad spot line(s) from upload:\n$(< bad_spots.txt)"
+        grep -v  "<...>" ${cached_spots_file_name} > cleaned_spots.txt
+        mv cleaned_spots.txt ${cached_spots_file_name}
+    fi
+
     ### Queue the enhanced_spot file we have just created to all of the posting daemons 
     shopt -s nullglob    ### * expands to NULL if there are no .wav wav_file
     local dir

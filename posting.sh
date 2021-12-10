@@ -147,7 +147,8 @@ function post_files()
             local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
             local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot hich marks whether it could be uploadee by the upload_server with a 1
  
-            wd_logger 1 "For call ${call} found the best spot '${best_spot}' in '${best_file}'"
+            local fixed_fields_line=$( printf "For call %12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )
+            wd_logger 1 "${fixed_fields_line}"
 
             echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
             if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
@@ -176,8 +177,8 @@ function post_files()
             mkdir -p ${wsprnet_uploads_queue_directory}
             local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
             local spots_count=$(wc -l < spots.BEST)
+            wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
             mv spots.BEST ${wsprnet_uploads_queue_filename}
-            wd_logger 1 "Queued 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}"
         fi
     fi
 
