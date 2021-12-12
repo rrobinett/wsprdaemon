@@ -75,7 +75,7 @@ function tbz_service_daemon()
                     if [[ ! ${tbz_file} =~ K7BIZ ]]; then   ### K7BIZ is running a corrupt config, so don't print that his .tbz files are corrupt
                         wd_logger 1 "Deleting invalid file ${tbz_file} which is ${file_age} seconds old"
                     fi
-                    rm ${tbz_file}
+                    sudo rm ${tbz_file}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
                         wd_logger 1 "ERROR: when deleting invalid file ${tbz_file} which is ${file_age} seconds old, 'rm ${tbz_file}' => ${ret_code}"
