@@ -206,7 +206,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.0}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.2}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
