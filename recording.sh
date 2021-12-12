@@ -336,7 +336,7 @@ function kiwirecorder_manager_daemon()
             local ps_output=$( ps ${kiwi_recorder_pid} )
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 1 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
+                wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
                 wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n${ps_output}"
                 kiwi_recorder_pid=""
@@ -480,7 +480,18 @@ function spawn_wav_recording_daemon() {
             wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
             rm ${WAV_RECORDING_DAEMON_PID_FILE}
         fi
+
     fi
+    ### There was no PID file or the pid in that file was dead.  But check with Linux to be sure there is no zombie recording_daemon running
+    local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in khz are unqiue to each rx band
+    local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
+    if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
+        wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} Khz, so go ahead and spawn a new job"
+    else
+        kill ${kiwirecorder_pids[@]}
+        wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}' and then spawn a new job"
+    fi
+
     ### No recoding daemon is running
     if [[ ${receiver_name} =~ ^AUDIO_ ]]; then
         [[ $verbosity -ge 1 ]] && echo "$(date): spawn_recording_daemon() record ${receiver_name}"

@@ -263,6 +263,48 @@ function truncate_file() {
     fi
 }
 
+### Because 'kill' and 'debug increment/decrement' traps are only processed by a program at the end of any currently running program,
+### Executing a long sleep command like 'sleep 60' will block processing of 'kill' commands for up to (in that case) 60 seconds
+### By using this command, long 'sleep NN' commands are executed as a series of 'sleep 1's and thus traps will be handled within one second
+function wd_sleep()
+{
+    local sleep_for_secs=$1
+    local start_secs=${SECONDS}
+    local end_secs=$(( start_secs + sleep_for_secs ))
+
+    wd_logger 2 "Starting to sleep for a total of ${sleep_for_secs} seconds"
+    while [[ ${SECONDS} -le ${end_secs} ]]; do
+        sleep 1
+    done
+    wd_logger 2 "Finished sleeping"
+}
+
+function wd_rm()
+{
+    local rm_list=($@)
+
+    wd_logger 2 "Delete ${#rm_list[@]} files: ${rm_list[*]}"
+    local rm_errors=0
+    local rm_file
+    for rm_file in ${rm_list[@]}; do
+        if [[ ! -f ${rm_file} ]]; then
+            wd_logger 1 "ERROR: can't find supplied file ${rm_file}"
+        else
+            rm ${rm_file}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to 'rm ${rm_file}' requested by function"
+                $(( ++ rm_errors ))
+            fi
+        fi
+    done
+    if [[ ${rm_errors} -gt 0 ]]; then
+        wd_logger 1 "ERROR: Encountered ${rm_errors} errors when executing 'rm ${rm_list[*]}'"
+    fi
+}
+
+################# Daemon management functions ==============================
+###
 ###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
 function get_pid_from_file(){
     local pid_var_name=$1   ### Where to return the PID found in $2 file
@@ -312,4 +354,140 @@ function kill_and_wait_for_death() {
     fi
     wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
     return 0
+}
+
+function spawn_daemon() 
+{
+    local daemon_function_name=$1
+    local daemon_root_dir=$2
+    mkdir -p ${daemon_root_dir}
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
+#    setup_systemctl_deamon "-u a"  "-u z"
+    if [[ -f ${daemon_pid_file_path} ]]; then
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        if ps ${daemon_pid} > /dev/null ; then
+            wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
+            return 0
+        else
+            wd_logger 1 "found a stale file '${daemon_pid_file_path}' with pid ${daemon_pid}, so deleting it"
+            rm -f ${daemon_pid_file_path}
+        fi
+    fi
+    echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
+    WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to spawn 'WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}' => ${ret_code}"
+        return 1
+    fi
+    echo $! > ${daemon_pid_file_path}
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '$!' and recorded the pid to '${daemon_pid_file_path}'"
+    return 0
+}
+
+function kill_daemon() {
+    local daemon_root_dir=$2
+    if [[ ! -d ${daemon_root_dir} ]]; then
+        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        return 1
+    fi
+    local daemon_function_name=$1
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start"
+    if [[ ! -f ${daemon_pid_file_path} ]]; then
+        wd_logger 1 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
+        return 2
+    else
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        rm -f ${daemon_pid_file_path}
+        if ! ps ${daemon_pid} > /dev/null ; then
+            wd_logger 1 "ERROR: ${daemon_function_name} pid file reported pid ${daemon_pid}, but that isn't running"
+            return 3
+        else
+            kill ${daemon_pid}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'kill ${daemon_pid}' failed for active pid ${daemon_pid}"
+                return 4
+            else
+                wd_logger 1 "'kill ${daemon_pid}' was successful"
+            fi
+        fi
+    fi
+    return 0
+}
+
+function get_status_of_daemon() {
+    local daemon_function_name=$1
+    local daemon_root_dir=$2
+    if [[ ! -d ${daemon_root_dir} ]]; then
+        wd_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        return 1
+    fi
+    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
+    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+
+    wd_logger 2 "Start"
+    if [[ ! -f ${daemon_pid_file_path} ]]; then
+        wd_logger 1 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
+        return 2
+    else
+        local daemon_pid=$( < ${daemon_pid_file_path})
+        ps ${daemon_pid} > /dev/null
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then 
+            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            rm -f ${daemon_pid_file_path}
+            return 3
+        else
+            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+        fi
+    fi
+    return 0
+}
+
+### Given a table of the form:
+### 
+### declare client_upload_daemon_list=(
+###   "upload_to_wsprnet_daemon         ${UPLOADS_WSPRNET_SPOTS_DIR}"
+###   "upload_to_wsprdaemon_daemon      ${UPLOADS_WSPRDAEMON_ROOT_DIR}"
+### )
+function daemons_list_action()
+{
+    local acton_to_perform=$1        ### 'a', 'z', or 's'
+    local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
+
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${daemon_list_name}'"
+
+    for spawn_line in "${daemon_list_name[@]}"; do
+        local daemon_info_list=(${spawn_line})
+        local daemon_function_name=${daemon_info_list[0]}
+        local daemon_home_directory=${daemon_info_list[1]}
+        
+        wd_logger 2 "Execute action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}'"
+        case ${acton_to_perform} in
+            a)
+                spawn_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+            z)
+                kill_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+
+            s)
+                get_status_of_daemon ${daemon_function_name} ${daemon_home_directory}
+                ;;
+            *)
+                wd_logger 1 "ERROR: invalid action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}'"
+                ;;
+        esac
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 2 "ERROR: Running action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}' => ${ret_code}"
+        fi
+    done
 }

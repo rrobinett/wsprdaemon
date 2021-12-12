@@ -140,7 +140,7 @@ while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
             usage
             ;;
         u)
-            upload_server_daemon $OPTARG
+            upload_server_cmd $OPTARG
             ;;
         v)
             ((verbosity++))

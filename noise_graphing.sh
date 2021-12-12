@@ -27,13 +27,13 @@ function setup_noise_graphs()
 {
     if [[ -n "${SIGNAL_LEVEL_LOCAL_GRAPHS-}" ]]; then
         NOISE_GRAPHS_LOCAL_ENABLED=${SIGNAL_LEVEL_LOCAL_GRAPHS}
-        wd_logger 1 "Local display of noise graphs set by SIGNAL_LEVEL_LOCAL_GRAPHS=${SIGNAL_LEVEL_LOCAL_GRAPHS} in WD.conf file"
+        wd_logger 2 "Whether to display noise graphs locally has been set by SIGNAL_LEVEL_LOCAL_GRAPHS=${SIGNAL_LEVEL_LOCAL_GRAPHS} in WD.conf file"
     fi
     if [[ -n "${SIGNAL_LEVEL_UPLOAD_GRAPHS-}" ]]; then
         NOISE_GRAPHS_UPLOAD_ENABLED=${SIGNAL_LEVEL_UPLOAD_GRAPHS}
-        wd_logger 2 "Upload of noise graphs set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
+        wd_logger 2 "Whether to upload noise graphs has been set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
-    if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" ]] && [[ ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
+    if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" && ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
         wd_logger 2 "Noise graphing is disabled, so skip installation of libraries needed for it"
         return 0
     fi
@@ -137,7 +137,7 @@ function plot_noise() {
     fi
 
     if [[ ! -f ${noise_calibration_file} ]]; then
-        mkdir -p ${noise_calibration_file}
+        mkdir -p ${noise_calibration_file%/*}   ### creates the directory for the file
 
         echo "# Cal file for use with 'wsprdaemon.sh -p'" >${noise_calibration_file}
         echo "# Values are: Nominal bandwidth, noise equiv bandwidth, RMS offset, freq offset, FFT_band, Threshold, see notes for details" >>${noise_calibration_file}
@@ -158,9 +158,13 @@ function plot_noise() {
     # noise records are all 2 min apart so 30 per hour so rows = hours *30. The max number of rows we need in the csv file is (24 *30), so to speed processing only take that number of rows from the log file
     local -i rows_per_day=$((24*30))
 
-    ### convert wsprdaemon AI6VN  sox stats format to csv for excel or Python matplotlib etc
-    ### Create csv files from log files
-    local signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) )
+    ### convert wsprdaemon AI6VN sox stats format files to csv for excel or Python matplotlib etc
+    if [[ ! -d ${signal_levels_root_dir} ]]; then
+        wd_logger 1 "'${signal_levels_root_dir}' doesn't exist"
+        return 0
+    fi
+    local signal_levels_log_list=()
+    signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) ) 
     if [[ ${#signal_levels_log_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no signal-levels.log files, so nothing to plot"
         return 0
@@ -233,3 +237,36 @@ function plot_noise() {
     fi
     return 0
 }
+
+declare NOISE_LINE_FIELDS_COUNT=16         ### The graphing program expects that every noise line
+function queue_noise_signal_levels_to_wsprdeamon() 
+{
+    local spot_date=$1
+    local spot_time=$2
+    local sox_signals_rms_fft_and_overload_info="$3"
+    local band_freq_hz=$4
+    local signal_levels_log_file=$5
+    local wsprdaemon_noise_directory=$6
+ 
+    local noise_line="${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}"
+    local noise_line_list=( ${noise_line} )
+
+    if [[ ${#noise_line_list[@]} -ne ${NOISE_LINE_FIELDS_COUNT} ]]; then
+        wd_logger 1 "ERROR: dumping invalid noise line '${noise_line}'"
+        return 1
+    fi
+
+    wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
+    echo "${noise_line}" >> ${signal_levels_log_file}
+
+    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
+        wd_logger 1 "Not configured to upload noise, so not queuing a noise file"
+    else
+        local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
+        wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
+        echo "${noise_line}" > ${wsprdaemon_noise_file}
+    fi
+    return 0
+}
+
+

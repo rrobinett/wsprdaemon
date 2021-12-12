@@ -83,8 +83,11 @@ function proxy_connection_manager() {
         fi
         wd_logger 1 "Got FRP tar file"
         tar xf ${frp_tar_file}
+        wd_rm ${frp_tar_file}         ### We are done with the tar file, so flush it
+
         local frp_dir=${frp_tar_file%.tar.gz}
         cp -p ${frp_dir}/frpc ${FRPC_CMD}
+        rm -r ${frp_dir}              ### We have extracted the 'frpc' command, so flush the directory tree
         cd -
     fi
     if [[ ! -f ${FRPC_INI_FILE} ]]; then
