@@ -690,7 +690,7 @@ function decoding_daemon_kill_handler() {
 #    fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
 #                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
 
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=17                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=18                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file_and_queue_to_posting_daemon () {
@@ -715,12 +715,12 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         local spot_line_list_count=${#spot_line_list[@]}
         local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_minutes ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_minutes <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric <<< "${other_fields}"    ### Most spot lines have a GRID
+            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_minutes <<< "${other_fields}"    ### Most spot lines have a GRID
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in ALL_WSPR.TXT spot line '${spot_line}'" 
@@ -752,17 +752,26 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         ### The first row of printed variables are taken from the ALL_WSPR.TXT file lines and are printed in the same order as they were found there
         ### The second row are the values added  by our 'add_derived' Python line
         ### The third row are values taken from WD's  rms_noise, fft_noise, WD.conf call sign and grid, etc.
-        printf "%6s %4s %3.0f %5.2f %10.7f %-22s %2d %5.2f %2d %2d %4d %2d %3d %5u %5d %4d %5d %4d %6.1f %6.1f %4d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6s %12s %4d %1d\n" \
-             ${spot_date} ${spot_time} ${spot_snr} ${spot_dt} ${spot_freq} "${spot_call} ${spot_grid} ${spot_pwr}" ${spot_drift} ${spot_sync_quality} ${spot_ipass} ${spot_blocksize} ${spot_jitter} ${spot_decodetype} ${spot_nhardmin} ${spot_cycles} ${spot_metric} \
+        printf "%6s %4s %3.0f %5.2f %12.7f %-22s %2d %5.2f %2d %2d %4d %2d %3d %5u %5d %4d %5d %2d %4d %6.1f %6.1f %4d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6s %12s %4d %1d\n" \
+             ${spot_date} ${spot_time} ${spot_snr} ${spot_dt} ${spot_freq} "${spot_call} ${spot_grid} ${spot_pwr}" ${spot_drift} ${spot_sync_quality} ${spot_ipass} ${spot_blocksize} ${spot_jitter} ${spot_decodetype} ${spot_nhardmin} ${spot_cycles} ${spot_metric} ${spot_pkt_minutes} \
               ${band} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} \
               ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${real_receiver_grid} ${real_receiver_call_sign} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot} >> ${cached_spots_file_name} 
-
+        if [[ -f debug_printf.conf ]]; then
+            source debug_printf.conf
+            if [[ -n "${debug_printf_fmt}" ]]; then
+                local debug_printf=$( printf "${debug_printf_fmt}" \
+                  ${spot_date} ${spot_time} ${spot_snr} ${spot_dt} ${spot_freq} "${spot_call} ${spot_grid} ${spot_pwr}" ${spot_drift} ${spot_sync_quality} ${spot_ipass} ${spot_blocksize} ${spot_jitter} ${spot_decodetype} ${spot_nhardmin} ${spot_cycles} ${spot_metric} ${spot_pkt_minutes} \
+                  ${band} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} \
+                  ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${real_receiver_grid} ${real_receiver_call_sign} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot})
+                wd_logger 1 "debug_printf: ${debug_printf}"
+            fi
+        fi
     done < ${real_receiver_wspr_spots_file}
 
     if [[ ! -s ${cached_spots_file_name} ]]; then
         wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
     else
-        wd_logger 1 "Created '${cached_spots_file_name}' of size $(ls -l ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
+        wd_logger 1 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
     fi
 
     if grep "<...>" ${cached_spots_file_name} > bad_spots.txt; then
@@ -933,8 +942,7 @@ function decoding_daemon() {
             wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
 
             local processed_wav_files="no"
-            local sox_signals_rms_fft_and_overload_info=""                     ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count wspr_pkt_mode"
-            local wspr_packet_mode=${returned_minutes}                         
+            local sox_signals_rms_fft_and_overload_info=""                     ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
             > decodes_cache.txt             ## Create or truncate to zero length a file which stores the decodes from all modes
             if [[ " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
@@ -962,7 +970,7 @@ function decoding_daemon() {
                         wd_logger 1 "wsprd found no spots"
                     else
                         wd_logger 2 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
-                        cat ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt
+                        awk -v wspr_pkt_minutes=${returned_minutes} '{printf "%s %s\n", $0, wspr_pkt_minutes}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt   ### Add the wspr pkt length in seconds to each spot line
                     fi
 
                     ### Output a noise line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
@@ -1037,7 +1045,7 @@ function decoding_daemon() {
                     else
                         local spot_date="${wav_file_list[0]:2:6}"
                         local spot_time="${wav_file_list[0]:9:4}"
-                        pkt_mode=$(( ${returned_minutes} + 1 ))  ### FST4W mode values are 'packet_minutes + 1', i.e. 2 => 3, 15 => 16
+                        local wspr_pkt_minutes=$(( ${returned_minutes} + 1 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 2 => 3, 15 => 16
                         if [[ -n "${sox_signals_rms_fft_and_overload_info}" ]]; then
                             ### This wav was processed, so 'wsprd' (and the Kiwi, if it created the wav) gave us rms_noise, fft_noise and ov_count data.  But the mode field must be incremented to mark this as an FST4W spot
                             wd_logger 1 "FST4W noise line '${sox_signals_rms_fft_and_overload_info}' was generated by WSPR code"
@@ -1046,8 +1054,8 @@ function decoding_daemon() {
                             sox_signals_rms_fft_and_overload_info="-999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 0"
                         fi
                            
-                        awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  \
-                                 '{printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32)}' \
+                        awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v wspr_pkt_minutes=${wspr_pkt_minutes} \
+                                 '{printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), wspr_pkt_minutes}' \
                                          ${decode_dir}/decoded.txt > ${decode_dir}/fst4w_spots.txt
                         wd_logger 1 "FST4W found spots after $(( SECONDS - start_time )) seconds:\n$( < ${decode_dir}/decoded.txt)\nconverted to uploadable lines:\n$( < ${decode_dir}/fst4w_spots.txt )"
                         cat ${decode_dir}/fst4w_spots.txt >> decodes_cache.txt

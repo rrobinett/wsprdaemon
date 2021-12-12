@@ -100,7 +100,7 @@ function posting_daemon()
             local spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
 
             if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
-                if [[ ${spot_file_time} -eq ${unique_times_list[-1]} ]]; then
+                if [[ ${spot_file_time} == ${unique_times_list[-1]} ]]; then
                     wd_logger 1 "There are only ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for the most recent time ${spot_file_time}, so wait for the rest of the files"
                 else
                     wd_logger 1 "Found ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for older WSPR cycle time ${spot_file_time}, so go ahead and post what we have"

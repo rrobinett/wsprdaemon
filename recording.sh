@@ -342,27 +342,27 @@ function kiwirecorder_manager_daemon()
                 kiwi_recorder_pid=""
                 rm ${KIWI_RECORDER_PID_FILE}
             fi
-        fi
+            fi
 
-        if [[ -z "${kiwi_recorder_pid}" ]]; then
-            ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
-            wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
+            if [[ -z "${kiwi_recorder_pid}" ]]; then
+                ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
+                wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                 --OV --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  sleep and retry"
-                sleep 1
-                continue
-            fi
-            kiwi_recorder_pid=$!
-            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
-            wd_logger 1 "Spawned kiwrecorder.py job with PID ${kiwi_recorder_pid}"
-        fi
+                            local ret_code=$?
+                            if [[ ${ret_code} -ne 0 ]]; then
+                                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  sleep and retry"
+                                sleep 1
+                                continue
+                            fi
+                            kiwi_recorder_pid=$!
+                            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
+                            wd_logger 1 "Spawned kiwrecorder.py job with PID ${kiwi_recorder_pid}"
+                            fi
 
         ### Monitor the operation of the kiwirecorder we spawned
         if ! ps ${kiwi_recorder_pid} > /dev/null; then
@@ -371,50 +371,66 @@ function kiwirecorder_manager_daemon()
             sleep ${KIWIRECORDER_KILL_WAIT_SECS}
             continue
         fi
+        if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
+            wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwrecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
+            kill ${kiwi_recorder_pid}
+            rm ${KIWI_RECORDER_PID_FILE}
+            sleep 1
+            continue
+        fi
 
         if [[ ! -f ${OVERLOADS_LOG_FILE} ]]; then
             ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
             printf "%(%s)T 0\n" -1  > ${OVERLOADS_LOG_FILE}
         fi
 
-        local current_time=$(printf "%(%s)T" -1 )
-        if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
-            ### there are new OV events.  
-            local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
-            local old_ov_count=${old_ov_info[1]}
-            local new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
-            local new_ov_time=${current_time}
-            if [[ "${new_ov_count}" -le "${old_ov_count}" ]]; then
-                wd_logger 1 "Found '${KIWI_RECORDER_LOG_FILE}' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
-            else
-                printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
-                local ov_event_count=$(( "${new_ov_count}" - "${old_ov_count}" ))
-                wd_logger 1 "Found ${new_ov_count} new - ${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
+        if [[ ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
+            wd_logger 2 "${KIWI_RECORDER_LOG_FILE} is empty, so no overloads have been reported an thus there are no OV counts to be checked"
+        else
+            local current_time=$(printf "%(%s)T" -1 )
+            if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
+                ### there may be  new OV events.  
+                local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
+                local old_ov_count=${old_ov_info[1]}
+
+                local new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
+                if [[ -z "${new_ov_count}" ]]; then
+                    wd_logger 1 "Found"
+                fi
+                local new_ov_time=${current_time}
+                if [[ "${new_ov_count}" -le "${old_ov_count}" ]]; then
+                    wd_logger 1 "Found '${KIWI_RECORDER_LOG_FILE}' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
+                    touch ${OVERLOADS_LOG_FILE}
+                else
+                    printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
+                    local ov_event_count=$(( "${new_ov_count}" - "${old_ov_count}" ))
+                    wd_logger 1 "Found ${new_ov_count} new - ${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
+                fi
+            fi
+            ### If there have been OV events, then every 10 minutes printout the count and mark the most recent line in ${OVERLOADS_LOG_FILE} as PRINTED
+            local latest_ov_log_line=( $(tail -1 ${OVERLOADS_LOG_FILE}) )   
+            local latest_ov_count=${latest_ov_log_line[1]}
+            local last_ov_print_line=( $(awk '/PRINTED/{t=$1; c=$2} END {printf "%d %d", t, c}' ${OVERLOADS_LOG_FILE}) )   ### extracts the time and count from the last PRINTED line
+            local last_ov_print_time=${last_ov_print_line[0]-0}   ### defaults to 0
+            local last_ov_print_count=${last_ov_print_line[1]-0}  ### defaults to 0
+            local secs_since_last_ov_print=$(( ${current_time} - ${last_ov_print_time} ))
+            local ov_print_interval=${OV_PRINT_INTERVAL_SECS-600}        ## By default, print OV count every 10 minutes
+            local ovs_since_last_print=$((${latest_ov_count} - ${last_ov_print_count}))
+            if [[ ${secs_since_last_ov_print} -ge ${ov_print_interval} ]] && [[ "${ovs_since_last_print}" -gt 0 ]]; then
+                wd_logger 1 "${ovs_since_last_print} overload events (OV) were reported in the last ${ov_print_interval} seconds"
+                printf " PRINTED" >> ${OVERLOADS_LOG_FILE}
+            fi
+            truncate_file ${OVERLOADS_LOG_FILE} ${MAX_OV_FILE_SIZE-100000}
+
+            local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} ${KIWI_RECORDER_LOG_FILE} )
+            if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
+                ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
+                wd_logger 1 "${KIWI_RECORDER_LOG_FILE} has grown too large (${kiwi_recorder_log_size} bytes), so killing kiwi_recorder"
+                kill ${kiwi_recorder_pid}
+                rm ${KIWI_RECORDER_PID_FILE}
             fi
         fi
-        ### If there have been OV events, then every 10 minutes printout the count and mark the most recent line in ${OVERLOADS_LOG_FILE} as PRINTED
-        local latest_ov_log_line=( $(tail -1 ${OVERLOADS_LOG_FILE}) )   
-        local latest_ov_count=${latest_ov_log_line[1]}
-        local last_ov_print_line=( $(awk '/PRINTED/{t=$1; c=$2} END {printf "%d %d", t, c}' ${OVERLOADS_LOG_FILE}) )   ### extracts the time and count from the last PRINTED line
-        local last_ov_print_time=${last_ov_print_line[0]-0}   ### defaults to 0
-        local last_ov_print_count=${last_ov_print_line[1]-0}  ### defaults to 0
-        local secs_since_last_ov_print=$(( ${current_time} - ${last_ov_print_time} ))
-        local ov_print_interval=${OV_PRINT_INTERVAL_SECS-600}        ## By default, print OV count every 10 minutes
-        local ovs_since_last_print=$((${latest_ov_count} - ${last_ov_print_count}))
-        if [[ ${secs_since_last_ov_print} -ge ${ov_print_interval} ]] && [[ "${ovs_since_last_print}" -gt 0 ]]; then
-            wd_logger 1 "${ovs_since_last_print} overload events (OV) were reported in the last ${ov_print_interval} seconds"
-            printf " PRINTED" >> ${OVERLOADS_LOG_FILE}
-        fi
-        truncate_file ${OVERLOADS_LOG_FILE} ${MAX_OV_FILE_SIZE-100000}
-
-        local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} ${KIWI_RECORDER_LOG_FILE} )
-        if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
-            ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
-            wd_logger 1 "${KIWI_RECORDER_LOG_FILE} has grown too large (${kiwi_recorder_log_size} bytes), so killing kiwi_recorder"
-            kill ${kiwi_recorder_pid}
-            rm ${KIWI_RECORDER_PID_FILE}
-        fi
-        sleep 2
+        sleep 1
     done
 }
 
