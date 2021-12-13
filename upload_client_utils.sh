@@ -242,8 +242,8 @@ function upload_to_wsprnet_daemon() {
            local spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
            wd_logger 1 "Uploading spots from ${#spots_files[@]} files"
 
-            ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ
-            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 5,5n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
+            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 5,5n | cut -c -97 > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
                 wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
