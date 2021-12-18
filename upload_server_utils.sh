@@ -172,11 +172,11 @@ function record_spot_files()
                 python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
+                    wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
                 else
-                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot files"
+                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
                 fi
-                wd_rm ${split_csv_file}
+                #wd_rm ${split_csv_file}
             done
             wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
@@ -217,9 +217,9 @@ function format_spot_lines()
     fi
 
     local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
-    awk 'NF != 32 && NF != 33' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
+    awk 'NF != 32 && NF != 34' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
     if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
-        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} )  bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
+        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} ) bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
     fi
 
     ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
@@ -236,6 +236,20 @@ function format_spot_lines()
                    n = split(FILENAME, a, "/"); 
                    printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
     sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${fixed_spot_lines_file}
+
+    ### WD 3.0 extended spot lines have two more fields and are in the ALL_WSPR.TXT field order
+    ### $6=toupper($6)     ==> call sign is all upper case
+    ### 
+     awk 'NF == 34 {
+                   $6=toupper($6);
+                   if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4)));
+                   if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
+                   $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4)));
+                   $23=toupper($23);
+                   n = split(FILENAME, a, "/");
+                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
+    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > /dev/null
+
     wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
 }
