@@ -66,18 +66,6 @@ if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
     exit 1
 fi
-declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
-################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
-declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
-if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
-    ### Legacy name for /tmp file system.  Leave it alone
-    true
-else
-    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
-fi
-
-source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 check_for_needed_utilities

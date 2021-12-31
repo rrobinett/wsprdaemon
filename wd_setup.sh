@@ -1,5 +1,19 @@
 #!/bin/bash
 
+declare -i verbosity=${verbosity:-1}
+
+declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
+declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
+    ### Legacy name for /tmp file system.  Leave it alone
+    true
+else
+    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
+fi
+
+declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
+
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
