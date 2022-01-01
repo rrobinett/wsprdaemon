@@ -433,7 +433,7 @@ function upload_server_watchdog_daemon()
                 wd_logger 1 "ERROR: '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
             fi
         done
-        sleep ${UPLOAD_SERVERS_POLL_RATE}
+        wd_sleep ${UPLOAD_SERVERS_POLL_RATE}
     done
 }
 

@@ -66,8 +66,13 @@ if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
     exit 1
 fi
-source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
+
+declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd ${WSPRDAEMON_ROOT_DIR}
+
+source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
+source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 check_for_needed_utilities
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
