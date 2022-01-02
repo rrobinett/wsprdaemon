@@ -228,8 +228,8 @@ function wsprnet_to_csv() {
             local spots_to_add_count=$(wc -l < ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)
             wd_logger 1 "$(printf "adding %4d spots at epoch %d == '%(%Y-%m-%d:%H:%M)T'"  ${spots_to_add_count}  ${spot_epoch} ${spot_epoch})"
             local this_epcoch_age_minutes=$(( (${epochs_list[-1]} - ${spot_epoch}) / 60 ))
-            if [[ ${this_epcoch_age_minutes} -gt 360000 ]]; then
-                wd_logger 1 "Found old spots:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
+            if [[ ${this_epcoch_age_minutes} -gt $(( 60 * 24 * 7 )) ]]; then
+                wd_logger 1 "Adding spots more than one week old:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
             fi
             cat ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv  >> ${wsprnet_csv_spot_file}
         fi
