@@ -214,7 +214,7 @@ function wsprnet_to_csv() {
         wd_logger 1 "Found all spots are for epoch ${epochs_list[0]}"
     else
         local minutes_span=$(( (${epochs_list[-1]} - ${epochs_list[0]}) / 60 ))
-        wd_logger 1 "Found spots which span ${minutes_span} minutes: ${epochs_list[*]}"
+        wd_logger 1 "Found spots which span ${minutes_span} minutes: ${epochs_list[*]:0:10}.."
     fi
 
     for spot_epoch in "${epochs_list[@]}"; do
@@ -228,7 +228,7 @@ function wsprnet_to_csv() {
             local spots_to_add_count=$(wc -l < ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)
             wd_logger 1 "$(printf "adding %4d spots at epoch %d == '%(%Y-%m-%d:%H:%M)T'"  ${spots_to_add_count}  ${spot_epoch} ${spot_epoch})"
             local this_epcoch_age_minutes=$(( (${epochs_list[-1]} - ${spot_epoch}) / 60 ))
-            if [[ ${this_epcoch_age_minutes} -gt 30 ]]; then
+            if [[ ${this_epcoch_age_minutes} -gt 360000 ]]; then
                 wd_logger 1 "Found old spots:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
             fi
             cat ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv  >> ${wsprnet_csv_spot_file}
@@ -294,7 +294,7 @@ function api_wait_until_next_offset() {
 # the appended data gets stored into this file which can be examined. Overwritten each acquisition cycle.
 declare WSPRNET_CSV_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.csv              ### This csv is derived from the html returned by the API and has fields 'wd_date, spotnum, epoch, ...' sorted by spotnum
 declare WSPRNET_CSV_SPOT_AZI_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots_azi.csv      ### This csv is derived from WSPRNET_CSV_SPOT_FILE and includes wd_XXXX fields calculated by azi_calc.py and added to each spot line
-declare AZI_PYTHON_CMD=${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_azi_calc.py
+declare WSPRNET_AZI_PYTHON_CMD=${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_azi_calc.py
 
 ### Takes a spot file created by API and adds azimuth fields to it
 function wsprnet_add_azi() {
@@ -303,16 +303,20 @@ function wsprnet_add_azi() {
 
     wd_logger 2 "process ${api_spot_file} to create ${api_azi_file}"
 
-    if [[ ! -f ${AZI_PYTHON_CMD} ]]; then
-        wd_logger 1 "ERROR: can't find expected python file ${AZI_PYTHON_CMD}"
+    if [[ ! -f ${WSPRNET_AZI_PYTHON_CMD} ]]; then
+        wd_logger 1 "ERROR: can't find expected python file ${WSPRNET_AZI_PYTHON_CMD}"
         exit 1
     fi
-    python3 ${AZI_PYTHON_CMD} --input ${api_spot_file} --output ${api_azi_file}
+    if [[ ! -f ${api_spot_file} ]]; then
+         wd_logger 1 "ERROR: can't find expected spot file ${api_spot_file}"
+         return 1
+     fi
+    python3 ${WSPRNET_AZI_PYTHON_CMD} --input ${api_spot_file} --output ${api_azi_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: python3 ${AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
+        wd_logger 1 "ERROR: python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
     else
-        wd_logger 2 "python3 ${AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
+        wd_logger 2 "python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
     fi
     return ${ret_code}
 }
@@ -323,25 +327,49 @@ declare UPLOAD_TO_TS="yes"    ### -u => don't upload
 
 function api_scrape_once() {
     local scrape_start_seconds=${SECONDS}
+    local ret_code
 
+    wd_logger 2 "Starting in $PWD"
     if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
+        wd_logger 1 "Logging into wsprnet"
         wpsrnet_login
-    fi
-    if [[ -f ${WSPRNET_SESSION_ID_FILE} ]]; then
-        wpsrnet_get_spots ${WSPRNET_HTML_SPOT_FILE}
-        local ret_code=$?
+        ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: wpsrnet_get_spots() returned error => ${ret_code}."
-        else
-            wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
-            wsprnet_add_azi     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}
-            if [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
-                ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE} )
-                wd_logger 2 "The Clickhouse database has been updated"
-            fi
-            wd_logger 2 "Batch upload completed"
+            wd_logger 1 "ERROR: wpsrnet_login returned error => ${ret_code}"
+            return ${ret_code}
         fi
     fi
+    if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
+         wd_logger 1 "ERROR: wpsrnet_login was successful, but it produced no ${WSPRNET_SESSION_ID_FILE}"
+         return 1
+    fi
+    wpsrnet_get_spots ${WSPRNET_HTML_SPOT_FILE}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: wpsrnet_get_spots() returned error => ${ret_code}."
+        return ${ret_code}
+    fi
+    wd_logger 2 "Got spots in html file  ${WSPRNET_HTML_SPOT_FILE}, translate into ${WSPRNET_CSV_SPOT_FILE}"
+    wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
+    ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
+        return ${ret_code}
+    fi
+    wd_logger 2 "Got csv ${WSPRNET_CSV_SPOT_FILE}, append azi information into ${WSPRNET_CSV_SPOT_AZI_FILE}"
+    wsprnet_add_azi     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}
+    ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wsprnet_add_azi     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
+        return ${ret_code}
+    fi
+    wd_logger 2 "Created azi file ${WSPRNET_CSV_SPOT_AZI_FILE}" 
+    if [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
+        ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE} )
+        wd_logger 2 "The Clickhouse database has been updated"
+    fi
+    wd_logger 2 "Done in $PWD"
+    return  ${ret_code}
 }
 
 function wsprnet_scrape_daemon() {
@@ -352,8 +380,4 @@ function wsprnet_scrape_daemon() {
         api_wait_until_next_offset
    done
 }
-
-declare scraper_daemon_list=(
-   "wsprnet_scrape_daemon ${WSPRNET_SCRAPER_HOME_PATH}"
-)
 
