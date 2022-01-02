@@ -382,9 +382,28 @@ function queue_files_for_upload_to_wd1() {
 declare -r UPLOAD_DAEMON_LIST=(
    "upload_to_mirror_daemon        ${UPLOADS_ROOT_DIR} "
    "tbz_service_daemon             ${UPLOADS_ROOT_DIR} "
-#   "scraper_daemon          ${UPLOADS_ROOT_DIR} "
+   "wsprnet_scrape_daemon          ${WSPRDAEMON_ROOT_DIR} "
 #   "noise_graph_daemon      ${UPLOADS_ROOT_DIR} "
     )
+
+function upload_server_daemon_list_status()
+{
+    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local daemon_info_list=( ${daemon_info} )
+        local daemon_function_name=${daemon_info_list[0]}
+        local daemon_home_dir=${daemon_info_list[1]}
+
+        wd_logger 2 "Get status of: '${daemon_function_name} ${daemon_home_dir}'"
+        get_status_of_daemon  ${daemon_function_name} ${daemon_home_dir}
+        local ret_code=$?
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger 2 "get_status_of_daemon() '${daemon_function_name} ${daemon_home_dir}' => OK"
+        else
+            wd_logger 1 "get_status_of_daemon() '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
+        fi
+    done
+    exit 0
+}
 
 function upload_server_watchdog_daemon_kill_handler()
 {
@@ -447,10 +466,12 @@ function upload_server_cmd() {
             spawn_daemon            upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}      ### Ensure there are upload daemons to consume the spots and noise data
             ;;
         z)
+            set +x
             kill_daemon             upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}
+            return 0
             ;;
         s)
-            get_status_of_daemon    upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}
+            upload_server_daemon_list_status
             return 0         ### Ignore error codes
             ;;
         *)
