@@ -117,6 +117,43 @@ function posting_daemon()
     done
 }
 
+### The wsprnet server processes spot lines with this block of PHP code.
+### Our ALL_WSPR.TXT spot lines contain 16 or 17 fields, so to communicate the 'mode' we need to shorten them to 11 fields
+### and put 'sync' in field #3 and 'mode' in field #11
+###
+### 352      $date = $fields[$i++];
+### 353      $utc = $fields[$i++];
+### 354      if ($nfields < 16) {
+### 355          // in wspr 2.3-2.4, the ALL_WSPR.TXT file puts sync later, and there are 16 or 17 total fields (depending on msg format)
+### 356          $sync = $fields[$i++];
+### 357      }
+### 358      $snr = $fields[$i++];
+### 359      $dt = $fields[$i++];
+### 360      $freq = $fields[$i++];
+### 361      $tcall = $fields[$i++];
+### 362      // In wspr 2.0, if there is a prefix/suffix, no grid is there (just power).
+### 363      // We'll assume that if it's length 4 or 6, it is a grid
+### 364      if (strlen($fields[$i]) == 4 || strlen($fields[$i]) == 6)
+### 365        $tgrid = $fields[$i++];
+### 366      else $tgrid = '';
+### 367      $tpower = $fields[$i++];
+### 368      if ($date && isset($fields[$i])) $drift = $fields[$i++];
+### 369      else $drift = '0';
+### 370      // can't tell version from log file.
+### 371      // $version = '';
+### 372      // accept version from form post. CJG 20210808
+### 373      $version = $_REQUEST['version'] ?? '';
+### 374
+### 375      // If the field count is 11, assume the 11th field is `mode`
+### 376      // otherwise default WSPR-2
+### 377      $mode = $nfields == 11 ? get_mode($fields[$i++]) : 1;
+### 378
+### 379      $success = add_spot($version, $call, $grid, $date, $utc, $snr, $dt, $freq, $tcall, $tgrid, $tpower, $drift, $mode);
+function format_spots_file_for_wsprnet() 
+{
+    local all_wsprnet_spot_lines_file=$1
+}
+
 function post_files()
 {
     local receiver_band=$1
@@ -178,6 +215,8 @@ function post_files()
             local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
             local spots_count=$(wc -l < spots.BEST)
             wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
+            ### Format spot lines for the wsprnet.org server which now (1/22) parses spot lines for a packet mode 
+            format_spots_file_for_wsprnet  spots.BEST
             mv spots.BEST ${wsprnet_uploads_queue_filename}
         fi
     fi
