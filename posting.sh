@@ -118,7 +118,7 @@ function posting_daemon()
 }
 
 ### The wsprnet server processes spot lines with this block of PHP code.
-### Our ALL_WSPR.TXT spot lines contain 16 or 17 fields, so to communicate the 'mode' we need to shorten them to 11 fields
+### Our ALL_WSPR.TXT spot lines contain 16 or 17 fields, so to communicate the 'mode' we need to shorten type 1 spots which include the tx grid to 11 fields
 ### and put 'sync' in field #3 and 'mode' in field #11
 ###
 ### 352      $date = $fields[$i++];

@@ -373,11 +373,39 @@ function api_scrape_once() {
 }
 
 function wsprnet_scrape_daemon() {
+    local scraper_root_dir=$1
+
+    mkdir -p ${scraper_root_dir}
+    cd ${scraper_root_dir}
+
     wd_logger 1 "Starting and scrapes will be attempted at second offsets: ${WSPRNET_OFFSET_SECS}"
     setup_verbosity_traps
     while true; do
         api_scrape_once
         api_wait_until_next_offset
    done
+}
+
+function kill_wsprnet_scrape_daemon() 
+{
+    local scraper_root_dir=$1
+    local scraper_daemon_function_name="wsprnet_scrape_daemon"
+
+    wd_logger 1 "Kill with: 'kill_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
+    kill_daemon         ${scraper_daemon_function_name}  ${scraper_root_dir}
+}
+
+function get_status_wsprnet_scrape_daemon() 
+{
+    local scraper_root_dir=$1
+    local scraper_daemon_function_name="wsprnet_scrape_daemon"
+
+    wd_logger 2 "Get status with: 'get_status_of_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
+    get_status_of_daemon  ${scraper_daemon_function_name}  ${scraper_root_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "'${scraper_daemon_function_name}  ${scraper_root_dir}' is not running"
+    fi
+    return ${ret_code}
 }
 

@@ -388,7 +388,7 @@ function spawn_daemon()
 function kill_daemon() {
     local daemon_root_dir=$2
     if [[ ! -d ${daemon_root_dir} ]]; then
-        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        wd_logger 2 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
         return 1
     fi
     local daemon_function_name=$1
@@ -397,7 +397,7 @@ function kill_daemon() {
 
     wd_logger 2 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 1 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
+        wd_logger 2 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -423,7 +423,7 @@ function get_status_of_daemon() {
     local daemon_function_name=$1
     local daemon_root_dir=$2
     if [[ ! -d ${daemon_root_dir} ]]; then
-        wd_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        wd_logger 2 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
         return 1
     fi
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
