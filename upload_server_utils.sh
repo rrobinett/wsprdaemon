@@ -352,31 +352,33 @@ function upload_to_mirror_site_daemon() {
     local url_login_name=${url_spec_list[2]}
     local url_login_password=${url_spec_list[3]}
     local upload_to_mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${url_id}   ### Where to find tbz files
+    local  upload_to_mirror_daemon_queue_dir=${upload_to_mirror_daemon_root_dir}/queue.d
 
     setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
 
-    mkdir -p ${upload_to_mirror_daemon_root_dir}
-    wd_logger 1 "Looking for files in ${upload_to_mirror_daemon_root_dir}"
+    mkdir -p ${upload_to_mirror_daemon_queue_dir}
+    wd_logger 1 "Looking for files in ${upload_to_mirror_daemon_queue_dir}"
     while true; do
-        local files_queued_for_upload_list=( $(find ${upload_to_mirror_daemon_root_dir}/queue.d -type f) )
+        local files_queued_for_upload_list=( $(find ${upload_to_mirror_daemon_queue_dir} -type f) )
         if [[ ${#files_queued_for_upload_list[@]} -eq 0 ]]; then
             wd_logger 1 "Found no files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
         else
             wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${url_login_name}:${url_login_password} ftp://${url_addr}'"
+            local curl_dest_subdir="wd-test"   ### <= TESTING, change to "upload" once this daemon is debugged
+            wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}'"
 
             local curl_upload_file_string=${curl_upload_file_list[@]}
 
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
 
-            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr} 
+            local curl_output=$(curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ 2>&1 )
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "curl xfer failed => ${ret_code}, so leave files alone and try again"
+                wd_logger 1 "Curl xfer failed: '${curl_output}'  => ${ret_code}, so leave files alone and try again"
             else
-                wd_logger 1 "curl xfer was successful, so delete ${#curl_upload_file_list[@]} local files"
+                wd_logger 2 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
                 wd_rm ${curl_upload_file_list[@]}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
@@ -665,8 +667,8 @@ declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper.d
 declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
 
 declare -r UPLOAD_DAEMON_LIST=(
-   #"tbz_service_daemon             kill_tbz_service_daemon        get_status_tbz_service_daemon     ${TBZ_SERVER_ROOT_DIR} "         ### Process extended_spot/noise files from WD clients
-   #"wsprnet_scrape_daemon          kill_wsprnet_scrape_daemon     get_status_wsprnet_scrape_daemon  ${SCRAPER_ROOT_DIR}"             ### Scrapes wspornet.org into a local DB
+   "tbz_service_daemon             kill_tbz_service_daemon        get_status_tbz_service_daemon     ${TBZ_SERVER_ROOT_DIR} "         ### Process extended_spot/noise files from WD clients
+   "wsprnet_scrape_daemon          kill_wsprnet_scrape_daemon     get_status_wsprnet_scrape_daemon  ${SCRAPER_ROOT_DIR}"             ### Scrapes wspornet.org into a local DB
    "mirror_watchdog_daemon         kill_mirror_watchdog_daemon    get_status_mirror_watchdog_daemon ${MIRROR_SERVER_ROOT_DIR}"       ### Forwards those files to WD1/WD2/...
 #   "noise_graph_daemon            ${UPLOADS_ROOT_DIR} "                                                                             ### 1/7/22 TBD.  Currently runs as a seperate service 
     )
@@ -687,7 +689,7 @@ function upload_server_cmd() {
             get_status_upload_services
             return 0         ### Ignore error codes
             ;;
-        *)
+       *)
             wd_logger 1 "argument action '${action}' is invalid"
             exit 1
             ;;

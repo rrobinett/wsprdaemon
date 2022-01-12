@@ -391,8 +391,14 @@ function kill_wsprnet_scrape_daemon()
     local scraper_root_dir=$1
     local scraper_daemon_function_name="wsprnet_scrape_daemon"
 
-    wd_logger 1 "Kill with: 'kill_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
+    wd_logger 2 "Kill with: 'kill_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
     kill_daemon         ${scraper_daemon_function_name}  ${scraper_root_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed '${scraper_daemon_function_name}' running in '${scraper_root_dir}'"
+    else
+        wd_logger -1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
+    fi
 }
 
 function get_status_wsprnet_scrape_daemon() 
@@ -403,8 +409,10 @@ function get_status_wsprnet_scrape_daemon()
     wd_logger 2 "Get status with: 'get_status_of_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
     get_status_of_daemon  ${scraper_daemon_function_name}  ${scraper_root_dir}
     local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "'${scraper_daemon_function_name}  ${scraper_root_dir}' is not running"
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
+    else
+        wd_logger -1 "The '${scraper_daemon_function_name}' is not running in '${scraper_root_dir}'"
     fi
     return ${ret_code}
 }
