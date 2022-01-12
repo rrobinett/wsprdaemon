@@ -302,7 +302,7 @@ function record_noise_files()
 ################################## Mirror Service Section #########################################################################################
 ### This daemon runs on WD (logs.wsprdaemon.org), the cloud server where all WD clients deliver their tgz files
 
-declare MIRROR_ROOT_DIR=${UPLOADS_ROOT_DIR}/mirror.d            ### Where tgz files are put to be uploaded
+declare MIRROR_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/mirror.d            ### Where tgz files are put to be uploaded
 ### ID,URL[:port],FTP_USER,FTP_USER_PASSWORD      ### This the primary target of client uploads.  Mirror at WD spot/noise files to WD1
 if [[ ${MIRROR_DESTINATIONS_LIST[0]-x} == "x" ]] ; then
     ### This array was not declared in the conf file, so declare it here
@@ -311,10 +311,41 @@ fi
 declare UPLOAD_TO_MIRROR_SERVER_SECS=10       ## How often to attempt to upload tar files to log1.wsprdaemon.org
 declare UPLOAD_MAX_FILE_COUNT=1000          ## curl will upload only a ?? number of files, so limit the number of files given to curl
 
+function get_upload_spec_from_id()
+{
+    local _return_url_spec_variable=$1
+    local target_spec_id=$2
+    local mirror_spec
+    
+    for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]}; do
+        local mirror_spec_list=( ${mirror_spec//,/ } )
+        if [[ "${mirror_spec_list[0]}" == "${target_spec_id}" ]]; then
+            wd_logger 1 "Found target_spec_id=${target_spec_id} in '${mirror_spec}"
+            eval ${_return_url_spec_variable}="${mirror_spec}"
+            return 0
+        fi
+    done
+    wd_logger 1 "ERROR:  couldn't find target_spec_id=${target_spec_id} in MIRROR_DESTINATIONS_LIST[]"
+    return 1
+}
+
 ### One instance of this daemon is spawned for each mirror target defined in MIRROR_DESTINATIONS_LIST
 ### This daemon polls for files under its mirror source directory
 function upload_to_mirror_site_daemon() {
-    local url_spec=$1
+    local my_pwd=$1            ### spawn_daemon passes us the directory we are to run in
+    mkdir -p ${my_pwd}
+    cd ${my_pwd}
+      
+    local my_upload_id=${my_pwd##*/}    ### Get the upload_id from the path to this daemon's home dir
+    local url_spec
+    get_upload_spec_from_id   url_spec ${my_upload_id}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: passed my home path '${my_upload_id}' which specifies an upload_id '${my_upload_id}' which can't be found in \$MIRROR_DESTINATIONS_LIST[]"
+        exit ${ret_code}
+    fi
+     wd_logger 1 "Got url_spec=${url_spec}' for my_upload_id=${my_upload_id}"
+
     local url_spec_list=( ${url_spec//,/ } )
     local url_id=${url_spec_list[0]}
     local url_addr=${url_spec_list[1]}
@@ -327,7 +358,7 @@ function upload_to_mirror_site_daemon() {
     mkdir -p ${upload_to_mirror_daemon_root_dir}
     wd_logger 1 "Looking for files in ${upload_to_mirror_daemon_root_dir}"
     while true; do
-        local files_queued_for_upload_list=( $(find ${upload_to_mirror_daemon_root_dir} -type f) )
+        local files_queued_for_upload_list=( $(find ${upload_to_mirror_daemon_root_dir}/queue.d -type f) )
         if [[ ${#files_queued_for_upload_list[@]} -eq 0 ]]; then
             wd_logger 1 "Found no files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
         else
@@ -340,10 +371,6 @@ function upload_to_mirror_site_daemon() {
 
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
 
-            ### HACK for testing WD 3.0 - RR 1/9/22
-            curl_upload_file_string=test.txt
-            echo "Testing WD3.0 mirror service" > ${curl_upload_file_string}
-
             curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr} 
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
@@ -353,7 +380,7 @@ function upload_to_mirror_site_daemon() {
                 wd_rm ${curl_upload_file_list[@]}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    d_logger 1 "ERROR: 'wd_rm ${curl_upload_file_list[*]}' => ${ret_code}, but there is nothing we can do to recover"
+                    wd_logger 1 "ERROR: 'wd_rm ${curl_upload_file_list[*]}' => ${ret_code}, but there is nothing we can do to recover"
                 fi
             fi
         fi
@@ -367,8 +394,7 @@ function kill_upload_to_mirror_site_daemons()
     wd_logger 2 "Start"
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger 1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
-        wd_logger 2 "Done"
+        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
  
@@ -376,10 +402,17 @@ function kill_upload_to_mirror_site_daemons()
     for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
         local mirror_spec_list=(${mirror_spec[@]//,/ })
         local mirror_daemon_id=${mirror_spec_list[0]}
-        local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${url_id}
+        local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
 
-        wd_logger 1 "Killing mirror daemon with: 'kill_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}'"
+        wd_logger 2 "Killing mirror daemon with: 'kill_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}'"
         kill_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}
+        local ret_code=$?
+        ### Normally upload_to_mirror_site_daemon() will print out its actions, so there is no reason to print out its return code
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger -1 "Killed a upload_to_mirror_site_daemon running in '${mirror_daemon_root_dir}'"
+        else
+            wd_logger -1 "The 'upload_to_mirror_site_daemon' was not running in '${mirror_daemon_root_dir}'"
+        fi
     done
     wd_logger 2 "Done"
 }
@@ -394,19 +427,19 @@ function mirror_daemon_kill_handler()
 
 function mirror_watchdog_daemon() {
     setup_verbosity_traps
-    trap mirror_daemon_kill_handler SIGTERM
+    ## trap mirror_daemon_kill_handler SIGTERM
 
     while true; do
         local mirror_spec
         for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
             local mirror_spec_list=(${mirror_spec[@]//,/ })
             local mirror_daemon_id=${mirror_spec_list[0]}
-            local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${url_id}
+            local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
             
-            wd_logger 1 "Spawning mirror daemon for '${mirror_spec}'"
+            wd_logger 2 "Spawning mirror daemon for '${mirror_spec}'"
             mkdir -p ${mirror_daemon_root_dir}
-            spawn_daemon  ${mirror_daemon_root_dir} 
-
+            spawn_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir} 
+            wd_logger 2 "Spawned upload_to_mirror_site_daemon with pid = $( < ${mirror_daemon_root_dir}/upload_to_mirror_site_daemon.pid)"
         done
         wd_logger 1 "Sleeping for ${UPLOAD_TO_MIRROR_SERVER_SECS} seconds"
         wd_sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
@@ -416,12 +449,19 @@ function mirror_watchdog_daemon() {
 function kill_mirror_watchdog_daemon()
 {
     local mirror_watchdog_daemon_home_dir=$1
-    
+    wd_logger 2 "Killing mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}" 
     kill_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the mirror_watchdog_daemon running in '${mirror_watchdog_daemon_home_dir}'"
+    else
+        wd_logger -1 "The 'mirror_watchdog_daemon' was not running in '${mirror_watchdog_daemon_home_dir}'"
+    fi
 
     ### If the mirror_watchdog_daemon() is running, then its SIG_TERM handler will have killed the individual mirror_daemons.
     ### But in the unlikekly case that mirror_watchdog_daemon isn't running, make sure they are killed
-    kill_upload_to_mirror_site_daemons
+    wd_logger 2 "Killing kill_upload_to_mirror_site_daemons ${mirror_watchdog_daemon_home_dir}"
+    kill_upload_to_mirror_site_daemons ${mirror_watchdog_daemon_home_dir}
 }
 
 function get_status_mirror_watchdog_daemon()
@@ -431,12 +471,14 @@ function get_status_mirror_watchdog_daemon()
     wd_logger 2 "Get status for 'mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}'"
     get_status_of_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
     local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "'mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}' is not running"
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The mirror_watchdog_daemon is running in '${mirror_watchdog_daemon_home_dir}'"
+    else
+        wd_logger -1 "The mirror_watchdog_daemon is not running in '${mirror_watchdog_daemon_home_dir}'"
     fi
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger 1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
     local mirror_spec
@@ -445,8 +487,14 @@ function get_status_mirror_watchdog_daemon()
         local mirror_daemon_id=${mirror_spec_list[0]}
         local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
 
-        wd_logger 1 "Get status for '${mirror_spec}'"
+        wd_logger 2 "Get status for '${mirror_spec}'"
         get_status_of_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}
+        local ret_code=$?
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is running in ${mirror_daemon_root_dir}"
+        else
+            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is not running in ${mirror_daemon_root_dir}"
+        fi
     done
 }
 
@@ -456,13 +504,13 @@ function queue_files_for_mirroring()
     local files_path_list=(${files})
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger 2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so don't queue the ${#files[@]} we were passed"
+        wd_logger 2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so don't queue the ${#files_path_list[@]} we were passed"
     else
         local mirror_spec
         for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
             local mirror_spec_list=(${mirror_spec[@]//,/ })
             local mirror_id=${mirror_spec_list[0]}
-            local mirror_root_dir=${MIRROR_ROOT_DIR}/${url_id}
+            local mirror_root_dir=${MIRROR_ROOT_DIR}/${mirror_id}
             local mirror_queue_dir=${mirror_root_dir}/queue.d
 
             mkdir -p ${mirror_queue_dir}
@@ -529,25 +577,24 @@ function upload_services_watchdog_daemon()
 
     wd_logger 1 "Starting"
     while true; do
-        wd_logger 2 "Starting to check all daemons"
+        wd_logger 1 "Starting to check all daemons"
         local daemon_info
         for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
-            wd_logger 2 "Check and spawn ${daemon_info}"
-
             local daemon_info_list=( ${daemon_info} )
             local daemon_function_name=${daemon_info_list[0]}
             local daemon_home_dir=${daemon_info_list[3]}
             
-            wd_logger 2 "Check and if needed spawn: '${daemon_function_name} ${daemon_home_dir}'"
+            wd_logger 1 "Check and if needed spawn: '${daemon_function_name} ${daemon_home_dir}'"
             spawn_daemon ${daemon_function_name} ${daemon_home_dir}
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
+                wd_logger 1 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
             else
                 wd_logger 1 "ERROR: '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
             fi
         done
-        wd_sleep ${UPLOAD_SERVERS_POLL_RATE}
+
+        wd_sleep 600 # ${UPLOAD_SERVERS_POLL_RATE}
     done
 }
 
@@ -558,8 +605,15 @@ function spawn_upload_services_watchdog_daemon()
 
 function kill_upload_services_watchdog_daemon()
 {
+    wd_logger 2 "Kill the upload_services_watchdog_daemon by executing: 'kill_daemon upload_services_watchdog_daemon ${SERVER_ROOT_DIR}'"
     ### Kill the watchdog
     kill_daemon  upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the daemon 'upload_services_watchdog_daemon' running in '${SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The 'upload_services_watchdog_daemon' was not running in '${SERVER_ROOT_DIR}'"
+    fi
 
     ### Kill the services it spawned
     for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
@@ -568,23 +622,30 @@ function kill_upload_services_watchdog_daemon()
         local daemon_kill_function_name=${daemon_info_list[1]}
         local daemon_home_dir=${daemon_info_list[3]}
 
-        wd_logger 1 "Killing: '${daemon_function_name}' by executing '${daemon_kill_function_name} ${daemon_home_dir}'"
+        wd_logger 2 "Kill the '${daemon_function_name} by executing: '${daemon_kill_function_name} ${daemon_home_dir}'"
         ${daemon_kill_function_name} ${daemon_home_dir}
         local ret_code=$?
+        ### Normally the kill function will print out its actions, so don't print here
         if [[ ${ret_code} -eq 0 ]]; then
-            wd_logger 1 "Killed '${daemon_function_name} ${daemon_home_dir}'"
+            wd_logger 2 "'${daemon_kill_function_name} ${daemon_home_dir}' reports success"
         else
-            wd_logger 1 "ERROR: failed to kill '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
+            wd_logger 2 "ERROR: '${daemon_kill_function_name} ${daemon_home_dir}' returned ${ret_code}"
         fi
     done
-    wd_logger 1 "Done killing"
+    wd_logger 2 "Done"
 }
 
 ### Watchdog daemons which spawn service daemons have their own status report functions
 function get_status_upload_services()
 {
-    wd_logger 2 "Execute: 'get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}'"
+    wd_logger 2 "Get the status of the topmost daemaon 'upload_services_watchdog_daemon' by executing: 'get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}'"
     get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
+    fi
 
     for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
         local daemon_info_list=( ${daemon_info} )
@@ -592,7 +653,7 @@ function get_status_upload_services()
         local daemon_status_function_name=${daemon_info_list[2]}
         local daemon_home_dir=${daemon_info_list[3]}
 
-        wd_logger 2 "Getting status for daemon: '${daemon_function_name}' by calling: ${daemon_status_function_name} ${daemon_home_dir}'"
+        wd_logger 2 "Getting status for '${daemon_function_name}' spawned by 'upload_services_watchdog_daemon' by calling: ${daemon_status_function_name} ${daemon_home_dir}'"
         ${daemon_status_function_name}  ${daemon_home_dir}
     done
     return 0
@@ -600,13 +661,13 @@ function get_status_upload_services()
 
 declare SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}
 declare TBZ_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/uploads.d
-declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
 declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper.d
+declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
 
 declare -r UPLOAD_DAEMON_LIST=(
-   "tbz_service_daemon             kill_tbz_service_daemon        get_status_tbz_service_daemon     ${TBZ_SERVER_ROOT_DIR} "         ### Process extended_spot/noise files from WD clients
+   #"tbz_service_daemon             kill_tbz_service_daemon        get_status_tbz_service_daemon     ${TBZ_SERVER_ROOT_DIR} "         ### Process extended_spot/noise files from WD clients
+   #"wsprnet_scrape_daemon          kill_wsprnet_scrape_daemon     get_status_wsprnet_scrape_daemon  ${SCRAPER_ROOT_DIR}"             ### Scrapes wspornet.org into a local DB
    "mirror_watchdog_daemon         kill_mirror_watchdog_daemon    get_status_mirror_watchdog_daemon ${MIRROR_SERVER_ROOT_DIR}"       ### Forwards those files to WD1/WD2/...
-   "wsprnet_scrape_daemon          kill_wsprnet_scrape_daemon     get_status_wsprnet_scrape_daemon  ${SCRAPER_ROOT_DIR}"             ### Scrapes wspornet.org into a local DB
 #   "noise_graph_daemon            ${UPLOADS_ROOT_DIR} "                                                                             ### 1/7/22 TBD.  Currently runs as a seperate service 
     )
 

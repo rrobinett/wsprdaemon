@@ -218,7 +218,7 @@ function wsprnet_to_csv() {
     fi
 
     for spot_epoch in "${epochs_list[@]}"; do
-        awk -v spot_epoch=${spot_epoch} -f wsprnet-scraper.awk <<< "${sorted_lines}" > ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv
+        awk -v spot_epoch=${spot_epoch} -f ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.awk <<< "${sorted_lines}" > ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv
         grep -v "^20" ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv > ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt 
         if [[ -s ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt ]]; then
             wd_logger 1 "Found invalid spots:\n$(< ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt)"

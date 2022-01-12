@@ -373,15 +373,16 @@ function spawn_daemon()
             rm -f ${daemon_pid_file_path}
         fi
     fi
-    echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
+    #echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
     WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: failed to spawn 'WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}' => ${ret_code}"
         return 1
     fi
-    echo $! > ${daemon_pid_file_path}
-    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '$!' and recorded the pid to '${daemon_pid_file_path}'"
+    local spawned_pid=$!
+    echo ${spawned_pid} > ${daemon_pid_file_path}
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
     return 0
 }
 
@@ -412,7 +413,7 @@ function kill_daemon() {
                 wd_logger 1 "ERROR: 'kill ${daemon_pid}' failed for active pid ${daemon_pid}"
                 return 4
             else
-                wd_logger 1 "'kill ${daemon_pid}' was successful"
+                wd_logger 2 "'kill ${daemon_pid}' was successful"
             fi
         fi
     fi
@@ -429,20 +430,20 @@ function get_status_of_daemon() {
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 2 "Start"
+    wd_logger 3 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 1 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
+        wd_logger 2 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
-            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
             rm -f ${daemon_pid_file_path}
             return 3
         else
-            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+            wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
         fi
     fi
     return 0
