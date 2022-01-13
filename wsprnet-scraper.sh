@@ -138,6 +138,9 @@ function wpsrnet_get_spots() {
 ### The html records are in the order Spotnum,Date,Reporter,ReporterGrid,dB,Mhz,CallSign,Grid,Power,Drift,distance,azimuth,Band,version,code
 ### The html records are in the order  1       2     3         4         5  6     7       8     9    10      11      12     13     14    15
 
+declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=$(( 60 * 24 * 7 ))                                                            ### Default is to print out spots only older than 7 days
+declare SHOW_SPOTS_OLDER_THAN_MINUTES=${SHOW_SPOTS_OLDER_THAN_MINUTES-${SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT}}
+
 function wsprnet_to_csv() {
     local wsprnet_html_spot_file=$1
     local wsprnet_csv_spot_file=$2
@@ -228,8 +231,8 @@ function wsprnet_to_csv() {
             local spots_to_add_count=$(wc -l < ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)
             wd_logger 1 "$(printf "adding %4d spots at epoch %d == '%(%Y-%m-%d:%H:%M)T'"  ${spots_to_add_count}  ${spot_epoch} ${spot_epoch})"
             local this_epcoch_age_minutes=$(( (${epochs_list[-1]} - ${spot_epoch}) / 60 ))
-            if [[ ${this_epcoch_age_minutes} -gt $(( 60 * 24 * 7 )) ]]; then
-                wd_logger 1 "Adding spots more than one week old:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
+            if [[ ${this_epcoch_age_minutes} -gt ${SHOW_SPOTS_OLDER_THAN_MINUTES} ]]; then
+                wd_logger 1 "Adding spots more than ${SHOW_SPOTS_OLDER_THAN_MINUTES} minutes old:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
             fi
             cat ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv  >> ${wsprnet_csv_spot_file}
         fi
@@ -395,7 +398,7 @@ function kill_wsprnet_scrape_daemon()
     kill_daemon         ${scraper_daemon_function_name}  ${scraper_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed '${scraper_daemon_function_name}' running in '${scraper_root_dir}'"
+        wd_logger -1 "Killed the ${scraper_daemon_function_name} running in '${scraper_root_dir}'"
     else
         wd_logger -1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
     fi
