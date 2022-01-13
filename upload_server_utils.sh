@@ -366,7 +366,7 @@ function upload_to_mirror_site_daemon() {
             wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            local curl_dest_subdir="wd-test"   ### <= TESTING, change to "upload" once this daemon is debugged
+            local curl_dest_subdir="${MIRROR_TARGET_SUBDIR-uploads}"   ### <= TESTING, change to "upload" once this daemon is debugged
             wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}'"
 
             local curl_upload_file_string=${curl_upload_file_list[@]}
