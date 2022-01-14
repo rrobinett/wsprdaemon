@@ -138,7 +138,7 @@ function wpsrnet_get_spots() {
 ### The html records are in the order Spotnum,Date,Reporter,ReporterGrid,dB,Mhz,CallSign,Grid,Power,Drift,distance,azimuth,Band,version,code
 ### The html records are in the order  1       2     3         4         5  6     7       8     9    10      11      12     13     14    15
 
-declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=$(( 60 * 24 * 7 ))                                                            ### Default is to print out spots only older than 7 days
+declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=30       ## $(( 60 * 24 * 7 )) change to this if want to print out spots only older than 7 days
 declare SHOW_SPOTS_OLDER_THAN_MINUTES=${SHOW_SPOTS_OLDER_THAN_MINUTES-${SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT}}
 
 function wsprnet_to_csv() {

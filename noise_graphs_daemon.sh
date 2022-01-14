@@ -24,7 +24,7 @@ function publish_latest_noisegraph_pngs()
         wd_logger 1 "There are '${#png_files_list[@]}' files to publish, too many to do at once.  So publish only the first ${MAX_PNG_FILES_TO_POST} files"
         png_files_list=( ${png_files_list[@]::{MAX_PNG_FILES_TO_POST}} )
     else
-        wd_logger 1 "Publishing the '${#png_files_list[@]}' png files found in '${UPLOAD_DAEMON_FTP_DIR}'"
+        wd_logger 2 "Publishing the '${#png_files_list[@]}' png files found in '${UPLOAD_DAEMON_FTP_DIR}'"
     fi
     local png_path
     for png_path in ${png_files_list[@]}; do
@@ -35,7 +35,7 @@ function publish_latest_noisegraph_pngs()
         file_upload_datetime=${file_upload_datetime%-*}
 
         local publish_dir=${NOISE_GRAPHS_WWW_ROOT_DIR}/${site_id}
-        wd_logger 1 "Found file '${png_file}' from site '${site_id}' and moving it to '${publish_dir}'"
+        wd_logger 2 "Found file '${png_file}' from site '${site_id}' and moving it to '${publish_dir}'"
         sudo mkdir -p ${publish_dir}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
