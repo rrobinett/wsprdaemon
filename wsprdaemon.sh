@@ -86,6 +86,7 @@ source ${WSPRDAEMON_ROOT_DIR}/kiwi_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
+source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
 
 [[ -z "$*" ]] && usage
 

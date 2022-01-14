@@ -665,12 +665,13 @@ declare SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}
 declare TBZ_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/uploads.d
 declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper.d
 declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
+declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs.d
 
 declare -r UPLOAD_DAEMON_LIST=(
-   "tbz_service_daemon             kill_tbz_service_daemon        get_status_tbz_service_daemon     ${TBZ_SERVER_ROOT_DIR} "         ### Process extended_spot/noise files from WD clients
-   "wsprnet_scrape_daemon          kill_wsprnet_scrape_daemon     get_status_wsprnet_scrape_daemon  ${SCRAPER_ROOT_DIR}"             ### Scrapes wspornet.org into a local DB
-   "mirror_watchdog_daemon         kill_mirror_watchdog_daemon    get_status_mirror_watchdog_daemon ${MIRROR_SERVER_ROOT_DIR}"       ### Forwards those files to WD1/WD2/...
-#   "noise_graph_daemon            ${UPLOADS_ROOT_DIR} "                                                                             ### 1/7/22 TBD.  Currently runs as a seperate service 
+   "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
+   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
+   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
     )
 
 ### function which handles 'wd -u ...'

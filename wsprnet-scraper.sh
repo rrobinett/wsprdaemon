@@ -415,7 +415,7 @@ function get_status_wsprnet_scrape_daemon()
     if [[ ${ret_code} -eq 0 ]]; then
         wd_logger -1 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
     else
-        wd_logger -1 "The '${scraper_daemon_function_name}' is not running in '${scraper_root_dir}'"
+        wd_logger -1 "The ${scraper_daemon_function_name} is not running in '${scraper_root_dir}'"
     fi
     return ${ret_code}
 }
