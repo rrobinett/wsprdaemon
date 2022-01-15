@@ -5,19 +5,6 @@ declare -r WSPRNET_SCRAPER_TMP_PATH=${WSPRDAEMON_TMP_DIR}/scraper.d
 mkdir -p ${WSPRNET_SCRAPER_TMP_PATH}
 declare -r WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
 
-### Get the site-specific configuration variables from the conf file
-declare WSPRNET_SCRAPER_CONF_FILE=${WSPRNET_SCRAPER_HOME_PATH}/wsprnet-scraper.conf
-if [[ ! -f ${WSPRNET_SCRAPER_CONF_FILE} ]]; then
-    echo "ERROR: can't open '${WSPRNET_SCRAPER_CONF_FILE}'"
-    exit 1
-fi
-source ${WSPRNET_SCRAPER_CONF_FILE}
-if [[ -z "${WSPRNET_USER-}" || -z "${WSPRNET_PASSWORD-}" || -z "${TS_USER-}" || -z "${TS_PASSWORD-}" || -z "${TS_DB-}" ]]; then
-    echo "ERROR: '${WSPRNET_SCRAPER_CONF_FILE}' doesn't contain lines which declare one or more of the expected variables: WSPRNET_USER, WSPRNET_PASSWORD, TS_USER, TS_PASSWORD, TS_DB"
-    exit 1
-fi
-declare UPLOAD_MODE="API"            ## Either 
-
 ################### API scrape section ##########################################################
 
 declare UPLOAD_WN_BATCH_PYTHON_CMD=${WSPRNET_SCRAPER_HOME_PATH}/ts_upload_batch.py
@@ -333,6 +320,10 @@ function api_scrape_once() {
     local ret_code
 
     wd_logger 2 "Starting in $PWD"
+    if [[ ! -d ${UPLOAD_DAEMON_FTP_DIR} ]]; then
+	wd_logger 1 "No '${UPLOAD_DAEMON_FTP_DIR}' on this server, so the user 'noisegraphs' is not setup on this server. Aborting this scrape and try to find it again later"
+	return 1
+    fi
     if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
         wd_logger 1 "Logging into wsprnet"
         wpsrnet_login
@@ -384,9 +375,11 @@ function wsprnet_scrape_daemon() {
     wd_logger 1 "Starting and scrapes will be attempted at second offsets: ${WSPRNET_OFFSET_SECS}"
     setup_verbosity_traps
     while true; do
-        api_scrape_once
+        if ! api_scrape_once ; then
+	    wd_logger "Scrape failed.  Sleep and try again later"
+	fi
         api_wait_until_next_offset
-   done
+    done
 }
 
 function kill_wsprnet_scrape_daemon() 

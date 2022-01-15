@@ -261,6 +261,10 @@ function install_python_package()
 {
     local pip_package=$1
 
+    if ! pip3 -V > /dev/null 2>&1 ; then
+	    wd_logger 1 "Installing pip3"
+	    sudo apt install python3-pip -y
+    fi
    if ! python3 -c "import ${pip_package}" 2> /dev/null; then
         if !  sudo pip3 install ${pip_package} ; then
             wd_logger 1 "ERROR: 'sudo pip3 install ${pip_package}' => $?"

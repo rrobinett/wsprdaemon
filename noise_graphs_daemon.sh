@@ -14,6 +14,10 @@ declare NOISE_GRAPHS_POLLING_INTERVAL_SECS=5
 declare MAX_PNG_FILES_TO_POST=1000             ### 
 function publish_latest_noisegraph_pngs()
 {
+    if [[ ! -d ${UPLOAD_DAEMON_FTP_DIR} ]]; then
+	wd_logger 1 "No '${UPLOAD_DAEMON_FTP_DIR}' on this server, so the user 'noisegraphs' needs to be created"
+	return 1
+    fi
     local png_files_list=( $( find ${UPLOAD_DAEMON_FTP_DIR} -type f -name '*.png') )
 
     wd_logger 2 "Found ${#png_files_list[@]} png files: ${png_files_list[*]}"
