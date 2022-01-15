@@ -48,7 +48,7 @@ function tbz_service_daemon()
         rm -rf wsprdaemon.d wsprnet.d
         local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
         local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
-        wd_logger 1 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
+        wd_logger 2 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
 
         local valid_tbz_list=() 
         local tbz_file 
@@ -66,7 +66,7 @@ function tbz_service_daemon()
                     break
                 fi
             else
-                wd_logger 1 "Found invalid tar file ${tbz_file}"
+                wd_logger 2 "Found invalid tar file ${tbz_file}"
                 local file_mod_epoch=0
                 file_mod_epoch=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
                 local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
@@ -84,16 +84,43 @@ function tbz_service_daemon()
             fi
         done
         if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
+            wd_logger 2 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
             sleep 1
             continue
         fi
+        ### Flush valid tbz files which we have previsouly processed
+        declare TBZ_PROCESSED_ARCHIVE_FILE="tbz_processed_list.txt"
+        declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its size
+        touch ${TBZ_PROCESSED_ARCHIVE_FILE}
+        local previously_processed_tbz_list=()
+        local new_tbz_list=()
+        local tbz_file
+        for tbz_file in ${valid_tbz_list[@]} ; do
+            if grep ${tbz_file} ${TBZ_PROCESSED_ARCHIVE_FILE} > /dev/null ; then
+                wd_logger 1 "Flushing '${tbz_file}' which has been previosuly processed"
+                wd_rm ${tbz_file}
+                previously_processed_tbz_list+=( ${tbz_file} )
+            else
+                new_tbz_list+=( ${tbz_file} )
+            fi
+        done
+        wd_logger 1 "In checking for previously processed files: valid_tbz_list has ${#valid_tbz_list[@]} files, of which we flushed the ${#previously_processed_tbz_list[@]} files which have been previously processed."
+        if [[ ${#new_tbz_list[@]} -eq 0 ]]; then
+            wd_logger 1 "After flushing there are no new tbz files, so there are no new tbz files to process\n"
+            sleep 1
+            continue
+        fi
+        valid_tbz_list=( ${new_tbz_list[@]} )
+        echo "${new_tbz_list[@]}" >> ${TBZ_PROCESSED_ARCHIVE_FILE}
+        truncate_file ${TBZ_PROCESSED_ARCHIVE_FILE} ${MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE}
+
         local valid_tbz_names_list=( ${valid_tbz_list[@]##*/} )
-        wd_logger 1 "Extracted spot and noise files from the ${#tbz_file_list[@]} raw tar files in the ftp directory. Next  process ${#valid_tbz_list[@]} valid tbz files: '${valid_tbz_names_list[*]:0:4}...'"
+        local valid_reporter_names_list=( $( sort -u <<< "${valid_tbz_names_list[@]}") )
+        wd_logger 1 "Extracted spot and noise files from the ${#valid_tbz_names_list[@]} valid tar files in the ftp directory which came from ${#valid_reporter_names_list[@]} different reporters: '${valid_reporter_names_list[*]}'"
 
         queue_files_for_mirroring ${valid_tbz_list[@]}
 
-        ### Remove frequectly found zero length spot files which are  are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decoded
+        ### Remove frequectly found zero length spot files which are  are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decodedgrep 
         flush_empty_spot_files
 
         record_spot_files
@@ -366,19 +393,18 @@ function upload_to_mirror_site_daemon() {
             wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            local curl_dest_subdir="${MIRROR_TARGET_SUBDIR-uploads}"   ### <= TESTING, change to "upload" once this daemon is debugged
-            wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}'"
+            local curl_dest_subdir="${MIRROR_TARGET_SUBDIR-upload}"   ### <= TESTING, change to "upload" once this daemon is debugged
 
             local curl_upload_file_string=${curl_upload_file_list[@]}
-
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
 
+            wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/'"
             local curl_output=$(curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ 2>&1 )
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "Curl xfer failed: '${curl_output}'  => ${ret_code}, so leave files alone and try again"
             else
-                wd_logger 2 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
+                wd_logger 1 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
                 wd_rm ${curl_upload_file_list[@]}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
@@ -516,10 +542,28 @@ function queue_files_for_mirroring()
             local mirror_queue_dir=${mirror_root_dir}/queue.d
 
             mkdir -p ${mirror_queue_dir}
-            wd_logger 1 "Queuing to ${mirror_queue_dir} these ${#files_path_list[@]} files: '${files_path_list[*]}'"
-            ln ${files_path_list[@]} ${mirror_queue_dir}
+            wd_logger 1 "Queuing ${#files_path_list[@]} files to ${mirror_queue_dir}: '${files_path_list[*]::5}...'"
+            local src_file_path
+            for src_file_path in ${files_path_list[@]}; do
+                local src_file_name=${src_file_path##*/}
+                local dst_file_path=${mirror_queue_dir}/${src_file_name}
+                if [[ -f ${dst_file_path} ]]; then
+                    wd_logger 1 "WARNING: source file '${src_file_path}' already exists in '${mirror_queue_dir}', so skipping"
+                else
+                    ln ${src_file_path} ${dst_file_path}
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: 'ln ${src_file_path} ${dst_file_path}' => ${ret_code}"
+                    else
+                        wd_logger 2 "Queued ${src_file_name} using 'ln ${src_file_path} ${dst_file_path}'"
+                    fi
+                fi
+            done
+            wd_logger 1 "Done queing to mirror '${mirror_spec}'"
         done
+        wd_logger 1 "Done queing to mirror targets: '${MIRROR_DESTINATIONS_LIST[*]}'"
     fi
+    wd_logger 1 "Done with all mirroring"
 }
 
 ######################## Upload services spawned by the upload watchdog server ######################
@@ -669,7 +713,7 @@ declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs.d
 
 declare -r UPLOAD_DAEMON_LIST=(
    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   #"wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
    "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
    "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
     )
