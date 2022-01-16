@@ -142,7 +142,8 @@ def calculate_azimuth(frequency, tx_locator, rx_locator):
 def process_csv_input(csv_file):
     """Process a CSV input file and return the data as an array of dictionaries with the column_names and additional_column_names keys"""
     # now read in lines file, as a single string, skip over lines with unexpected number of columns
-    spot_lines=np.genfromtxt(csv_file, dtype='str', delimiter=',', loose=True, invalid_raise=False)
+    # print("variable csv_file contains:",  csv_file)    # G3ZIL debug  and added .name after csv_file in the variable name below
+    spot_lines=np.genfromtxt(csv_file.name, dtype='str', delimiter=',', loose=True, invalid_raise=False)
     # get number of lines
     n_lines=len(spot_lines)
 
@@ -214,7 +215,8 @@ def process_json_input(json_file):
 
 def wsprnet_azi_calc(input_file, output_file):
     """Process an input file and output the data as a CSV"""
-    with input_file as in_file:
+    # print("variable input_file contains: ",input_file)    #G3ZIL added .name to input_file in the if __name block below
+    with open(input_file,'r') as in_file:                 # and added open (filename ,'r') for read
         extension = os.path.splitext(in_file.name)[1]
         if extension == ".csv":
             spots = process_csv_input(csv_file=in_file)
@@ -223,7 +225,7 @@ def wsprnet_azi_calc(input_file, output_file):
             spots = process_json_input(json_file=in_file)
 
     # open file for output as a csv file, to which we will copy original data and the tx and rx azimuths
-    with output_file as out_file:
+    with open(output_file,'w') as out_file:               # G3ZIL added open (filename, 'w') for write
         out_writer = csv.DictWriter(out_file, fieldnames=column_names + additional_column_names, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for spot in spots:
             out_writer.writerow(spot)
@@ -233,5 +235,5 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", dest="spotsFile", help="FILE is a CSV containing WSPRNET spots", metavar="FILE", required=True, nargs='?', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument("-o", "--output", dest="spotsPlusAzimuthsFile", help="FILE is a CSV containing WSPRNET spots", metavar="FILE", required=True, nargs='?', type=argparse.FileType('w'), default=sys.stdout)
     args = parser.parse_args()
-
-    wsprnet_azi_calc(input_file=args.spotsFile, output_file=args.spotsPlusAzimuthsFile)
+    print("args.spotsFile.name contains: ", args.spotsFile.name) # G3ZIL added .name below so just file name gets passed
+    wsprnet_azi_calc(input_file=args.spotsFile.name, output_file=args.spotsPlusAzimuthsFile.name)

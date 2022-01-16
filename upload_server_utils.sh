@@ -1,6 +1,6 @@
 #!/bin/bash
 
-declare UPLOAD_FTP_PATH=~/ftp/upload       ### Where the FTP server leaves tar.tbz files
+declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ### Where the FTP server puts the uploaded  tar.tbz files from WD clients
 declare UPLOAD_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_upload_batch.py
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
@@ -144,11 +144,23 @@ function tbz_service_daemon()
 function get_status_tbz_service_daemon()
 {
     get_status_of_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The tbz_service_daemon is not running in '${TBZ_SERVER_ROOT_DIR}'"
+    fi
 }
 
 function kill_tbz_service_daemon()
 {
     kill_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the tbz_service_daemon running in '${TBZ_SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "Failed to kill the  tbz_service_daemon in '${TBZ_SERVER_ROOT_DIR}'"
+    fi
 }
 
 function flush_empty_spot_files()
@@ -713,7 +725,7 @@ declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs.d
 
 declare -r UPLOAD_DAEMON_LIST=(
    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-   #"wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
    "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
    "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
     )

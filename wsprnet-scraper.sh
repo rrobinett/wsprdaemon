@@ -288,25 +288,25 @@ declare WSPRNET_AZI_PYTHON_CMD=${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_azi_calc.py
 
 ### Takes a spot file created by API and adds azimuth fields to it
 function wsprnet_add_azi() {
-    local api_spot_file=$1
-    local api_azi_file=$2
+    local api_spot_file_path=$1
+    local api_azi_file_path=$2
 
-    wd_logger 2 "process ${api_spot_file} to create ${api_azi_file}"
+    wd_logger 1 "process ${api_spot_file_path} to create ${api_azi_file_path}"
+    if [[ ! -f ${api_spot_file_path} ]]; then
+        wd_logger 1 "ERROR: no api_spot_file_path=${api_spot_file_path}"
+        return 1
+    fi
 
     if [[ ! -f ${WSPRNET_AZI_PYTHON_CMD} ]]; then
         wd_logger 1 "ERROR: can't find expected python file ${WSPRNET_AZI_PYTHON_CMD}"
-        exit 1
+        return 2
     fi
-    if [[ ! -f ${api_spot_file} ]]; then
-         wd_logger 1 "ERROR: can't find expected spot file ${api_spot_file}"
-         return 1
-     fi
-    python3 ${WSPRNET_AZI_PYTHON_CMD} --input ${api_spot_file} --output ${api_azi_file}
+    python3 ${WSPRNET_AZI_PYTHON_CMD} --input ${api_spot_file_path} --output ${api_azi_file_path}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
+        wd_logger 1 "ERROR:  'python3 ${WSPRNET_AZI_PYTHON_CMD} --input ${api_spot_file_path} --output ${api_azi_file_path}' => ${ret_code}"
     else
-        wd_logger 2 "python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file} ${api_azi_file} => ${ret_code}"
+        wd_logger 2 "python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file_path} ${api_azi_file_path} => ${ret_code}"
     fi
     return ${ret_code}
 }
