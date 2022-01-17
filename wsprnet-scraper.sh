@@ -7,7 +7,7 @@ declare -r WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
 
 ################### API scrape section ##########################################################
 
-declare UPLOAD_WN_BATCH_PYTHON_CMD=${WSPRNET_SCRAPER_HOME_PATH}/ts_upload_batch.py
+declare UPLOAD_WN_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/wn_upload_batch.py
 declare UPLOAD_SPOT_SQL='INSERT INTO spots (wd_time, "Spotnum", "Date", "Reporter", "ReporterGrid", "dB", "MHz", "CallSign", "Grid", "Power", "Drift", distance, azimuth, "Band", version, code, 
     wd_band, wd_c2_noise, wd_rms_noise, wd_rx_az, wd_rx_lat, wd_rx_lon, wd_tx_az, wd_tx_lat, wd_tx_lon, wd_v_lat, wd_v_lon ) 
     VALUES( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s );'
@@ -17,14 +17,15 @@ function wn_spots_batch_upload() {
 
     wd_logger 1 "Record ${csv_file} to TS"
     if [[ ! -f ${UPLOAD_WN_BATCH_PYTHON_CMD} ]]; then
-        create_wn_spots_batch_upload_python
+        wd_logger 1 "ERROR: Can't find expected file '${UPLOAD_WN_BATCH_PYTHON_CMD}'"
+        return 1
     fi
-    python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}  # "${UPLOAD_SPOT_SQL}" "${UPLOAD_WN_BATCH_TS_CONNECT_INFO}"
+    python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}  # "${UPLOAD_SPOT_SQL}" "${UPLOAD_WN_BATCH_TS_CONNECT_INFO}"
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: '${UPLOAD_WN_BATCH_PYTHON_CMD} ...' => ${ret_code}"
+        wd_logger 1 "ERROR: 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' => ${ret_code}"
     else
-        wd_logger 2 "${UPLOAD_WN_BATCH_PYTHON_CMD} ...'  => ${ret_code}"
+        wd_logger 1 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
     fi
     return ${ret_code}
 }
@@ -358,9 +359,18 @@ function api_scrape_once() {
         return ${ret_code}
     fi
     wd_logger 2 "Created azi file ${WSPRNET_CSV_SPOT_AZI_FILE}" 
+
+    wn_spots_batch_upload    ${WSPRNET_CSV_SPOT_AZI_FILE}
+    ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wn_spots_batch_upload    ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
+        return ${ret_code}
+    fi
+    wd_logger 2 "Recorded spots to TS database"
+
     if [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
         ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE} )
-        wd_logger 2 "The Clickhouse database has been updated"
+        wd_logger 2 "Recorded spots to Clickhouse database"
     fi
     wd_logger 2 "Done in $PWD"
     return  ${ret_code}
@@ -376,7 +386,7 @@ function wsprnet_scrape_daemon() {
     setup_verbosity_traps
     while true; do
         if ! api_scrape_once ; then
-	    wd_logger "Scrape failed.  Sleep and try again later"
+	    wd_logger 1 "Scrape failed.  Sleep and try again later"
 	fi
         api_wait_until_next_offset
     done
