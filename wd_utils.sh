@@ -291,7 +291,7 @@ function wd_rm()
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: failed to 'rm ${rm_file}' requested by function"
-                $(( ++ rm_errors ))
+                rm_errors=$(( ++rm_errors ))
             fi
         fi
     done
