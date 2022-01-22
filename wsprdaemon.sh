@@ -2,7 +2,7 @@
 
 ###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
 
-###    Copyright (C) 2020  Robert S. Robinett
+###    Copyright (C) 2022  Robert S. Robinett
 ###
 ###    This program is free software: you can redistribute it and/or modify
 ###    it under the terms of the GNU General Public License as published by
@@ -12,7 +12,7 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -36,7 +36,7 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 ###  I owe him much thanks for his encouragement and support 
 ###  Feel free to email me with questions or problems at:  rob@robinett.us
 ###  This script was originally developed on Mac OSX, but this version 0.1 has been tested only on the Raspberry Pi 3b+
-###  On the 3b+ I am easily running 6 similtaneous WSPR decode session and expect to be able to run 12 sessions covering a;; the 
+###  On the 3b+ I am easily running 6 simultaneous WSPR decode sessions and expect to be able to run 12 sessions covering all the 
 ###  LF/MF/HF WSPR bands on one Pi
 ###
 ###  Rob Robinett AI6VN   rob@robinett.us    July 1, 2018
@@ -45,19 +45,19 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 ###  You are free to make and distribute copies and modifications as long as you include this disclaimer
 ###  I welcome feedback about its performance and functionality
 
-shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
+shopt -s -o nounset          	    ### bash stops with error if undeclared variable is referenced
 
-#declare -r VERSION=2.9e            ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
+#declare -r VERSION=2.9e             ### Fix exchanged values of ipass and nhdwrmin when posting to TS.  This section of code runs only at wsprdaemon.org
 #declare -r VERSION=2.9f             ### Fix wsprnet upload client to support multiple CALL_GRID in conf file
                                     ### Fix CHU_14 frequency
                                     ### Tweek comments in prototype WD.conf file
                                     ### WD upload service (-u a/s/z) which runs on the wsprdaemon.org server has been enhanced to run 1000x faster, really!  It now used batch mode to record 4000+ spots per second to TimeScale 
                                     ### WD upload service better filters out corrupt spot lines.
-#declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which suppplies the 'wsprd' decoder
+#declare -r VERSION=2.9g             ### Cleanup installation of WSJT-x which supplies the 'wsprd' decoder
                                     ### Check for and install if needed 'ntp' and 'at'
                                     ### Cleanup systemctl setup so startup after boot functions on Ubuntu
                                     ### Wsprnet upload client daemon flushes files of completed cycles where no bands have spots
-                                    ### Fix wrong start/stop args in wsprdeamon.service
+                                    ### Fix wrong start/stop args in wsprdaemon.service
                                     ### Stop checking the Pi OS version number, since we run on almost every Pi
                                     ### Add validation of spots in wspr_spots.txt and ALL_WSPR.TXT files
 #declare -r VERSION=2.9h             ### Install at beta sites
@@ -65,34 +65,34 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                     ### Add support for VHF/UHF transverter ahead of rx device.  Set KIWIRECORDER_FREQ_OFFSET to offset in KHz
 #declare -r VERSION=2.9i             ### Change to support per-Kiwi OFFSET defined in conf file
                                     ### Fix noise level calcs and graphs for transcoder-fed Kiwis
-                                    ### Fix mirror deaemon to handle 50,000+ cached files
-                                    ### Cleaup handling of WD spots and noise file mirroring to logs1...
+                                    ### Fix mirror daemon to handle 50,000+ cached files
+                                    ### Cleanup handling of WD spots and noise file mirroring to logs1...
                                     ### Fix bash arg overflow error when startup after long time finds 50,000+ tar files in the ftp/upload directory
 #declare -r VERSION=2.9j             ### WD server: fix recording of rx and tx GRID.  Add recording of receiver name to each spot
-#declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file.
+#declare -r VERSION=2.10a            ### Support Ubuntu 20.04 and streamline installation of wsprd by extracting only wsprd from the package file
                                     ### Execute the astral python sunrise/sunset calculation script with python3
 #declare -r VERSION=2.10b            ### Fix installation problems on Ubuntu 20.04.  Download and run 'wsprd' v2.3.0-rc0
 #declare -r VERSION=2.10c            ### Change default 'wsprd' to load 2.3.0-rc1
 #declare -r VERSION=2.10d            ### Check for and if missing install the libgfortran5 library used by wsprd V2.3.0xxx
 #declare -r VERSION=2.10e            ### Add GNU Public license
 #declare -r VERSION=2.10f            ### Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file
-#declare -r VERSION=2.10g            ### Fix uninitialized veriable bug which was causing recording jobs to abort
+#declare -r VERSION=2.10g            ### Fix uninitialized variable bug which was causing recording jobs to abort
 #declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
 #declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
 declare -r VERSION=2.10k            ### Add 'WD_...' rx site sw version number to spots uploaded to wsprnet.org
-                                    ### TODO: Support FST4W decodomg through the use of 'jt9'
+                                    ### TODO: Support FST4W decoding through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Split Python utilities in seperate files maintained by git
-                                    ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
+                                    ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
-                                    ### TODO: Add VOCAP support
+                                    ### TODO: Add VOACAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
-    echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
+    echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permission problems"
     exit 1
 fi
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -100,7 +100,7 @@ declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 
 export TZ=UTC LC_TIME=POSIX          ### Ensures that log dates will be in UTC
 
-lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
+lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in its output and this gets rid of them
 if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
@@ -154,7 +154,7 @@ function decrement_verbosity() {
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
-    ### We are running on a Rasperberry Pi or generic Debian server
+    ### We are running on a Raspberry Pi or generic Debian server
     declare -r GET_FILE_SIZE_CMD="stat --format=%s" 
     declare -r GET_FILE_MOD_TIME_CMD="stat -c %Y"       
 elif [[ "${OSTYPE}" == "darwin18" ]]; then
@@ -178,9 +178,9 @@ fi
 function check_tmp_filesystem()
 {
     if [[ ! -d ${WSPRDAEMON_TMP_DIR} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "The directrory system for WSPR recordings does not exist.  Creating it"
+        [[ $verbosity -ge 0 ]] && echo "The directory system for WSPR recordings does not exist.  Creating it"
         if ! mkdir -p ${WSPRDAEMON_TMP_DIR} ; then
-            "ERROR: Can't create the directrory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
+            "ERROR: Can't create the directory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
             exit 1
         fi
     fi
@@ -188,14 +188,14 @@ function check_tmp_filesystem()
         [[ $verbosity -ge 1 ]] && echo "check_tmp_filesystem() found '${WSPRDAEMON_TMP_DIR}' is a tmpfs file system"
     else
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
-            echo "WARNING: configured to record to a non-ram file system"
+            echo "WARNING: configured to record to a non-RAM file system"
         else
-            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB ram file system."
+            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB RAM file system."
             echo "         Every 2 minutes this program can write more than 200 Mbps to that file system which will prematurely wear out a microSD or SSD"
             read -p "So do you want to modify your /etc/fstab to add that new file system? [Y/n]> "
             REPLY=${REPLY:-Y}     ### blank or no response change to 'Y'
             if [[ ${REPLY^} != "Y" ]]; then
-                echo "WARNING: you have chosen to use to non-ram file system"
+                echo "WARNING: you have chosen to use a non-RAM file system"
             else
                 if ! grep -q ${WSPRDAEMON_TMP_DIR} /etc/fstab; then
                     sudo cp -p /etc/fstab /etc/fstab.save
@@ -282,7 +282,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt --yes install python-numpy
         fi
-        echo "Successfully installed kwirecorder.py"
+        echo "Successfully installed kiwirecorder.py"
         cd - >& /dev/null
     fi
 }
@@ -293,7 +293,7 @@ if ! check_for_kiwirecorder_cmd ; then
 fi
 
 
-################  Check for the existence of a config file and that it differss from the  prototype conf file  ################
+################  Check for the existence of a config file and that it differss from the prototype conf file  ################
 declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
 declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_TMP_DIR}/template.conf
 
@@ -306,7 +306,7 @@ cat << 'EOF'  > ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}
                                    ### SIGNAL_LEVEL_UPLOAD_MODE="noise" => Upload extended spots and noise data.  Upload spots directly to wsprnet.org
                                    ### SIGNAL_LEVEL_UPLOAD_MODE="proxy" => In addition to "noise", don't upload to wsprnet.org from this server.  Regenerate and upload spots to wsprnet.org on the wsprdaemon.org server
 #SIGNAL_LEVEL_UPLOAD="yes"          ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then upload extended spots and noise levels to the logs.wsprdaemon.org database and graphics file server.
-#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the the title bar of the graph, and the name used to view spots and noise at that server.
+#SIGNAL_LEVEL_UPLOAD_ID="AI6VN"     ### The name put in upload log records, the title bar of the graph, and the name used to view spots and noise at that server.
 #SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://wsprdaemon.org/graphs/SIGNAL_LEVEL_UPLOAD_ID
 #SIGNAL_LEVEL_LOCAL_GRAPHS="yes"    ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then make graphs visible at http://localhost/
 
@@ -331,7 +331,7 @@ declare RECEIVER_LIST=(
         "MERG_0    KIWI_1,KIWI2,AUDIO_1,SDR_1     AI6VN         CM88mc  foobar"
 )
 
-### This table defines a schedule of configurations which will be applied by '-j a,all' and thus by the watchdog daemon when it runs '-j a,all' ev ery odd two minutes
+### This table defines a schedule of configurations which will be applied by '-j a,all' and thus by the watchdog daemon when it runs '-j a,all' every odd two minutes
 ### The first field of each entry in the start time for the configuration defined in the following fields
 ### Start time is in the format HH:MM (e.g 13:15) and by default is in the time zone of the host server unless ',UDT' is appended, e.g '01:30,UDT'
 ### Following the time are one or more fields of the format 'RECEIVER,BAND'
@@ -357,7 +357,7 @@ declare WSPR_SCHEDULE_complex=(
     "sunset+01:00                KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10"
 )
 
-### This array WSPR_SCHEDULE defines the running configuration.  Here we make the simple configuration defined above the active one:
+### This array WSPR_SCHEDULE defines the running configuration. Here we make the simple configuration defined above the active one:
 declare WSPR_SCHEDULE=( "${WSPR_SCHEDULE_simple[@]}" )
 
 EOF
@@ -367,14 +367,14 @@ fi
 ### Check that there is a conf file
 if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is missing, so it is being created from a template."
-    echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
+    echo "         Edit that file to match your Receiver(s) and the WSPR band(s) you wish to scan on it (them). Then run this again"
     mv ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
     exit
 fi
 ### Check that it differs from the prototype
 if diff -q ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE} > /dev/null; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is the same as the template."
-    echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
+    echo "         Edit that file to match your Receiver(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
     exit 
 fi
 
@@ -404,7 +404,7 @@ fi
 #           70cm------------432.300000-------------432.301500 (+- 100Hz)
 #           23cm-----------1296.500000------------1296.501500 (+- 100Hz)
 
-### These are the 'dial frequency' in KHz.  The actual wspr tx frequenecies are these values + 1400 to 1600 Hz
+### These are the 'dial frequency' in KHz.  The actual wspr tx frequencies are these values + 1400 to 1600 Hz
 declare WSPR_BAND_LIST=(
 "2200     136.0"
 "630      474.2"
@@ -471,7 +471,7 @@ function get_wspr_band_freq(){
     done
 }
 
-### Validation requries that we have a list of valid RECEIVERs
+### Validation requires that we have a list of valid RECEIVERs
 ###
 function get_receiver_list_index_from_name() {
     local new_receiver_name=$1
@@ -525,7 +525,7 @@ function get_receiver_khz_offset_list_from_name() {
 
 ### Validation requires we check the time specified for each job
 ####  Input is HH:MM or {sunrise,sunset}{+,-}HH:MM
-declare -r SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes    ### cache sunrise HH:MM and sunset HH:MM for Reciever's Maidenhead grid
+declare -r SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes  ### cache sunrise HH:MM and sunset HH:MM for Receiver's Maidenhead grid
 declare -r MAX_SUNTIMES_FILE_AGE_SECS=86400               ### refresh that cache file once a day
 
 ###   Adds or subtracts two: HH:MM  +/- HH:MM
@@ -558,7 +558,7 @@ function time_math() {
 
 ######### This block of code supports scheduling changes based upon local sunrise and/or sunset ############
 declare A_IN_ASCII=65           ## Decimal value of 'A'
-declare ZERO_IN_ASCII=48           ## Decimal value of '0'
+declare ZERO_IN_ASCII=48        ## Decimal value of '0'
 
 function alpha_to_integer() { 
     echo $(( $( printf "%d" "'$1" ) - $A_IN_ASCII )) 
@@ -568,7 +568,7 @@ function digit_to_integer() {
     echo $(( $( printf "%d" "'$1" ) - $ZERO_IN_ASCII )) 
 }
 
-### This returns the approximate lat/long of a Maidenhead 4 or 6 chancter locator
+### This returns the approximate lat/long of a Maidenhead 4 or 6 character locator
 ### Primarily useful in getting sunrise and sunset time
 function maidenhead_to_long_lat() {
     printf "%s %s\n" \
@@ -626,7 +626,7 @@ function get_sunrise_sunset() {
     echo "$sunrise_hm $sunset_hm"
 }
 
-function get_index_time() {   ## If sunrise or sunset is specified, Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
+function get_index_time() {   ## If sunrise or sunset is specified, uses Receiver's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
     local time_field=$1
     local receiver_grid=$2
     local hour
@@ -645,7 +645,7 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
         echo "ERROR: time specification '${time_field}' is not valid"
         exit 1
     fi
-    ## Sunrise or sunset has been specified. Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
+    ## Sunrise or sunset has been specified. Uses Receiver's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
     if [[ ! -f ${SUNTIMES_FILE} ]] || [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -gt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
         ### Once per day, cache the sunrise/sunset times for the grids of all receivers
         rm -f ${SUNTIMES_FILE}
@@ -740,7 +740,7 @@ function validate_configured_schedule()
 function validate_configuration_file()
 {
     if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
-        echo "ERROR: configuratino file '${WSPRDAEMON_CONFIG_FILE}' does not exist"
+        echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' does not exist"
         exit 1
     fi
     source ${WSPRDAEMON_CONFIG_FILE}
@@ -754,7 +754,7 @@ function validate_configuration_file()
         echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' defines RECEIVER_LIST[*] but it contains no receiver definitions"
         exit 1
     fi
-    ### Create a list of receivers and validate all are specifired to be in the same grid.  More validation could be added later
+    ### Create a list of receivers and validate all are specifired to be in the same grid. More validation could be added later
     local rx_name=""
     local rx_grid=""
     local first_rx_grid=""
@@ -819,7 +819,7 @@ declare -r SIGNAL_LEVELS_WWW_INDEX_FILE=${SIGNAL_LEVELS_WWW_DIR}/index.html
 declare -r NOISE_GRAPH_FILENAME=noise_graph.png
 declare -r SIGNAL_LEVELS_NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/${NOISE_GRAPH_FILENAME}          ## If configured, this is the png graph copied to the graphs.wsprdaemon.org site and displayed by the local Apache server
 declare -r SIGNAL_LEVELS_TMP_NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/wd_tmp.png                   ## If configured, this is the file created by the python graphing program
-declare -r SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE=${SIGNAL_LEVELS_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache serivce running to locally display noise graphs, then this will be a symbolic link to ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
+declare -r SIGNAL_LEVELS_WWW_NOISE_GRAPH_FILE=${SIGNAL_LEVELS_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache service running to locally display noise graphs, then this will be a symbolic link to ${SIGNAL_LEVELS_NOISE_GRAPH_FILE}
 declare -r SIGNAL_LEVELS_TMP_CSV_FILE=${WSPRDAEMON_TMP_DIR}/wd_log.csv
 
 function ask_user_to_install_sw() {
@@ -827,14 +827,14 @@ function ask_user_to_install_sw() {
     local is_requried_by_wd=${2:-}
 
     echo ${prompt_string}
-    read -p "Do you want to proceed with the installation of that this software? [Yn] > "
+    read -p "Do you want to proceed with the installation of this software? [Yn] > "
     REPLY=${REPLY:-Y}
     REPLY=${REPLY:0:1}
     if [[ ${REPLY^} != "Y" ]]; then
         if [[ -n "${is_requried_by_wd}" ]]; then
             echo "${is_requried_by_wd} is a software utility required by wsprdaemon and must be installed for it to run"
         else
-            echo "WARNING: change wsprdaemon.conf to avoid installtion of this software"
+            echo "WARNING: change wsprdaemon.conf to avoid installation of this software"
         fi
         exit
     fi
@@ -865,7 +865,7 @@ function check_for_needed_utilities()
         sudo apt-get install at --assume-yes
         local ret_code=$?
         if [[ $ret_code -ne 0 ]]; then
-            echo "FATAL ERROR: Failed to install 'at' which is needed iby the wspd_vpn service"
+            echo "FATAL ERROR: Failed to install 'at' which is needed by the wsprd_vpn service"
             exit 1
         fi
     fi
@@ -996,7 +996,7 @@ function check_for_needed_utilities()
         fi
         local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
         if [[ ! -x ${dpkg_wsprd_file} ]]; then
-            echo "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
+            echo "ERROR: failed to find executable '${dpkg_wsprd_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
@@ -1006,7 +1006,7 @@ function check_for_needed_utilities()
 
         local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
-            echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            echo "ERROR: failed to find executable '${dpkg_jt9_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         sudo apt install libboost-log1.67.0       ### Needed by jt9
@@ -1024,7 +1024,7 @@ function check_for_needed_utilities()
                 exit 1
             fi
             if !  sudo pip3 install psycopg2 ; then
-                echo "FATAL ERROR: ip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
+                echo "FATAL ERROR: pip3 can't install the Python3 'psycopg2' library used to upload spot and noise data to wsprdaemon.org"
                 exit 1
             fi
         fi
@@ -1091,7 +1091,7 @@ EOF
     fi
 }
 
-### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
 check_for_needed_utilities
 
 declare WSPRD_COMPARE="no"      ### If "yes" and a new version of wsprd was installed, then copy the old version and run it on each wav file and compare the spot counts to see how much improvement we got
@@ -1131,7 +1131,7 @@ function list_receivers() {
 ##############################################################
 function list_known_receivers() {
     echo "
-        Index    Recievers Name          IP:PORT"
+        Index    Receivers Name          IP:PORT"
     for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
         local receiver_info=(${RECEIVER_LIST[i]})
         local receiver_name=${receiver_info[0]}
@@ -1195,7 +1195,7 @@ function list_audio_devices()
     while [[ ${quit_test} == "no" ]]; do
         local gain_step=1
         local gain_direction="-"
-        echo "The audio input to device ${audio_device} is being echoed to it line output.  Press ^C (Control+C) to terminate:"
+        echo "The audio input to device ${audio_device} is being echoed to its line output.  Press ^C (Control+C) to terminate:"
         sox -t alsa hw:${audio_device},0 -t alsa hw:${audio_device},0
         read -p "Adjust the input gain and restart test? [-+q] => "
         case "$REPLY" in
@@ -1228,7 +1228,7 @@ function list_devices()
     list_audio_devices
 }
 
-declare -r RECEIVER_SNR_ADJUST=-0.25             ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW reuqired by wsprnet.org
+declare -r RECEIVER_SNR_ADJUST=-0.25         ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW reuqired by wsprnet.org
                                              ### But experimentation has shown that setting the Kiwi's passband to 500 Hz (1250 ... 1750 Hz) yields SNRs which match WSJT-x's, so this isn't needed
 
 ##############################################################
@@ -1291,9 +1291,9 @@ function rtl_biast_setup() {
         return
     fi
     if [[ ! -x ${RTL_BIAST_CMD} ]]; then
-        echo "$(date): ERROR: your system is configured to turn on the BIAS-T (5 VDC) oputput of the RTL_SDR, but the rtl_biast application has not been installed.
+        echo "$(date): ERROR: your system is configured to turn on the BIAS-T (5 VDC) output of the RTL_SDR, but the rtl_biast application has not been installed.
               To install 'rtl_biast', open https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/ and search for 'To enable the bias tee in Linux'
-              Your capture deaemon process is running, but the LNA is not receiving the BIAS-T power it needs to amplify signals"
+              Your capture daemon process is running, but the LNA is not receiving the BIAS-T power it needs to amplify signals"
         return
     fi
     (cd ${RTL_BIAST_DIR}; ${RTL_BIAST_CMD} -b 1)        ## rtl_blast gives a 'missing library' when not run from that directory
@@ -1323,19 +1323,19 @@ declare  SAMPLE_RATE=32000
 declare  DEMOD_RATE=32000
 declare  RTL_FREQ_ADJUSTMENT=0
 declare -r FREQ_AJUST_CONF_FILE=./freq_adjust.conf       ## If this file is present, read it each 2 minutes to get a new value of 'RTL_FREQ_ADJUSTMENT'
-declare  USE_RX_FM="no"                                  ## Hopefully rx_fm will replace rtl_fm and give us better frequency control and Sopay support for access to a wide range of SDRs
+declare  USE_RX_FM="no"                                  ## Hopefully rx_fm will replace rtl_fm and give us better frequency control and Soapy support for access to a wide range of SDRs
 declare  TEST_CONFIGS="./test.conf"
 
 function rtl_daemon() 
 {
     local rtl_id=$1
-    local arg_rx_freq_mhz=$( echo "scale = 6; ($2 + (0/1000000))" | bc )         ## The wav file names are derived from the desired tuning frequency.  The tune frequncy given to the RTL may be adjusted for clock errors.
+    local arg_rx_freq_mhz=$( echo "scale = 6; ($2 + (0/1000000))" | bc )         ## The wav file names are derived from the desired tuning frequency. The tune frequncy given to the RTL may be adjusted for clock errors.
     local arg_rx_freq_hz=$(echo "scale=0; (${receiver_rx_freq_mhz} * 1000000) / 1" | bc)
     local capture_secs=${WAV_FILE_CAPTURE_SECONDS}
 
     setup_verbosity_traps
 
-    [[ $verbosity -ge 0 ]] && echo "$(date): INFO: starting a capture daemon from RTL-STR #${rtl_id} tuned to ${receiver_rx_freq_mhz}"
+    [[ $verbosity -ge 0 ]] && echo "$(date): INFO: starting a capture daemon from RTL-SDR #${rtl_id} tuned to ${receiver_rx_freq_mhz}"
 
     source ${WSPRDAEMON_CONFIG_FILE}   ### Get RTL_BIAST_ON
     rtl_biast_setup ${RTL_BIAST_ON}
@@ -1348,7 +1348,7 @@ function rtl_daemon()
         local wav_file_name="${start_time}_${arg_rx_freq_hz}_usb.wav"
         local raw_wav_file_name="${wav_file_name}.raw"
         local tmp_wav_file_name="tmp/${wav_file_name}"
-        [[ $verbosity -ge 1 ]] && echo "$(date): starting a ${capture_secs} second RTL-STR capture to '${wav_file_name}'" 
+        [[ $verbosity -ge 1 ]] && echo "$(date): starting a ${capture_secs} second RTL-SDR capture to '${wav_file_name}'" 
         if [[ -f freq_adjust.conf ]]; then
             [[ $verbosity -ge 1 ]] && echo "$(date): adjusting rx frequency from file 'freq_adjust.conf'.  Current adj = '${RTL_FREQ_ADJUSTMENT}'"
             source freq_adjust.conf
@@ -1375,9 +1375,9 @@ function audio_recording_daemon()
 {
     local audio_id=$1                 ### For an audio input device this will have the format:  localhost:DEVICE,CHANNEL[,GAIN]   or remote_wspr_daemons_ip_address:DEVICE,CHANNEL[,GAIN]
     local audio_server=${audio_id%%:*}
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     if [[ -z "${audio_server}" ]] ; then
-        [[ $verbosity -ge 1 ]] && echo "$(date): audio_recording_daemon() ERROR: AUDIO_x id field '${audio_id}' is invalidi. Expecting 'localhost:' or 'IP_ADDR:'" >&2
+        [[ $verbosity -ge 1 ]] && echo "$(date): audio_recording_daemon() ERROR: AUDIO_x id field '${audio_id}' is invalid. Expecting 'localhost:' or 'IP_ADDR:'" >&2
         return 1
     fi
     local audio_input_id=${audio_id##*:}
@@ -1428,7 +1428,7 @@ function kiwi_recording_daemon()
     local receiver_rx_freq_khz=$2
     local my_receiver_password=$3
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() starting recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
     rm -f recording.stop
     local recorder_pid=""
@@ -1455,10 +1455,10 @@ function kiwi_recording_daemon()
             --agc-gain=60 --quiet --no_compression --modulation=usb  --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=120 > kiwi_recorder.log 2>&1 &
         recorder_pid=$!
         echo ${recorder_pid} > kiwi_recorder.pid
-        ## Initialize the file which logs the date (in epoch seconds, and the number of OV errors st that time
+        ## Initialize the file which logs the date (in epoch seconds), and the number of OV errors at that time
         printf "$(date +%s) 0" > ov.log
         if [[ $verbosity -ge 2 ]]; then
-            echo "$(date): kiwi_recording_daemon() PID $$ spawned kiwrecorder PID ${recorder_pid}"
+            echo "$(date): kiwi_recording_daemon() PID $$ spawned kiwirecorder PID ${recorder_pid}"
             ps -f -q ${recorder_pid}
         fi
     fi
@@ -1466,7 +1466,7 @@ function kiwi_recording_daemon()
     ### Monitor the operation of the kiwirecorder we spawned
     while [[ ! -f recording.stop ]] ; do
         if ! ps ${recorder_pid} > /dev/null; then
-            [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: kiwirecorder with PID ${recorder_pid} died unexpectedly. Wwait for ${KIWIRECORDER_KILL_WAIT_SECS} seconds before restarting it."
+            [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: kiwirecorder with PID ${recorder_pid} died unexpectedly. Wait for ${KIWIRECORDER_KILL_WAIT_SECS} seconds before restarting it."
             rm -f kiwi_recorder.pid
             sleep ${KIWIRECORDER_KILL_WAIT_SECS}
             [[ $verbosity -ge 0 ]] && echo "$(date): kiwi_recording_daemon() ERROR: awake after error detected and done"
@@ -1490,7 +1490,7 @@ function kiwi_recording_daemon()
                     [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() found ${new_ov_count}" new - "${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
                 fi
             fi
-            ### In there have been OV events, then every 10 minutes printout the count and mark the most recent line in ov.log as PRINTED
+            ### If there have been OV events, then every 10 minutes printout the count and mark the most recent line in ov.log as PRINTED
             local latest_ov_log_line=( $(tail -1 ov.log) )   
             local latest_ov_count=${latest_ov_log_line[1]}
             local last_ov_print_line=( $(awk '/PRINTED/{t=$1; c=$2} END {printf "%d %d", t, c}' ov.log) )   ### extracts the time and count from the last PRINTED line
@@ -1513,7 +1513,7 @@ function kiwi_recording_daemon()
                 touch recording.stop
             fi
             if [[ ! -f recording.stop ]]; then
-                [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete.  Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
+                [[ $verbosity -ge 4 ]] && echo "$(date): kiwi_recording_daemon() checking complete. Sleeping for ${WAV_FILE_POLL_SECONDS} seconds"
                 sleep ${WAV_FILE_POLL_SECONDS}
             fi
         fi
@@ -1524,7 +1524,7 @@ function kiwi_recording_daemon()
     rm -f kiwi_recorder.pid
     [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() PID $$ Sleeping for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
     sleep ${KIWIRECORDER_KILL_WAIT_SECS}
-    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() Awake. Signaling it is done  by deleting 'recording.stop'"
+    [[ $verbosity -ge 2 ]] && echo "$(date): kiwi_recording_daemon() Awake. Signaling it is done by deleting 'recording.stop'"
     rm -f recording.stop
     [[ $verbosity -ge 1 ]] && echo "$(date): kiwi_recording_daemon() done. terminating myself"
 }
@@ -1532,7 +1532,7 @@ function kiwi_recording_daemon()
 
 ###  Call this function from the watchdog daemon 
 ###  If verbosity > 0 it will print out any new OV report lines in the recording.log files
-###  Since those lines are printed only opnce every 10 minutes, this will print out OVs only once every 10 minutes`
+###  Since those lines are printed only once every 10 minutes, this will print out OVs only once every 10 minutes`
 function print_new_ov_lines() {
     local kiwi
 
@@ -1611,7 +1611,7 @@ function spawn_recording_daemon() {
     local my_receiver_password=${receiver_list_element[4]}
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     mkdir -p ${recording_dir}
     cd ${recording_dir}
     rm -f recording.stop
@@ -1822,7 +1822,7 @@ declare -r WSPRD_DECODES_FILE=wsprd.txt               ### wsprd stdout goes into
 declare -r WSPRNET_UPLOAD_CMDS=wsprd_upload.sh        ### The output of wsprd is reworked by awk into this file which contains a list of 'curl..' commands for uploading spots.  This is less efficient than bulk uploads, but I can include the version of this script in the upload.
 declare -r WSPRNET_UPLOAD_LOG=wsprd_upload.log        ### Log of our curl uploads
 
-declare -r WAV_FILE_POLL_SECONDS=5            ### How often to poll for the 2 minute .wav record file to be filled
+declare -r WAV_FILE_POLL_SECONDS=5            	   ### How often to poll for the 2 minute .wav record file to be filled
 declare -r WSPRD_WAV_FILE_MIN_VALID_SIZE=2500000   ### .wav files < 2.5 MBytes are likely truncated captures during startup of this daemon
 
 ####
@@ -1832,7 +1832,7 @@ declare -r HASHFILE_MASTER_FILE=${HASHFILE_ARCHIVE_PATH}/hashtable.master
 declare -r HASHFILE_MASTER_FILE_OLD=${HASHFILE_ARCHIVE_PATH}/hashtable.master.old
 declare    MAX_HASHFILE_AGE_SECS=1209600        ## Flush the hastable file every 2 weeks
 
-### Get a copy of the master hasfile.txt in the rx/band directory prior to running wsprd
+### Get a copy of the master hashfile.txt in the rx/band directory prior to running wsprd
 function refresh_local_hashtable()
 {
     if [[ ${HASHFILE_MERGE-no} == "yes" ]] && [[ -f ${HASHFILE_MASTER_FILE} ]]; then
@@ -1940,14 +1940,14 @@ function get_af_db() {
 
 ############## Decoding ################################################
 ### For each real receiver/band there is one decode daemon and one recording daemon
-### Waits for a new wav file then decodes and posts it to all of the posting lcient
+### Waits for a new wav file then decodes and posts it to all of the posting clients
 
 
 declare -r DECODING_CLIENTS_SUBDIR="decoding_clients.d"     ### Each decoding daemon will create its own subdir where it will copy YYMMDD_HHMM_wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                            ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare FFT_WINDOW_CMD=${WSPRDAEMON_TMP_DIR}/wav_window.py
 
-declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noisae levels
+declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noise levels
 declare C2_FFT_CMD=${WSPRDAEMON_TMP_DIR}/c2_noise.py
 
 function decode_create_c2_fft_cmd() {
@@ -1957,7 +1957,7 @@ function decode_create_c2_fft_cmd() {
 # Filename: c2_noise.py
 # Program to extract the noise level from the 'wsprd -c' C2 format file
 ## V1 by Christoph Mayer. This version V1.1 by Gwyn Griffiths to output a single value
-## being the total power (dB arbitary scale) in the lowest 30% of the Fourier coefficients
+## being the total power (dB arbitrary scale) in the lowest 30% of the Fourier coefficients
 ## between 1369.5 and 1630.5 Hz where the passband is flat.
 
 import struct
@@ -2065,7 +2065,7 @@ function decoding_daemon()
     local real_receiver_rx_band=${2}
     local real_recording_dir=$(get_recording_dir_path ${real_receiver_name} ${real_receiver_rx_band})
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     ### Since they are not CPU intensive, always calculate sox RMS and C2 FFT stats
     local real_receiver_maidenhead=$(get_my_maidenhead)
 
@@ -2143,7 +2143,7 @@ function decoding_daemon()
         spawn_recording_daemon ${real_receiver_name} ${real_receiver_rx_band}
         [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon() checking for *.wav' files in $PWD"
         shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
-        ### Wait for a wav file and synthisize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails
+        ### Wait for a wav file and synthesize a zero length spot file every two minutes so MERGed rx don't hang if one real rx fails
         local -a wav_file_list
         while wav_file_list=( *.wav) && [[ ${#wav_file_list[@]} -eq 0 ]]; do
             ### recording daemon isn't outputing a wav file, so post a zero length spot file in order to signal the posting daemon to process other real receivers in a MERGed group 
@@ -2165,7 +2165,7 @@ function decoding_daemon()
         for wav_file_name in *.wav; do
             [[ ${verbosity} -ge 2 ]] && echo "$(date): decoding_daemon(): monitoring size of wav file '${wav_file_name}'"
 
-            ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writting this 2 minutes of capture and has moved to the next wav_file_name
+            ### Wait until the wav_file_name size isn't changing, i.e. kiwirecorder.py has finished writing this 2 minutes of capture and has moved to the next wav_file_name
             local old_wav_file_size=0
             local new_wav_file_size=$( ${GET_FILE_SIZE_CMD} ${wav_file_name} )
             while [[ -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]] && [[ ${new_wav_file_size} -ne ${old_wav_file_size} ]]; do
@@ -2232,7 +2232,7 @@ function decoding_daemon()
                 if [[ ${ret_code} -eq 124 ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon(): 'wsprd' timeout with ret_code = ${ret_code} after ${run_time} seconds"
                 else
-                    [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon(): 'wsprd' retuned error ${ret_code} after ${run_time} seconds.  It printed:\n$(cat ${WSPRD_DECODES_FILE})"
+                    [[ ${verbosity} -ge 1 ]] && echo -e "$(date): decoding_daemon(): 'wsprd' returned error ${ret_code} after ${run_time} seconds.  It printed:\n$(cat ${WSPRD_DECODES_FILE})"
                 fi
                 ### A zero length wspr_spots.txt file signals the following code that no spots were decoded
                 rm -f wspr_spots.txt
@@ -2244,7 +2244,7 @@ function decoding_daemon()
                 ### Validate, and if necessary cleanup, the spot list file created by wsprd
                 local bad_wsprd_lines=$(awk 'NF < 11 || NF > 12 || $6 == 0.0 {printf "%40s: %s\n", FILENAME, $0}' wspr_spots.txt)
                 if [[ -n "${bad_wsprd_lines}" ]]; then
-                    ### Save this corrupt wspr_spots.txt, but leave it untouched so it can be used later to tell us how man ALL_WSPT.TXT lines to process
+                    ### Save this corrupt wspr_spots.txt, but leave it untouched so it can be used later to tell us how man ALL_WSPR.TXT lines to process
                     mkdir -p bad_wspr_spots.d
                     cp -p wspr_spots.txt bad_wspr_spots.d/
                     ###
@@ -2303,7 +2303,7 @@ function decoding_daemon()
                 fi
             fi
 
-            # Get RMS levels from the wav file and adjuest them to correct for the effects of the LPF on the Kiwi's input
+            # Get RMS levels from the wav file and adjust them to correct for the effects of the LPF on the Kiwi's input
             local pre_tx_levels=($(sox ${wsprd_input_wav_filename} -t wav - trim ${SIGNAL_LEVEL_PRE_TX_SEC} ${SIGNAL_LEVEL_PRE_TX_LEN} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
             [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): raw   pre_tx_levels  levels '${pre_tx_levels[@]}'"
             local i
@@ -2362,7 +2362,7 @@ function decoding_daemon()
                 rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
                 local hann_adjust=6.0
                 local fft_value=$(nice awk -v fft_adj=${fft_adjust} -v hann_adjust=${hann_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj + hann_adjust) ; exit }'  sox_fft_sorted.txt)
-                                                                                             # The 0.43429 is simply awk using natual log
+                                                                                             # The 0.43429 is simply awk using natural log
                                                                                              #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
                 rm sox_fft_sorted.txt
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): sox_fft_value=${fft_value}"
