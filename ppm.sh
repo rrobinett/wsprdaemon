@@ -12,7 +12,7 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -62,16 +62,16 @@ function sdr_measure_error() {
 ### Tune to $2 then vary the center frequency around $2-$3 expecting an audio tone of $4
 function check_offset_accuracy() {
     local test_device=$1                 ### The Soapy device number of the SDR
-    local tuning_freq_hz=$2       ### Tune to this freq (e.g. carrier freq in hz - 1000 
+    local tuning_freq_hz=$2              ### Tune to this freq (e.g. carrier freq in Hz - 1000 
     local center_offset_hz=$3            ### The frequency of the center
     local center_freq_hz=$((tuning_freq_hz - center_offset_hz))
     local expected_audio_freq=$4
 
      wd_logger 0 "with signal at ${center_freq_hz}, tune device #${test_device} around  ${tuning_freq_hz}, expecting %4d Hz audio at the center tuning\n" ${expected_audio_freq}
 
-    local sample_rate=2000000     ### This is the deault for the RTL-SDR
+    local sample_rate=2000000     ### This is the default for the RTL-SDR
 
-    ### Fill center_offset_hertz_table[] with absolute values in hz of offset from ${center_offset_hz}
+    ### Fill center_offset_hertz_table[] with absolute values in Hz of offset from ${center_offset_hz}
     local center_offset_percent_table=( 1 2 5 10 20 50 )  ### % of ${sample_rate} to try
     local center_offset_percent_table=( -50 -20 -10 -5 -2 0 2 5 10 20 50) ### % of ${center_offset_hz} to try
     local center_offset_hertz_table=()
@@ -159,7 +159,7 @@ function get_tuning_error_hz() {
     local center_frequency=$5
     local test_expected_audio_freq=$6
 
-     wd_logger 3 "center device #${soapy_device} at ${center_frequency} and tune to ${tuning_frequency} expecting audio tone at ${test_expected_audio_freq} hz"
+    wd_logger 3 "center device #${soapy_device} at ${center_frequency} and tune to ${tuning_frequency} expecting audio tone at ${test_expected_audio_freq} hz"
     local measured_audio_freq="none"
     sdr_measure_error measured_audio_freq ${soapy_device} ${tuning_frequency} ${center_frequency} ${test_expected_audio_freq}
     local ret_code=$?
@@ -220,7 +220,7 @@ function read_ppm() {
 declare THIS_CMD_FILE_PATH=$(realpath ${0})
 declare PPM_FILE_PATH=${THIS_CMD_FILE_PATH/.sh/.ppm}
 
- ### The -p cmd: Tune device #$1 to ATSC ch #$2, then calculate the ppm error and update the ppm file with the ppm erro
+ ### The -p cmd: Tune device #$1 to ATSC ch #$2, then calculate the ppm error and update the ppm file with the ppm error
 function ppm_measure() {
     local soapy_device=$1
     local atsc_channel=$2   ### ATSC channel to use as reference 
@@ -266,7 +266,7 @@ function get_ppm_error() {
     return 0
 }
 
-## The -m cmd:  Tune device #$1 to ATSC ch #$2, then calculate the ppm error. If $4 is present, update that file with the ppm error adn return, else validate ppm by tuning to $2 and $3.
+## The -m cmd:  Tune device #$1 to ATSC ch #$2, then calculate the ppm error. If $4 is present, update that file with the ppm error and return, else validate ppm by tuning to $2 and $3.
 function test_ppm_adjust() {
     local soapy_device=$1
     local atsc_channel=$2   ### ATSC channel to use as reference 
@@ -291,7 +291,7 @@ function test_ppm_adjust() {
     fi
 
     local ppm_hz_error=$(bc <<< "(${pilot_carrier_freq} * ${stored_ppm}) / 1000000" )                           ### The order of the arguments to 'bc' is important so that the output is rounded to the nearest integer value
-    local ppm_calculated_tuning_freq=$(( ${pilot_carrier_freq} - ${TARGET_AUDIO_TONE_FREQ} - ${ppm_hz_error} ))   ### i.e. if the audio tone was too high, then there is a negative ppm value, so subtract ppm to get the new tuning freq
+    local ppm_calculated_tuning_freq=$(( ${pilot_carrier_freq} - ${TARGET_AUDIO_TONE_FREQ} - ${ppm_hz_error} )) ### i.e. if the audio tone was too high, then there is a negative ppm value, so subtract ppm to get the new tuning freq
  
      wd_logger 2 "So the tuning frequency corrected by the stored ppm is ${ppm_calculated_tuning_freq}\n"
 
@@ -327,7 +327,7 @@ function get_adjusted_tuning_freq() {
         return 1
     fi
 
-    local ppm_hz_error=$(bc <<< "(${tuning_frequency} * ${stored_ppm}) / 1000000" )                           ### The order of the arguments to 'bc' is important so that the output is rounded to the nearest integer value
+    local ppm_hz_error=$(bc <<< "(${tuning_frequency} * ${stored_ppm}) / 1000000" )  ### The order of the arguments to 'bc' is important so that the output is rounded to the nearest integer value
     local adjusted_freq=$(( ${tuning_frequency} - ${ppm_hz_error} ))
     eval "${adjusted_tuning_freq_ret_variable}=${adjusted_freq}"
 
@@ -379,7 +379,7 @@ function test_at_tuning_freq_loop() {
 ### Format is BAND_IN_METERS_OR_CM:TUNING_FREQ_IN_HZ
 declare WSPR_BAND_TO_TUNING_FREQ=( 2200:136000 630:474200 160:1836600 80:3568600 61:5287200 60:5364700 40:7038600 30:10138700 20:14095600 17:18104600 15:21094600 12:24924600 10:28124600 6:50293000 4:70091000 2:144489000 70:432300000  23:1296500000 29:560308000)
 
-function get_wspr_tuning_frquency() {
+function get_wspr_tuning_frequency() {
     local freq_ret_var=$1
     local search_band=$2
 
