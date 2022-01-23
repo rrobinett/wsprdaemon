@@ -5080,7 +5080,7 @@ function add_remove_jobs_in_running_file() {
 
 #############
 ###################
-declare -r HHMM_SCHED_FILE=${WSPRDAEMON_ROOT_DIR}/hhmm.sched        ### Contains the schedule from kiwiwspr.conf with sunrise/sunset entries fixed in HHMM_SCHED[]
+declare -r HHMM_SCHED_FILE=${WSPRDAEMON_ROOT_DIR}/hhmm.sched        ### Contains the schedule from wsprdaemon.conf with sunrise/sunset entries fixed in HHMM_SCHED[]
 declare -r EXPECTED_JOBS_FILE=${WSPRDAEMON_ROOT_DIR}/expected.jobs  ### Based upon current HHMM, this is the job list from EXPECTED_JOBS_FILE[] which should be running in EXPECTED_LIST[]
 declare -r RUNNING_JOBS_FILE=${WSPRDAEMON_ROOT_DIR}/running.jobs    ### This is the list of jobs we programmed to be running in RUNNING_LIST[]
 
@@ -5512,7 +5512,7 @@ function stop_running_jobs() {
     local index_running_jobs
     for index_running_jobs in $(seq 0 $((${#temp_running_jobs[*]} - 1 )) ); do
         local running_job=(${temp_running_jobs[${index_running_jobs}]/,/ })
-        local running_reciever=${running_job[0]}
+        local running_receiver=${running_job[0]}
         local running_band=${running_job[1]}
         [[ $verbosity -ge 3 ]] && echo "$(date): stop_running_jobs(${stop_receiver},${stop_band}) INFO: compare against running job ${running_job[@]}"
         if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_receiver} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
@@ -5644,22 +5644,22 @@ function seconds_until_next_odd_minute() {
 }
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
-declare -r SYSTEMNCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
-function setup_systemctl_deamon() {
+declare -r SYSTEMCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
+function setup_systemctl_daemon() {
     local start_args=${1--a}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
     local stop_args=${2--z} 
-    local systemctl_dir=${SYSTEMNCTL_UNIT_PATH%/*}
+    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
     if [[ ! -d ${systemctl_dir} ]]; then
-        echo "$(date): setup_systemctl_deamon() WARNING, this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
+        echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
         return
     fi
-    if [[ -f ${SYSTEMNCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_deamon() found this server already has a ${SYSTEMNCTL_UNIT_PATH} file. So leaving it alone."
+    if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
         return
     fi
     local my_id=$(id -u -n)
     local my_group=$(id -g -n)
-    cat > ${SYSTEMNCTL_UNIT_PATH##*/} <<EOF
+    cat > ${SYSTEMCTL_UNIT_PATH##*/} <<EOF
     [Unit]
     Description= WSPR daemon
     After=multi-user.target
@@ -5677,18 +5677,18 @@ function setup_systemctl_deamon() {
     WantedBy=multi-user.target
 EOF
    ask_user_to_install_sw "Configuring this computer to run the watchdog daemon after reboot or power up. Doing this requires root privilege" "wsprdaemon.service"
-   sudo mv ${SYSTEMNCTL_UNIT_PATH##*/} ${SYSTEMNCTL_UNIT_PATH}    ### 'sudo cat > ${SYSTEMNCTL_UNIT_PATH} gave me permission errors
+   sudo mv ${SYSTEMCTL_UNIT_PATH##*/} ${SYSTEMCTL_UNIT_PATH}    ### 'sudo cat > ${SYSTEMCTL_UNIT_PATH} gave me permission errors
    sudo systemctl daemon-reload
    sudo systemctl enable wsprdaemon.service
    ### sudo systemctl start  kiwiwspr.service       ### Don't start service now, since we are already starting. Service is setup to run during next reboot/powerup
-   echo "Created '${SYSTEMNCTL_UNIT_PATH}'."
+   echo "Created '${SYSTEMCTL_UNIT_PATH}'."
    echo "Watchdog daemon will now automatically start after a powerup or reboot of this system"
 }
 
-function enable_systemctl_deamon() {
+function enable_systemctl_daemon() {
     sudo systemctl enable wsprdaemon.service
 }
-function disable_systemctl_deamon() {
+function disable_systemctl_daemon() {
     sudo systemctl disable wsprdaemon.service
 }
 
