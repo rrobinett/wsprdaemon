@@ -3975,7 +3975,7 @@ declare UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH=${UPLOADS_WSPRDAEMON_FTP_R
 ### FTP upload mode functions
 declare UPLOADS_FTP_MODE_SECONDS=${UPLOADS_FTP_MODE_SECONDS-10}       ### Defaults to upload every 60 seconds
 declare UPLOADS_FTP_MODE_MAX_BPS=${UPLOADS_FTP_MODE_MAX_BPS-100000}   ### Defaults to upload at 100 kbps
-declare UPOADS_MAX_FILES=${UPOADS_MAX_FILES-10000}                    ### Limit the number of *txt files in one upload tar file.  bash limits this to < 24000
+declare UPLOADS_MAX_FILES=${UPLOADS_MAX_FILES-10000}                  ### Limit the number of *txt files in one upload tar file.  bash limits this to < 24000
 declare UPLOADS_WSPRNET_LINE_FORMAT_VERSION=1                         ### I don't expect this will change
 declare UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=2
 declare UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=1
@@ -3989,14 +3989,14 @@ function ftp_upload_to_wsprdaemon_daemon() {
         ### find all *.txt files under spots.d and noise.d.  Don't upload wsprnet.d/... files
         [[ ${verbosity} -ge 1 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() starting search for *wspr*.txt files"
         local -a file_list
-        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' | head -n ${UPOADS_MAX_FILES} ) ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
+        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' | head -n ${UPLOADS_MAX_FILES} ) ) && [[ ${#file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
             [[ ${verbosity} -ge 2 ]] && echo "$(date): ftp_upload_to_wsprdaemon_daemon() found no .txt files. sleeping..."
             sleep 10
         done
         [[ ${verbosity} -ge 1 ]] && echo -e "$(date): ftp_upload_to_wsprdaemon_daemon() found ${#file_list[@]} '*wspr*.txt' files. Wait until there are no more new files."
         local old_file_count=${#file_list[@]}
         sleep 20
-        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' | head -n ${UPOADS_MAX_FILES} ) ) && [[ ${#file_list[@]} -ne ${old_file_count} ]]; do
+        while file_list=( $(find wsprdaemon.d/ -name '*wspr*.txt' | head -n ${UPLOADS_MAX_FILES} ) ) && [[ ${#file_list[@]} -ne ${old_file_count} ]]; do
             local new_file_count=${#file_list[@]}
             [[ ${verbosity} -ge 1 ]] && echo -e "$(date): ftp_upload_to_wsprdaemon_daemon() file count increased from ${old_file_count} to ${new_file_count}. sleep 5 and check again."
             old_file_count=${new_file_count}
