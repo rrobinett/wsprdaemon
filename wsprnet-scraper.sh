@@ -15,7 +15,7 @@ declare UPLOAD_SPOT_SQL='INSERT INTO spots (wd_time, "Spotnum", "Date", "Reporte
 function wn_spots_batch_upload() {
     local csv_file=$1
 
-    wd_logger 1 "Record ${csv_file} to TS"
+    wd_logger 2 "Record ${csv_file} to TS"
     if [[ ! -f ${UPLOAD_WN_BATCH_PYTHON_CMD} ]]; then
         wd_logger 1 "ERROR: Can't find expected file '${UPLOAD_WN_BATCH_PYTHON_CMD}'"
         return 1
@@ -25,7 +25,7 @@ function wn_spots_batch_upload() {
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' => ${ret_code}"
     else
-        wd_logger 1 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
+        wd_logger 2 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
     fi
     return ${ret_code}
 }
@@ -292,7 +292,7 @@ function wsprnet_add_azi() {
     local api_spot_file_path=$1
     local api_azi_file_path=$2
 
-    wd_logger 1 "process ${api_spot_file_path} to create ${api_azi_file_path}"
+    wd_logger 2 "process ${api_spot_file_path} to create ${api_azi_file_path}"
     if [[ ! -f ${api_spot_file_path} ]]; then
         wd_logger 1 "ERROR: no api_spot_file_path=${api_spot_file_path}"
         return 1
