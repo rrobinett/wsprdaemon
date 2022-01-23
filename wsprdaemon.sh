@@ -6187,7 +6187,7 @@ while getopts :aAzZshij:pvVw:dDu:U: opt ; do
             uploading_controls $OPTARG
             ;;
         A)
-            enable_systemctl_deamon
+            enable_systemctl_daemon
             watchdog_cmd a
             ;;
         a)
