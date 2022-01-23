@@ -99,7 +99,7 @@ while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
             uploading_controls $OPTARG
             ;;
         A)
-            enable_systemctl_deamon ## edit to daemon but do the parallel for all of the same in other .sh
+            enable_systemctl_daemon ## edit to daemon but do the parallel for all of the same in other wd_utils.sh
             watchdog_cmd a
             ;;
         a)
