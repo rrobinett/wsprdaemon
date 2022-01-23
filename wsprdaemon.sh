@@ -2357,13 +2357,13 @@ function decoding_daemon()
                 if [[ ${tmp_percent_used} -gt ${MAX_TMP_PERCENT_USED-90} ]]; then
                     [[ ${verbosity} -ge 1 ]] && echo "$(date): decoding_daemon(): WARNING: ${WSPRDAEMON_TMP_DIR} is ${tmp_percent_used}% full.  Increase its size in /etc/fstab!"
                 fi
-                rm sox_fft.txt                                                               # Get rid of that 15 MB fft file ASAP
+                rm sox_fft.txt                                                               # get rid of that 15 MB fft file ASAP
                 nice sort -g -k 2 < sox_fft_trimmed.txt > sox_fft_sorted.txt                 # sort those numerically on the second field, i.e. fourier coefficient  ascending
-                rm sox_fft_trimmed.txt                                                       # This is much smaller, but don't need it again
+                rm sox_fft_trimmed.txt                                                       # this is much smaller, but don't need it again
                 local hann_adjust=6.0
                 local fft_value=$(nice awk -v fft_adj=${fft_adjust} -v hann_adjust=${hann_adjust} '{ s += $2} NR > 11723 { print ( (0.43429 * 10 * log( s / 2147483647)) + fft_adj + hann_adjust) ; exit }'  sox_fft_sorted.txt)
-                                                                                             # The 0.43429 is simply awk using natural log
-                                                                                             #  the denominator in the sq root is the scaling factor in the text info at the end of the ftt file
+                                                                                             # the 0.43429 is simply awk using natural log
+                                                                                             # the denominator in the sqr root is the scaling factor in the text info at the end of the ftt file
                 rm sox_fft_sorted.txt
                 [[ ${verbosity} -ge 3 ]] && echo "$(date): decoding_daemon(): sox_fft_value=${fft_value}"
             fi
@@ -2380,7 +2380,7 @@ function decoding_daemon()
                 old_kiwi_ov_lines=${current_kiwi_ov_lines}
             fi
 
-            ### Output a line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
+            ### Output a line  which contains 'DATE TIME + three sets of four space-seperated statistics' followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
             ###                           Pre Tx                                                        Tx                                                   Post TX
             ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
             local signal_level_line="               ${pre_tx_levels[*]}          ${tx_levels[*]}          ${post_tx_levels[*]}   ${rms_value}    ${c2_FFT_nl_cal}  ${new_kiwi_ov_count}"
@@ -2541,7 +2541,7 @@ function get_decoding_status() {
 ################ Posting ####################################
 #############################################################
 
-declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting deamon directory which contains symlinks to the decoding deamon(s) subdirs where spots for this daemon are copied
+declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting dawmon directory which contains symlinks to the decoding daemon(s) subdirs where spots for this daemon are copied
 
 ### This daemon creates links from the posting dirs of all the $3 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
@@ -2552,12 +2552,12 @@ function posting_daemon()
     local real_receiver_list=(${3})
     local real_receiver_count=${#real_receiver_list[@]}
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
     local my_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
     local my_grid="$(get_receiver_grid_from_name ${posting_receiver_name})"
     
-    ### This Python command creates the enhanced azi infomation added to each spot
+    ### This Python command creates the enhanced azi information added to each spot
     create_azi_python
 
     ### Where to put the spots from the one or more real receivers for the upload daemon to find
@@ -2575,13 +2575,13 @@ function posting_daemon()
     for real_receiver_name in ${real_receiver_list[@]}; do
         ### Create posting subdirs for each real recording/decoding receiver to copy spot files
         ### If a schedule change disables this receiver, we will want to signal to the real receivers that we are no longer listening to their spots
-        ### To find those receivers, create a posting dir under each real reciever and make a sybolic link from our posting subdir to that real posting dir
+        ### To find those receivers, create a posting dir under each real receiver and make a symbolic link from our posting subdir to that real posting dir
         ### Since both dirs are under /tmp, create a hard link between that new dir and a dir under the real receiver where it will copy its spots
         local real_receiver_dir_path=$(get_recording_dir_path ${real_receiver_name} ${posting_receiver_band})
         local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
         ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
         mkdir -p ${real_receiver_posting_dir_path}
-        ### Now create a symlink from under here to the directory where spots will apper
+        ### Now create a symlink from under here to the directory where spots will appear
         local this_rx_local_dir_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
         [[ ! -f ${this_rx_local_dir_name} ]] && ln -s ${real_receiver_posting_dir_path} ${this_rx_local_dir_name}
         posting_source_dir_list+=(${this_rx_local_dir_name})
@@ -2595,7 +2595,7 @@ function posting_daemon()
         local newest_all_wspr_file_path=""
         local newest_all_wspr_file_name=""
 
-        ### Wait for all of the real receivers to decode ands post a *_wspr_spots.txt file
+        ### Wait for all of the real receivers to decode and post a *_wspr_spots.txt file
         local waiting_for_decodes=yes
         local printed_waiting=no   ### So we print out the 'waiting...' message only once at the start of each wait cycle
         while [[ ${waiting_for_decodes} == "yes" ]]; do
@@ -2654,7 +2654,7 @@ function posting_daemon()
                     done
                     cd - > /dev/null
                 done
-                ### Check that an wspr_spots.txt with the same date/time/freq is present in all subdirs
+                ### Check that a wspr_spots.txt with the same date/time/freq is present in all subdirs
                 waiting_for_decodes=no
                 local posting_dir
                 for posting_dir in ${posting_source_dir_list[@]}; do
@@ -2662,7 +2662,7 @@ function posting_daemon()
                         waiting_for_decodes=yes
                         [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found no file ${posting_dir}/${newest_all_wspr_file_name}"
                     else
-                        [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found    file ${posting_dir}/${newest_all_wspr_file_name}"
+                        [[ ${verbosity} -ge 3 ]] && echo "$(date): posting_daemon() found file ${posting_dir}/${newest_all_wspr_file_name}"
                     fi
                 done
             fi
@@ -2712,12 +2712,12 @@ function posting_daemon()
             [[ ${verbosity} -ge 2 ]] && echo "$(date): posting_daemon() no spots were decoded"
             wsprd_spots_best_file_path=${wsprd_spots_all_file_path}
         else
-            ### At least one of the real receiver decoder reported a spot. Create a spot file with only the strongest SNR for each call sign
+            ### At least one of the real receiver decoders reported a spot. Create a spot file with only the strongest SNR for each call sign
              wsprd_spots_best_file_path=${posting_receiver_dir_path}/wspr_spots.txt.BEST
 
             if [[ ${verbosity} -ge 2 ]]; then
                 echo "$(date): posting_daemon() merging and sorting files '${newest_list[@]}' to ${wsprd_spots_all_file_path}"
-                echo "$(date): posting_daemon() cat ${newest_list[@]} > ${wsprd_spots_all_file_path}.  Files contain spots:"
+                echo "$(date): posting_daemon() cat ${newest_list[@]} > ${wsprd_spots_all_file_path}. Files contain spots:"
                 ${GREP_CMD} . ${newest_list[@]}
                 printf ">>>>>>>> which were put into '${wsprd_spots_all_file_path}' which contains:\n$( cat ${wsprd_spots_all_file_path})\n=============\n"
             fi
@@ -2768,7 +2768,7 @@ function posting_daemon()
  
         ###  Queue spots and noise from all real receivers for upload to wsprdaemon.org
         local real_receiver_band=${PWD##*/}
-        ### For each real receiver, queue any *wspr_spots.txt files containing at least on spot.  there should always be *noise.tx files to upload
+        ### For each real receiver, queue any *wspr_spots.txt files containing at least on spot. There should always be *noise.txt file to upload
         for real_receiver_dir in ${POSTING_SUPPLIERS_SUBDIR}/*; do
             local real_receiver_name=${real_receiver_dir#*/}
 
@@ -2854,12 +2854,12 @@ function posting_daemon()
 
 ### Called by the posting_daemon() to create a spot file which will be uploaded to wsprdaemon.org
 ###
-### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length  enhanced spot file with tx and rx azi vectors added
-###  The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
+### Takes the spot file created by 'wsprd' which has 10 or 11 fields and creates a fixed field length enhanced spot file with tx and rx azi vectors added
+### The lines in wspr_spots.txt output by wsprd will not contain a GRID field for type 2 reports
 ###  Date  Time SyncQuality   SNR    DT  Freq  CALL   GRID  PWR   Drift  DecodeCycles  Jitter  Blocksize  Metric  OSD_Decode)
 ###  [0]    [1]      [2]      [3]   [4]   [5]   [6]  -/[7]  [7/8] [8/9]   [9/10]      [10/11]   [11/12]   [12/13   [13:14]   )]
 ### The input spot lines also have two fields added by WD:  ', RMS_NOISE C2_NOISE
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=20                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=20                                              ### wsprd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file() {
@@ -2902,7 +2902,7 @@ function create_enhanced_spots_file() {
         local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
         read band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
 
-        ### Output a space-seperated line of enhanced spot data.  The first 13/14 fields are in the same order as in the ALL_WSPR.TXT and wspr_spot.txt files created by 'wsprd'
+        ### Output a space-seperated line of enhanced spot data. The first 13/14 fields are in the same order as in the ALL_WSPR.TXT and wspr_spot.txt files created by 'wsprd'
         echo "${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_decode_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_osd_decode} ${spot_ipass} ${spot_nhardmin} ${spot_for_wsprnet} ${spot_rms_noise} ${spot_c2_noise} ${band} ${my_grid} ${my_call_sign} ${km} ${rx_az} ${rx_lat} ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon}" >> ${real_receiver_enhanced_wspr_spots_file}
 
     done < ${real_receiver_wspr_spots_file}
@@ -3174,7 +3174,7 @@ function kill_posting_daemon() {
                 kill ${posting_pid}
               [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): killed active pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
             else
-                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
+                [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(): pid ${posting_pid} was dead. Deleting '${posting_daemon_pid_file}' it came from"
             fi
             rm -f ${posting_daemon_pid_file}
         fi
@@ -3206,7 +3206,7 @@ function kill_posting_daemon() {
             [[ $verbosity -ge 2 ]] && echo "$(date): kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: posting directory  ${real_receiver_posting_dir} does not exist"
         else 
             rm -f ${posting_suppliers_root_dir}/${real_receiver_name}     ## Remote the posting daemon's link to the source of spots
-            rm -rf ${real_receiver_posting_dir}  ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
+            rm -rf ${real_receiver_posting_dir}  ### Remove the directory under the recording daemon where it puts spot files for this decoding daemon to process
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
             if [[ ${real_receiver_posting_root_dir_count} -eq 0 ]]; then
@@ -3246,32 +3246,32 @@ function get_posting_status() {
 }
 
 ##########################################################################################################################################################
-########## Section which manaages creating and later/remote uploading of the spot and noise level caches ##################################################
+########## Section which manages creating and later/remote uploading of the spot and noise level caches ##################################################
 ##########################################################################################################################################################
 
 ### We cache spots and noise data under ~/wsprdaemon/.. Three upload daemons run at second 110:
-### 1)  Upload spots to wsprnet.org using the curl MEPT bulk transfer metho
+### 1)  Upload spots to wsprnet.org using the curl MEPT bulk transfer method
 ### 2)  Upload those same spots to logs.wsprdaemon.org using 'curl ...'
 ### 3)  Upload noise level data to logs.wsprdaemon.org using 'curl ...'
 
 ###### uploading to wsprnet.org
-### By consolidating spots for all bands of each CALL/GRID into one curl MEPT upload, we dramtically increase the effeciency of the upload for 
+### By consolidating spots for all bands of each CALL/GRID into one curl MEPT upload, we dramatically increase the efficiency of the upload for 
 ### both the Pi and wsprnet.org while also ensuring that when we view the wsprnet.org database sorted by CALL and TIME, the spots for
-### each 2 minute cycle are displayed in ascending or decending frequency order.
+### each 2 minute cycle are displayed in ascending or descending frequency order.
 ### To achieve that:
 ### Wait for all of the CALL/GRID/BAND jobs in a two minute cycle to complete, 
-###    then cat all of the wspr_spot.txt files together and sorting them into a single file in time->freq order
+###   then cat all of the wspr_spot.txt files together and sort them into a single file in time->freq order
 ### The posting daemons put the wspr_spots.txt files in ${UPLOADS_WSPRNET_ROOT_DIR}/CALL/..
 ### There is a potential problem in the way I've implemented this algorithm:
-###   If all of the wsprds don't complete their decdoing in the 2 minute WSPR cycle, then those tardy band results will be delayed until the following upload
+###   If all of the wsprds don't complete their decoding in the 2 minute WSPR cycle, then those tardy band results will be delayed until the following upload
 ###   I haven't seen that problem and if it occurs the only side effect is that a time sorted display of the wsprnet.org database may have bands that don't
 ###   print out in ascending frequency order for that 2 minute cycle.  Avoiding that unlikely and in any case lossless event would require a lot more logic
 ###   in the upload_to_wsprnet_daemon() and I would rather work on VHF/UHF support
 
-declare uploading_status="enabled"    ### For testing.  If not "enabled", the the uploading daemons will not attempt 'curl...' and leave signals and noise in local cache
+declare uploading_status="enabled"    ### For testing. If not "enabled", the uploading daemons will not attempt 'curl...' and leave signals and noise in local cache
 declare uploading_last_record_time=0 
 
-### We save those variables in the ~/wsprdaemon/wspdaemon.status file where they can be accessed by NN_the uploaading_daemons
+### We save those variables in the ~/wsprdaemon/wspdaemon.status file where they can be accessed by NN_the uploading_daemons
 declare UPLOADING_CONTROL_FILE=${WSPRDAEMON_CONFIG_FILE/.conf/.status}
 if [[ ! -f ${UPLOADING_CONTROL_FILE} ]] ; then
     cat > ${UPLOADING_CONTROL_FILE} <<EOF
@@ -3326,7 +3326,7 @@ function uploading_controls(){
 }
 
 ### The spot and noise data is saved in permanent file systems, while temp files are not saved 
-declare UPLOADS_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads.d           ### Put under here all the spot, noise and log files here so they will persist through a reboot/power cycle
+declare UPLOADS_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads.d           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
 declare UPLOADS_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/uploads.d        ### Put under here all files which can or should be flushed when the system is started
 
 declare UPLOADS_WSPRDAEMON_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon.d
@@ -3360,10 +3360,10 @@ declare UPLOADS_WSPRNET_PIDFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.pid
 declare UPLOADS_WSPRNET_LOGFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.log
 declare UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRNET_SPOTS_DIR}/successful_spot_uploads.log
 
-declare UPLOADS_MAX_LOG_LINES=100000    ### LImit our local spot log file size
+declare UPLOADS_MAX_LOG_LINES=100000    ### Limit our local spot log file size
 
 ### The curl POST call requires the band center of the spot being uploaded, but the default is now to use curl MEPT, so this code isn't normally executed
-declare MAX_SPOT_DIFFERENCE_IN_MHZ_FROM_BAND_CENTER="0.000200"  ### WSPR bands are 200z wide, but we accept wsprd spots which are + or - 200 Hz of the band center
+declare MAX_SPOT_DIFFERENCE_IN_MHZ_FROM_BAND_CENTER="0.000200"  ### WSPR bands are 200 Hz wide, but we accept wsprd spots which are + or - 200 Hz of the band center
 
 ### This is an ugly and slow way to find the band center of spots.  To speed execution, put the bands with the most spots at the top of the list.
 declare WSPR_BAND_CENTERS_IN_MHZ=(
@@ -3504,7 +3504,7 @@ function get_wsprnet_uploading_job_dir_path(){
 
 function upload_to_wsprnet_daemon()
 {
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     mkdir -p ${UPLOADS_WSPRNET_SPOTS_DIR}
     shopt -s nullglob    ### * expands to NULL if there are no file matches
     while true; do
