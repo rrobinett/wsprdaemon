@@ -12,7 +12,7 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -27,8 +27,8 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 ### This bash script logs WSPR spots from one or more Kiwi
 ### It differs from the autowspr mode built in to the Kiwi by:
 ### 1) Processing the uncompressed audio .wav file through the 'wsprd' utility program supplied as part of the WSJT-x distribution
-###    The latest 'wsprd' includes alogrithmic improvements over the version included in the Kiwi
-### 2) Executing 'wsprd -d', a deep search mode which sometimes detects 10% or more signals in the .wav file
+###    The latest 'wsprd' includes algorithmic improvements over the version included in the Kiwi
+### 2) Executing 'wsprd -d', a deep search mode which sometimes detects 10% more signals in the .wav file
 ### 3) By executing on a more powerful CPU than the single core ARM in the Beaglebone, many more signals are extracted on busy WSPR bands,'
 ###    e.g. 20M during daylight hours
 ###
@@ -36,7 +36,7 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 ###  I owe him much thanks for his encouragement and support 
 ###  Feel free to email me with questions or problems at:  rob@robinett.us
 ###  This script was originally developed on Mac OSX, but this version 0.1 has been tested only on the Raspberry Pi 3b+
-###  On the 3b+ I am easily running 6 similtaneous WSPR decode session and expect to be able to run 12 sessions covering a;; the 
+###  On the 3b+ I am easily running 6 simultaneous WSPR decode sessions and expect to be able to run 12 sessions covering all the 
 ###  LF/MF/HF WSPR bands on one Pi
 ###
 ###  Rob Robinett AI6VN   rob@robinett.us    July 1, 2018
@@ -51,14 +51,14 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
 declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
                                     ### TODO: Fix kiwirecorder arguments
-                                    ### TODO: Support FST4W decodomg through the use of 'jt9'
+                                    ### TODO: Support FST4W decoding through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
-                                    ### TODO: Split Python utilities in seperate files maintained by git
+                                    ### TODO: Split Python utilities in separate files maintained by git
                                     ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
                                     ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
-                                    ### TODO: Add VOCAP support
+                                    ### TODO: Add VOACAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
                                     ### TODO: Uploader should flush all spots, not just ones for current scheduled rxs 
 
@@ -99,7 +99,7 @@ while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
             uploading_controls $OPTARG
             ;;
         A)
-            enable_systemctl_deamon
+            enable_systemctl_deamon ## edit to daemon but do the parallel for all of the same in other .sh
             watchdog_cmd a
             ;;
         a)
