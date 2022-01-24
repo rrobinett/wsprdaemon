@@ -324,7 +324,7 @@ declare UPLOADS_WSPRDAEMON_FTP_TMP_WSPRNET_SPOTS_PATH=${UPLOADS_WSPRDAEMON_FTP_R
 ##############
 declare UPLOADS_FTP_MODE_SECONDS=${UPLOADS_FTP_MODE_SECONDS-10}           ### Defaults to upload every 60 seconds
 declare UPLOADS_FTP_MODE_MAX_BPS=${UPLOADS_FTP_MODE_MAX_BPS-100000}       ### Defaults to upload at 100 kbps
-declare UPOADS_MAX_FILES=${UPOADS_MAX_FILES-10000}                        ### Limit the number of *txt files in one upload tar file. Bash limits this to < 24000
+declare UPLOADS_MAX_FILES=${UPLOADS_MAX_FILES-10000}                      ### Limit the number of *txt files in one upload tar file. Bash limits this to < 24000
 declare UPLOADS_WSPRNET_LINE_FORMAT_VERSION=1                             ### I don't expect this will change
 declare UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=2
 declare UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=1
