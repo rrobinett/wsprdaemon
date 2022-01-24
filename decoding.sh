@@ -2,18 +2,18 @@
 
 ############## Decoding ################################################
 ### For each real receiver/band there is one decode daemon and one recording daemon
-### Waits for a new wav file then decodes and posts it to all of the posting lcient
+### Waits for a new wav file then decodes and posts it to all of the posting client
 
 
 declare -r DECODING_CLIENTS_SUBDIR="decoding_clients.d"     ### Each decoding daemon will create its own subdir where it will copy YYMMDD_HHMM_wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                            ### Delete the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare FFT_WINDOW_CMD=${WSPRDAEMON_ROOT_DIR}/wav_window.py
 
-declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noisae levels
+declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noise levels
 declare C2_FFT_CMD=${WSPRDAEMON_ROOT_DIR}/c2_noise.py
 
 function get_decode_mode_list() {
-    local modes_varible_to_return=$1
+    local modes_variable_to_return=$1
     local receiver_modes_arg=$2
     local receiver_band=$3
     local temp_receiver_modes
@@ -150,14 +150,14 @@ function get_wav_levels()
         local adjusted_val=$(bc <<< "scale = 2; (${db_val} + ${rms_adjust})/1")           ### '/1' forces bc to use the scale = 2 setting
         return_line="${return_line} ${adjusted_val}"
     done
-    wd_logger 2 "Returning ajusted dB values: '${return_line}'"
+    wd_logger 2 "Returning adjusted dB values: '${return_line}'"
     eval ${__return_levels_var}=\"${return_line}\"
     return 0
 }
 
-declare MIN_VALID_RAW_WAV_SECCONDS=${MIN_VALID_RAW_WAV_SECCONDS-59}
+declare MIN_VALID_RAW_WAV_SECONDS=${MIN_VALID_RAW_WAV_SECONDS-59}
 declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_RAW_WAV_SECONDS-60}
-declare MIN_VALID_WSPR_WAV_SECCONDS=${MIN_VALID_WSPR_WAV_SECCONDS-119}
+declare MIN_VALID_WSPR_WAV_SECONDS=${MIN_VALID_WSPR_WAV_SECONDS-119}
 declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-120}
 
 function is_valid_wav_file()
@@ -213,7 +213,7 @@ function get_rms_levels()
     local wav_filename=$3
     local rms_adjust=$4
 
-    if ! is_valid_wav_file ${wav_filename} ${MIN_VALID_WSPR_WAV_SECCONDS} ${MAX_VALID_WSPR_WAV_SECONDS} ; then
+    if ! is_valid_wav_file ${wav_filename} ${MIN_VALID_WSPR_WAV_SECONDS} ${MAX_VALID_WSPR_WAV_SECONDS} ; then
         wd_logger 1 "ERROR: 'valid_wav_file ${wav_filename}' => $?"
         return 1
     fi
@@ -239,7 +239,7 @@ function get_rms_levels()
     fi
     local return_rms_value
     local pre_rms_value=${output_line_list[3]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
-    local post_rms_value=${output_line_list[11]}                                           # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
+    local post_rms_value=${output_line_list[11]}                                         # RMS level is the minimum of the Pre and Post 'RMS Tr dB'
     if [[  $(bc --mathlib <<< "${pre_rms_value} <  ${post_rms_value}") -eq "1" ]]; then
         return_rms_value=${pre_rms_value}
         wd_logger 2 "So returning rms_level ${return_rms_value} which is from pre_tx"
@@ -295,7 +295,7 @@ declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
-declare RAW_FILE_FULL_SIZE=1440000   ### Approximate number of bytes in a full size one minute long raw or wav file
+declare RAW_FILE_FULL_SIZE=1440000                       ### Approximate number of bytes in a full size one minute long raw or wav file
 declare ONE_MINUTE_WAV_FILE_MIN_SIZE=${ONE_MINUTE_WAV_FILE_MIN_SIZE-1438000}   ### In bytes
 declare ONE_MINUTE_WAV_FILE_MAX_SIZE=${ONE_MINUTE_WAV_FILE_MAX_SIZE-1450000}
 
@@ -323,7 +323,7 @@ function sleep_until_raw_file_is_full() {
         return 1
     fi
     if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} ]]; then
-        wd_logger 1 "The wav file stablized at invalid too small size ${new_file_size} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        wd_logger 1 "The wav file stabilized at invalid too small size ${new_file_size} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
         wd_rm ${filename}
         return 2
     fi
@@ -333,14 +333,14 @@ function sleep_until_raw_file_is_full() {
         local ps_output=$(ps au | grep "kiwirecorder.*freq=${kiwi_freq}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, but can't find any kiwirecorder processes which would be creating it"
+            wd_logger 1 "ERROR: wav file stabilized at invalid too large size ${new_file_size}, but can't find any kiwirecorder processes which would be creating it"
         else
             kill ${kiwirecorder_pids[@]}
-            wd_logger 1 "ERROR: wav file stablized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
+            wd_logger 1 "ERROR: wav file stabilized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
         fi
         return 1
     fi
-    wd_logger 2 "File ${filename} stabliized at size ${new_file_size} after ${loop_seconds} seconds"
+    wd_logger 2 "File ${filename} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
     return 0
 }
 
@@ -404,7 +404,7 @@ function cleanup_wav_file_list()
             wd_logger 1 "ERROR: flushing file ${test_file_name}"
             rm ${test_file_name}
         else
-            is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECCONDS} ${MAX_VALID_RAW_WAV_SECONDS}
+            is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECONDS} ${MAX_VALID_RAW_WAV_SECONDS}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: found wav file '${test_file_name}' has invalid size.  Flush it"
@@ -451,8 +451,8 @@ function cleanup_wav_file_list()
 
 ### Waits for wav files needed to decode one or more of the MODEs have been fully recorded
 function get_wav_file_list() {
-    local return_variable_name=$1  ### returns a string with a sapce-seperated list each element of which is of the form MODE:first.wav[,second.wav,...]
-    local receiver_name=$2              ### Used when we need to start or restart the wav recording daemon
+    local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
+    local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
     local receiver_band=$3           
     local receiver_modes=$4
     local      target_modes_list=( ${receiver_modes//:/ } )    ### Argument has form MODE1[:MODE2...] put it in local array  
@@ -567,7 +567,7 @@ function get_wav_file_list() {
                 if [[ ${minute_of_first_raw_sample} -lt 0 ]]; then
                     minute_of_first_raw_sample=59
                 fi
-                wd_logger 1 "Adjusted minute_of_first_raw_sample by 1 minute to ${minute_of_first_raw_sample} which compensates for the façt that sdrTest writes the last bytes of a wav file in the following minute of the first bytes"
+                wd_logger 1 "Adjusted minute_of_first_raw_sample by 1 minute to ${minute_of_first_raw_sample} which compensates for the fact that sdrTest writes the last bytes of a wav file in the following minute of the first bytes"
             fi
 
             local first_minute_raw_wspr_pkt_index=$(( minute_of_first_raw_sample % raw_files_in_wav_file_count ))
@@ -650,7 +650,7 @@ function get_wav_file_list() {
              wd_logger 1 "Added a new report list to be returned and remembering to save the files in it by changing the current index_of_first_file_which_needs_to_be_saved=${index_of_first_file_which_needs_to_be_saved} to index_of_first_unreported_raw_file=${index_of_first_unreported_raw_file}"
              index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
          fi
-         wd_logger 2 "For ${seconds_in_wspr_pkt} packet, Remembered that a list for this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
+         wd_logger 2 "For ${seconds_in_wspr_pkt} packet, remembered that a list for this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
     done
     
     if [[ ${index_of_first_file_which_needs_to_be_saved} -lt ${#raw_file_list[@]} ]] ; then
@@ -683,21 +683,21 @@ function decoding_daemon_kill_handler() {
 }
 
 ### Called by the decoding_daemon() to create an enhanced_spot file from the output of ALL_WSPR.TXT
-### That enhanced_spot file is then posted to the subdirectory where the posting_daemon will process it (and other enhnced_spot filed if this receiver is part of a MERGEd group)
+### That enhanced_spot file is then posted to the subdirectory where the posting_daemon will process it (and other enhanced_spot files if this receiver is part of a MERGEd group)
 
 ### For future reference, here is the output lines in  ALL_WSPR.TXT taken from the wsjt-x 2.1-2 source code:
 # In WSJT-x v 2.2+, the wsprd decoder was enhanced.  That new wsprd can be detected because it outputs 17 fields to each line of ALL_WSPR.TXT
 #    fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
 #                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
 
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=18                                              ### wspd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=18                                              ### wsprd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     local real_receiver_wspr_spots_file=$1              ### file with the new spot lines found in ALL_WSPR.TXT
-    local spot_file_date=$2              ### These are prepended to the output file name
+    local spot_file_date=$2                             ### These are prepended to the output file name
     local spot_file_time=$3
-    local wspr_cycle_rms_noise=$4                       ### The folowing fields are the same for every spot in the wspr cycle
+    local wspr_cycle_rms_noise=$4                       ### The following fields are the same for every spot in the wspr cycle
     local wspr_cycle_fft_noise=$5
     local wspr_cycle_kiwi_overloads_count=$6
     local real_receiver_call_sign=$7                    ### For real receivers, these are taken from the conf file line
@@ -747,7 +747,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
             wd_logger 1 "WARNING: the time in spot line ${spot_time} doesn't match the time in the filename: ${spot_file_time}"
         fi
 
-        ### Output a space-seperated line of enhanced spot data.  The first 14 fields are in the same order but with "none" added when the message field with CALL doesn't include a GRID field
+        ### Output a space-separated line of enhanced spot data.  The first 14 fields are in the same order but with "none" added when the message field with CALL doesn't include a GRID field
         ### Each of these lines should be uploaded to logs.wsprdaemon.org.  If ${SIGNAL_LEVEL_UPLOAD} == "proxy" AND this is the only spot (or best spot among a MERGEd group), then the posting daemon will modify the last field to signal the upload_server to forward this spot to wsprnet.org
         ### The first row of printed variables are taken from the ALL_WSPR.TXT file lines and are printed in the same order as they were found there
         ### The second row are the values added  by our 'add_derived' Python line
@@ -780,7 +780,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         ### The decodes of this receiver/band are copied to one or more posting_subdirs where the posting_daemon will process them for posting to wsprnet.org
         local decoding_client_spot_file_name=${dir}/${cached_spots_file_name}
         if [[ -s ${decoding_client_spot_file_name} ]]; then
-            wd_logger 1 "ERROR: file ${decoding_client_spot_file_name} already exisits, so dropping this new ${cached_spots_file_name}"
+            wd_logger 1 "ERROR: file ${decoding_client_spot_file_name} already exists, so dropping this new ${cached_spots_file_name}"
         else
             wd_logger 1 "Creating link from ${cached_spots_file_name} to ${decoding_client_spot_file_name} which is monitored by a posting daemon"
             ln ${cached_spots_file_name} ${decoding_client_spot_file_name}
@@ -804,7 +804,7 @@ function get_wsprdaemon_noise_queue_directory()
         wd_logger 1 "ERROR: can't find receiver '${receiver_name}"
         return 1
     fi
-    ### Linux directory names can't have the '/' character in them which is so common in ham call signs.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal in call signs
+    ### Linux directory names can't have the '/' character in them which is so common in ham callsigns.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal in call signs
     local call_dir_name=${receiver_call_grid//\//=}
     local noise_directory=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}
 
@@ -861,7 +861,7 @@ function decoding_daemon() {
     setup_signal_levels_log_file  signal_levels_log_file ${receiver_name} ${receiver_band} 
     wd_logger 1 "Log signals to '${signal_levels_log_file}'"
     
-    ### 4he noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
+    ### The noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
     local wsprdaemon_noise_queue_directory
     get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}
     local ret_code
@@ -877,7 +877,7 @@ function decoding_daemon() {
     wd_logger 1 "Calculated rms_nl_adjust=${rms_nl_adjust} and fft_nl_adjust=${fft_nl_adjust}"
 
     wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
-    local decoded_spots=0        ### Maintain a running count of the total number of spots_decoded
+    local decoded_spots=0             ### Maintain a running count of the total number of spots_decoded
     local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
@@ -904,8 +904,8 @@ function decoding_daemon() {
         for returned_files in ${mode_wav_file_list[@]}; do
             local returned_seconds=${returned_files%:*}
             local returned_minutes=$(( returned_seconds / 60 ))
-            local comma_seperated_files=${returned_files#*:}
-            local wav_files=${comma_seperated_files//,/ }
+            local comma_separated_files=${returned_files#*:}
+            local wav_files=${comma_separated_files//,/ }
             local wav_file_list=( ${wav_files} )
             local wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
 
@@ -928,15 +928,15 @@ function decoding_daemon() {
             fi
 
             local wd_string="${wav_time_list[*]}"
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_seperated_files}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
             ### Enf of diagnostic code
 
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
-            wav_file_freq_hz=${wav_file_freq_hz%_*}      ### Remove the _usb.wav
+            wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
             local processed_wav_files="no"
-            local sox_signals_rms_fft_and_overload_info=""                     ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
-            > decodes_cache.txt             ## Create or truncate to zero length a file which stores the decodes from all modes
+            local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
+            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
 
@@ -966,7 +966,7 @@ function decoding_daemon() {
                         awk -v wspr_pkt_minutes=${returned_minutes} '{printf "%s %s\n", $0, wspr_pkt_minutes}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt   ### Add the wspr pkt length in seconds to each spot line
                     fi
 
-                    ### Output a noise line  which contains 'DATE TIME + three sets of four space-seperated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
+                    ### Output a noise line  which contains 'DATE TIME + three sets of four space-separated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
                     ###                           Pre Tx                                                        Tx                                                   Post TX
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
                     local c2_filename="${decode_dir}/000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
@@ -1012,7 +1012,7 @@ function decoding_daemon() {
 
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
-                rm ${decode_dir}/${decoder_input_wav_filename}   ### wait until now to delete it so RMS and C2 cacluations wd_logger lines go to logfile in this directory
+                rm ${decode_dir}/${decoder_input_wav_filename}   ### wait until now to delete it so RMS and C2 calculations wd_logger lines go to logfile in this directory
 
                 processed_wav_files="yes"
             fi
@@ -1071,7 +1071,7 @@ function decoding_daemon() {
                   wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
 
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
-            queue_noise_signal_levels_to_wsprdeamon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
+            queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt to wsprnet.org
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprnet.org
