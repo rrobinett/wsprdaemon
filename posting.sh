@@ -15,8 +15,6 @@ function get_posting_dir_path(){
     echo ${receiver_posting_path}
 }
 
-
-
 ### This daemon creates links from the posting dirs of all the $4 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
 function posting_daemon() 
