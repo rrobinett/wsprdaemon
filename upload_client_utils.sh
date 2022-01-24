@@ -243,7 +243,7 @@ function upload_to_wsprnet_daemon() {
            wd_logger 1 "Uploading spots from ${#spots_files[@]} files"
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
-            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 5,5n | cut -c -97 > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 5,5n | cut -c 1-96 > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
                 wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
@@ -407,7 +407,7 @@ function upload_to_wsprdaemon_daemon() {
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'tar cfj ${tar_file_path} \${source_file_list[@]}' => ret_code ${ret_code}"
         else
-            wd_logger 1 "Starting curl upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files."
+            wd_logger 1 "Starting curl upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files. Spots are::\n$(sort -k5,5n ${spot_file_list[*]})"
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
