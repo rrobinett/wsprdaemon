@@ -5,7 +5,7 @@
 ##########################################################################################################################################################
 
 ### We cache spots and noise data under ~/wsprdaemon/.. Three upload daemons run at second 110:
-### 1)  Upload spots to wsprnet.org using the curl MEPT bulk transfer metho
+### 1)  Upload spots to wsprnet.org using the curl MEPT bulk transfer method
 ### 2)  Upload those same spots to logs.wsprdaemon.org using 'curl ...'
 ### 3)  Upload noise level data to logs.wsprdaemon.org using 'curl ...'
 
