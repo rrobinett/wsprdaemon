@@ -40,7 +40,7 @@ function get_decode_mode_list() {
         return 1
     fi
     wd_logger 2 "Returning modes ${temp_receiver_modes}"
-    eval ${modes_varible_to_return}=${temp_receiver_modes}
+    eval ${modes_variable_to_return}=${temp_receiver_modes}
     return 0
 }
 
