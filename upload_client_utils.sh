@@ -12,7 +12,7 @@
 ###### uploading to wsprnet.org
 ### By consolidating spots for all bands of each CALL/GRID into one curl MEPT upload, we dramatically increase the efficiency of the upload for 
 ### both the Pi and wsprnet.org while also ensuring that when we view the wsprnet.org database sorted by CALL and TIME, the spots for
-### each 2 minute cycle are displayed in ascending or decending frequency order.
+### each 2 minute cycle are displayed in ascending or descending frequency order.
 ### To achieve that:
 ### Wait for all of the CALL/GRID/BAND jobs in a two minute cycle to complete, 
 ###    then cat all of the wspr_spot.txt files together and sort them into a single file in time->freq order
