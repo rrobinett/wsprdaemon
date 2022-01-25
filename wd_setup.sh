@@ -33,7 +33,7 @@ esac
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
-    ### We are running on a Rasperberry Pi or generic Debian server
+    ### We are running on a Raspberry Pi or generic Debian server
     declare -r GET_FILE_SIZE_CMD="stat --format=%s" 
     declare -r GET_FILE_MOD_TIME_CMD="stat -c %Y"       
 elif [[ "${OSTYPE}" == "darwin18" ]]; then
@@ -61,7 +61,7 @@ fi
 ### Check that the conf file differs from the prototype conf file
 if diff -q ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE} > /dev/null; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is the same as the template."
-    echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
+    echo "         Edit that file to match your Receiver(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
     exit 
 fi
 
@@ -80,7 +80,7 @@ source ${WSPRDAEMON_CONFIG_FILE}
 WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
-### If the user has enabled a remote proxy connection in the conf file, then start up that connecton now.
+### If the user has enabled a remote proxy connection in the conf file, then start up that connection now.
 declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
 source ${WSPRDAEMON_PROXY_UTILS_FILE}
 proxy_connection_manager      
@@ -88,9 +88,9 @@ proxy_connection_manager
 function check_tmp_filesystem()
 {
     if [[ ! -d ${WSPRDAEMON_TMP_DIR} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "The directrory system for WSPR recordings does not exist.  Creating it"
+        [[ $verbosity -ge 0 ]] && echo "The directory system for WSPR recordings does not exist.  Creating it"
         if ! mkdir -p ${WSPRDAEMON_TMP_DIR} ; then
-            "ERROR: Can't create the directrory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
+            "ERROR: Can't create the directory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
             exit 1
         fi
     fi
@@ -100,12 +100,12 @@ function check_tmp_filesystem()
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
             echo "WARNING: configured to record to a non-ram file system"
         else
-            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB ram file system."
+            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB RAM file system."
             echo "         Every 2 minutes this program can write more than 200 Mbps to that file system which will prematurely wear out a microSD or SSD"
             read -p "So do you want to modify your /etc/fstab to add that new file system? [Y/n]> "
             REPLY=${REPLY:-Y}     ### blank or no response change to 'Y'
             if [[ ${REPLY^} != "Y" ]]; then
-                echo "WARNING: you have chosen to use to non-ram file system"
+                echo "WARNING: you have chosen to use a non-ram file system"
             else
                 if ! grep -q ${WSPRDAEMON_TMP_DIR} /etc/fstab; then
                     sudo cp -p /etc/fstab /etc/fstab.save
@@ -189,7 +189,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt --yes install python-numpy
         fi
-        echo "Successfully installed kwirecorder.py"
+        echo "Successfully installed kiwirecorder.py"
         cd - >& /dev/null
     fi
 }
@@ -204,14 +204,14 @@ function ask_user_to_install_sw() {
     local is_requried_by_wd=${2:-}
 
     echo ${prompt_string}
-    read -p "Do you want to proceed with the installation of that this software? [Yn] > "
+    read -p "Do you want to proceed with the installation of this software? [Yn] > "
     REPLY=${REPLY:-Y}
     REPLY=${REPLY:0:1}
     if [[ ${REPLY^} != "Y" ]]; then
         if [[ -n "${is_requried_by_wd}" ]]; then
             echo "${is_requried_by_wd} is a software utility required by wsprdaemon and must be installed for it to run"
         else
-            echo "WARNING: change wsprdaemon.conf to avoid installtion of this software"
+            echo "WARNING: change wsprdaemon.conf to avoid installation of this software"
         fi
         exit
     fi
@@ -245,7 +245,7 @@ function install_debian_package(){
         sudo apt-get update --allow-releaseinfo-change
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'udo apt-get update' => ${ret_code}"
+            wd_logger 1 "ERROR: 'sudo apt-get update' => ${ret_code}"
             return ${ret_code}
         fi
         APT_GET_UPDATE_HAS_RUN="yes"
@@ -351,7 +351,7 @@ function load_wsjtx_commands()
         fi
         local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
         if [[ ! -x ${dpkg_wsprd_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
@@ -361,7 +361,7 @@ function load_wsjtx_commands()
 
         local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         sudo apt install libboost-log1.67.0       ### Needed by jt9
@@ -401,4 +401,4 @@ function check_for_needed_utilities()
     setup_noise_graphs
 }
 
-### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
