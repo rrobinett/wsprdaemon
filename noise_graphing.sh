@@ -34,13 +34,14 @@ function setup_noise_graphs()
         wd_logger 2 "Whether to upload noise graphs has been set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" && ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
-        wd_logger 2 "Noise graphing is disabled, so skip installation of libraries needed for it"
+        wd_logger 1 "Noise graphing is disabled, so skip installation of libraries needed for it"
         return 0
     fi
 
     ### Get the Python packages needed to create the graphs.png
     local package
     for package in psycopg2 matplotlib scipy ; do
+        wd_logger 1 "Install Python package ${package}"
         install_python_package ${package}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
@@ -51,6 +52,7 @@ function setup_noise_graphs()
 
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] ; then
         ## Ensure that Apache is installed and running
+        wd_logger 1 "We are confgiured for local display of noise graphs, so check that Apache is installed"
         if ! install_debian_package  apache2 ; then
             wd_logger 1 "ERROR: 'install_debian_package  apache2' => $?"
             exit 1

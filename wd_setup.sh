@@ -1,5 +1,4 @@
 #!/bin/bash
-
 declare -i verbosity=${verbosity:-1}
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
@@ -17,7 +16,11 @@ declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by pri
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf qt5-default:armhf)
+        declare QT5_PACKAGE=qt5-default:armhf 
+        if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
+            QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
+        fi
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf ${QT5_PACKAGE})
         ;;
     x86_64)
         declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:amd64 qt5-default:amd64)
@@ -52,7 +55,7 @@ declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.co
 if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is missing, so it is being created from a template."
     echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
-    mv ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
+    cp -p  ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
     exit
 fi
 ### Check that the conf file differs from the prototype conf file
@@ -261,29 +264,23 @@ function install_python_package()
 {
     local pip_package=$1
 
-    if ! pip3 -V > /dev/null 2>&1 ; then
-	    wd_logger 1 "Installing pip3"
-	    sudo apt install python3-pip -y
-    fi
-   if ! python3 -c "import ${pip_package}" 2> /dev/null; then
-        if !  sudo pip3 install ${pip_package} ; then
-            wd_logger 1 "ERROR: 'sudo pip3 install ${pip_package}' => $?"
-            exit 1
-        fi
-    fi
-    if ! which pip3 > /dev/null; then
-        if ! install_debian_package python3-pip3 ; then
-            wd_logger 1 "ERROR: 'install_debian_package pip3' => $?"
-            exit 1
-        fi
-    fi
-    if python3 -c "import ${pip_package}" > /dev/null ; then
-        wd_logger 2 "Python package ${pip_package} is already installed"
+    wd_logger 1 "Verifying or Installing package ${pip_package}"
+    if python3 -c "import ${pip_package}" 2> /dev/null; then
+        wd_logger 1 "Found that package ${pip_package} is installed"
         return 0
     fi
+    wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
+    if ! pip3 -V > /dev/null 2>&1 ; then
+        wd_logger 1 "Installing pip3"
+        if ! sudo apt install python3-pip -y ; then
+            wd_logger 1 "ERROR: can't install pip3:  'sudo apt install python3-pip -y' => $?"
+            exit 1
+        fi
+    fi
+    wd_logger 1 "Having pip3 install package ${pip_package} "
     if ! sudo pip3 install ${pip_package} ; then
         wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
-        exit 1
+        exit 2
     fi
     wd_logger 1 "Installed Python package ${pip_package}"
     return 0
@@ -387,18 +384,21 @@ function check_for_needed_utilities()
 {
     local package_needed
     for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        wd_logger 1 "Checking for package ${package_needed}"
         if ! install_debian_package ${package_needed} ; then
             wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
             exit 1
         fi
     done
+    wd_logger 1 "Checking for Python's astral library"
     if ! install_python_package astral; then
         wd_logger 1 "ERROR: failed to install Python package 'astral'"
         exit 1
     fi
+    wd_logger 1 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
+    wd_logger 1 "Setting up noise graphing"
     setup_noise_graphs
 }
 
 ### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
-
