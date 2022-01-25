@@ -16,6 +16,7 @@ declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by pri
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
+        ### Add code to support installation on Pi's bullseye OS
         declare QT5_PACKAGE=qt5-default:armhf 
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
             QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
