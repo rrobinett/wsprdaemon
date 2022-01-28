@@ -68,6 +68,8 @@ if [[ $USER == "root" ]]; then
 fi
 
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands so they know where to look for *.pid files
+
 cd ${WSPRDAEMON_ROOT_DIR}
 
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh

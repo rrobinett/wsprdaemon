@@ -129,11 +129,11 @@ function wd_logger() {
 #############################################
 function verbosity_increment() {
     verbosity=$(( $verbosity + 1))
-    echo "$(date): verbosity_increment() verbosity now = ${verbosity}"
+    wd_logger 0 "verbosity now = ${verbosity}"
 }
 function verbosity_decrement() {
     [[ ${verbosity} -gt 0 ]] && verbosity=$(( $verbosity - 1))
-    echo "$(date): verbosity_decrement() verbosity now = ${verbosity}"
+    wd_logger 0 "verbosity now = ${verbosity}"
 }
 
 function setup_verbosity_traps() {
@@ -143,10 +143,10 @@ function setup_verbosity_traps() {
 
 function signal_verbosity() {
     local up_down=$1
-    local pid_files=$(shopt -s nullglob ; echo *.pid)
+    local pid_files=$(find ${RUNNING_IN_DIR} -maxdepth 1 -name '*.pid')
 
     if [[ -z "${pid_files}" ]]; then
-        echo "No *.pid files in $PWD"
+        echo "No *.pid files in ${RUNNING_IN_DIR}"
         return
     fi
     local file
