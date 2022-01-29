@@ -6,8 +6,12 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
 #     
 #  local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
-#                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
-declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+#                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" 
+#                                                                                                             "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
+
+### This is the format of the spot lines in the CSV file derived from the extended spot lines.  In WD 2.10 those lines have 32 fields and the second field is 'sync_quality'.  In WD 3.x the lines have 34 fields and 'sync_quality' has been moved and we add two fields at the end: ov_count and wsprnet_info (for now '1' == forward spot to WN) 
+declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver, ov_count, wsprnet_info) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+
 declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
 declare MAX_RM_ARGS=5000    ### Limit of the number of files in the 'rm ...' cmd line
@@ -55,10 +59,6 @@ function tbz_service_daemon()
         for tbz_file in ${tbz_file_list[@]}; do
             if tar xf ${tbz_file} &> /dev/null ; then
                 wd_logger 2 "Found a valid tar file: ${tbz_file}"
-                if [[ ${tbz_file} =~ AI6VN ]]; then
-                    local tared_files=$(tar tf ${tbz_file})
-                    wd_logger 3 "Tar file ${tbz_file} contains:\n${tared_files}"
-                fi
                 valid_tbz_list+=(${tbz_file})
                 local file_system_usage=$(df . | awk '/^tmpfs/{print $3}')
                 if [[ ${file_system_usage} -gt ${file_system_max_usage} ]]; then
@@ -283,12 +283,16 @@ function format_spot_lines()
                    $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); 
                    $23=toupper($23); 
                    n = split(FILENAME, a, "/"); 
-                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
+                   printf "%s %s%s 0 0\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
     sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${fixed_spot_lines_file}
 
     ### WD 3.0 extended spot lines have two more fields and are in the ALL_WSPR.TXT field order
     ### $6=toupper($6)     ==> call sign is all upper case
     ### 
+     awk 'NF != 32 { printf "%s spot line has %d fields\n", FILENAME, NF }' ${spot_file_list[@]} > wd3_format_files.log
+     if [[ -s wd3_format_files.log ]]; then
+         wd_logger 1 "Found $(wc -l < wd3_format_files.log) spot lines in wd3_format:\n$(head -n 2 wd3_format_files.log)"
+     fi
      awk 'NF == 34 {
                    $6=toupper($6);
                    if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4)));
@@ -296,8 +300,8 @@ function format_spot_lines()
                    $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4)));
                    $23=toupper($23);
                    n = split(FILENAME, a, "/");
-                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
-    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > /dev/null
+                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > wd3_awk.out
+    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" wd3_awk.out > wd3_spot_lines.txt
 
     wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
@@ -434,7 +438,7 @@ function kill_upload_to_mirror_site_daemons()
     wd_logger 2 "Start"
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        wd_logger -2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
  
@@ -518,7 +522,7 @@ function get_status_mirror_watchdog_daemon()
     fi
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        wd_logger -2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
     local mirror_spec
