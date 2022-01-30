@@ -29,7 +29,7 @@ function proxy_connection_pid() {
 function proxy_connection_status() {
     local proxy_pid=$(proxy_connection_pid)
     if [[ ${proxy_pid} -eq 0 ]]; then
-        wd_logger 1 "No proxy client connection daemon is active"
+        wd_logger 2 "No proxy client connection daemon is active"
     else
         wd_logger 1 "Proxy client connection daemon is active with pid ${proxy_pid}"
     fi

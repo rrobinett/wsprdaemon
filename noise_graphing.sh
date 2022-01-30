@@ -41,7 +41,7 @@ function setup_noise_graphs()
     ### Get the Python packages needed to create the graphs.png
     local package
     for package in psycopg2 matplotlib scipy ; do
-        wd_logger 1 "Install Python package ${package}"
+        wd_logger 2 "Install Python package ${package}"
         install_python_package ${package}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then

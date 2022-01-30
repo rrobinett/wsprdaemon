@@ -265,9 +265,9 @@ function install_python_package()
 {
     local pip_package=$1
 
-    wd_logger 1 "Verifying or Installing package ${pip_package}"
+    wd_logger 2 "Verifying or Installing package ${pip_package}"
     if python3 -c "import ${pip_package}" 2> /dev/null; then
-        wd_logger 1 "Found that package ${pip_package} is installed"
+        wd_logger 2 "Found that package ${pip_package} is installed"
         return 0
     fi
     wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
@@ -385,20 +385,20 @@ function check_for_needed_utilities()
 {
     local package_needed
     for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
-        wd_logger 1 "Checking for package ${package_needed}"
+        wd_logger 2 "Checking for package ${package_needed}"
         if ! install_debian_package ${package_needed} ; then
             wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
             exit 1
         fi
     done
-    wd_logger 1 "Checking for Python's astral library"
+    wd_logger 2 "Checking for Python's astral library"
     if ! install_python_package astral; then
         wd_logger 1 "ERROR: failed to install Python package 'astral'"
         exit 1
     fi
-    wd_logger 1 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
+    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
-    wd_logger 1 "Setting up noise graphing"
+    wd_logger 2 "Setting up noise graphing"
     setup_noise_graphs
 }
 
