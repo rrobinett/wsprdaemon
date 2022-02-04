@@ -86,6 +86,15 @@ declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
 source ${WSPRDAEMON_PROXY_UTILS_FILE}
 proxy_connection_manager      
 
+### Check the variables which should (or might) be defined in the wsprdaemon.conf file
+SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
+if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
+        wd_logger -1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
+        exit 1
+    fi
+fi
+
 function check_tmp_filesystem()
 {
     if [[ ! -d ${WSPRDAEMON_TMP_DIR} ]]; then
