@@ -93,6 +93,14 @@ if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
         wd_logger -1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
         exit 1
     fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
+        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in  the wd_template.conf file"
+        exit 2
+    fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
+        wd_logger -1 "ERROR: SIGNAL_LEVEL_UPLOAD_ID=\"${SIGNAL_LEVEL_UPLOAD_ID}\" defined in your wsprdaemon.conf file cannot include the \"/\". Please change it to \"_\""
+        exit 3
+    fi
 fi
 
 function check_tmp_filesystem()
