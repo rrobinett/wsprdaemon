@@ -1,4 +1,4 @@
-# wsprdaemon (WD) Under devleopment version v3.0a
+# wsprdaemon (WD) Under development version v3.0a
 
 This branch is currently under development.   Server mode is largely finished, debugged and running at wsprdaemon.org and wd1.wsprdeamon.org 
 The client mode is running at AI6VN/KH6 but it isn't really ready for even alpha testing at other sites.
