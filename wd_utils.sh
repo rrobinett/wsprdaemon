@@ -362,7 +362,6 @@ function spawn_daemon()
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
     wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
-#    setup_systemctl_deamon "-u a"  "-u z"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
         if ps ${daemon_pid} > /dev/null ; then
@@ -373,7 +372,6 @@ function spawn_daemon()
             rm -f ${daemon_pid_file_path}
         fi
     fi
-    #echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
     WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
