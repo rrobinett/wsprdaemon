@@ -4,13 +4,18 @@ declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ##
 declare UPLOAD_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_upload_batch.py
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
-#     
-#  local extended_line=$( printf "%6s %4s %3d %3.0f %5.2f %11.7f %-14s %-6s %2d %2d %5u %4s, %4d %4d %2u %2d %3d %2d\n" \
-#                        "${spot_date}" "${spot_time}" "${spot_sync_quality}" "${spot_snr}" "${spot_dt}" "${spot_freq}" "${spot_call}" "${spot_grid}" "${spot_pwr}" "${spot_drift}" "${spot_decode_cycles}" "${spot_jitter}" 
-#                                                                                                             "${spot_blocksize}"  "${spot_metric}" "${spot_osd_decode}" "${spot_ipass}" "${spot_nhardmin}" "${spot_for_wsprnet}")
+### The extended spot lines created by WD 2.x have these 32 fields:
+### spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin       <=== Taken directly from the ALL_WSPR.TXT spot lines
+###                         spot_for_wsprnet spot_rms_noise spot_c2_noise                                                                                                                                             <=== Added by the decode_daemon()
+###                         band my_grid my_call_sign km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon                                                                                                          <=== Added by add_azi() python code
 
-### This is the format of the spot lines in the CSV file derived from the extended spot lines.  In WD 2.10 those lines have 32 fields and the second field is 'sync_quality'.  In WD 3.x the lines have 34 fields and 'sync_quality' has been moved and we add two fields at the end: ov_count and wsprnet_info (for now '1' == forward spot to WN) 
-declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver, ov_count, wsprnet_info) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+###  WD 3.0 adds two additional fields at the end of each extended spot line for a total of 34 fields:
+###                         overload_counts  pkt_mode
+
+### When recording these lines to TS and CH condense the first two field 'spot_date' and 'spot_time' into one time field in the TS format, and add the receiver_name field derived from the path name of the spot file.
+### So there are 34 values recorded in TS/CH for each spot:
+#declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver, ov_count, wsprnet_info) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, mode, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, ov_count, wsprnet_info, receiver ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 
 declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
@@ -199,8 +204,15 @@ function record_spot_files()
         fi
 
         local ts_spots_csv_file=./ts_spots.csv    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
-        format_spot_lines ${ts_spots_csv_file}
+        format_spot_lines ${ts_spots_csv_file}    ### That function ${spot_file_list[@]}
 
+        mv ${ts_spots_csv_file} testing.csv
+        if grep "KPH "  testing.csv > /dev/null ; then
+            if grep "KPH\/A " testing.csv > /dev/null; then
+                wd_lgger 1 "Found some KPH anspots in testing.csv. Sleeping 30"
+                wd_sleep 30
+            fi
+        fi
         if [[ ! -s ${ts_spots_csv_file} ]]; then
             wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
         else
@@ -255,53 +267,22 @@ function record_spot_files()
 ###                                                                                   s/^/"20/;  => insert '"20' to get "20YY-MM-DD:HH:MM"
 ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
 ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
+
+declare WD_SPOTS_TO_TS_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wd_spots_to_ts.awk
 function format_spot_lines()
 {
     local fixed_spot_lines_file=$1
 
-    ### WD v2.10* spot lines will have 32 fields, while v3.0a+ spot lines will have 33 fields
-    awk '{printf "%90s:%s\n", FILENAME, $0}' ${spot_file_list[@]} > file_fields.log
-    if [[ -s file_fields.log ]]; then
-        wd_logger 1 "Recording spots from ${#spot_file_list[@]} spot files:\n$(head -n 4 file_fields.log)"
+    if [[ ! -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ]]; then
+        wd_logger 1 "ERROR: can't find awk program file '${WD_SPOTS_TO_TS_AWK_PROGRAM}'"
+        exit 1
     fi
-
-    local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
-    awk 'NF != 32 && NF != 34' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
-    if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
-        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} ) bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
+    awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${fixed_spot_lines_file}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM}' => ${ret_code}"
+        return 1
     fi
-
-    ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
-    ### 9/5/20:   RR: added the site's receiver name to end of each line.  It is extracted from the path of the wsprdaemon_spots.txt file
-    ### 10/26.21: RR: The decoder now inserts 'none' in type 2 spots, so changed this to test only for spots without 32 fields.
-    ###               Added the wspr_packet_mode 'W_2' to spot lines from WD 2.10x which are missing that last field 
-    awk 'NF == 32 { 
-                   if (NF == 32)  wspr_pkt_mode = "2 ";
-                   $7=toupper($7); 
-                   if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4))); 
-                   if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
-                   $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4))); 
-                   $23=toupper($23); 
-                   n = split(FILENAME, a, "/"); 
-                   printf "%s %s%s 0 0\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
-    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${fixed_spot_lines_file}
-
-    ### WD 3.0 extended spot lines have two more fields and are in the ALL_WSPR.TXT field order
-    ### $6=toupper($6)     ==> call sign is all upper case
-    ### 
-     awk 'NF != 32 { printf "%s spot line has %d fields\n", FILENAME, NF }' ${spot_file_list[@]} > wd3_format_files.log
-     if [[ -s wd3_format_files.log ]]; then
-         wd_logger 1 "Found $(wc -l < wd3_format_files.log) spot lines in wd3_format:\n$(head -n 2 wd3_format_files.log)"
-     fi
-     awk 'NF == 34 {
-                   $6=toupper($6);
-                   if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4)));
-                   if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
-                   $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4)));
-                   $23=toupper($23);
-                   n = split(FILENAME, a, "/");
-                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > wd3_awk.out
-    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" wd3_awk.out > wd3_spot_lines.txt
 
     wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
