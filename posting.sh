@@ -238,7 +238,7 @@ function post_files()
                 if [[ ! -s wn_format_spots.txt ]]; then
                     wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' succeeeded but there are no spots in wn_format_spots.txt"
                 else
-                    wd_logger 1 "Queuing file with $(wc -l < ${wn_format_spots.txt}) spots to ${wsprnet_uploads_queue_filename}"
+                    wd_logger 1 "Queuing file with $(wc -l < wn_format_spots.txt) spots to ${wsprnet_uploads_queue_filename}"
                     cp -p wn_format_spots.txt ${wsprnet_uploads_queue_filename}
                 fi
             else
