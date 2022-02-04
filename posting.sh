@@ -147,9 +147,27 @@ function posting_daemon()
 ### 377      $mode = $nfields == 11 ? get_mode($fields[$i++]) : 1;
 ### 378
 ### 379      $success = add_spot($version, $call, $grid, $date, $utc, $snr, $dt, $freq, $tcall, $tgrid, $tpower, $drift, $mode);
+
+declare WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wn_from_wd_spot_file.awk
+### From an extended wsprdaemon format spots file, creates a wsprnet format spots file with 12 fields.  The last field specifies the pkt mode
 function format_spots_file_for_wsprnet() 
 {
-    local all_wsprnet_spot_lines_file=$1
+    local source_extended_spotlines_file=$1
+    local dest_wsprnet_spotlines_file=$2
+
+    wd_logger 1 "Create WN format spot lines from ${source_extended_spotlines_file} in ${dest_wsprnet_spotlines_file}"
+    awk -f ${WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM} ${source_extended_spotlines_file} > ${dest_wsprnet_spotlines_file}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'awk -f ${WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM} ${source_extended_spotlines_file} > ${dest_wsprnet_spotlines_file}' => ${rc}"
+        return 1
+    fi
+    local error_lines
+    if ! error_lines=$( grep ERROR ${dest_wsprnet_spotlines_file} ) ; then
+       wd_logger 1 "ERROR: bad spot lines reported by awk:\n${error_lines}"
+    fi
+    wd_logger 1 "Created WN format spot file ${dest_wsprnet_spotlines_file}"
+    return 0
 }
 
 function post_files()
@@ -214,8 +232,18 @@ function post_files()
             local spots_count=$(wc -l < spots.BEST)
             wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
             ### Format spot lines for the wsprnet.org server which now (1/22) parses spot lines for a packet mode 
-            format_spots_file_for_wsprnet  spots.BEST
-            mv spots.BEST ${wsprnet_uploads_queue_filename}
+            format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt
+            local rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                if [[ ! -s wn_format_spots.txt ]]; then
+                    wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' succeeeded but there are no spots in wn_format_spots.txt"
+                else
+                    wd_logger 1 "Queuing file with $(wc -l < ${wn_format_spots.txt}) spots to ${wsprnet_uploads_queue_filename}"
+                    cp -p wn_format_spots.txt ${wsprnet_uploads_queue_filename}
+                fi
+            else
+                wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' => ${rc}"
+            fi
         fi
     fi
 
