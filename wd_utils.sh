@@ -437,11 +437,12 @@ function get_status_of_daemon() {
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
-            wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
             rm -f ${daemon_pid_file_path}
             return 3
         else
             wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+            wd_logger 1 "daemon '${daemon_function_name}' with  pid ${daemon_pid} is running"
         fi
     fi
     return 0

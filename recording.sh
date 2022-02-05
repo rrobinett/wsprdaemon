@@ -574,7 +574,7 @@ function kill_wav_recording_daemon()
     fi
     local recording_pid=$(cat ${recording_pid_file})
     if [[ -z "${recording_pid}" ]]; then
-        wd_loger 1 "Found no pid file '${recording_pid_file}'"
+        wd_logger 1 "Found no pid file '${recording_pid_file}'"
         return 0
     fi
     if ! ps ${recording_pid} > /dev/null; then
