@@ -82,7 +82,7 @@ function list_audio_devices()
     while [[ ${quit_test} == "no" ]]; do
         local gain_step=1
         local gain_direction="-"
-        echo "The audio input to device ${audio_device} is being echoed to it line output.  Press ^C (Control+C) to terminate:"
+        echo "The audio input to device ${audio_device} is being echoed to its line output.  Press ^C (Control+C) to terminate:"
         sox -t alsa hw:${audio_device},0 -t alsa hw:${audio_device},0
         read -p "Adjust the input gain and restart test? [-+q] => "
         case "$REPLY" in
@@ -115,7 +115,7 @@ function list_devices()
     list_audio_devices
 }
 
-declare -r RECEIVER_SNR_ADJUST=-0.25             ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW reuqired by wsprnet.org
+declare -r RECEIVER_SNR_ADJUST=-0.25         ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW reuqired by wsprnet.org
                                              ### But experimentation has shown that setting the Kiwi's passband to 500 Hz (1250 ... 1750 Hz) yields SNRs which match WSJT-x's, so this isn't needed
 
 ##############################################################
@@ -169,9 +169,9 @@ function rtl_biast_setup() {
         return
     fi
     if [[ ! -x ${RTL_BIAST_CMD} ]]; then
-        echo "$(date): ERROR: your system is configured to turn on the BIAS-T (5 VDC) oputput of the RTL_SDR, but the rtl_biast application has not been installed.
+        echo "$(date): ERROR: your system is configured to turn on the BIAS-T (5 VDC) output of the RTL_SDR, but the rtl_biast application has not been installed.
               To install 'rtl_biast', open https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/ and search for 'To enable the bias tee in Linux'
-              Your capture deaemon process is running, but the LNA is not receiving the BIAS-T power it needs to amplify signals"
+              Your capture daemon process is running, but the LNA is not receiving the BIAS-T power it needs to amplify signals"
         return
     fi
     (cd ${RTL_BIAST_DIR}; ${RTL_BIAST_CMD} -b 1)        ## rtl_blast gives a 'missing library' when not run from that directory
@@ -183,7 +183,7 @@ declare  SAMPLE_RATE=32000
 declare  DEMOD_RATE=32000
 declare  RTL_FREQ_ADJUSTMENT=0
 declare -r FREQ_AJUST_CONF_FILE=./freq_adjust.conf       ## If this file is present, read it each 2 minutes to get a new value of 'RTL_FREQ_ADJUSTMENT'
-declare  USE_RX_FM="no"                                  ## Hopefully rx_fm will replace rtl_fm and give us better frequency control and Sopay support for access to a wide range of SDRs
+declare  USE_RX_FM="no"                                  ## Hopefully rx_fm will replace rtl_fm and give us better frequency control and Soapy support for access to a wide range of SDRs
 declare  TEST_CONFIGS="./test.conf"
 
 function rtl_daemon() 
@@ -208,7 +208,7 @@ function rtl_daemon()
         local wav_file_name="${start_time}_${arg_rx_freq_hz}_usb.wav"
         local raw_wav_file_name="${wav_file_name}.raw"
         local tmp_wav_file_name="tmp/${wav_file_name}"
-        [[ $verbosity -ge 1 ]] && echo "$(date): starting a ${capture_secs} second RTL-STR capture to '${wav_file_name}'" 
+        [[ $verbosity -ge 1 ]] && echo "$(date): starting a ${capture_secs} second RTL-SDR capture to '${wav_file_name}'" 
         if [[ -f freq_adjust.conf ]]; then
             [[ $verbosity -ge 1 ]] && echo "$(date): adjusting rx frequency from file 'freq_adjust.conf'.  Current adj = '${RTL_FREQ_ADJUSTMENT}'"
             source freq_adjust.conf
@@ -235,7 +235,7 @@ function audio_recording_daemon()
 {
     local audio_id=$1                 ### For an audio input device this will have the format:  localhost:DEVICE,CHANNEL[,GAIN]   or remote_wspr_daemons_ip_address:DEVICE,CHANNEL[,GAIN]
     local audio_server=${audio_id%%:*}
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     if [[ -z "${audio_server}" ]] ; then
         [[ $verbosity -ge 1 ]] && echo "$(date): audio_recording_daemon() ERROR: AUDIO_x id field '${audio_id}' is invalidi. Expecting 'localhost:' or 'IP_ADDR:'" >&2
         return 1
@@ -279,7 +279,7 @@ function audio_recording_daemon()
 }
 
 ###
-declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is on longer a client and frees that rx2...7 channel
+declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is no longer a client and frees that rx2...7 channel
 
 ### NOTE: This function assumes it is executing in the KIWI/BAND directory of the job to be killed
 function kiwirecorder_manager_daemon_kill_handler() {
@@ -316,7 +316,7 @@ function kiwirecorder_manager_daemon_kill_handler() {
 ### This daemon spawns a kiwirecorder.py session and monitor's its stdout for 'OV' lines
 declare KIWI_RECORDER_PID_FILE="kiwi_recorder.pid"
 declare KIWI_RECORDER_LOG_FILE="kiwi_recorder.log"
-declare OVERLOADS_LOG_FILE="kiwi_recorder_overloads_count.log"   ### kiwirecorder_manager_daemon logs the 
+declare OVERLOADS_LOG_FILE="kiwi_recorder_overloads_count.log"   ### kiwirecorder_manager_daemon logs the OV
 function kiwirecorder_manager_daemon()
 {
     local receiver_ip=$1
@@ -324,7 +324,7 @@ function kiwirecorder_manager_daemon()
     local my_receiver_password=$3
     local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     trap kiwirecorder_manager_daemon_kill_handler SIGTERM
 
     wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
@@ -355,13 +355,13 @@ function kiwirecorder_manager_daemon()
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
                             local ret_code=$?
                             if [[ ${ret_code} -ne 0 ]]; then
-                                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  sleep and retry"
+                                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
                                 sleep 1
                                 continue
                             fi
                             kiwi_recorder_pid=$!
                             echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
-                            wd_logger 1 "Spawned kiwrecorder.py job with PID ${kiwi_recorder_pid}"
+                            wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
                             fi
 
         ### Monitor the operation of the kiwirecorder we spawned
@@ -372,7 +372,7 @@ function kiwirecorder_manager_daemon()
             continue
         fi
         if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
-            wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwrecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
+            wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwirecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
             kill ${kiwi_recorder_pid}
             rm ${KIWI_RECORDER_PID_FILE}
             sleep 1
@@ -385,7 +385,7 @@ function kiwirecorder_manager_daemon()
         fi
 
         if [[ ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
-            wd_logger 2 "${KIWI_RECORDER_LOG_FILE} is empty, so no overloads have been reported an thus there are no OV counts to be checked"
+            wd_logger 2 "${KIWI_RECORDER_LOG_FILE} is empty, so no overloads have been reported and thus there are no OV counts to be checked"
         else
             local current_time=$(printf "%(%s)T" -1 )
             if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
@@ -436,7 +436,7 @@ function kiwirecorder_manager_daemon()
 
 ###  Call this function from the watchdog daemon 
 ###  If verbosity > 0 it will print out any new OV report lines in the recording.log files
-###  Since those lines are printed only opnce every 10 minutes, this will print out OVs only once every 10 minutes`
+###  Since those lines are printed only once every 10 minutes, this will print out OVs only once every 10 minutes`
 function print_new_ov_lines() {
     local kiwi
 
@@ -499,16 +499,16 @@ function spawn_wav_recording_daemon() {
 
     fi
     ### There was no PID file or the pid in that file was dead.  But check with Linux to be sure there is no zombie recording_daemon running
-    local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in khz are unqiue to each rx band
+    local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in kHz are unqiue to each rx band
     local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
     if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-        wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} Khz, so go ahead and spawn a new job"
+        wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
     else
         kill ${kiwirecorder_pids[@]}
         wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}' and then spawn a new job"
     fi
 
-    ### No recoding daemon is running
+    ### No recording daemon is running
     if [[ ${receiver_name} =~ ^AUDIO_ ]]; then
         [[ $verbosity -ge 1 ]] && echo "$(date): spawn_recording_daemon() record ${receiver_name}"
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  audio_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
@@ -574,7 +574,7 @@ function kill_wav_recording_daemon()
     fi
     local recording_pid=$(cat ${recording_pid_file})
     if [[ -z "${recording_pid}" ]]; then
-        wd_loger 1 "Found no pid file '${recording_pid_file}'"
+        wd_logger 1 "Found no pid file '${recording_pid_file}'"
         return 0
     fi
     if ! ps ${recording_pid} > /dev/null; then

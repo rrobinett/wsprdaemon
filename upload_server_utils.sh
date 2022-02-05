@@ -1,6 +1,6 @@
 #!/bin/bash
 
-declare UPLOAD_FTP_PATH=~/ftp/upload       ### Where the FTP server leaves tar.tbz files
+declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
 declare UPLOAD_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_upload_batch.py
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
@@ -10,28 +10,28 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time,     sync_quality, "SNR", dt, freq,   tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin,            rms_noise, c2_noise,  band, rx_grid,        rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
-declare MAX_RM_ARGS=5000    ### Limit of the number of files in the 'rm ...' cmd line
+declare MAX_RM_ARGS=5000     ### Limit of the number of files in the 'rm ...' cmd line
 
-### This deamon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
+### This daemon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
 function tbz_service_daemon() 
 {
     wd_logger 1 "Starting in $PWD, but will run in ${UPLOADS_TMP_ROOT_DIR}"
 
-    local tbz_service_daemon_root_dir=$1       ### The tbz files are found in permanent storage under ~/wsprdaemon/uploads.d/..., but this daemon does all its work in a /tmp/wsprdaemon/... directory
+    local tbz_service_daemon_root_dir=$1  ### The tbz files are found in permanent storage under ~/wsprdaemon/uploads.d/..., but this daemon does all its work in a /tmp/wsprdaemon/... directory
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
     mkdir -p ${UPLOADS_TMP_ROOT_DIR}
     cd ${UPLOADS_TMP_ROOT_DIR}
 
-    ### wd_logger will write to $PWD in UPLOADS_TMP_ROOT_DIR.  We want the log to be kept on a permanet file system, so create a symlink to a log file over there
+    ### wd_logger will write to $PWD in UPLOADS_TMP_ROOT_DIR.  We want the log to be kept on a permanent file system, so create a symlink to a log file over there
     if [[ ! -L tbz_service_daemon.log ]]; then
-        ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log       ### Logging for this dameon is in permanent storage
+        ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log       ### Logging for this daemon is in permanent storage
         wd_logger 1 "Created symlink 'ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log'"
     fi
 
-    ### Most of the file read/write happens in /tmp/wsprdsaemon
+    ### Most of the file read/write happens in /tmp/wsprdaemon
     echo "UPLOAD_SPOT_SQL=${UPLOAD_SPOT_SQL}" > upload_spot.sql       ### helps debugging from cmd line
     echo "UPLOAD_NOISE_SQL=${UPLOAD_NOISE_SQL}" > upload_noise.sql
     shopt -s nullglob
@@ -44,11 +44,11 @@ function tbz_service_daemon()
             sleep 1
         done
 
-        ### Untar one .tbz file at a time, throwing away bad and old files, until we run out of .tbz files or we  fill up the /tmp/wsprdemon file system.
+        ### Untar one .tbz file at a time, throwing away bad and old files, until we run out of .tbz files or we fill up the /tmp/wsprdaemon file system.
         rm -rf wsprdaemon.d wsprnet.d
         local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
         local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
-        wd_logger 1 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} KByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
+        wd_logger 2 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} kByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
 
         local valid_tbz_list=() 
         local tbz_file 
@@ -66,7 +66,7 @@ function tbz_service_daemon()
                     break
                 fi
             else
-                wd_logger 1 "Found invalid tar file ${tbz_file}"
+                wd_logger 2 "Found invalid tar file ${tbz_file}"
                 local file_mod_epoch=0
                 file_mod_epoch=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
                 local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
@@ -84,16 +84,43 @@ function tbz_service_daemon()
             fi
         done
         if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
+            wd_logger 2 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
             sleep 1
             continue
         fi
+        ### Flush valid tbz files which we have previously processed
+        declare TBZ_PROCESSED_ARCHIVE_FILE="tbz_processed_list.txt"
+        declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its size
+        touch ${TBZ_PROCESSED_ARCHIVE_FILE}
+        local previously_processed_tbz_list=()
+        local new_tbz_list=()
+        local tbz_file
+        for tbz_file in ${valid_tbz_list[@]} ; do
+            if grep ${tbz_file} ${TBZ_PROCESSED_ARCHIVE_FILE} > /dev/null ; then
+                wd_logger 1 "Flushing '${tbz_file}' which has been previously processed"
+                wd_rm ${tbz_file}
+                previously_processed_tbz_list+=( ${tbz_file} )
+            else
+                new_tbz_list+=( ${tbz_file} )
+            fi
+        done
+        wd_logger 1 "In checking for previously processed files: valid_tbz_list has ${#valid_tbz_list[@]} files, of which we flushed the ${#previously_processed_tbz_list[@]} files which have been previously processed."
+        if [[ ${#new_tbz_list[@]} -eq 0 ]]; then
+            wd_logger 1 "After flushing there are no new tbz files, so there are no new tbz files to process\n"
+            sleep 1
+            continue
+        fi
+        valid_tbz_list=( ${new_tbz_list[@]} )
+        echo "${new_tbz_list[@]}" >> ${TBZ_PROCESSED_ARCHIVE_FILE}
+        truncate_file ${TBZ_PROCESSED_ARCHIVE_FILE} ${MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE}
+
         local valid_tbz_names_list=( ${valid_tbz_list[@]##*/} )
-        wd_logger 1 "Extracted spot and noise files from the ${#tbz_file_list[@]} raw tar files in the ftp directory. Next  process ${#valid_tbz_list[@]} valid tbz files: '${valid_tbz_names_list[*]:0:4}...'"
+        local valid_reporter_names_list=( $( sort -u <<< "${valid_tbz_names_list[@]}") )
+        wd_logger 1 "Extracted spot and noise files from the ${#valid_tbz_names_list[@]} valid tar files in the ftp directory which came from ${#valid_reporter_names_list[@]} different reporters: '${valid_reporter_names_list[*]}'"
 
-        queue_files_for_upload_to_wd1 ${valid_tbz_list[@]}
+        queue_files_for_mirroring ${valid_tbz_list[@]}
 
-        ### Remove frequectly found zero length spot files which are  are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decoded
+        ### Remove frequently found zero length spot files which are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decodedgrep 
         flush_empty_spot_files
 
         record_spot_files
@@ -112,6 +139,28 @@ function tbz_service_daemon()
         wd_logger 1 "Finished deleting the tar files\n"
         sleep 1
     done
+}
+
+function get_status_tbz_service_daemon()
+{
+    get_status_of_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The tbz_service_daemon is not running in '${TBZ_SERVER_ROOT_DIR}'"
+    fi
+}
+
+function kill_tbz_service_daemon()
+{
+    kill_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the tbz_service_daemon running in '${TBZ_SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "Failed to kill the tbz_service_daemon in '${TBZ_SERVER_ROOT_DIR}'"
+    fi
 }
 
 function flush_empty_spot_files()
@@ -172,11 +221,11 @@ function record_spot_files()
                 python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots from:\n${reporters}\n in ${split_csv_file} to the wsprdaemon_spots_s table"
+                    wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
                 else
-                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot files"
+                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
                 fi
-                wd_rm ${split_csv_file}
+                #wd_rm ${split_csv_file}
             done
             wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
@@ -204,7 +253,7 @@ function record_spot_files()
 ###                                                      s/./&:/9; => insert ':' to get YYMMDD:HH:MM"
 ###                                                                s/./&-/4; s/./&-/2;   => insert ':' to get YY-MM-DD:HH:MM"
 ###                                                                                   s/^/"20/;  => insert '"20' to get "20YY-MM-DD:HH:MM"
-###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floting point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
+###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floating point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
 ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
 function format_spot_lines()
 {
@@ -217,9 +266,9 @@ function format_spot_lines()
     fi
 
     local TS_BAD_SPOTS_FILE=./ts_bad_spots.log
-    awk 'NF != 32 && NF != 33' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
+    awk 'NF != 32 && NF != 34' ${spot_file_list[@]} > ${TS_BAD_SPOTS_FILE}
     if [[ -s ${TS_BAD_SPOTS_FILE} ]] ; then
-        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} )  bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
+        wd_logger 1 "Found $(wc -l < ${TS_BAD_SPOTS_FILE} ) bad spots:\n$(head -n 4 ${TS_BAD_SPOTS_FILE})"
     fi
 
     ### the awk expression forces the tx_call and rx_id to be all upper case letters and the tx_grid and rx_grid to by UU99ll, just as is done by wsprnet.org
@@ -236,6 +285,20 @@ function format_spot_lines()
                    n = split(FILENAME, a, "/"); 
                    printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
     sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > ${fixed_spot_lines_file}
+
+    ### WD 3.0 extended spot lines have two more fields and are in the ALL_WSPR.TXT field order
+    ### $6=toupper($6)     ==> call sign is all upper case
+    ### 
+    awk 'NF == 34 {
+                   $6=toupper($6);
+                   if ( $8 != "none" ) $8 = ( toupper(substr($8, 1, 2)) tolower(substr($8, 3, 4)));
+                   if ( $9 !~ /^[0-9]+/ ) { for ( i=9; i<20; i++ ) { $i = $(i+1)} ; $i = "-999.0"} ;
+                   $22 = ( toupper(substr($22, 1, 2)) tolower(substr($22, 3, 4)));
+                   $23=toupper($23);
+                   n = split(FILENAME, a, "/");
+                   printf "%s %s%s\n", $0, wspr_pkt_mode, a[n-2]} ' ${spot_file_list[@]}  > awk.out
+    sed -r 's/\S+\s+//18; s/ /,/g; s/,/:/; s/./&"/11; s/./&:/9; s/./&-/4; s/./&-/2; s/^/"20/; s/",0\./",/;'"s/\"/'/g" awk.out > /dev/null
+
     wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
 }
@@ -275,171 +338,415 @@ function record_noise_files()
 }
 
 
-declare UPLOAD_TO_MIRROR_SERVER_URL="${UPLOAD_TO_MIRROR_SERVER_URL-}"       ### Defaults to blank, so no uploading happens
+################################## Mirror Service Section #########################################################################################
+### This daemon runs on WD (logs.wsprdaemon.org), the cloud server where all WD clients deliver their tgz files
 
-declare UPLOAD_TO_MIRROR_QUEUE_DIR=${UPLOADS_ROOT_DIR}/mirror.d            ### Where tgz files are put to be uploaded
-if [[ ! -d ${UPLOAD_TO_MIRROR_QUEUE_DIR} ]]; then
-    mkdir -p ${UPLOAD_TO_MIRROR_QUEUE_DIR}
+declare MIRROR_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/mirror.d   ### Where tgz files are put to be uploaded
+### ID,URL[:port],FTP_USER,FTP_USER_PASSWORD              ### This is the primary target of client uploads. Mirror at WD spot/noise files to WD1
+if [[ ${MIRROR_DESTINATIONS_LIST[0]-x} == "x" ]] ; then
+    ### This array was not declared in the conf file, so declare it here
+    declare -a MIRROR_DESTINATIONS_LIST=()
 fi
+declare UPLOAD_TO_MIRROR_SERVER_SECS=10     ### How often to attempt to upload tar files to log1.wsprdaemon.org
+declare UPLOAD_MAX_FILE_COUNT=1000          ### curl will upload only a ?? number of files, so limit the number of files given to curl
 
-declare UPLOAD_TO_MIRROR_SERVER_SECS=10       ## How often to attempt to upload tar files to log1.wsprdaemon.org
-declare UPLOAD_MAX_FILE_COUNT=1000          ## curl will upload only a ?? number of files, so limit the number of files given to curl
-
-### Copies the valid tar files found by the upload_server_daemon() to logs1.wsprdaemon.org
-function upload_to_mirror_daemon() {
-    local upload_to_mirror_daemon_root_dir=$1
-    mkdir -p ${upload_to_mirror_daemon_root_dir}
-    cd ${upload_to_mirror_daemon_root_dir}
-
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
-
-    mkdir -p ${UPLOAD_TO_MIRROR_QUEUE_DIR}
-    cd       ${UPLOAD_TO_MIRROR_QUEUE_DIR}
-    wd_logger 1 "Starting in ${UPLOAD_TO_MIRROR_QUEUE_DIR}"
-    while true; do
-        shopt -s nullglob
-        local files_queued_for_upload_list=( $(find -type f) )
-        if [[ -z "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
-            wd_logger 1 "UPLOAD_TO_MIRROR_SERVER_URL is not defined, so nothing for us to do now. 'sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}' and then reread the config file"
-            if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
-                 wd_logger 1 "ERROR: this mirror server is disabled, but there are ${#files_queued_for_upload_list[@]} files waiting to be uploaded"
-             fi
-            sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
-            source ${WSPRDAEMON_CONFIG_FILE}
-            continue
-        else
-            local parsed_server_url_list=( ${UPLOAD_TO_MIRROR_SERVER_URL//,/ } )
-            if [[ ${#parsed_server_url_list[@]} -ne  3  ]]; then
-                wd_logger 1 "ERROR: invalid configuration variable UPLOAD_TO_MIRROR_SERVER_URL  = '${UPLOAD_TO_MIRROR_SERVER_URL}'. 'sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}' and then reread the config file"
-                if [[ ${#files_queued_for_upload_list[@]} -gt 0 ]]; then
-                    wd_logger 1 "ERROR: this mirror server's URL is corrupted and  there are ${#files_queued_for_upload_list[@]} files waiting to be uploaded"
-                fi
-                sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
-                source ${WSPRDAEMON_CONFIG_FILE}
-                continue
-            fi
+function get_upload_spec_from_id()
+{
+    local _return_url_spec_variable=$1
+    local target_spec_id=$2
+    local mirror_spec
+    
+    for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]}; do
+        local mirror_spec_list=( ${mirror_spec//,/ } )
+        if [[ "${mirror_spec_list[0]}" == "${target_spec_id}" ]]; then
+            wd_logger 1 "Found target_spec_id=${target_spec_id} in '${mirror_spec}"
+            eval ${_return_url_spec_variable}="${mirror_spec}"
+            return 0
         fi
-        local upload_url=${parsed_server_url_list[0]}
-        local upload_user=${parsed_server_url_list[1]}
-        local upload_password=${parsed_server_url_list[2]}
+    done
+    wd_logger 1 "ERROR:  couldn't find target_spec_id=${target_spec_id} in MIRROR_DESTINATIONS_LIST[]"
+    return 1
+}
 
+### One instance of this daemon is spawned for each mirror target defined in MIRROR_DESTINATIONS_LIST
+### This daemon polls for files under its mirror source directory
+function upload_to_mirror_site_daemon() {
+    local my_pwd=$1            ### spawn_daemon passes us the directory we are to run in
+    mkdir -p ${my_pwd}
+    cd ${my_pwd}
+      
+    local my_upload_id=${my_pwd##*/}    ### Get the upload_id from the path to this daemon's home dir
+    local url_spec
+    get_upload_spec_from_id   url_spec ${my_upload_id}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: passed my home path '${my_upload_id}' which specifies an upload_id '${my_upload_id}' which can't be found in \$MIRROR_DESTINATIONS_LIST[]"
+        exit ${ret_code}
+    fi
+     wd_logger 1 "Got url_spec=${url_spec}' for my_upload_id=${my_upload_id}"
+
+    local url_spec_list=( ${url_spec//,/ } )
+    local url_id=${url_spec_list[0]}
+    local url_addr=${url_spec_list[1]}
+    local url_login_name=${url_spec_list[2]}
+    local url_login_password=${url_spec_list[3]}
+    local upload_to_mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${url_id}   ### Where to find tbz files
+    local upload_to_mirror_daemon_queue_dir=${upload_to_mirror_daemon_root_dir}/queue.d
+
+    setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
+
+    mkdir -p ${upload_to_mirror_daemon_queue_dir}
+    wd_logger 1 "Looking for files in ${upload_to_mirror_daemon_queue_dir}"
+    while true; do
+        local files_queued_for_upload_list=( $(find ${upload_to_mirror_daemon_queue_dir} -type f) )
         if [[ ${#files_queued_for_upload_list[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
+            wd_logger 1 "Found no files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
         else
-            wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to upload_url=${upload_url}, upload_user=${upload_user}, upload_password=${upload_password}"
+            wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            wd_logger 1 "Starting curl of ${#curl_upload_file_list[@]} files using: '.. --user ${upload_user}:${upload_password} ftp://${upload_url}'"
+            local curl_dest_subdir="${MIRROR_TARGET_SUBDIR-upload}"   ### <= TESTING, change to "upload" once this daemon is debugged
 
             local curl_upload_file_string=${curl_upload_file_list[@]}
+            curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-separated list of files
 
-            curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-seperated list of files
-            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${upload_user}:${upload_password} ftp://${upload_url} 
+            wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/'"
+            local curl_output=$(curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ 2>&1 )
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "curl xfer failed => ${ret_code}, so leave files alone and try again"
+                wd_logger 1 "Curl xfer failed: '${curl_output}'  => ${ret_code}, so leave files alone and try again"
             else
-                wd_logger 1 "curl xfer was successful, so delete ${#curl_upload_file_list[@]} local files"
-                rm ${curl_upload_file_list[@]}
+                wd_logger 1 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
+                wd_rm ${curl_upload_file_list[@]}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    d_logger 1 "ERROR: 'rm ${curl_upload_file_list[*]}' => ${ret_code}, but there is nothing we can do to recover"
+                    wd_logger 1 "ERROR: 'wd_rm ${curl_upload_file_list[*]}' => ${ret_code}, but there is nothing we can do to recover"
                 fi
             fi
         fi
         wd_logger 1 "Sleeping for ${UPLOAD_TO_MIRROR_SERVER_SECS} seconds"
-        sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
+        wd_sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
     done
 }
 
-function queue_files_for_upload_to_wd1() {
-    local files="$@"
-
-    if [[ -z "${UPLOAD_TO_MIRROR_SERVER_URL}" ]]; then
-        wd_logger 2 "Queuing is disabled, so ignoring the we were passed"
-    else
-        local files_path_list=(${files})
-        local files_name_list=(${files_path_list[@]##*/})
-        wd_logger 1 "queuing ${#files_name_list[@]} files '${files_name_list[*]}' in '${UPLOAD_TO_MIRROR_QUEUE_DIR}'"
-        ln ${files} ${UPLOAD_TO_MIRROR_QUEUE_DIR}
-    fi
-}
-
-declare -r UPLOAD_DAEMON_LIST=(
-   "upload_to_mirror_daemon        ${UPLOADS_ROOT_DIR} "
-   "tbz_service_daemon             ${UPLOADS_ROOT_DIR} "
-#   "scraper_daemon          ${UPLOADS_ROOT_DIR} "
-#   "noise_graph_daemon      ${UPLOADS_ROOT_DIR} "
-    )
-
-function upload_server_watchdog_daemon_kill_handler()
+function kill_upload_to_mirror_site_daemons()
 {
-    wd_logger 1 "Got SIGTERM"
-    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
-        local daemon_info_list=( ${daemon_info} )
-        local daemon_function_name=${daemon_info_list[0]}
-        local daemon_home_dir=${daemon_info_list[1]}
+    wd_logger 2 "Start"
 
-        wd_logger 1 "Killing: '${daemon_function_name} ${daemon_home_dir}'"
-        kill_daemon ${daemon_function_name} ${daemon_home_dir}
+    if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
+        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        return 0
+    fi
+ 
+    local mirror_spec
+    for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
+        local mirror_spec_list=(${mirror_spec[@]//,/ })
+        local mirror_daemon_id=${mirror_spec_list[0]}
+        local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
+
+        wd_logger 2 "Killing mirror daemon with: 'kill_daemon upload_to_mirror_site_daemon ${mirror_daemon_root_dir}'"
+        kill_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}
         local ret_code=$?
+        ### Normally upload_to_mirror_site_daemon() will print out its actions, so there is no reason to print out its return code
         if [[ ${ret_code} -eq 0 ]]; then
-            wd_logger 1 "Killed '${daemon_function_name} ${daemon_home_dir}'"
+            wd_logger -1 "Killed a upload_to_mirror_site_daemon running in '${mirror_daemon_root_dir}'"
         else
-            wd_logger 1 "ERROR: failed to kill '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
+            wd_logger -1 "The 'upload_to_mirror_site_daemon' was not running in '${mirror_daemon_root_dir}'"
         fi
     done
+    wd_logger 2 "Done"
+}
+
+function mirror_daemon_kill_handler()
+{
+    wd_logger 1 "Got SIGTERM"
+    kill_upload_to_mirror_site_daemons
     wd_logger 1 "Done killing"
     exit 0
 }
-    
-declare -r UPLOAD_SERVERS_POLL_RATE=10       ### Seconds for the daemons to wait between polling for files
-function upload_server_watchdog_daemon() 
+
+function mirror_watchdog_daemon() {
+    setup_verbosity_traps
+    ## trap mirror_daemon_kill_handler SIGTERM
+
+    while true; do
+        local mirror_spec
+        for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
+            local mirror_spec_list=(${mirror_spec[@]//,/ })
+            local mirror_daemon_id=${mirror_spec_list[0]}
+            local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
+            
+            wd_logger 2 "Spawning mirror daemon for '${mirror_spec}'"
+            mkdir -p ${mirror_daemon_root_dir}
+            spawn_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir} 
+            wd_logger 2 "Spawned upload_to_mirror_site_daemon with pid = $( < ${mirror_daemon_root_dir}/upload_to_mirror_site_daemon.pid)"
+        done
+        wd_logger 1 "Sleeping for ${UPLOAD_TO_MIRROR_SERVER_SECS} seconds"
+        wd_sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
+    done
+}
+
+function kill_mirror_watchdog_daemon()
 {
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
-    trap upload_server_watchdog_daemon_kill_handler SIGTERM
+    local mirror_watchdog_daemon_home_dir=$1
+    wd_logger 2 "Killing mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}" 
+    kill_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the mirror_watchdog_daemon running in '${mirror_watchdog_daemon_home_dir}'"
+    else
+        wd_logger -1 "The 'mirror_watchdog_daemon' was not running in '${mirror_watchdog_daemon_home_dir}'"
+    fi
+
+    ### If the mirror_watchdog_daemon() is running, then its SIG_TERM handler will have killed the individual mirror_daemons.
+    ### But in the unlikely case that mirror_watchdog_daemon isn't running, make sure they are killed
+    wd_logger 2 "Killing kill_upload_to_mirror_site_daemons ${mirror_watchdog_daemon_home_dir}"
+    kill_upload_to_mirror_site_daemons ${mirror_watchdog_daemon_home_dir}
+}
+
+function get_status_mirror_watchdog_daemon()
+{
+    local mirror_watchdog_daemon_home_dir=$1
+    
+    wd_logger 2 "Get status for 'mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}'"
+    get_status_of_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The mirror_watchdog_daemon is running in '${mirror_watchdog_daemon_home_dir}'"
+    else
+        wd_logger -1 "The mirror_watchdog_daemon is not running in '${mirror_watchdog_daemon_home_dir}'"
+    fi
+
+    if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
+        wd_logger -1 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        return 0
+    fi
+    local mirror_spec
+    for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
+        local mirror_spec_list=(${mirror_spec[@]//,/ })
+        local mirror_daemon_id=${mirror_spec_list[0]}
+        local mirror_daemon_root_dir=${MIRROR_ROOT_DIR}/${mirror_daemon_id}
+
+        wd_logger 2 "Get status for '${mirror_spec}'"
+        get_status_of_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}
+        local ret_code=$?
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is running in ${mirror_daemon_root_dir}"
+        else
+            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is not running in ${mirror_daemon_root_dir}"
+        fi
+    done
+}
+
+function queue_files_for_mirroring()
+{
+    local files="$@"
+    local files_path_list=(${files})
+
+    if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
+        wd_logger 2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so don't queue the ${#files_path_list[@]} we were passed"
+    else
+        local mirror_spec
+        for mirror_spec in ${MIRROR_DESTINATIONS_LIST[@]} ; do
+            local mirror_spec_list=(${mirror_spec[@]//,/ })
+            local mirror_id=${mirror_spec_list[0]}
+            local mirror_root_dir=${MIRROR_ROOT_DIR}/${mirror_id}
+            local mirror_queue_dir=${mirror_root_dir}/queue.d
+
+            mkdir -p ${mirror_queue_dir}
+            wd_logger 1 "Queuing ${#files_path_list[@]} files to ${mirror_queue_dir}: '${files_path_list[*]::5}...'"
+            local src_file_path
+            for src_file_path in ${files_path_list[@]}; do
+                local src_file_name=${src_file_path##*/}
+                local dst_file_path=${mirror_queue_dir}/${src_file_name}
+                if [[ -f ${dst_file_path} ]]; then
+                    wd_logger 1 "WARNING: source file '${src_file_path}' already exists in '${mirror_queue_dir}', so skipping"
+                else
+                    ln ${src_file_path} ${dst_file_path}
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: 'ln ${src_file_path} ${dst_file_path}' => ${ret_code}"
+                    else
+                        wd_logger 2 "Queued ${src_file_name} using 'ln ${src_file_path} ${dst_file_path}'"
+                    fi
+                fi
+            done
+            wd_logger 1 "Done queuing to mirror '${mirror_spec}'"
+        done
+        wd_logger 1 "Done queuing to mirror targets: '${MIRROR_DESTINATIONS_LIST[*]}'"
+    fi
+    wd_logger 1 "Done with all mirroring"
+}
+
+######################## Upload services spawned by the upload watchdog server ######################
+function get_status_upload_service() 
+{
+    local daemon_function_name=$1
+
+    local daemon_status_function_name=""
+    local daemon_home_dir
+    local entry_info
+    for entry_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local entry_info_list=( ${entry_info} )
+        local entry_function_name=${entry_info_list[0]}
+        local entry_status_function_name=${entry_info_list[2]-get_status_of_daemon}
+        local entry_home_dir=${entry_info_list[3]}
+
+        if [[ ${daemon_function_name} == ${entry_function_name} ]]; then
+            daemon_status_function_name=${entry_status_function_name}
+            daemon_home_dir=${entry_home_dir}
+            break
+        fi
+    done
+    if [[ -z "${daemon_status_function_name}" ]]; then
+        wd_logger 1 "ERROR:  can't find daemon_function_name='${daemon_function_name}' in '\${UPLOAD_DAEMON_LIST[@]}'"
+        return 1
+    fi
+
+    wd_logger 1 "Get status of: '${daemon_function_name}' with home dir '${daemon_home_dir}' by executing '${daemon_status_function_name}'"
+    ${daemon_status_function_name} ${daemon_home_dir}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger 2 "${daemon_status_function_name}() '${daemon_home_dir}' => OK"
+    else
+        wd_logger 1 "${daemon_status_function_name}() '${daemon_home_dir}' => ${ret_code}"
+    fi
+}
+
+function get_status_upload_watchdog_services()
+{
+    local daemon_status_function_name=""
+    local daemon_home_dir
+    local entry_info
+    for entry_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local entry_info_list=( ${entry_info} )
+        local entry_function_name=${entry_info_list[0]}
+        get_status_upload_service ${entry_function_name}
+    done
+    return 0
+}
+
+################################## Upload Server Top Level Daemon Watchdog Section #########################################################################################
+declare -r UPLOAD_SERVERS_POLL_RATE=10       ### Seconds for the daemons to wait between polling for files
+
+function upload_services_watchdog_daemon() 
+{
+    setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
     wd_logger 1 "Starting"
     while true; do
-        wd_logger 2 "Starting to check all daemons"
+        wd_logger 1 "Starting to check all daemons"
         local daemon_info
         for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
-            wd_logger 2 "Check and spawn ${daemon_info}"
-
             local daemon_info_list=( ${daemon_info} )
             local daemon_function_name=${daemon_info_list[0]}
-            local daemon_home_dir=${daemon_info_list[1]}
+            local daemon_home_dir=${daemon_info_list[3]}
             
-            wd_logger 2 "Check and if needed spawn: '${daemon_function_name} ${daemon_home_dir}'"
+            wd_logger 1 "Check and if needed spawn: '${daemon_function_name} ${daemon_home_dir}'"
             spawn_daemon ${daemon_function_name} ${daemon_home_dir}
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
+                wd_logger 1 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
             else
                 wd_logger 1 "ERROR: '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
             fi
         done
-        sleep ${UPLOAD_SERVERS_POLL_RATE}
+
+        wd_sleep 600 # ${UPLOAD_SERVERS_POLL_RATE}
     done
 }
+
+function spawn_upload_services_watchdog_daemon() 
+{
+     spawn_daemon            upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+}
+
+function kill_upload_services_watchdog_daemon()
+{
+    wd_logger 2 "Kill the upload_services_watchdog_daemon by executing: 'kill_daemon upload_services_watchdog_daemon ${SERVER_ROOT_DIR}'"
+    ### Kill the watchdog
+    kill_daemon  upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the daemon 'upload_services_watchdog_daemon' running in '${SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The 'upload_services_watchdog_daemon' was not running in '${SERVER_ROOT_DIR}'"
+    fi
+
+    ### Kill the services it spawned
+    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local daemon_info_list=( ${daemon_info} )
+        local daemon_function_name=${daemon_info_list[0]}
+        local daemon_kill_function_name=${daemon_info_list[1]}
+        local daemon_home_dir=${daemon_info_list[3]}
+
+        wd_logger 2 "Kill the '${daemon_function_name} by executing: '${daemon_kill_function_name} ${daemon_home_dir}'"
+        ${daemon_kill_function_name} ${daemon_home_dir}
+        local ret_code=$?
+        ### Normally the kill function will print out its actions, so don't print here
+        if [[ ${ret_code} -eq 0 ]]; then
+            wd_logger 2 "'${daemon_kill_function_name} ${daemon_home_dir}' reports success"
+        else
+            wd_logger 2 "ERROR: '${daemon_kill_function_name} ${daemon_home_dir}' returned ${ret_code}"
+        fi
+    done
+    wd_logger 2 "Done"
+}
+
+### Watchdog daemons which spawn service daemons have their own status report functions
+function get_status_upload_services()
+{
+    wd_logger 2 "Get the status of the topmost daemon 'upload_services_watchdog_daemon' by executing: 'get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}'"
+    get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
+    fi
+
+    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local daemon_info_list=( ${daemon_info} )
+        local daemon_function_name=${daemon_info_list[0]}
+        local daemon_status_function_name=${daemon_info_list[2]}
+        local daemon_home_dir=${daemon_info_list[3]}
+
+        wd_logger 2 "Getting status for '${daemon_function_name}' spawned by 'upload_services_watchdog_daemon' by calling: ${daemon_status_function_name} ${daemon_home_dir}'"
+        ${daemon_status_function_name}  ${daemon_home_dir}
+    done
+    return 0
+}
+
+declare SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}
+declare TBZ_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/uploads.d
+declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper.d
+declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
+declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs.d
+
+declare -r UPLOAD_DAEMON_LIST=(
+   "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
+   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
+   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
+    )
 
 ### function which handles 'wd -u ...'
 function upload_server_cmd() {
     local action=$1
     
-    wd_logger 2 "process cmd '${action}'"
+    wd_logger 3 "Process cmd '${action}'"
     case ${action} in
         a)
-            spawn_daemon            upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}      ### Ensure there are upload daemons to consume the spots and noise data
+            spawn_upload_services_watchdog_daemon
             ;;
         z)
-            kill_daemon             upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}
+            kill_upload_services_watchdog_daemon
             ;;
         s)
-            get_status_of_daemon    upload_server_watchdog_daemon ${WSPRDAEMON_ROOT_DIR}
+            get_status_upload_services
             return 0         ### Ignore error codes
             ;;
-        *)
+       *)
             wd_logger 1 "argument action '${action}' is invalid"
             exit 1
             ;;

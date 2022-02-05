@@ -4,8 +4,8 @@
 ################ Posting ####################################
 #############################################################
 
-declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting deamon directory which contains symlinks to the decoding deamon(s) subdirs where spots for this daemon are copied
-declare -r WAV_FILE_POLL_SECONDS=5            ### How often to poll for the 2 minute .wav record file to be filled
+declare POSTING_SUPPLIERS_SUBDIR="posting_suppliers.d"    ### Subdir under each posting daemon directory which contains symlinks to the decoding daemon(s) subdirs where spots for this daemon are copied
+declare -r WAV_FILE_POLL_SECONDS=5                        ### How often to poll for the 2 minute .wav record file to be filled
 
 function get_posting_dir_path(){
     local receiver_name=$1
@@ -14,8 +14,6 @@ function get_posting_dir_path(){
 
     echo ${receiver_posting_path}
 }
-
-
 
 ### This daemon creates links from the posting dirs of all the $4 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
@@ -29,7 +27,7 @@ function posting_daemon()
 
     wd_logger 1 "Starting with args ${posting_receiver_name} ${posting_receiver_band} ${posting_receiver_modes} '${real_receiver_list[*]}'"
 
-    setup_verbosity_traps          ## So we can increment aand decrement verbosity without restarting WD
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
     source ${WSPRDAEMON_CONFIG_FILE}
 
     local posting_call_sign="$(get_receiver_call_from_name ${posting_receiver_name})"
@@ -51,14 +49,14 @@ function posting_daemon()
     for real_receiver_name in ${real_receiver_list[@]}; do
         ### Create posting subdirs for each real recording/decoding receiver to copy spot files
         ### If a schedule change disables this receiver, we will want to signal to the real receivers that we are no longer listening to their spots
-        ### To find those receivers, create a posting dir under each real reciever and make a sybolic link from our posting subdir to that real posting dir
+        ### To find those receivers, create a posting dir under each real receiver and make a symbolic link from our posting subdir to that real posting dir
         ### Since both dirs are under /tmp, create a hard link between that new dir and a dir under the real receiver where it will copy its spots
         local real_receiver_dir_path=$(get_recording_dir_path ${real_receiver_name} ${posting_receiver_band})
         local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
         ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
         mkdir -p ${real_receiver_posting_dir_path}
 
-        ### Now create a symlink from under here to the directory where spots will apper
+        ### Now create a symlink from under here to the directory where spots will appear
         local this_rx_local_link_name=${POSTING_SUPPLIERS_SUBDIR}/${real_receiver_name}
         if [[ -L ${this_rx_local_link_name} ]]; then
             wd_logger 1 "Link from ${real_receiver_posting_dir_path} to ${this_rx_local_link_name} already exists"
@@ -117,12 +115,67 @@ function posting_daemon()
     done
 }
 
+### The wsprnet server processes spot lines with this block of PHP code.
+### Our ALL_WSPR.TXT spot lines contain 16 or 17 fields, so to communicate the 'mode' we need to shorten type 1 spots which include the tx grid to 11 fields
+### and put 'sync' in field #3 and 'mode' in field #11
+###
+### 352      $date = $fields[$i++];
+### 353      $utc = $fields[$i++];
+### 354      if ($nfields < 16) {
+### 355          // in wspr 2.3-2.4, the ALL_WSPR.TXT file puts sync later, and there are 16 or 17 total fields (depending on msg format)
+### 356          $sync = $fields[$i++];
+### 357      }
+### 358      $snr = $fields[$i++];
+### 359      $dt = $fields[$i++];
+### 360      $freq = $fields[$i++];
+### 361      $tcall = $fields[$i++];
+### 362      // In wspr 2.0, if there is a prefix/suffix, no grid is there (just power).
+### 363      // We'll assume that if it's length 4 or 6, it is a grid
+### 364      if (strlen($fields[$i]) == 4 || strlen($fields[$i]) == 6)
+### 365        $tgrid = $fields[$i++];
+### 366      else $tgrid = '';
+### 367      $tpower = $fields[$i++];
+### 368      if ($date && isset($fields[$i])) $drift = $fields[$i++];
+### 369      else $drift = '0';
+### 370      // can't tell version from log file.
+### 371      // $version = '';
+### 372      // accept version from form post. CJG 20210808
+### 373      $version = $_REQUEST['version'] ?? '';
+### 374
+### 375      // If the field count is 11, assume the 11th field is `mode`
+### 376      // otherwise default WSPR-2
+### 377      $mode = $nfields == 11 ? get_mode($fields[$i++]) : 1;
+### 378
+### 379      $success = add_spot($version, $call, $grid, $date, $utc, $snr, $dt, $freq, $tcall, $tgrid, $tpower, $drift, $mode);
+
+declare WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wn_from_wd_spot_file.awk
+### From an extended wsprdaemon format spots file, creates a wsprnet format spots file with 12 fields.  The last field specifies the pkt mode
+function format_spots_file_for_wsprnet() 
+{
+    local source_extended_spotlines_file=$1
+    local dest_wsprnet_spotlines_file=$2
+
+    wd_logger 1 "Create WN format spot lines from ${source_extended_spotlines_file} in ${dest_wsprnet_spotlines_file}"
+    awk -f ${WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM} ${source_extended_spotlines_file} > ${dest_wsprnet_spotlines_file}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'awk -f ${WN_FROM_WD_SPOTS_FILE_AWK_PROGRAM} ${source_extended_spotlines_file} > ${dest_wsprnet_spotlines_file}' => ${rc}"
+        return 1
+    fi
+    local error_lines
+    if ! error_lines=$( grep ERROR ${dest_wsprnet_spotlines_file} ) ; then
+       wd_logger 1 "ERROR: bad spot lines reported by awk:\n${error_lines}"
+    fi
+    wd_logger 1 "Created WN format spot file ${dest_wsprnet_spotlines_file}"
+    return 0
+}
+
 function post_files()
 {
     local receiver_band=$1
     local wsprnet_uploads_queue_directory=$2   ### This is derived from the call and grid and will differ from the real receiver when we are posting for a MERGEd (i.e.logical) receiver
     local spot_time=$3
-    local spot_file_list=(${@:4})         ### The rest of the args are the *_spot.txt files in this WSPR cycle
+    local spot_file_list=(${@:4})              ### The rest of the args are the *_spot.txt files in this WSPR cycle
 
     wd_logger 1 "Post spots from ${#spot_file_list[@]} files: '${spot_file_list[*]}'"
 
@@ -136,7 +189,7 @@ function post_files()
     if [[ -s spots.ALL ]]; then
         ### There are spots to upload
         ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
-        ### If confiugred for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
+        ### If configured for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
         > spots.BEST
         local calls_list=( $( awk '{print $6}' spots.ALL | sort -u ) )
         wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
@@ -145,14 +198,14 @@ function post_files()
             local best_line=$( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
             local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
             local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
-            local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot hich marks whether it could be uploadee by the upload_server with a 1
+            local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
  
             local fixed_fields_line=$( printf "For call %12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )
             wd_logger 1 "${fixed_fields_line}"
 
             echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
             if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
-                ### Mark the line in the source file for proxy `upload
+                ### Mark the line in the source file for proxy upload
                 grep -v -F "${best_spot}" ${best_file} > best.TMP
                 echo "${best_spot_marked}" >> best.TMP
                 sort -k 5,5n best.TMP > ${best_file}
@@ -178,7 +231,19 @@ function post_files()
             local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
             local spots_count=$(wc -l < spots.BEST)
             wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
-            mv spots.BEST ${wsprnet_uploads_queue_filename}
+            ### Format spot lines for the wsprnet.org server which now (1/22) parses spot lines for a packet mode 
+            format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt
+            local rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                if [[ ! -s wn_format_spots.txt ]]; then
+                    wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' succeeeded but there are no spots in wn_format_spots.txt"
+                else
+                    wd_logger 1 "Queuing file with $(wc -l < wn_format_spots.txt) spots to ${wsprnet_uploads_queue_filename}"
+                    cp -p wn_format_spots.txt ${wsprnet_uploads_queue_filename}
+                fi
+            else
+                wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' => ${rc}"
+            fi
         fi
     fi
 
@@ -222,7 +287,7 @@ function add_derived() {
     python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
 }
 
-### For a group of MERGEd receivers: For each call output the to the file 'merged.log' one SNR reported for it to wsprnet.org and a list of SNRs (if any) reported for it by each real reciever 
+### For a group of MERGEd receivers: For each call output to the file 'merged.log' one SNR reported for it to wsprnet.org and a list of SNRs (if any) reported for it by each real reciever 
 function log_merged_snrs() 
 {
     local best_snrs_file=$1
@@ -238,8 +303,8 @@ function log_merged_snrs()
     fi
  
     local posted_spots_count=$(cat ${best_snrs_file} | wc -l)
-    local posted_calls_list=( $(awk '{print $6}' ${best_snrs_file}) )               ### This list will have already been unique and sorted by frequency
-    local posted_spots_count=${#posted_calls_list[@]}                               ### WD posts to wsprnet.org only the spot with the best SNR from each call, so sthe # of spots == #calls
+    local posted_calls_list=( $(awk '{print $6}' ${best_snrs_file}) )   ### This list will have already been unique and sorted by frequency
+    local posted_spots_count=${#posted_calls_list[@]}                   ### WD posts to wsprnet.org only the spot with the best SNR from each call, so the # of spots == #calls
 
     local real_receiver_list=( ${all_spot_files_list[@]#*/} )
           real_receiver_list=( ${real_receiver_list[@]%/*}     )
@@ -272,11 +337,10 @@ function log_merged_snrs()
         done
         printf "\n"                                        >>  merged.log
     done
-    truncate_file merged.log ${MAX_MERGE_LOG_FILE_SIZE-1000000}        ## Keep each of these logs to less than 1 MByte
+    truncate_file merged.log ${MAX_MERGE_LOG_FILE_SIZE-1000000}  ### Keep each of these logs to less than 1 MByte
     return 0
 }
  
-
 declare -r POSTING_DAEMON_PID_FILE="posting_daemon.pid"
 declare -r POSTING_DAEMON_LOG_FILE="posting_daemon.log"
 
@@ -328,12 +392,12 @@ function kill_posting_daemon() {
 
     local receiver_address=$(get_receiver_ip_from_name ${receiver_name})
     if [[ -z "${receiver_address}" ]]; then
-        wd_logger 1 " No address(s) found for ${receiver_name}"
+        wd_logger 1 " No address(es) found for ${receiver_name}"
         return 1
     fi
     local posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     if [[ ! -d "${posting_dir}" ]]; then
-        wd_logger 1 "Caan't find expected posting daemon dir ${posting_dir}"
+        wd_logger 1 "Can't find expected posting daemon dir ${posting_dir}"
         return 2
     else
         local posting_daemon_pid_file=${posting_dir}/${POSTING_DAEMON_PID_FILE}
@@ -346,7 +410,7 @@ function kill_posting_daemon() {
                 kill ${posting_pid}
                 wd_logger 1 "Killed active posting_daemon() pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
             else
-                wd_logger 1 "Pid ${posting_pid} was dead.  Deleting '${posting_daemon_pid_file}' it came from"
+                wd_logger 1 "Pid ${posting_pid} was dead. Deleting '${posting_daemon_pid_file}' it came from"
             fi
             rm -f ${posting_daemon_pid_file}
         fi
@@ -379,8 +443,8 @@ function kill_posting_daemon() {
             wd_logger 1 "ERROR: kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: expect posting directory  ${real_receiver_posting_dir} does not exist"
         else 
             wd_logger 1  "Removing '${posting_suppliers_root_dir}/${real_receiver_name}' and '${real_receiver_posting_dir}'"
-            rm -f ${posting_suppliers_root_dir}/${real_receiver_name}     ## Remote the posting daemon's link to the source of spots
-            rm -rf ${real_receiver_posting_dir}                          ### Remove the directory under the recording deamon where it puts spot files for this decoding daemon to process
+            rm -f ${posting_suppliers_root_dir}/${real_receiver_name}    ### Remote the posting daemon's link to the source of spots
+            rm -rf ${real_receiver_posting_dir}                          ### Remove the directory under the recording daemon where it puts spot files for this decoding daemon to process
             local real_receiver_posting_root_dir=${real_receiver_posting_dir%/*}
             local real_receiver_posting_root_dir_count=$(ls -d ${real_receiver_posting_root_dir}/*/ 2> /dev/null | wc -w)
             if [[ ${real_receiver_posting_root_dir_count} -gt 0 ]]; then
@@ -397,8 +461,6 @@ function kill_posting_daemon() {
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
     return 0
 }
-
-#
 
 ##
 function get_posting_status() {

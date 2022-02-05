@@ -2,7 +2,7 @@
 
 ### Config file exists, now validate it.    
 
-### Validation requries that we have a list of valid BANDs
+### Validation requires that we have a list of valid BANDs
 
 ### These are the band frequencies taken from wsprnet.org
 # ----------Band----------Dial Frequency----------TX Frequency center(+range)--------------
@@ -26,8 +26,8 @@
 #           70cm------------432.300000-------------432.301500 (+- 100Hz)
 #           23cm-----------1296.500000------------1296.501500 (+- 100Hz)
 
-### These are the 'dial frequency' in KHz.  The actual wspr tx frequenecies are these values + 1400 to 1600 Hz
-### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-seperated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
+### These are the 'dial frequency' in kHz.  The actual wspr tx frequencies are these values + 1400 to 1600 Hz
+### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-separated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
 ###       e.g. "W2" == classic WSPR decode by the wsprd of a 2 minute long wav file
 
 declare VALID_MODE_LIST=( W2 F2 F5 F15 F30 )
@@ -137,7 +137,7 @@ function get_wspr_band_freq(){
     done
 }
 
-### Validation requries that we have a list of valid RECEIVERs
+### Validation requires that we have a list of valid RECEIVERs
 ###
 function get_receiver_list_index_from_name() {
     local new_receiver_name=$1
@@ -197,14 +197,14 @@ function get_receiver_khz_offset_list_from_name() {
 
 ### Validation requires we check the time specified for each job
 ####  Input is HH:MM or {sunrise,sunset}{+,-}HH:MM
-declare -r SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes    ### cache sunrise HH:MM and sunset HH:MM for Reciever's Maidenhead grid
+declare -r SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes  ### cache sunrise HH:MM and sunset HH:MM for Receiver's Maidenhead grid
 declare -r MAX_SUNTIMES_FILE_AGE_SECS=86400               ### refresh that cache file once a day
 
 ###   Adds or subtracts two: HH:MM  +/- HH:MM
 function time_math() {
     local -i index_hr=$((10#${1%:*}))        ### Force all HH MM to be decimal number with no leading zeros
     local -i index_min=$((10#${1#*:}))
-    local    math_operation=$2      ### I expect only '+' or '-'
+    local    math_operation=$2               ### I expect only '+' or '-'
     local -i offset_hr=$((10#${3%:*}))
     local -i offset_min=$((10#${3#*:}))
 
@@ -229,8 +229,8 @@ function time_math() {
 }
 
 ######### This block of code supports scheduling changes based upon local sunrise and/or sunset ############
-declare A_IN_ASCII=65           ## Decimal value of 'A'
-declare ZERO_IN_ASCII=48           ## Decimal value of '0'
+declare A_IN_ASCII=65              ### Decimal value of 'A'
+declare ZERO_IN_ASCII=48           ### Decimal value of '0'
 
 function alpha_to_integer() { 
     echo $(( $( printf "%d" "'$1" ) - $A_IN_ASCII )) 
@@ -240,7 +240,7 @@ function digit_to_integer() {
     echo $(( $( printf "%d" "'$1" ) - $ZERO_IN_ASCII )) 
 }
 
-### This returns the approximate lat/long of a Maidenhead 4 or 6 chancter locator
+### This returns the approximate lat/long of a Maidenhead 4 or 6 character locator
 ### Primarily useful in getting sunrise and sunset time
 function maidenhead_to_long_lat() {
     printf "%s %s\n" \
@@ -265,7 +265,7 @@ function get_astral_sun_times() {
 function get_sunrise_sunset() {
     local maiden=$1
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
-    [[ $verbosity -gt 2 ]] && echo "$(date): get_sunrise_sunset() for maidenhead ${maiden} at long/lat  ${long_lat[@]}"
+    [[ $verbosity -gt 2 ]] && echo "$(date): get_sunrise_sunset() for Maidenhead ${maiden} at long/lat  ${long_lat[@]}"
 
     if [[ ${GET_SUNTIMES_FROM_ASTRAL-yes} == "yes" ]]; then
         local long=${long_lat[0]}
@@ -278,8 +278,8 @@ function get_sunrise_sunset() {
         local sunrise_hm=${astral_times[0]}
         local sunset_hm=${astral_times[1]}
     else
-        local querry_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
-        local query_lines=$( echo ${querry_results} | sed 's/[,{}]/\n/g' )
+        local query_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
+        local query_lines=$( echo ${query_results} | sed 's/[,{}]/\n/g' )
         local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
         local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
         local sunrise_hm=$(date --date=$sunrise +%H:%M)
@@ -288,7 +288,7 @@ function get_sunrise_sunset() {
     echo "$sunrise_hm $sunset_hm"
 }
 
-function get_index_time() {   ## If sunrise or sunset is specified, Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
+function get_index_time() {   ## If sunrise or sunset is specified, Uses Receiver's name to find it's Maidenhead and from there lat/long leads to sunrise and sunset
     local time_field=$1
     local receiver_grid=$2
     local hour
@@ -307,7 +307,7 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Recieve
         echo "ERROR: time specification '${time_field}' is not valid"
         exit 1
     fi
-    ## Sunrise or sunset has been specified. Uses Reciever's name to find it's maidenhead and from there lat/long leads to sunrise and sunset
+    ## Sunrise or sunset has been specified. Uses Receiver's name to find it's Maidenhead and from there lat/long leads to sunrise and sunset
     if [[ ! -f ${SUNTIMES_FILE} ]] || [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -gt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
         ### Once per day, cache the sunrise/sunset times for the grids of all receivers
         rm -f ${SUNTIMES_FILE}
@@ -413,7 +413,7 @@ function validate_configured_schedule()
 function validate_configuration_file()
 {
     if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
-        echo "ERROR: configuratino file '${WSPRDAEMON_CONFIG_FILE}' does not exist"
+        echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' does not exist"
         exit 1
     fi
     source ${WSPRDAEMON_CONFIG_FILE}
@@ -452,7 +452,7 @@ function validate_configuration_file()
         fi
         ### Validate file name, i.i don't allow ',' characters in the name
         if [[ ${rx_name} =~ , ]]; then
-            echo "ERROR:  the receiver '${rx_name}' defined in wsprdaemon.conf contains the invalid character ','"
+            echo "ERROR: the receiver '${rx_name}' defined in wsprdaemon.conf contains the invalid character ','"
             exit 1
         fi
         rx_name_list=(${rx_name_list[@]} ${rx_name})

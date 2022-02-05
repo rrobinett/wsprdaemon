@@ -50,7 +50,7 @@ try:
                cur.close()
                #print (connected,cursor, execute,commit)
         except:
-               print ("Unable to record spot file do the database:",connected,cursor, execute,commit)
+               print ("Unable to record spot file to the database:",connected,cursor, execute,commit)
                ret_code=1
 finally:
         if conn is not None:

@@ -12,7 +12,7 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -21,13 +21,10 @@ shopt -s -o nounset                               ### bash stops with error if u
 
 declare -i verbosity=${verbosity:-1}              ### default to level 1, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
 
-export TZ=UTC                                                    ### Log lines use FMT below, but legacy $(date) will printout 12H UTC
-
-declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
-lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in it output and this gets rid of them
+lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in its output and this gets rid of them
 if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
     echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
     echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
@@ -107,7 +104,7 @@ function wd_logger() {
     local printout_line="${time_and_calling_function_name}${printout_string}"
 
     if [ -t 0 -a -t 1 -a -t 2 ]; then
-        ### This program is not a daemon, it is attached to a terminal.  So echo to that termina
+        ### This program is not a daemon, it is attached to a terminal.  So echo to that terminal
         echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
 
@@ -196,22 +193,22 @@ function seconds_until_next_odd_minute() {
 }
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
-declare -r SYSTEMNCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
-function setup_systemctl_deamon() {
+declare -r SYSTEMCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
+function setup_systemctl_daemon() {
     local start_args=${1--a}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
     local stop_args=${2--z} 
-    local systemctl_dir=${SYSTEMNCTL_UNIT_PATH%/*}
+    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
     if [[ ! -d ${systemctl_dir} ]]; then
-        echo "$(date): setup_systemctl_deamon() WARNING, this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
+        echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
         return
     fi
-    if [[ -f ${SYSTEMNCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_deamon() found this server already has a ${SYSTEMNCTL_UNIT_PATH} file. So leaving it alone."
+    if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
         return
     fi
     local my_id=$(id -u -n)
     local my_group=$(id -g -n)
-    cat > ${SYSTEMNCTL_UNIT_PATH##*/} <<EOF
+    cat > ${SYSTEMCTL_UNIT_PATH##*/} <<EOF
     [Unit]
     Description= WSPR daemon
     After=multi-user.target
@@ -228,19 +225,19 @@ function setup_systemctl_deamon() {
     [Install]
     WantedBy=multi-user.target
 EOF
-   ask_user_to_install_sw "Configuring this computer to run the watchdog daemon after reboot or power up.  Doing this requires root priviledge" "wsprdaemon.service"
-   sudo mv ${SYSTEMNCTL_UNIT_PATH##*/} ${SYSTEMNCTL_UNIT_PATH}    ### 'sudo cat > ${SYSTEMNCTL_UNIT_PATH} gave me permission errors
+   ask_user_to_install_sw "Configuring this computer to run the watchdog daemon after reboot or power up.  Doing this requires root privilege" "wsprdaemon.service"
+   sudo mv ${SYSTEMCTL_UNIT_PATH##*/} ${SYSTEMCTL_UNIT_PATH}    ### 'sudo cat > ${SYSTEMCTL_UNIT_PATH} gave me permission errors
    sudo systemctl daemon-reload
    sudo systemctl enable wsprdaemon.service
    ### sudo systemctl start  kiwiwspr.service       ### Don't start service now, since we are already starting.  Service is setup to run during next reboot/powerup
-   echo "Created '${SYSTEMNCTL_UNIT_PATH}'."
+   echo "Created '${SYSTEMCTL_UNIT_PATH}'."
    echo "Watchdog daemon will now automatically start after a powerup or reboot of this system"
 }
 
-function enable_systemctl_deamon() {
+function enable_systemctl_daemon() {
     sudo systemctl enable wsprdaemon.service
 }
-function disable_systemctl_deamon() {
+function disable_systemctl_daemon() {
     sudo systemctl disable wsprdaemon.service
 }
 
@@ -294,7 +291,7 @@ function wd_rm()
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: failed to 'rm ${rm_file}' requested by function"
-                $(( ++ rm_errors ))
+                rm_errors=$(( ++rm_errors ))
             fi
         fi
     done
@@ -365,7 +362,6 @@ function spawn_daemon()
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
     wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
-#    setup_systemctl_deamon "-u a"  "-u z"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
         if ps ${daemon_pid} > /dev/null ; then
@@ -376,22 +372,22 @@ function spawn_daemon()
             rm -f ${daemon_pid_file_path}
         fi
     fi
-    echo "WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  &"
     WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: failed to spawn 'WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}' => ${ret_code}"
         return 1
     fi
-    echo $! > ${daemon_pid_file_path}
-    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '$!' and recorded the pid to '${daemon_pid_file_path}'"
+    local spawned_pid=$!
+    echo ${spawned_pid} > ${daemon_pid_file_path}
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
     return 0
 }
 
 function kill_daemon() {
     local daemon_root_dir=$2
     if [[ ! -d ${daemon_root_dir} ]]; then
-        d_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        wd_logger 2 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
         return 1
     fi
     local daemon_function_name=$1
@@ -400,7 +396,7 @@ function kill_daemon() {
 
     wd_logger 2 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 1 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
+        wd_logger 2 "ERROR: ${daemon_function_name} pid file ${daemon_pid_file_path} doesn't exist"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -415,7 +411,7 @@ function kill_daemon() {
                 wd_logger 1 "ERROR: 'kill ${daemon_pid}' failed for active pid ${daemon_pid}"
                 return 4
             else
-                wd_logger 1 "'kill ${daemon_pid}' was successful"
+                wd_logger 2 "'kill ${daemon_pid}' was successful"
             fi
         fi
     fi
@@ -426,15 +422,15 @@ function get_status_of_daemon() {
     local daemon_function_name=$1
     local daemon_root_dir=$2
     if [[ ! -d ${daemon_root_dir} ]]; then
-        wd_logger 1 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
+        wd_logger 2 "ERROR: daemon root dir ${daemon_root_dir} doesn't exist"
         return 1
     fi
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 2 "Start"
+    wd_logger 3 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 1 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
+        wd_logger 2 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -445,7 +441,8 @@ function get_status_of_daemon() {
             rm -f ${daemon_pid_file_path}
             return 3
         else
-            wd_logger 1 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+            wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+            wd_logger 1 "daemon '${daemon_function_name}' with  pid ${daemon_pid} is running"
         fi
     fi
     return 0

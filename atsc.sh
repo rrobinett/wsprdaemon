@@ -12,7 +12,7 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -23,7 +23,7 @@ declare ATSC_CHANNEL_VHF_START="7 174000000"      ### The ATSC VHF band starts w
 declare ATSC_CHANNEL_VHF_END="13 210000000"
 declare ATSC_CHANNEL_UHF_START="14 470000000"     ### The ATSC UHF band starts with Channel 14
 declare ATSC_CHANNEL_UHF_END="51 692000000"
-declare ATSC_CHANNEL_WIDTH="6000000"              ### ATSC channels are 6 Mhz wide
+declare ATSC_CHANNEL_WIDTH="6000000"              ### ATSC channels are 6 MHz wide
 declare ATSC_PILOT_CARRIER_OFFSET=309441          ### The pilot carrier is at 309440.559 Hz above the bottom of the channel.  Round it up to 309441
 
 declare ATSC_PILOT_FREQ_TABLE
@@ -105,7 +105,7 @@ function test_tuning() {
 
 declare SFO_ATSC_CHANNEL_LIST=( 7 13 19 27 29 30 33 38 39 40 41 43 44)
 declare SOAPY_DEVICE_LIST=( 0 )
-declare ATSC_PILOT_AUDIO_EXPECTED=1441       ### Tune this many hz below the pilot frequency and expect an audio tone of this frequency in hz
+declare ATSC_PILOT_AUDIO_EXPECTED=1441       ### Tune this many Hz below the pilot frequency and expect an audio tone of this frequency in Hz
 
 ### Tunes 1440 Hz below the pilot carriers, records 2 seconds of audio, then runs 'sox -n stat -freq' to see how much the audio frequency differs from 1440 Hz.
 function atsc_scan() {
@@ -124,7 +124,7 @@ function atsc_scan() {
         local tuning_frequency=$(( atsc_pilot_frequency - ${test_expected_audio_freq} ))
         local center_frequency=$(( atsc_pilot_frequency - (atsc_pilot_frequency % ${TUNING_CENTER_OFFSET_HZ}) ))
 
-         wd_logger 3 "recieve ch #${channel_number} at ${atsc_pilot_frequency} by tuning to freq ${tuning_frequency}"
+        wd_logger 3 "receive ch #${channel_number} at ${atsc_pilot_frequency} by tuning to freq ${tuning_frequency}"
         local measured_audio_freq="none"
         sdr_measure_error measured_audio_freq ${soapy_device} ${tuning_frequency} ${center_frequency} ${test_expected_audio_freq}
         local ret_code=$?
@@ -144,7 +144,7 @@ function atsc_scan() {
     done
 }
 
-declare ATSC_CENTER_OFFSET_HZ=100000     ### For ATSC pilot carrier measurements, set the center 100 KHz below the pilot carrier frequecy
+declare ATSC_CENTER_OFFSET_HZ=100000     ### For ATSC pilot carrier measurements, set the center 100 kHz below the pilot carrier frequecy
 function get_atsc_ppm_error() {
     local pilot_carrier_freq_ret_variable=$1
     local measured_audio_hz_ret_variable=$2
@@ -179,14 +179,14 @@ function get_atsc_ppm_error() {
     return 0
 }
 
-declare TARGET_AUDIO_TONE_FREQ=1500       ### When tuning is compensated for oscillator error, this is the audio tone in hertz we expect
+declare TARGET_AUDIO_TONE_FREQ=1500       ### When tuning is compensated for oscillator error, this is the audio tone in Hertz we expect
 
 function show_atsc_ppm_loop() {
     local soapy_device=$1
     local atsc_channel=$2
-    local tuning_offset_hz=${TARGET_AUDIO_TONE_FREQ}  ### audio tone frequency in hz we expect when tuned this many hz below the pilot carrier of this ATSC channel
-    local pilot_carrier_freq        ### returned tuning frequency in hz of the ATSC channel's pilot carrier
-    local mesasured_audio_hz        ### returned audio tone in hz when tuned ${tuning_offset} below that pilot carrier
+    local tuning_offset_hz=${TARGET_AUDIO_TONE_FREQ}  ### audio tone frequency in Hz we expect when tuned this many Hz below the pilot carrier of this ATSC channel
+    local pilot_carrier_freq        ### returned tuning frequency in Hz of the ATSC channel's pilot carrier
+    local mesasured_audio_hz        ### returned audio tone in Hz when tuned ${tuning_offset} below that pilot carrier
     local measured_ppm              ### returned ppm error
 
      wd_logger 0 "testing device #${soapy_device} on ATSC channel #${atsc_channel}\n"

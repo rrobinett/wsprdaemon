@@ -1,9 +1,27 @@
 #!/bin/bash
+declare -i verbosity=${verbosity:-1}
+
+declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
+declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
+    ### Legacy name for /tmp file system.  Leave it alone
+    true
+else
+    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
+fi
+
+declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf qt5-default:armhf)
+        ### Add code to support installation on Pi's bullseye OS
+        declare QT5_PACKAGE=qt5-default:armhf 
+        if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
+            QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
+        fi
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf ${QT5_PACKAGE})
         ;;
     x86_64)
         declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:amd64 qt5-default:amd64)
@@ -16,7 +34,7 @@ esac
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
-    ### We are running on a Rasperberry Pi or generic Debian server
+    ### We are running on a Raspberry Pi or generic Debian server
     declare -r GET_FILE_SIZE_CMD="stat --format=%s" 
     declare -r GET_FILE_MOD_TIME_CMD="stat -c %Y"       
 elif [[ "${OSTYPE}" == "darwin18" ]]; then
@@ -38,13 +56,13 @@ declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.co
 if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is missing, so it is being created from a template."
     echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
-    mv ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
+    cp -p  ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
     exit
 fi
 ### Check that the conf file differs from the prototype conf file
 if diff -q ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE} > /dev/null; then
     echo "WARNING: The configuration file '${WSPRDAEMON_CONFIG_FILE}' is the same as the template."
-    echo "         Edit that file to match your Reciever(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
+    echo "         Edit that file to match your Receiver(s) and the WSPR band(s) you wish to scan on it (them).  Then run this again"
     exit 
 fi
 
@@ -63,17 +81,34 @@ source ${WSPRDAEMON_CONFIG_FILE}
 WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
-### If the user has enabled a remote proxy connection in the conf file, then start up that connecton now.
+### If the user has enabled a remote proxy connection in the conf file, then start up that connection now.
 declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
 source ${WSPRDAEMON_PROXY_UTILS_FILE}
 proxy_connection_manager      
 
+### Check the variables which should (or might) be defined in the wsprdaemon.conf file
+SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
+if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
+        wd_logger -1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
+        exit 1
+    fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
+        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in  the wd_template.conf file"
+        exit 2
+    fi
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
+        wd_logger -1 "ERROR: SIGNAL_LEVEL_UPLOAD_ID=\"${SIGNAL_LEVEL_UPLOAD_ID}\" defined in your wsprdaemon.conf file cannot include the \"/\". Please change it to \"_\""
+        exit 3
+    fi
+fi
+
 function check_tmp_filesystem()
 {
     if [[ ! -d ${WSPRDAEMON_TMP_DIR} ]]; then
-        [[ $verbosity -ge 0 ]] && echo "The directrory system for WSPR recordings does not exist.  Creating it"
+        [[ $verbosity -ge 0 ]] && echo "The directory system for WSPR recordings does not exist.  Creating it"
         if ! mkdir -p ${WSPRDAEMON_TMP_DIR} ; then
-            "ERROR: Can't create the directrory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
+            "ERROR: Can't create the directory system for WSPR recordings '${WSPRDAEMON_TMP_DIR}'"
             exit 1
         fi
     fi
@@ -83,12 +118,12 @@ function check_tmp_filesystem()
         if [[ "${USE_TMPFS_FILE_SYSTEM-yes}" != "yes" ]]; then
             echo "WARNING: configured to record to a non-ram file system"
         else
-            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB ram file system."
+            echo "WARNING: This server is not configured so that '${WSPRDAEMON_TMP_DIR}' is a 300 MB RAM file system."
             echo "         Every 2 minutes this program can write more than 200 Mbps to that file system which will prematurely wear out a microSD or SSD"
             read -p "So do you want to modify your /etc/fstab to add that new file system? [Y/n]> "
             REPLY=${REPLY:-Y}     ### blank or no response change to 'Y'
             if [[ ${REPLY^} != "Y" ]]; then
-                echo "WARNING: you have chosen to use to non-ram file system"
+                echo "WARNING: you have chosen to use a non-ram file system"
             else
                 if ! grep -q ${WSPRDAEMON_TMP_DIR} /etc/fstab; then
                     sudo cp -p /etc/fstab /etc/fstab.save
@@ -172,7 +207,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt --yes install python-numpy
         fi
-        echo "Successfully installed kwirecorder.py"
+        echo "Successfully installed kiwirecorder.py"
         cd - >& /dev/null
     fi
 }
@@ -187,14 +222,14 @@ function ask_user_to_install_sw() {
     local is_requried_by_wd=${2:-}
 
     echo ${prompt_string}
-    read -p "Do you want to proceed with the installation of that this software? [Yn] > "
+    read -p "Do you want to proceed with the installation of this software? [Yn] > "
     REPLY=${REPLY:-Y}
     REPLY=${REPLY:0:1}
     if [[ ${REPLY^} != "Y" ]]; then
         if [[ -n "${is_requried_by_wd}" ]]; then
             echo "${is_requried_by_wd} is a software utility required by wsprdaemon and must be installed for it to run"
         else
-            echo "WARNING: change wsprdaemon.conf to avoid installtion of this software"
+            echo "WARNING: change wsprdaemon.conf to avoid installation of this software"
         fi
         exit
     fi
@@ -228,7 +263,7 @@ function install_debian_package(){
         sudo apt-get update --allow-releaseinfo-change
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'udo apt-get update' => ${ret_code}"
+            wd_logger 1 "ERROR: 'sudo apt-get update' => ${ret_code}"
             return ${ret_code}
         fi
         APT_GET_UPDATE_HAS_RUN="yes"
@@ -247,25 +282,23 @@ function install_python_package()
 {
     local pip_package=$1
 
-   if ! python3 -c "import ${pip_package}" 2> /dev/null; then
-        if !  sudo pip3 install ${pip_package} ; then
-            wd_logger 1 "ERROR: 'sudo pip3 install ${pip_package}' => $?"
-            exit 1
-        fi
-    fi
-    if ! which pip3 > /dev/null; then
-        if ! install_debian_package python3-pip3 ; then
-            wd_logger 1 "ERROR: 'install_debian_package pip3' => $?"
-            exit 1
-        fi
-    fi
-    if python3 -c "import ${pip_package}" > /dev/null ; then
-        wd_logger 2 "Python package ${pip_package} is already installed"
+    wd_logger 2 "Verifying or Installing package ${pip_package}"
+    if python3 -c "import ${pip_package}" 2> /dev/null; then
+        wd_logger 2 "Found that package ${pip_package} is installed"
         return 0
     fi
+    wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
+    if ! pip3 -V > /dev/null 2>&1 ; then
+        wd_logger 1 "Installing pip3"
+        if ! sudo apt install python3-pip -y ; then
+            wd_logger 1 "ERROR: can't install pip3:  'sudo apt install python3-pip -y' => $?"
+            exit 1
+        fi
+    fi
+    wd_logger 1 "Having pip3 install package ${pip_package} "
     if ! sudo pip3 install ${pip_package} ; then
         wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
-        exit 1
+        exit 2
     fi
     wd_logger 1 "Installed Python package ${pip_package}"
     return 0
@@ -336,7 +369,7 @@ function load_wsjtx_commands()
         fi
         local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
         if [[ ! -x ${dpkg_wsprd_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
@@ -346,7 +379,7 @@ function load_wsjtx_commands()
 
         local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
         if [[ ! -x ${dpkg_jt9_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the dowloaded WSJT-x package"
+            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the downloaded WSJT-x package"
             exit 1
         fi
         sudo apt install libboost-log1.67.0       ### Needed by jt9
@@ -369,18 +402,21 @@ function check_for_needed_utilities()
 {
     local package_needed
     for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        wd_logger 2 "Checking for package ${package_needed}"
         if ! install_debian_package ${package_needed} ; then
             wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
             exit 1
         fi
     done
+    wd_logger 2 "Checking for Python's astral library"
     if ! install_python_package astral; then
         wd_logger 1 "ERROR: failed to install Python package 'astral'"
         exit 1
     fi
+    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
+    wd_logger 2 "Setting up noise graphing"
     setup_noise_graphs
 }
 
-### The configuration may determine which utlites are needed at run time, so now we can check for needed utilites
-
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities

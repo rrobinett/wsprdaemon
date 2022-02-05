@@ -29,7 +29,7 @@ function proxy_connection_pid() {
 function proxy_connection_status() {
     local proxy_pid=$(proxy_connection_pid)
     if [[ ${proxy_pid} -eq 0 ]]; then
-        wd_logger 1 "No proxy client connection daemon is active"
+        wd_logger 2 "No proxy client connection daemon is active"
     else
         wd_logger 1 "Proxy client connection daemon is active with pid ${proxy_pid}"
     fi
@@ -42,7 +42,7 @@ function proxy_connection_manager() {
     local proxy_pid=$(proxy_connection_pid)
     if [[ ${REVERSE_PROXY-no} == "no" ]] ; then
         if [[ ${proxy_pid} -ne 0 ]]; then
-            wd_logger 1 "Proxy disabled, but found running proxy client job ${proxy_pid}.  Kill it"
+            wd_logger 1 "Proxy disabled, but found running proxy client job ${proxy_pid}. Kill it"
             kill ${proxy_pid}
             rm ${WSPRDAEMON_PROXY_PID_FILE}
         else

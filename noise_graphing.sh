@@ -11,7 +11,7 @@ declare -r NOISE_GRAPH_TMP_FILE=${WSPRDAEMON_TMP_DIR}/wd_tmp.png
 declare -r NOISE_GRAPH_LOCAL_WWW_DIR=/var/www/html
 declare -r NOISE_GRAPHS_WWW_INDEX_FILE=${NOISE_GRAPH_LOCAL_WWW_DIR}/index.html
 declare -r NOISE_GRAPH_FILE=${WSPRDAEMON_TMP_DIR}/${NOISE_GRAPH_FILENAME}          ## If configured, this is the png graph copied to the graphs.wsprdaemon.org site and displayed by the local Apache server
-declare -r NOISE_GRAPH_WWW_FILE=${NOISE_GRAPH_LOCAL_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache serivce running to locally display noise graphs, then this will be a symbolic link to ${NOISE_GRAPH_FILE}
+declare -r NOISE_GRAPH_WWW_FILE=${NOISE_GRAPH_LOCAL_WWW_DIR}/${NOISE_GRAPH_FILENAME}   ## If we have the Apache service running to locally display noise graphs, then this will be a symbolic link to ${NOISE_GRAPH_FILE}
 declare -r NOISE_GRAPHS_TMP_CSV_FILE=${WSPRDAEMON_TMP_DIR}/wd_log.csv
 declare -r NOISE_GRAPHS_INDEX_LINES="
 <html>
@@ -34,13 +34,14 @@ function setup_noise_graphs()
         wd_logger 2 "Whether to upload noise graphs has been set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" && ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
-        wd_logger 2 "Noise graphing is disabled, so skip installation of libraries needed for it"
+        wd_logger 1 "Noise graphing is disabled, so skip installation of libraries needed for it"
         return 0
     fi
 
     ### Get the Python packages needed to create the graphs.png
     local package
     for package in psycopg2 matplotlib scipy ; do
+        wd_logger 2 "Install Python package ${package}"
         install_python_package ${package}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
@@ -51,6 +52,7 @@ function setup_noise_graphs()
 
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] ; then
         ## Ensure that Apache is installed and running
+        wd_logger 1 "We are confgiured for local display of noise graphs, so check that Apache is installed"
         if ! install_debian_package  apache2 ; then
             wd_logger 1 "ERROR: 'install_debian_package  apache2' => $?"
             exit 1
@@ -139,7 +141,7 @@ function plot_noise() {
     if [[ ! -f ${noise_calibration_file} ]]; then
         mkdir -p ${noise_calibration_file%/*}   ### creates the directory for the file
 
-        echo "# Cal file for use with 'wsprdaemon.sh -p'" >${noise_calibration_file}
+        echo "# Call file for use with 'wsprdaemon.sh -p'" >${noise_calibration_file}
         echo "# Values are: Nominal bandwidth, noise equiv bandwidth, RMS offset, freq offset, FFT_band, Threshold, see notes for details" >>${noise_calibration_file}
         ## read -p 'Enter nominal kiwirecorder.py bandwidth (500 or 320Hz):' nom_bw
         ## echo "Using defaults -50.4dB for RMS offset, -41.0dB for FFT offset, and +13.1dB for FFT %coefficients correction"
@@ -158,7 +160,7 @@ function plot_noise() {
     # noise records are all 2 min apart so 30 per hour so rows = hours *30. The max number of rows we need in the csv file is (24 *30), so to speed processing only take that number of rows from the log file
     local -i rows_per_day=$((24*30))
 
-    ### convert wsprdaemon AI6VN sox stats format files to csv for excel or Python matplotlib etc
+    ### convert wsprdaemon AI6VN sox stats format files to csv for Excel or Python matplotlib etc
     if [[ ! -d ${signal_levels_root_dir} ]]; then
         wd_logger 1 "'${signal_levels_root_dir}' doesn't exist"
         return 0
@@ -221,7 +223,7 @@ function plot_noise() {
     mv ${NOISE_GRAPH_TMP_FILE} ${NOISE_GRAPH_FILE}
     wd_logger 1 "Created new '${NOISE_GRAPH_FILE}'"
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]]; then
-        wd_logger 1 "Configured for local web page display, so copying ${NOISE_GRAPH_FILE} to ${NOISE_GRAPH_WWW_FILE}"
+        wd_logger 1 "Configured for local webpage display, so copying ${NOISE_GRAPH_FILE} to ${NOISE_GRAPH_WWW_FILE}"
         sudo  cp -p  ${NOISE_GRAPH_FILE}  ${NOISE_GRAPH_WWW_FILE}
     fi
     if [[ "${NOISE_GRAPHS_UPLOAD_ENABLED-no}" == "yes" ]] && [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} != "none" ]]; then
@@ -238,8 +240,8 @@ function plot_noise() {
     return 0
 }
 
-declare NOISE_LINE_FIELDS_COUNT=16         ### The graphing program expects that every noise line
-function queue_noise_signal_levels_to_wsprdeamon() 
+declare NOISE_LINE_FIELDS_COUNT=16         ### The graphing program expects that every noise line has 16 fields (??)
+function queue_noise_signal_levels_to_wsprdaemon() 
 {
     local spot_date=$1
     local spot_time=$2
