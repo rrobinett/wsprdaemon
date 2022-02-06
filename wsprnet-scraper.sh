@@ -245,7 +245,7 @@ function wsprnet_to_csv() {
     WSPRNET_LAST_SPOTNUM=${last_spot_array[0]}
 }
 
-### Create ${WSPRNET_OFFSET_SECS}, a string of offsets in seconds from the start of an even minute when the scraper should execute the wsprnet API to get the lattest spots
+### Create ${WSPRNET_OFFSET_SECS}, a string of offsets in seconds from the start of an even minute when the scraper should execute the wsprnet API to get the latest spots
 ### This variable is used by the api_wait_until_next_offset() to determine how long to sleep
 declare WSPRNET_OFFSET_FIRST_SEC=55
 declare WSPRNET_OFFSET_GAP=30

@@ -11,7 +11,7 @@ declare NOISE_GRAPHS_ROOT_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graph
 declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
 
 declare NOISE_GRAPHS_POLLING_INTERVAL_SECS=5
-declare MAX_PNG_FILES_TO_POST=1000             ### 
+declare MAX_PNG_FILES_TO_POST=1000 
 function publish_latest_noisegraph_pngs()
 {
     if [[ ! -d ${UPLOAD_DAEMON_FTP_DIR} ]]; then
@@ -25,7 +25,7 @@ function publish_latest_noisegraph_pngs()
         wd_logger 2 "There are no .png files in '${UPLOAD_DAEMON_FTP_DIR}'"
         return 0
     elif [[ ${#png_files_list[@]} -gt ${MAX_PNG_FILES_TO_POST} ]]; then
-        wd_logger 1 "There are '${#png_files_list[@]}' files to publish, too many to do at once.  So publish only the first ${MAX_PNG_FILES_TO_POST} files"
+        wd_logger 1 "There are '${#png_files_list[@]}' files to publish, too many to do at once. So publish only the first ${MAX_PNG_FILES_TO_POST} files"
         png_files_list=( ${png_files_list[@]::{MAX_PNG_FILES_TO_POST}} )
     else
         wd_logger 2 "Publishing the '${#png_files_list[@]}' png files found in '${UPLOAD_DAEMON_FTP_DIR}'"
@@ -112,7 +112,7 @@ function noise_graphs_publishing_daemon()
 
         publish_latest_noisegraph_pngs
 
-        wd_logger 2 "Finished publishing.  Sleeping for ${NOISE_GRAPHS_POLLING_INTERVAL_SECS} seconds"
+        wd_logger 2 "Finished publishing. Sleeping for ${NOISE_GRAPHS_POLLING_INTERVAL_SECS} seconds"
         wd_sleep ${NOISE_GRAPHS_POLLING_INTERVAL_SECS}
     done
 }
@@ -142,7 +142,7 @@ function get_status_noise_graphs_publishing_daemon()
     get_status_of_daemon  ${noise_graphs_publishing_daemon_function_name}  ${noise_graphs_publishing_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The ${noise_graphs_publishing_daemon_function_name} is running in  '${noise_graphs_publishing_root_dir}'"
+        wd_logger -1 "The ${noise_graphs_publishing_daemon_function_name} is running in '${noise_graphs_publishing_root_dir}'"
     else
         wd_logger -1 "The ${noise_graphs_publishing_daemon_function_name} is not running in '${noise_graphs_publishing_root_dir}'"
     fi

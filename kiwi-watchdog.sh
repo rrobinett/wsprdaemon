@@ -1,6 +1,6 @@
 #!/bin/bash
 
-###  kiwi-watchdog:   pings Kiwis and powe cycles them if they don't respond
+###  kiwi-watchdog:   pings Kiwis and power cycles them if they don't respond
 
 ###    Copyright (C) 2021  Robert S. Robinett
 ###
@@ -12,15 +12,15 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###   GNU General Public License for more details.
+###    GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ### This program uses a Sain brand ethernet controller to control a bank of 8 mechanical relays
-### The Sain controller has a fixed IP address of 192.168.1.4, so the Pi running this program must have a LOCAL path to the that address i.e. IP traffic can't go through a router
+### The Sain controller has a fixed IP address of 192.168.1.4, so the Pi running this program must have a LOCAL path to that address i.e. IP traffic can't go through a router
 ### So this program needs to run on a Pi attached to the same LAN as the Sain controller and the Pi must be configured 
-### with an additional IP addresss on eth0 by executing:  'ip address add 192.168.1.xx/24 dev etho'
+### with an additional IP address on eth0 by executing:  'ip address add 192.168.1.xx/24 dev etho'
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 declare    verbosity=2
@@ -37,13 +37,13 @@ declare    verbosity=1
 
 ###  Manage 
 declare -r KIWI_STARTUP_DELAY_SECONDS=60   ### When starting the Pi wait this long before checking the Kiwis which may be powering up at the same time.
-declare    SYSTEMNCTL_UNIT_FILE_NAME=${0##*/}
-declare -r SYSTEMNCTL_SERVICE_NAME=${SYSTEMNCTL_UNIT_FILE_NAME%.*}
-           SYSTEMNCTL_UNIT_FILE_NAME=${SYSTEMNCTL_SERVICE_NAME}.service
-declare -r SYSTEMNCTL_UNIT_DIR=/lib/systemd/system
-declare -r SYSTEMNCTL_UNIT_PATH=${SYSTEMNCTL_UNIT_DIR}/${SYSTEMNCTL_UNIT_FILE_NAME}
+declare    SYSTEMCTL_UNIT_FILE_NAME=${0##*/}
+declare -r SYSTEMCTL_SERVICE_NAME=${SYSTEMCTL_UNIT_FILE_NAME%.*}
+           SYSTEMCTL_UNIT_FILE_NAME=${SYSTEMCTL_SERVICE_NAME}.service
+declare -r SYSTEMCTL_UNIT_DIR=/lib/systemd/system
+declare -r SYSTEMCTL_UNIT_PATH=${SYSTEMCTL_UNIT_DIR}/${SYSTEMCTL_UNIT_FILE_NAME}
 
-cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
+cat > ${SYSTEMCTL_UNIT_FILE_NAME} <<EOF
     [Unit]
     Description= ${CMD_DESCRIPTION}
     After=multi-user.target
@@ -61,48 +61,48 @@ cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
     WantedBy=multi-user.target
 EOF
 
-function setup_systemctl_deamon() 
+function setup_systemctl_daemon() 
 {
-    if [[ ! -d ${SYSTEMNCTL_UNIT_DIR} ]]; then
-        echo "WARNING: this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
+    if [[ ! -d ${SYSTEMCTL_UNIT_DIR} ]]; then
+        echo "WARNING: this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
         return
     fi
-    if [[ -f ${SYSTEMNCTL_UNIT_PATH} ]]; then
-        if diff ${SYSTEMNCTL_UNIT_FILE_NAME} ${SYSTEMNCTL_UNIT_PATH} ; then
+    if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        if diff ${SYSTEMCTL_UNIT_FILE_NAME} ${SYSTEMCTL_UNIT_PATH} ; then
             echo "This service is already setup"
             return 0
         else
-            echo "This service template ${SYSTEMNCTL_UNIT_FILE_NAME} differs from the installed service file ${SYSTEMNCTL_UNIT_PATH}, so reinstall it."
+            echo "This service template ${SYSTEMCTL_UNIT_FILE_NAME} differs from the installed service file ${SYSTEMCTL_UNIT_PATH}, so reinstall it."
         fi
     fi
-    sudo cp ${SYSTEMNCTL_UNIT_FILE_NAME} ${SYSTEMNCTL_UNIT_PATH}
-    echo "Copied ${SYSTEMNCTL_UNIT_FILE_NAME} to ${SYSTEMNCTL_UNIT_PATH}"
+    sudo cp ${SYSTEMCTL_UNIT_FILE_NAME} ${SYSTEMCTL_UNIT_PATH}
+    echo "Copied ${SYSTEMCTL_UNIT_FILE_NAME} to ${SYSTEMCTL_UNIT_PATH}"
 
     sudo systemctl daemon-reload
-    echo "Created '${SYSTEMNCTL_UNIT_PATH}'."
+    echo "Created '${SYSTEMCTL_UNIT_PATH}'."
 }
 
-function enable_systemctl_deamon() 
+function enable_systemctl_daemon() 
 {
-    setup_systemctl_deamon
-    sudo systemctl enable ${SYSTEMNCTL_SERVICE_NAME}
+    setup_systemctl_daemon
+    sudo systemctl enable ${SYSTEMCTL_SERVICE_NAME}
     echo "Watchdog daemon will now automatically start after a powerup or reboot of this system"
 }
 
-function disable_systemctl_deamon() 
+function disable_systemctl_daemon() 
 {
-    sudo systemctl disable ${SYSTEMNCTL_SERVICE_NAME}
+    sudo systemctl disable ${SYSTEMCTL_SERVICE_NAME}
 }
 
-function get_systemctl_deamon_status()
+function get_systemctl_daemon_status()
 {
-    setup_systemctl_deamon
-    sudo systemctl status ${SYSTEMNCTL_UNIT_FILE_NAME}
+    setup_systemctl_daemon
+    sudo systemctl status ${SYSTEMCTL_UNIT_FILE_NAME}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        echo "${SYSTEMNCTL_UNIT_FILE_NAME} is enabled"
+        echo "${SYSTEMCTL_UNIT_FILE_NAME} is enabled"
     else
-        echo "${SYSTEMNCTL_UNIT_FILE_NAME} is disabled"
+        echo "${SYSTEMCTL_UNIT_FILE_NAME} is disabled"
     fi
 }
 
@@ -115,13 +115,13 @@ function startup_daemon_control()
             echo "startup_daemon_control actions are:  a=install and enable, z=disable, s=status"
             ;;
         a)
-            enable_systemctl_deamon
+            enable_systemctl_daemon
             ;;
         z)
-            disable_systemctl_deamon
+            disable_systemctl_daemon
             ;;
         s)
-            get_systemctl_deamon_status
+            get_systemctl_daemon_status
             ;;
         *)
             echo "ERROR: action ${action} is invalid"
@@ -245,7 +245,7 @@ function usage()
 {
     echo "$0: 
     -c KIWI STATE    KIWI=72...78  STATE=on|off
-    -a               start daemon which pings kiwis and power cycles them if they don't respond
+    -a               start daemon which pings Kiwis and power cycles them if they don't respond
     -A               start daemon with a delay of ${KIWI_STARTUP_DELAY_SECONDS}
     -z               kill the daemon
     -s               show the daemon status
