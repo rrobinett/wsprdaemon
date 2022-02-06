@@ -163,7 +163,7 @@ function format_spots_file_for_wsprnet()
         return 1
     fi
     local error_lines
-    if ! error_lines=$( grep ERROR ${dest_wsprnet_spotlines_file} ) ; then
+    if error_lines=$( grep ERROR ${dest_wsprnet_spotlines_file} ) ; then
        wd_logger 1 "ERROR: bad spot lines reported by awk:\n${error_lines}"
     fi
     wd_logger 1 "Created WN format spot file ${dest_wsprnet_spotlines_file}"
@@ -186,85 +186,94 @@ function post_files()
         sleep 5
         exit
     fi
-    if [[ -s spots.ALL ]]; then
-        ### There are spots to upload
-        ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
-        ### If configured for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
-        > spots.BEST
-        local calls_list=( $( awk '{print $6}' spots.ALL | sort -u ) )
-        wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
-        local call
-        for call in ${calls_list[@]}; do
-            local best_line=$( awk -v call=${call} '$6 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
-            local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
-            local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
-            local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
- 
-            local fixed_fields_line=$( printf "For call %12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )
-            wd_logger 1 "${fixed_fields_line}"
+    if [[ ! -s spots.ALL ]]; then
+        wd_logger 1 "The spot file(s) are empty, so just flush them"
+        wd_rm ${spot_file_list[@]}
+        return 0
+    fi
+    ### There are spots to uploaded
+    ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
+    ### If configured for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
+    > spots.BEST       ### Create and/or truncate spots.BEST
+    local calls_list=( $( awk '{print $7}' spots.ALL | sort -u ) )
+    wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
+    local call
+    for call in ${calls_list[@]}; do
+        local best_line=$( awk -v call=${call} '$7 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
+        local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
+        local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
+        local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
 
-            echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
-            if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
-                ### Mark the line in the source file for proxy upload
-                grep -v -F "${best_spot}" ${best_file} > best.TMP
-                echo "${best_spot_marked}" >> best.TMP
-                sort -k 5,5n best.TMP > ${best_file}
-            fi
-        done
-        ### Sort the spot lines in spots.BEST by ascending frequency
-        sort -k 5,5n spots.BEST > best.TMP
-        mv best.TMP spots.BEST
+        local fixed_fields_line=$( printf "For call %-12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )
+        wd_logger 2 "${fixed_fields_line}"
 
-        if [[ ${posting_receiver_name} =~ MERG.* ]] ; then
-            wd_logger 1 "Among the spots reported by a set of MERGEd receivers, saved this set of $(wc -l < spots.BEST) spots in file spots.BEST:\n$(cat spots.BEST)"
-            if [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
-                ### Append to 'merged.log'
-                wd_logger 1 "Log the MERGEd spot decisions with: 'log_merged_snrs  spots.BEST ${spot_file_list[*]}'"
-                log_merged_snrs  spots.BEST ${spot_file_list[@]}
-            fi
+        echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
+        if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
+            ### Mark the line in the source file for proxy upload
+            wd_logger 1 "Proxy upload the best spot, but this code has not been debugged"
+            grep -v -F "${best_spot}" ${best_file} > best.TMP       ### Remove any exisitng lines for this call
+            echo "${best_spot_marked}" >> best.TMP                  ### Add this newly found best spot for this call
+            sort -k 6,6n best.TMP > ${best_file}                    ### And sort the best 
         fi
+    done
+    ### Sort the spot lines in spots.BEST by ascending frequency
+    sort -k 6,6n spots.BEST > best.TMP
+    mv best.TMP spots.BEST
 
-        if [[ ${SIGNAL_LEVEL_UPLOAD} != "proxy" ]]; then
-            ### We are configured to upload the best set of spots directly to wsprnet.org
-            ### The upload_to_wsprdaemon_client_dameon() could do this, but it would have to regenerate the 'spots.BEST' file.  Since we have that information now, queue spots.BEST for upload to wsprnet.org
-            mkdir -p ${wsprnet_uploads_queue_directory}
-            local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
-            local spots_count=$(wc -l < spots.BEST)
-            wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
-            ### Format spot lines for the wsprnet.org server which now (1/22) parses spot lines for a packet mode 
-            format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt
-            local rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                if [[ ! -s wn_format_spots.txt ]]; then
-                    wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' succeeeded but there are no spots in wn_format_spots.txt"
-                else
-                    wd_logger 1 "Queuing file with $(wc -l < wn_format_spots.txt) spots to ${wsprnet_uploads_queue_filename}"
-                    cp -p wn_format_spots.txt ${wsprnet_uploads_queue_filename}
-                fi
+    if [[ ${posting_receiver_name} =~ MERG.* ]] ; then
+        wd_logger 1 "Among the spots reported by a set of MERGEd receivers, saved this set of $(wc -l < spots.BEST) spots in file spots.BEST:\n$(cat spots.BEST)"
+        if [[ ${LOG_MERGED_SNRS-yes} == "yes"  ]]; then
+            ### Append to 'merged.log'
+            wd_logger 1 "Log the MERGEd spot decisions with: 'log_merged_snrs  spots.BEST ${spot_file_list[*]}'"
+            log_merged_snrs  spots.BEST ${spot_file_list[@]}
+        fi
+    fi
+
+    if [[ ${SIGNAL_LEVEL_UPLOAD} != "proxy" ]]; then
+        ### We are configured to upload the best set of spots directly to wsprnet.org
+        ### The upload_to_wsprdaemon_client_dameon() could do this, but it would have to regenerate the 'spots.BEST' file.  Since we have that information now, queue spots.BEST for upload to wsprnet.org
+        mkdir -p ${wsprnet_uploads_queue_directory}
+        local wsprnet_uploads_queue_filename=${wsprnet_uploads_queue_directory}/${spot_time}_spots.txt
+        local spots_count=$(wc -l < spots.BEST)
+        wd_logger 1 "Queuing 'spots.BEST' which contains the ${spots_count} spots from the ${#calls_list[@]} calls found in the source files by moving it to ${wsprnet_uploads_queue_filename}:\n$(< spots.BEST)"
+        ### Format spot lines for the wsprnet.org server which now (1/22) parses spot lines for a packet mode 
+        format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt
+        local rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            if [[ ! -s wn_format_spots.txt ]]; then
+                wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' succeeeded but there are no spots in wn_format_spots.txt"
             else
-                wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' => ${rc}"
+                wd_logger 1 "Queuing file with $(wc -l < wn_format_spots.txt) spots to be delivered to  wsprnet.org ${wsprnet_uploads_queue_filename}:\n$(< wn_format_spots.txt)"
+                cp -p wn_format_spots.txt ${wsprnet_uploads_queue_filename}
             fi
+        else
+            wd_logger 1 "ERROR: 'format_spots_file_for_wsprnet  spots.BEST wn_format_spots.txt' => ${rc}"
         fi
     fi
 
-    if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
-        ### We are configured to upload extended spots and noise files to wsprdaemon.org and/or configured for proxy uploads
-        ### If confgiured to upload to wsprdaemon, the noise files are queued by the decoding_daemon(), so we need to upload only spot files here
-        wd_logger 1 "Queuing  spot files '${spot_file_list[*]}"
-        local spot_file_list=( ${spot_file_list[@]} )
-        local spot_file
-        for spot_file in ${spot_file_list[@]} ; do
-            local receiver_name=${spot_file#*/}
-                  receiver_name=${receiver_name%/*}
-
-            local receiver_call_grid=$(get_call_grid_from_receiver_name ${receiver_name})    ### So that receiver_call_grid can be used as a directory name, any '/' in the receiver call has been replaced with '=' 
-            local upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}  
-            mkdir -p ${upload_wsprdaemon_spots_dir}
-            mv ${spot_file} ${upload_wsprdaemon_spots_dir}
-            wd_logger 1 "Copied ${spot_file} to ${upload_wsprdaemon_spots_dir} which contains spot(s):\n$( cat ${upload_wsprdaemon_spots_dir}/${spot_file##*/})"
-       done
-       wd_logger 1 "Done queuing noise and spot files"
+    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
+        wd_logger 1 "We are not configured to uplaod spots and noise to wsprdaemon.org, so flush the extended spots file ${spot_file}"
+        wd_rm ${spot_file_list[@]}
+        return 0
     fi
+
+    ### We are configured to upload extended spots and noise files to wsprdaemon.org and/or configured for proxy uploads
+    ### If confgiured to upload to wsprdaemon, the noise files are queued by the decoding_daemon(), so we need to upload only spot files here
+    wd_logger 1 "Queuing spot files for wsprdaemon.org: '${spot_file_list[*]}"
+    local spot_file_list=( ${spot_file_list[@]} )
+    local spot_file
+    for spot_file in ${spot_file_list[@]} ; do
+        local receiver_name=${spot_file#*/}
+        receiver_name=${receiver_name%/*}
+
+        local receiver_call_grid=$(get_call_grid_from_receiver_name ${receiver_name})    ### So that receiver_call_grid can be used as a directory name, any '/' in the receiver call has been replaced with '=' 
+        local upload_wsprdaemon_spots_dir=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}  
+        mkdir -p ${upload_wsprdaemon_spots_dir}
+        cp -p ${spot_file} ${upload_wsprdaemon_spots_dir}
+        wd_logger 1 "Copied ${spot_file} to ${upload_wsprdaemon_spots_dir} which contains spot(s):\n$( cat ${upload_wsprdaemon_spots_dir}/${spot_file##*/})"
+    done
+    wd_logger 1 "Done queuing wsprdaemon.org spot files, so flush the extended spot files created by the recording daemon"
+    wd_rm ${spot_file_list[@]}
     return 0
 }
 
