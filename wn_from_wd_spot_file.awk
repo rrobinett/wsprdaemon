@@ -27,5 +27,5 @@ NF == 34 {
         wn_pkt_mod= 2
         printf ("ERROR: WD spot line has pkt_mode = '%s', not one of the expected 2/3/5/15/16/30 values: ", wd_pkt_mode)
     }
-    printf ( "%6s %4s %3.2f %3d %3.2f %12.7f %-14s %-6s %2d %2d %4d\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, wn_pkt_mode)
+    printf ( "%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, wn_pkt_mode)
 }
