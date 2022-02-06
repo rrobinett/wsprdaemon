@@ -31,35 +31,35 @@ declare ATSC_PILOT_FREQ_TABLE
 function atsc_pilot_freq_table_create() {
     local channel_info=( ${ATSC_CHANNEL_VHF_START} )
     local channel_number=${channel_info[0]}
-    local channel_freqency=${channel_info[1]}
+    local channel_frequency=${channel_info[1]}
     local last_channel_info=( ${ATSC_CHANNEL_VHF_END} )
     local last_channel_number=${last_channel_info[0]}
     local last_channel_frequency=${last_channel_info[1]}
     local table_index=0
 
-    local wd_arg=$(printf "Filling ATSC_PILOT_FREQ_TABLE[] with ATSC channels from #${channel_number} at %d Hz to #${last_channel_number} at %d\n" ${channel_freqency} ${last_channel_frequency})
+    local wd_arg=$(printf "Filling ATSC_PILOT_FREQ_TABLE[] with ATSC channels from #${channel_number} at %d Hz to #${last_channel_number} at %d\n" ${channel_frequency} ${last_channel_frequency})
     wd_logger 2 "${wd_arg}"
-    while [[ ${channel_freqency} -le ${last_channel_frequency} ]]; do
-        ATSC_PILOT_FREQ_TABLE[${table_index}]="${channel_number} ${channel_freqency}"
-        wd_logger 3 "Assigned Ch '${channel_number}' / Freq '${channel_freqency}' to ATSC_PILOT_FREQ_TABLE[${table_index}]"
+    while [[ ${channel_frequency} -le ${last_channel_frequency} ]]; do
+        ATSC_PILOT_FREQ_TABLE[${table_index}]="${channel_number} ${channel_frequency}"
+        wd_logger 3 "Assigned Ch '${channel_number}' / Freq '${channel_frequency}' to ATSC_PILOT_FREQ_TABLE[${table_index}]"
         (( ++table_index ))
         (( ++channel_number ))
-        (( channel_freqency+=${ATSC_CHANNEL_WIDTH} ))
+        (( channel_frequency+=${ATSC_CHANNEL_WIDTH} ))
     done
     
     channel_info=( ${ATSC_CHANNEL_UHF_START} )
     channel_number=${channel_info[0]}
-    channel_freqency=${channel_info[1]}
+    channel_frequency=${channel_info[1]}
     last_channel_info=( ${ATSC_CHANNEL_UHF_END} )
     last_channel_number=${last_channel_info[0]}
     last_channel_frequency=${last_channel_info[1]}
 
-     while [[ ${channel_freqency} -le ${last_channel_frequency} ]]; do
-        ATSC_PILOT_FREQ_TABLE[${table_index}]="${channel_number} ${channel_freqency}"
-        wd_logger 3 "Assigned Ch '${channel_number}' / Freq '${channel_freqency}' to ATSC_PILOT_FREQ_TABLE[${table_index}]"
+     while [[ ${channel_frequency} -le ${last_channel_frequency} ]]; do
+        ATSC_PILOT_FREQ_TABLE[${table_index}]="${channel_number} ${channel_frequency}"
+        wd_logger 3 "Assigned Ch '${channel_number}' / Freq '${channel_frequency}' to ATSC_PILOT_FREQ_TABLE[${table_index}]"
         (( ++table_index ))
         (( ++channel_number ))
-        (( channel_freqency+=${ATSC_CHANNEL_WIDTH} ))
+        (( channel_frequency+=${ATSC_CHANNEL_WIDTH} ))
     done
 }
 
@@ -76,10 +76,10 @@ function atsc_get_pilot_freq() {
     while [[ ${atsc_channel_info_index} -lt ${atsc_channel_info_max_index} ]]; do
         local channel_info=( ${ATSC_PILOT_FREQ_TABLE[${atsc_channel_info_index}]} )
         channel_number=${channel_info[0]}
-        channel_freqency=${channel_info[1]}
+        channel_frequency=${channel_info[1]}
         if [[ ${channel_number} -eq ${atsc_channel_number} ]]; then
             ### Tune to 1000 Hz below the pilot carrier frequency
-            local pilot_frequency=$(( ${channel_freqency} + ${ATSC_PILOT_CARRIER_OFFSET} ))
+            local pilot_frequency=$(( ${channel_frequency} + ${ATSC_PILOT_CARRIER_OFFSET} ))
              wd_logger 3 "found ATSC channel #${channel_info[@]} in table, its pilot frequency is ${pilot_frequency}"
             eval "${ret_string_name}=${pilot_frequency}"
             return 0
