@@ -312,7 +312,7 @@ function log_merged_snrs()
     fi
  
     local posted_spots_count=$(cat ${best_snrs_file} | wc -l)
-    local posted_calls_list=( $(awk '{print $6}' ${best_snrs_file}) )   ### This list will have already been unique and sorted by frequency
+    local posted_calls_list=( $(awk '{print $7}' ${best_snrs_file}) )   ### This list will have already been unique and sorted by frequency
     local posted_spots_count=${#posted_calls_list[@]}                   ### WD posts to wsprnet.org only the spot with the best SNR from each call, so the # of spots == #calls
 
     local real_receiver_list=( ${all_spot_files_list[@]#*/} )
@@ -320,7 +320,7 @@ function log_merged_snrs()
  
     wd_logger 1 "Log the source of the ${posted_spots_count} posted spots taken from the total ${source_spots_count} spots reported by the ${#real_receiver_list[@]} receivers '${real_receiver_list[*]}' in the MERGEd pool"
     
-    printf "${WD_TIME_FMT}: %10s %8s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
+    TZ=UTC printf "${WD_TIME_FMT}: %10s %8s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
    local receiver
     for receiver in ${real_receiver_list[@]}; do
         printf "%12s" ${receiver}                            >> merged.log
@@ -329,13 +329,13 @@ function log_merged_snrs()
 
     local call
     for call in ${posted_calls_list[@]}; do
-        local posted_freq=$(${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $5}')
-        local posted_snr=$( ${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $3}')
-        printf "${WD_TIME_FMT}: %10s %8s %10s" -1 $posted_freq $call $posted_snr            >>  merged.log
+        local posted_freq=$(${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $6}')
+        local posted_snr=$( ${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $4}')
+        TZ=UTC printf "${WD_TIME_FMT}: %10s %8s %10s" -1 $posted_freq $call $posted_snr            >>  merged.log
         local file
         for file in ${all_spot_files_list[@]}; do
             ### Only pick the strongest SNR from each file which went into the .BEST file
-            local rx_snr=$(${GREP_CMD} -F " $call " $file | sort -k 3,3n | tail -n 1 | awk '{print $3}')
+            local rx_snr=$(${GREP_CMD} -F " $call " $file | sort -k 4,4n | tail -n 1 | awk '{print $4}')
             if [[ -z "$rx_snr" ]]; then
                 printf "%12s" "*"                           >>  merged.log
             elif [[ $rx_snr == $posted_snr ]]; then
