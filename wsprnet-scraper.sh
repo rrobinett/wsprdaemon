@@ -257,7 +257,7 @@ while [[ ${offset} -lt 120 ]]; do
 done
 
 function api_wait_until_next_offset() {
-    local epoch_secs=$(date +%s)
+    local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
     local cycle_offset=$(( ${epoch_secs} % 120 ))
 
     wd_logger 2 "starting at offset ${cycle_offset}"
