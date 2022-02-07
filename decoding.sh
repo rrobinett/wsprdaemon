@@ -330,7 +330,7 @@ function sleep_until_raw_file_is_full() {
     if [[ ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
         local kiwi_freq=${filename#*_}
               kiwi_freq=${kiwi_freq::3}
-        local ps_output=$(ps au | grep "kiwirecorder.*freq=${kiwi_freq}" | grep -v grep)
+        local ps_output=$(ps aux | grep "kiwirecorder.*freq=${kiwi_freq}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
             wd_logger 1 "ERROR: wav file stabilized at invalid too large size ${new_file_size}, but can't find any kiwirecorder processes which would be creating it"
