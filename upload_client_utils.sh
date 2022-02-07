@@ -296,8 +296,8 @@ function upload_to_wsprnet_daemon() {
                     fi
                     wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
-                wd_logger 1 "Flushing the ${#all_spots_file_list[*]}} spot files containing ${spots_offered} now that they have been uploaded: '${all_spots_file_list[*]}'"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "Flushing the ${#all_spots_file_list[*]} spot files containing ${spots_offered} spots now that they have been uploaded:\n${all_spots_file_list[*]}"
+                wd_rm ${all_spots_file_list[@]}
             fi
         done
    done
