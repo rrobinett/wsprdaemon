@@ -1228,7 +1228,7 @@ function list_devices()
     list_audio_devices
 }
 
-declare -r RECEIVER_SNR_ADJUST=-0.25         ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW reuqired by wsprnet.org
+declare -r RECEIVER_SNR_ADJUST=-0.25         ### We set the Kiwi passband to 400 Hz (1300-> 1700Hz), so adjust the wsprd SNRs by this dB to get SNR in the 300-2600 BW required by wsprnet.org
                                              ### But experimentation has shown that setting the Kiwi's passband to 500 Hz (1250 ... 1750 Hz) yields SNRs which match WSJT-x's, so this isn't needed
 
 ##############################################################
