@@ -198,6 +198,8 @@ function get_wsprnet_uploading_job_dir_path(){
 
 declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-40} ### By default wait for the oldest spot file to be 40 seconds old before starting an upload of it and all newer spotfiles
 declare UPLOAD_SLEEP_SECONDS=10
+declare -r WSPR_CYCLE_SECONDS=120
+declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-100}    ### Wait until 100 seconds (default) into a wspr cycle before searching for spots to upload.
 function upload_to_wsprnet_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
@@ -205,17 +207,31 @@ function upload_to_wsprnet_daemon() {
     cd ${UPLOADS_WSPRNET_SPOTS_DIR}
 
     wd_logger 1 "Starting in $PWD"
+
     while true; do
-        wd_logger 2 "Checking for CALL/GRID directories"
+        ### Wait until we are (default) 100 seconds into a 120 second wspr cycle before searching for spot files to upload
+        ### This minimizes the number of uploads per wspr cycle by giving our server time to finish decoding all of the spots from the last cycle
+        local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
+        local cycle_offset=$(( ${epoch_secs} % ${WSPR_CYCLE_SECONDS}  ))
+        if [[ ${cycle_offset} -lt ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} ]]; then
+            sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} - ${cycle_offset} ))
+        else
+            sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
+        fi
+        wd_logger 1 "Waiting ${sleep_secs} seconds until cycle offset ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} for all decodes to finish"
+        wd_sleep ${sleep_secs}
+
+        wd_logger 1 "Checking for CALL/GRID directories"
         local call_grid_dirs_list
         call_grid_dirs_list=( $(find . -mindepth 1 -maxdepth 1 -type d) )
         call_grid_dirs_list=(${call_grid_dirs_list[@]#./})       ### strip the './' off the front of each element
-            if [[ ${#call_grid_dirs_list[@]} -eq 0 ]]; then
-                wd_logger 1 "Found no CALL/GRID directories.  'sleep ${UPLOAD_SLEEP_SECONDS}' and search again"
-                sleep ${UPLOAD_SLEEP_SECONDS}
-                continue
-            fi
-            wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
+
+        if [[ ${#call_grid_dirs_list[@]} -eq 0 ]]; then
+            wd_logger 1 "Found no CALL/GRID directories.  'sleep ${UPLOAD_SLEEP_SECONDS}' and search again"
+            sleep ${UPLOAD_SLEEP_SECONDS}
+            continue
+        fi
+        wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
 
        ### All spots in an upload to wspr.org must come from a single CALL/GRID
        for call_grid_dir in ${call_grid_dirs_list[@]} ; do
@@ -227,16 +243,6 @@ function upload_to_wsprnet_daemon() {
                wd_logger 2 "Found no '*_spots.txt' files for ${call_grid_dir}"
                continue
            fi
-           local oldest_spot_file_epoch=${spots_files_list[0]%%.*}
-           local current_time_epoch=$(printf "%(%s)T\n" -1)
-           local oldest_spotfile_seconds=$(( current_time_epoch - oldest_spot_file_epoch))
-
-           if [[ ${oldest_spotfile_seconds} -lt ${MAX_SPOTFILE_SECONDS} ]]; then
-               wd_logger 1 "Max spotfile age is only ${oldest_spotfile_seconds} seconds, so wait for more files"
-               continue
-           fi
-           wd_logger 1 "Found ${#spots_files_list[@]} spot files, the oldest is ${oldest_spotfile_seconds} seconds old"
-
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
            local spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
@@ -290,14 +296,11 @@ function upload_to_wsprnet_daemon() {
                     fi
                     wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
-                wd_logger 1 "Flushing spot files which have been uploaded: '${all_spots_file_list[*]}'"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "Flushing the ${#all_spots_file_list[*]} spot files containing ${spots_offered} spots now that they have been uploaded:\n${all_spots_file_list[*]}"
+                wd_rm ${all_spots_file_list[@]}
             fi
         done
-        ### Poll every 10 seconds for a complete set of spots.txt files
-        wd_logger 2 "Sleeping for ${UPLOAD_SLEEP_SECONDS} seconds"
-        sleep ${UPLOAD_SLEEP_SECONDS}
-    done
+   done
 }
 
 ###################  Upload to wsprdaemon.org functions ##################
