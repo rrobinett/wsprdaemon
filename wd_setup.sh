@@ -246,7 +246,7 @@ declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.2}"
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
-declare JT9_DECODE_EANABLED=${JT9_DECODE_EANABLED:-no}
+declare JT9_DECODE_ENABLED=${JT9_DECODE_ENABLED:-no}
 
 declare INSTALLED_DEBIAN_PACKAGES=$(${DPKG_CMD} -l)
 declare APT_GET_UPDATE_HAS_RUN="no"
