@@ -187,33 +187,18 @@ function flush_empty_spot_files()
 }
 function record_spot_files()
 {
+    wd_logger 1 "Starting"
     ### Process non-empty spot files
     while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
         if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
             wd_logger 1 "${#spot_file_list[@]} spot files are too many to process in one pass, so processing the first ${MAX_RM_ARGS} spot files"
             spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
         fi
-        ### If the sync_quality in the third field is a float (i.e. has a '.' in it), then this spot was decoded by wsprd v2.1
-        local calls_delivering_jtx_2_1_lines=( $(awk 'NF == 32 && $3  !~ /\./ { print $23}' ${spot_file_list[@]} | sort -u) )
-        if [[ ${#calls_delivering_jtx_2_1_lines[@]} -ne 0 ]]; then
-            wd_logger 1 "ERROR: found spots from calls using WSJT-x V2.1 wsprd: ${calls_delivering_jtx_2_1_lines[@]}"
-        fi
-        local calls_delivering_jtx_2_2_lines=( $(awk 'NF == 32 && $3  ~ /\./ { print $23}' ${spot_file_list[@]} | sort -u) )
-        if [[ ${#calls_delivering_jtx_2_2_lines[@]} -ne 0 ]]; then
-            wd_logger 2 "Found spots from Calls using WSJT-x V2.2 wsprd: ${calls_delivering_jtx_2_2_lines[@]}"
-        fi
-
         local ts_spots_csv_file=./ts_spots.csv    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
-        format_spot_lines ${ts_spots_csv_file}    ### That function ${spot_file_list[@]}
-
-        mv ${ts_spots_csv_file} testing.csv
-        if grep "KPH "  testing.csv > /dev/null ; then
-            if grep "KPH\/A " testing.csv > /dev/null; then
-                wd_lgger 1 "Found some KPH anspots in testing.csv. Sleeping 30"
-                wd_sleep 30
-            fi
-        fi
-        if [[ ! -s ${ts_spots_csv_file} ]]; then
+        format_spot_lines ${ts_spots_csv_file}    ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
+        # mv ${ts_spots_csv_file} testing.csv
+        # > ${ts_spots_csv_file}
+       if [[ ! -s ${ts_spots_csv_file} ]]; then
             wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
         else
             declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
@@ -283,7 +268,14 @@ function format_spot_lines()
         wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM}' => ${ret_code}"
         return 1
     fi
-   wd_logger 1 "Formatted WD spot lines into TS spot lines:\n$(head -n 4 ${fixed_spot_lines_file})"
+    if grep ERROR ${fixed_spot_lines_file} > fixed_error_spots.csv ; then
+        grep -v ERROR ${fixed_spot_lines_file} > fixed_good_spots.csv
+        mv ${fixed_spot_lines_file} good_and_bad_spots.csv
+        cp fixed_good_spots.csv ${fixed_spot_lines_file}
+        wd_logger 1 "ERROR: found some invalid spots which are not being recorded:\n$(< fixed_error_spots.csv)"
+    fi
+
+   wd_logger 1 "Formatted WD spot lines into TS spot lines of ${fixed_spot_lines_file}:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
 }
 
@@ -559,7 +551,7 @@ function queue_files_for_mirroring()
         done
         wd_logger 1 "Done queuing to mirror targets: '${MIRROR_DESTINATIONS_LIST[*]}'"
     fi
-    wd_logger 1 "Done with all mirroring"
+    wd_logger 2 "Done with all mirroring"
 }
 
 ######################## Upload services spawned by the upload watchdog server ######################
