@@ -129,6 +129,14 @@ function wpsrnet_get_spots() {
 declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=30       ## $(( 60 * 24 * 7 )) change to this if want to print out spots only older than 7 days
 declare SHOW_SPOTS_OLDER_THAN_MINUTES=${SHOW_SPOTS_OLDER_THAN_MINUTES-${SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT}}
 
+### Creates a file which records a gap between scrapes or within a scrape.  The scrape_gap_filler_deemon() will attempt to fill those gaps by quering the other WD servers
+function queue_gap_file() {
+    local first_missing_seq=$1
+    local last_missing_seq=$2
+    mkdir -p gaps.d/
+    printf "%(%s)T %d %d\n" -1 ${first_missing_seq} ${last_missing_seq} > gaps.d/${first_missing_seq}.log
+}
+
 function wsprnet_to_csv() {
     local wsprnet_html_spot_file=$1
     local wsprnet_csv_spot_file=$2
@@ -166,8 +174,25 @@ function wsprnet_to_csv() {
         fi
         sorted_lines_array=( "${jq_sorted_lines_array[@]}" )
     fi
- 
-    ### To monitor and validate the spots, check for gaps in the sequence numbers
+
+    ### See if there is a gap between the last spot of the previous scrape or the last spot stored in our TS data and the first spot of this scrape
+    local first_spot_array=(${sorted_lines_array[0]//,/ })
+    local last_spot_array=(${sorted_lines_array[${max_index}]//,/ })
+    local scrape_seconds=$(( ${SECONDS} - ${scrape_start_seconds} ))
+    #wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots from %4d wspr cycles. First sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" "${#epochs_list[@]}")"
+    wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots first sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" )"
+
+    local spot_num_gap=$(( ${first_spot_array[0]} - ${WSPRNET_LAST_SPOTNUM} ))
+    if [[ ${WSPRNET_LAST_SPOTNUM} -ne 0 ]] && [[ ${spot_num_gap} -gt 1 ]]; then
+        wd_logger 1 "$(printf "Found gap of %4d spotnums between last spot #${WSPRNET_LAST_SPOTNUM} and first spot #${first_spot_array[0]} of this scrape" "${spot_num_gap}")"
+        local first_missing_seq=$(( ${WSPRNET_LAST_SPOTNUM} + 1 ))
+        local last_missing_seq=$((  ${first_spot_array[0]}  - 1 ))
+        queue_gap_file ${first_missing_seq} ${last_missing_seq}
+    fi
+    ### Remember the current last spot for the next call to this function
+    WSPRNET_LAST_SPOTNUM=${last_spot_array[0]}
+
+    ### Check for gaps within this new scrape
     local total_gaps=0
     local total_missing=0
     local max_gap_size=0
@@ -185,7 +210,10 @@ function wsprnet_to_csv() {
                if [[ ${gap_size} -gt ${max_gap_size} ]]; then
                    max_gap_size=${gap_size}
                fi
-               wd_logger 1 "$(printf "found gap of %3d at index %4d:  Expected ${expected_seq}, got ${got_seq}" "${gap_size}" "${index}")"
+               wd_logger 1 "$(printf "Found gap of %3d at index %4d:  Expected ${expected_seq}, got ${got_seq}" "${gap_size}" "${index}")"
+               local first_missing_seq=${expected_seq}
+               local last_missing_seq=$(( got_seq - 1 ))
+               queue_gap_file ${first_missing_seq} ${last_missing_seq}
            fi
            expected_seq=${next_seq}
        fi
@@ -194,6 +222,7 @@ function wsprnet_to_csv() {
         wd_logger 1 "Found ${total_gaps} gaps missing a total of ${total_missing} spots. The max gap was of ${max_gap_size} spot numbers"
     fi
 
+    ### Create a csv file from the scraped spots
     unset lines   ### just to be sure we don't use it again
 
     ### Prepend TS format times derived from the epoch times in field #2 to each spot line in the sorted 
@@ -229,20 +258,9 @@ function wsprnet_to_csv() {
     local csv_spotnum_count=$( wc -l < ${wsprnet_csv_spot_file})
     if [[ ${csv_spotnum_count} -ne ${#sorted_lines_array[@]} ]]; then
         wd_logger 1 "ERROR: found ${#sorted_lines_array[@]} in our plaintext of the html file, but only ${csv_spotnum_count} is the csv version of it"
+        return 1
     fi
-
-    local first_spot_array=(${sorted_lines_array[0]//,/ })
-    local last_spot_array=(${sorted_lines_array[${max_index}]//,/ })
-    local scrape_seconds=$(( ${SECONDS} - ${scrape_start_seconds} ))
-    wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots from %4d wspr cycles. First sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" "${#epochs_list[@]}")"
-
-    ### For monitoring and validation, document the gap between the last spot of the last scrape and the first spot of this scrape
-    local spot_num_gap=$(( ${first_spot_array[0]} - ${WSPRNET_LAST_SPOTNUM} ))
-    if [[ ${WSPRNET_LAST_SPOTNUM} -ne 0 ]] && [[ ${spot_num_gap} -gt 2 ]]; then
-        wd_logger 1 "$(printf "Found gap of %4d spotnums between last spot #${WSPRNET_LAST_SPOTNUM} and first spot #${first_spot_array[0]} of this scrape" "${spot_num_gap}")"
-    fi
-    ### Remember the current last spot for the next call to this function
-    WSPRNET_LAST_SPOTNUM=${last_spot_array[0]}
+    return 0
 }
 
 ### Create ${WSPRNET_OFFSET_SECS}, a string of offsets in seconds from the start of an even minute when the scraper should execute the wsprnet API to get the latest spots
@@ -423,3 +441,81 @@ function get_status_wsprnet_scrape_daemon()
     return ${ret_code}
 }
 
+##########  Gap filling daemon ###########
+
+declare GAP_POLL_SECS=5                             ### How often to look for new gap report files
+declare GAP_PROCESSED_LOG_FILE=gaps_processed.log   ### Log our processing acts here
+declare GAP_PROCESSED_LOG_MAX_BYTES=100000          ### Limit this log size
+function wsprnet_gap_daemon()
+{
+    wd_logger 1 "Starting in ${PWD}"
+    mkdir -p ${SCRAPER_ROOT_DIR}/gaps.d
+    local tmp_ts_csv_file=${WSPRNET_SCRAPER_TMP_PATH}/missing_spots.csv
+    while true; do
+        local gap_files_list=()
+        while [[ ! -d ${SCRAPER_ROOT_DIR}/gaps.d ]] ; do
+            wd_logger 1 "There is no ${SCRAPER_ROOT_DIR}/gaps.d directory, so sleep ${GAP_POLL_SECS}"
+            wd_sleep ${GAP_POLL_SECS}
+        done
+        wd_logger 1 "Waiting for gap report files to appear in ${SCRAPER_ROOT_DIR}/gaps.d"
+        while gap_files_list=( $(find ${SCRAPER_ROOT_DIR}/gaps.d -type f) ) && [[ ${#gap_files_list[@]} -eq 0 ]] ; do
+            wd_logger 2 "Found no gap files, so sleep ${GAP_POLL_SECS}"
+            wd_sleep ${GAP_POLL_SECS}
+        done
+        wd_logger 1 "Found ${#gap_files_list[@]} new gap reports"
+        for gap_file in ${gap_files_list[@]}; do
+            local gap_line_list=( $(< ${gap_file}) )
+            if [[ ${#gap_line_list[@]} -ne 2 ]]; then
+                wd_logger 1 "ERROR: got gap file ${gap_file} with invalid line: $(< ${gap_file})"
+                wd_rm ${gap_file}
+                continue
+            fi
+            local gap_seq_start=${gap_line_list[0]}
+            local gap_seq_end=${gap_line_list[1]}
+            local gap_count=$(( gap_seq_end - gap_seq_start ))
+            wd_logger 1 "Attmept to fill gap of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}"
+            local host
+            for host in ${GAP_FILLER_HOST_LIST[@]}; do
+                wd_logger 1 "Querying ${host} for missing spots"
+                local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h ${host} -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" > ${gap_seq_start}  and \"Spotnum\" < ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: psql query of ${host} failed"
+                else
+                    local psql_copy_count=$(awk '/COPY/{print $2}' <<< "${psql_response}")
+                    local tmp_csv_file_count=$(wc -l < ${tmp_ts_csv_file})
+                    wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(< ${tmp_ts_csv_file})"
+                fi
+            done
+            printf "${WD_TIME_FMT}: ${gap_seq_start} to ${gap_seq_end} filled with ..." >> ${GAP_PROCESSED_LOG_FILE}
+            truncate_file ${GAP_PROCESSED_LOG_FILE} ${GAP_PROCESSED_LOG_MAX_BYTES}
+            wd_rm ${gap_file}
+        done
+    done
+}
+    
+function kill_wsprnet_gap_daemon()
+{
+    wd_logger 2 "Kill the wsprnet_gap_daemon by executing: 'kill_daemon wsprnet_gap_daemon ${SCRAPER_ROOT_DIR}'"
+    ### Kill the watchdog
+    kill_daemon  wsprnet_gap_daemon ${SCRAPER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "Killed the daemon 'wsprnet_gap_daemon' running in '${SCRAPER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The 'wsprnet_gap_daemon' was not running in '${SCRAPER_ROOT_DIR}'"
+    fi
+    return 0
+}
+
+function get_status_wsprnet_gap_daemon()
+{
+    get_status_of_daemon   wsprnet_gap_daemon  ${SCRAPER_ROOT_DIR}
+    local ret_code=$?
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger -1 "The wsprnet_gap_daemon is running in '${SCRAPER_ROOT_DIR}'"
+    else
+        wd_logger -1 "The wsprnet_gap_daemon is not running in '${SCRAPER_ROOT_DIR}'"
+    fi
+    return 0
+}

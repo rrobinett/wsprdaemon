@@ -442,7 +442,7 @@ function get_status_of_daemon() {
             return 3
         else
             wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
-            wd_logger 1 "daemon '${daemon_function_name}' with  pid ${daemon_pid} is running"
+            wd_logger 2 "daemon '${daemon_function_name}' with  pid ${daemon_pid} is running"
         fi
     fi
     return 0
