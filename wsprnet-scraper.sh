@@ -446,6 +446,8 @@ function get_status_wsprnet_scrape_daemon()
 declare GAP_POLL_SECS=5                             ### How often to look for new gap report files
 declare GAP_PROCESSED_LOG_FILE=gaps_processed.log   ### Log our processing acts here
 declare GAP_PROCESSED_LOG_MAX_BYTES=100000          ### Limit this log size
+declare GAP_MIN_AGE_SECS=20      ### Wait 5 minutes before asking other WDs for spots in gap
+
 function wsprnet_gap_daemon()
 {
     wd_logger 1 "Starting in ${PWD}"
@@ -463,17 +465,56 @@ function wsprnet_gap_daemon()
             wd_sleep ${GAP_POLL_SECS}
         done
         wd_logger 1 "Found ${#gap_files_list[@]} new gap reports"
+        local aged_files_list=()
+        local current_epoch=$(printf "%(%s)T" -1 )
+        local oldest_gap_file_age=0
+        local gap_file
         for gap_file in ${gap_files_list[@]}; do
+            local gap_file_epoch=$( ${GET_FILE_MOD_TIME_CMD} ${gap_file} )
+            local gap_file_age=$(( current_epoch - gap_file_epoch ))
+            if [[ ${gap_file_age} -lt ${GAP_MIN_AGE_SECS} ]]; then
+                wd_logger 1 "Gap file ${gap_file} age is ${gap_file_age} seconds.  Wait until it is ${GAP_MIN_AGE_SECS} seconds old before processing it"
+                if [[ ${gap_file_age} -gt ${oldest_gap_file_age} ]]; then
+                    wd_logger 1 "Gap file ${gap_file} age ${gap_file_age} is older than oldest gap of ${gap_file_age} second, so remember it"
+                    oldest_gap_file_age=${gap_file_age}
+                fi
+            else
+                wd_logger 1 "Gap file ${gap_file} age is ${gap_file_age} seconds, so process it"
+                aged_files_list+=( ${gap_file} )
+            fi
+        done
+        if [[ ${#aged_files_list[@]} -eq 0 ]]; then
+            local gap_sleep_seconds=$(( GAP_MIN_AGE_SECS - oldest_gap_file_age ))
+            wd_logger 1 "Found no gap files old enough to be processed.  The oldest gap file is ${oldest_gap_file_age}, so sleep ${gap_sleep_seconds} until it will be ready to be processed"
+            wd_sleep ${gap_sleep_seconds}
+            continue
+        fi
+        wd_logger 1 "Found ${#aged_files_list[@]} gap reports old enough to be ready for processing"
+        for gap_file in ${aged_files_list[@]}; do
             local gap_line_list=( $(< ${gap_file}) )
-            if [[ ${#gap_line_list[@]} -ne 2 ]]; then
+            if [[ ${#gap_line_list[@]} -ne 3 ]]; then
                 wd_logger 1 "ERROR: got gap file ${gap_file} with invalid line: $(< ${gap_file})"
                 wd_rm ${gap_file}
                 continue
             fi
-            local gap_seq_start=${gap_line_list[0]}
-            local gap_seq_end=${gap_line_list[1]}
+            local gap_report_epoch=${gap_line_list[0]}
+            local gap_seq_start=${gap_line_list[1]}
+            local gap_seq_end=${gap_line_list[2]}
             local gap_count=$(( gap_seq_end - gap_seq_start ))
-            wd_logger 1 "Attmept to fill gap of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}"
+            wd_logger 1 "$(printf "Attmept to fill gap reported at ${WD_TIME_FMT} of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}" ${gap_report_epoch})"
+
+            local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h localhost -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" > ${gap_seq_start}  and \"Spotnum\" < ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: psql query of localhost failed when verifying that gap file spots are really missing from the local TS DB"
+            else
+                local psql_copy_count=$(awk '/COPY/{print $2}' <<< "${psql_response}")
+                local tmp_csv_file_count=$(wc -l < ${tmp_ts_csv_file})
+                if [[ ${psql_copy_count} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: in local TS DB found ${psql_copy_count} spots in the gap.  Expecting 0 spots"
+                fi
+            fi
+
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
@@ -484,7 +525,14 @@ function wsprnet_gap_daemon()
                 else
                     local psql_copy_count=$(awk '/COPY/{print $2}' <<< "${psql_response}")
                     local tmp_csv_file_count=$(wc -l < ${tmp_ts_csv_file})
-                    wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(< ${tmp_ts_csv_file})"
+                    if [[ ${psql_copy_count} -ne ${tmp_csv_file_count} ]]; then
+                        wd_logger 1 "ERROR: psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end}, but psql response ${psql_copy_count} doesn't equal the number of lines {tmp_csv_file_count} in the csv file"
+                    fi
+                    if [[ ${psql_copy_count} -eq 0 ]]; then
+                        wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} but got zero spot lines"
+                    else
+                        wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(< ${tmp_ts_csv_file})"
+                    fi
                 fi
             done
             printf "${WD_TIME_FMT}: ${gap_seq_start} to ${gap_seq_end} filled with ..." >> ${GAP_PROCESSED_LOG_FILE}
