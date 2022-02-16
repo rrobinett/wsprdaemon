@@ -443,10 +443,9 @@ function get_status_wsprnet_scrape_daemon()
 
 ##########  Gap filling daemon ###########
 
-declare GAP_POLL_SECS=5                             ### How often to look for new gap report files
-declare GAP_PROCESSED_LOG_FILE=gaps_processed.log   ### Log our processing acts here
-declare GAP_PROCESSED_LOG_MAX_BYTES=100000          ### Limit this log size
-declare GAP_MIN_AGE_SECS=20      ### Wait 5 minutes before asking other WDs for spots in gap
+declare GAP_POLL_SECS=5                                                  ### How often to look for new gap report files
+declare GAP_PROCESSED_LOG_MAX_BYTES=100000                               ### Limit this log size
+declare GAP_MIN_AGE_SECS=20                                              ### Wait 5 minutes before asking other WDs for spots in gap
 
 function wsprnet_gap_daemon()
 {
@@ -515,6 +514,7 @@ function wsprnet_gap_daemon()
                 fi
             fi
 
+            local filled_count=0
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
@@ -532,13 +532,28 @@ function wsprnet_gap_daemon()
                         wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} but got zero spot lines"
                     else
                         wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(< ${tmp_ts_csv_file})"
+                        wn_spots_batch_upload ${tmp_ts_csv_file}
+                        local rc=$?
+                        if [[ ${rc} -ne 0 ]]; then
+                            wd_logger 1 "ERROR: 'wn_spots_batch_upload ${tmp_ts_csv_file}' => ${rc}, so try another WD"
+                        else
+                            wd_logger 1 "Recorded the ${psql_copy_count} spots of the ${gap_count} missing spots. Don't try to find more on another WD"
+                            filled_count=${psql_copy_count}
+                            break
+                        fi
                     fi
                 fi
             done
-            printf "${WD_TIME_FMT}: ${gap_seq_start} to ${gap_seq_end} filled with ..." >> ${GAP_PROCESSED_LOG_FILE}
+            if [[ ${filled_count} -eq 0 ]]; then
+                filled_count="no"
+            fi
+            local GAP_PROCESSED_LOG_FILE=${SCRAPER_ROOT_DIR}/gaps_processed.log    ### Log our processing acts here
+            printf "${WD_TIME_FMT}: gap of ${gap_count} spots from seq ${gap_seq_start} to seq ${gap_seq_end} filled with ${filled_count} spots\n" -1  >> ${GAP_PROCESSED_LOG_FILE}
             truncate_file ${GAP_PROCESSED_LOG_FILE} ${GAP_PROCESSED_LOG_MAX_BYTES}
             wd_rm ${gap_file}
+            wd_logger 1 "Finished processing gap file ${gap_file}"
         done
+        wd_logger 1 "Finished processing all ready gap files"
     done
 }
     
