@@ -502,7 +502,7 @@ function wsprnet_gap_daemon()
             local gap_count=$(( gap_seq_end - gap_seq_start ))
             wd_logger 1 "$(printf "Attmept to fill gap reported at ${WD_TIME_FMT} of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}" ${gap_report_epoch})"
 
-            local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h localhost -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" > ${gap_seq_start}  and \"Spotnum\" < ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+            local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h localhost -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: psql query of localhost failed when verifying that gap file spots are really missing from the local TS DB"
@@ -518,7 +518,7 @@ function wsprnet_gap_daemon()
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
-                local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h ${host} -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" > ${gap_seq_start}  and \"Spotnum\" < ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+                local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h ${host} -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
                 local rc=$?
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: psql query of ${host} failed"
@@ -529,9 +529,10 @@ function wsprnet_gap_daemon()
                         wd_logger 1 "ERROR: psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end}, but psql response ${psql_copy_count} doesn't equal the number of lines {tmp_csv_file_count} in the csv file"
                     fi
                     if [[ ${psql_copy_count} -eq 0 ]]; then
-                        wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} but got zero spot lines"
+                        wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} but got zero spot lines in the response:\n${psql_response}"
                     else
                         wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(< ${tmp_ts_csv_file})"
+                        sed -i 's/,$//' ${tmp_ts_csv_file}        ### edit in place.  chops off the trailing ,
                         wn_spots_batch_upload ${tmp_ts_csv_file}
                         local rc=$?
                         if [[ ${rc} -ne 0 ]]; then
