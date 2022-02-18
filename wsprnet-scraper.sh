@@ -502,7 +502,6 @@ function wsprnet_gap_daemon()
         if [[ ${#aged_files_list[@]} -eq 0 ]]; then
             local gap_sleep_seconds=$(( GAP_MIN_AGE_SECS - oldest_gap_file_age ))
             wd_logger 1 "Found no gap files old enough to be processed.  The oldest gap file is ${oldest_gap_file_age} seconds old, so sleep ${gap_sleep_seconds} until it will be ready to be processed"
-            ld 
             wd_sleep ${gap_sleep_seconds}
             continue
         fi
@@ -550,6 +549,7 @@ function wsprnet_gap_daemon()
                     if [[ ${psql_copy_count} -eq 0 ]]; then
                         wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} but got zero spot lines in the response:\n${psql_response}"
                     else
+                        ### Record the missing spots to local TS
                         sed -i 's/,$//' ${tmp_ts_csv_file}                         ### edit in place.  chops off the trailing ,
                         sort -t , -k 2,2n ${tmp_ts_csv_file} -o ${tmp_ts_csv_file}  ### sorts in place
                         wd_logger 1 "psql ${host} asked for the ${gap_count} missing spots from ${gap_seq_start} to ${gap_seq_end} and got response of '${psql_response}' while csv file has ${tmp_csv_file_count} spot lines:\n$(head -n 1 ${tmp_ts_csv_file}; echo ...; tail -n 1 ${tmp_ts_csv_file})"
@@ -560,9 +560,16 @@ function wsprnet_gap_daemon()
                         else
                             wd_logger 1 "Recorded the ${psql_copy_count} spots of the ${gap_count} missing spots in a $(wc -c < ${tmp_ts_csv_file}) byte file. Don't try to find more on another WD"
                             filled_count=${psql_copy_count}
-                            break
+                            ### Record the missing spots to CH
+                            if [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
+                                ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${tmp_ts_csv_file} )
+                                wd_logger 1 "Recorded spots to Clickhouse database"
+                            else
+                                wd_logger 1 "ERROR: can't find CLICKHOUSE_IMPORT_CMD '${CLICKHOUSE_IMPORT_CMD}'"
+                            fi
+                            break        ### Don't try to find gap spots on another WD
                         fi
-                    fi
+                   fi
                 fi
             done
             if [[ ${filled_count} -eq 0 ]]; then
