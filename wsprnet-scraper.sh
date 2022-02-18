@@ -129,14 +129,6 @@ function wpsrnet_get_spots() {
 declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=30       ## $(( 60 * 24 * 7 )) change to this if want to print out spots only older than 7 days
 declare SHOW_SPOTS_OLDER_THAN_MINUTES=${SHOW_SPOTS_OLDER_THAN_MINUTES-${SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT}}
 
-### Creates a file which records a gap between scrapes or within a scrape.  The scrape_gap_filler_deemon() will attempt to fill those gaps by quering the other WD servers
-function queue_gap_file() {
-    local first_missing_seq=$1
-    local last_missing_seq=$2
-    mkdir -p gaps.d/
-    printf "%(%s)T %d %d\n" -1 ${first_missing_seq} ${last_missing_seq} > gaps.d/${first_missing_seq}.log
-}
-
 function wsprnet_to_csv() {
     local wsprnet_html_spot_file=$1
     local wsprnet_csv_spot_file=$2
@@ -447,6 +439,29 @@ function get_status_wsprnet_scrape_daemon()
 declare GAP_POLL_SECS=5                                                  ### How often to look for new gap report files
 declare GAP_PROCESSED_LOG_MAX_BYTES=100000                               ### Limit this log size
 declare GAP_MIN_AGE_SECS=20                                              ### Wait 5 minutes before asking other WDs for spots in gap
+declare GAP_MAX_REQUEST=50000                                            ### Ask for no more than this number of spots per download
+
+### Creates a file which records a gap between scrapes or within a scrape.  The scrape_gap_filler_deemon() will attempt to fill those gaps by quering the other WD servers
+function queue_gap_file() {
+    local first_missing_seq=$1
+    local last_missing_seq=$2
+    mkdir -p gaps.d/
+
+    local first_seq=${first_missing_seq}
+    local last_seq
+    local gap_request_size
+
+    while gap_request_size=$(( last_missing_seq - first_seq + 1 )) && [[ ${gap_request_size} -gt 0 ]] ; do
+        if [[ ${gap_request_size} -le ${GAP_MAX_REQUEST} ]] ; then
+            last_seq=${last_missing_seq}
+        else
+            last_seq=$(( ${first_seq} + ${GAP_MAX_REQUEST} - 1 ))
+        fi
+        printf "%(%s)T %d %d\n" -1 ${first_seq} ${last_seq}  > gaps.d/${first_seq}.log
+        wd_logger 1 "Queued gap reqeust file gaps.d/${first_seq}.log which is for  ${gap_request_size} spots from seq_num ${first_seq} to ${last_seq}"
+        first_seq=$(( ${last_seq} + 1 ))
+    done
+}
 
 function wsprnet_gap_daemon()
 {
@@ -460,7 +475,8 @@ function wsprnet_gap_daemon()
             wd_sleep ${GAP_POLL_SECS}
         done
         wd_logger 1 "Waiting for gap report files to appear in ${SCRAPER_ROOT_DIR}/gaps.d"
-        while gap_files_list=( $(find ${SCRAPER_ROOT_DIR}/gaps.d -type f) ) && [[ ${#gap_files_list[@]} -eq 0 ]] ; do
+        ### sort the output of find in numeric (i.e. sequence number) order.  Thus we will fill gaps from lowest sequence to highest
+        while gap_files_list=( $(find ${SCRAPER_ROOT_DIR}/gaps.d -type f | sort -t / -k 2,2n ) ) && [[ ${#gap_files_list[@]} -eq 0 ]] ; do
             wd_logger 2 "Found no gap files, so sleep ${GAP_POLL_SECS}"
             wd_sleep ${GAP_POLL_SECS}
         done
