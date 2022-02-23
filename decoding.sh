@@ -931,6 +931,8 @@ function decoding_daemon() {
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
+            local sox_rms_noise_level
+            local rms_line
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
             > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
@@ -980,8 +982,6 @@ function decoding_daemon() {
                     local fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
                     wd_logger 1 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
 
-                    local sox_rms_noise_level
-                    local rms_line
                     get_rms_levels  sox_rms_noise_level rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
