@@ -841,7 +841,7 @@ function decoding_daemon() {
     get_decode_mode_list  receiver_modes ${receiver_modes_arg} ${receiver_band}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then 
-        wd_logger 1 "ERROR: 'get_decode_mode_list receiver_modes ${receiver_modes_arg}' => ${retCode}"
+        wd_logger 1 "ERROR: 'get_decode_mode_list receiver_modes ${receiver_modes_arg}' => ${ret_code}"
         return ${ret_code}
     fi
     ### Put the list of configured decoding modes into the array receiver_modes_list[]
