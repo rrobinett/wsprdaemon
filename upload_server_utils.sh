@@ -387,11 +387,12 @@ function upload_to_mirror_site_daemon() {
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-separated list of files
 
             wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/'"
-            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ > curl.log 2>&1 
+            ### curl -sS == don't print progress, but print errors
+            curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ > curl.log 2>&1 
             local ret_code=$?
-            local curl_output=$(< curl.log)
+            local curl_output=$(head -n 1 curl.log)
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "Curl xfer failed: '${curl_output}'  => ${ret_code}, so leave files alone and try again"
+                wd_logger 1 "Curl xfer failed: '${curl_output} ...'  => ${ret_code}, so leave files alone and try again"
             else
                 wd_logger 1 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
                 wd_rm ${curl_upload_file_list[@]}
