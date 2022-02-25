@@ -387,8 +387,9 @@ function upload_to_mirror_site_daemon() {
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-separated list of files
 
             wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/'"
-            local curl_output=$(curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ 2>&1 )
+            curl -s -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ > curl.log 2>&1 
             local ret_code=$?
+            local curl_output=$(< curl.log)
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "Curl xfer failed: '${curl_output}'  => ${ret_code}, so leave files alone and try again"
             else
@@ -400,7 +401,7 @@ function upload_to_mirror_site_daemon() {
                 fi
             fi
         fi
-        wd_logger 1 "Sleeping for ${UPLOAD_TO_MIRROR_SERVER_SECS} seconds"
+        wd_logger 2 "Sleeping for ${UPLOAD_TO_MIRROR_SERVER_SECS} seconds"
         wd_sleep ${UPLOAD_TO_MIRROR_SERVER_SECS}
     done
 }
