@@ -62,6 +62,7 @@ function tbz_service_daemon()
         local valid_tbz_list=() 
         local tbz_file 
         for tbz_file in ${tbz_file_list[@]}; do
+            wd_logger 3 "In $PWD: Running 'tar xf ${tbz_file}'"
             if tar xf ${tbz_file} &> /dev/null ; then
                 wd_logger 2 "Found a valid tar file: ${tbz_file}"
                 valid_tbz_list+=(${tbz_file})

@@ -304,6 +304,26 @@ function install_python_package()
     return 0
 }
 
+function install_ts_recording_packages()
+{
+   ### Get the Python packages needed to create the graphs.png
+    local package
+    for package in psycopg2 ; do
+        wd_logger 2 "Install Python package ${package}"
+        install_python_package ${package}
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to install Python package ${package}"
+            return ${ret_code}
+        fi
+    done
+}
+
+if ! install_ts_recording_packages ; then
+    wd_logger 1 "ERROR: failed to install Python package ${package} needed by the server to record spots and noise to TS"
+    exit 1
+fi
+
 ### WD uses the 'wsprd' and 'jt9' binaries from the WSJT-x package.  
 ### 9/16/20 RR - WSJT-x doesn't yet install on Ubuntu 20.04, so special case that.
 ### 'wsprd' doesn't report its version number (e.g. with wsprd -V), so on most systems we learn the version from 'dpkt -l'.
