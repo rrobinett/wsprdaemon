@@ -296,6 +296,15 @@ function install_python_package()
         fi
     fi
     wd_logger 1 "Having pip3 install package ${pip_package} "
+    if [[ ${pip_package} == "psycopg2" ]]; then
+        wd_logger 1 "'pip3 install ${pip_package}' requires 'apt install python3-dev libpq-dev'"
+        sudo apt install python3-dev libpq-dev
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'sudo apt install python3-dev libpq-dev'  => ${rc}"
+            exit ${rc}
+        fi
+    fi
     if ! sudo pip3 install ${pip_package} ; then
         wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
         exit 2
