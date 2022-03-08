@@ -5739,7 +5739,7 @@ function spawn_watchdog_daemon(){
         fi
         rm -f ${watchdog_pid_file}
     fi
-    setup_systemctl_deamon
+    setup_systemctl_daemon
     watchdog_daemon > ${PATH_WATCHDOG_LOG} 2>&1  &   ### Redirecting stderr in watchdog_daemon() left stderr still output to PATH_WATCHDOG_LOG
     echo $! > ${PATH_WATCHDOG_PID}
     watchdog_pid=$(cat ${watchdog_pid_file})
