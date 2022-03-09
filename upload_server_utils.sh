@@ -381,20 +381,19 @@ function upload_to_mirror_site_daemon() {
             wd_logger 1 "Found ${#files_queued_for_upload_list[@]} files to upload to url_addr=${url_addr}, url_login_name=${url_login_name}, url_login_password=${url_login_password}"
 
             local curl_upload_file_list=(${files_queued_for_upload_list[@]::${UPLOAD_MAX_FILE_COUNT}})  ### curl limits the number of files to upload, so curl only the first UPLOAD_MAX_FILE_COUNT files 
-            local curl_dest_subdir="${MIRROR_TARGET_SUBDIR-upload}"   ### <= TESTING, change to "upload" once this daemon is debugged
 
             local curl_upload_file_string=${curl_upload_file_list[@]}
             curl_upload_file_string=${curl_upload_file_string// /,}     ### curl wants a comma-separated list of files
 
-            wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/'"
+            wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/'"
             ### curl -sS == don't print progress, but print errors
-            curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/${curl_dest_subdir}/ > curl.log 2>&1 
+            curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/ > curl.log 2>&1 
             local ret_code=$?
-            local curl_output=$(head -n 1 curl.log)
+            local curl_output=$(< curl.log)
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "Curl xfer failed: '${curl_output} ...'  => ${ret_code}, so leave files alone and try again"
             else
-                wd_logger 1 "Curl xfer was successful: '${curl_output}', so delete ${#curl_upload_file_list[@]} local files"
+                wd_logger 1 "Curl xfer was successful, so delete the ${#curl_upload_file_list[@]} local files"
                 wd_rm ${curl_upload_file_list[@]}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
