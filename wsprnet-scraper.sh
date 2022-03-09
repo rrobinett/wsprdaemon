@@ -88,8 +88,8 @@ function wpsrnet_get_spots() {
         local psql_output=$(cat ${psql_output_file})
         local last_spotnum=$(tr -d ' ' <<< "${psql_output}")
         if [[ -z "${last_spotnum}" ]] || [[ ${last_spotnum} -eq 0 ]]; then
-            wd_logger 1 "ERROR: At startup failed to get a Spotnum from TS"
-            exit 1
+            wd_logger 1 "ERROR: At startup got no or invalid spot num '${last_spotnum}' from TS, so use last_spotnum='0'"
+            last_spotnum=0
         fi
         WSPRNET_LAST_SPOTNUM=${last_spotnum}
         wd_logger 1 "At startup using highest Spotnum ${last_spotnum} from TS, not 0"
@@ -520,7 +520,7 @@ function wsprnet_gap_daemon()
             local gap_count=$(( gap_seq_end - gap_seq_start + 1 ))
             wd_logger 1 "$(printf "Attempt to fill gap reported at ${WD_TIME_FMT} of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}" ${gap_report_epoch})"
 
-            local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h localhost -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+            local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h localhost -p 5432 -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: psql query of localhost failed when verifying that gap file spots are really missing from the local TS DB"
@@ -536,7 +536,7 @@ function wsprnet_gap_daemon()
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
-                local psql_response=$(PGPASSWORD=${GAP_FILLER_TS_PASSWORD}  psql -U wdread -h ${host} -p 5432 -d wsprnet -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+                local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h ${host} -p 5432 -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
                 local rc=$?
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: psql query of ${host} failed"

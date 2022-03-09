@@ -396,6 +396,10 @@ function upload_to_wsprdaemon_daemon() {
         wd_logger 1 "created ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}:\n$(cat ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})"
 
         local source_file_list=( ${spot_file_list[@]} ${noise_file_list[@]} )
+        if [[ ${#source_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
+            wd_logger 1 "source_file_list[] has ${#source_file_list[@]} elements which is more than the allowed MAX_RM_ARGS=${MAX_RM_ARGS} elements, so truncate it"
+            source_file_list=( ${source_file_list[@]:0:${MAX_RM_ARGS}} )
+        fi
         ### In v2.10* the spot and noise file paths were tared from the ~/wsprdaemon/uploads.d directory, so the filenames all start with 'wsprdaemon.d/...
         ### So to preserve backwards compatibility we will mimic that behavior by executing tar from ..uploads.d and prepending 'wsprdaemon.d' to all the filenames we are tarring
         local tar_source_file_list=( wsprdaemon.d/${config_relative_path} ${source_file_list[@]/./wsprdaemon.d} )
