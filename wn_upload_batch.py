@@ -58,6 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--address", dest="address", help="ADDRESS is the hostname of the Timescale DB", metavar="ADDRESS", required=False, default="localhost")
     parser.add_argument("-d", "--database", dest="database", help="DATABASE is the database name in Timescale DB", metavar="DATABASE", required=False, default="wsprnet")
     parser.add_argument("-u", "--username", dest="username", help="USERNAME is the username to use with Timescale DB", metavar="USERNAME", required=False, default="wsprnet")
+    parser.add_argument("-o", "--ip_port", dest="ip_port", help="The IP port of the Timescale DB", metavar="IPPORT", required=False, default="5432")
     parser.add_argument("-p", "--password", dest="password", help="PASSWORD is the password to use with Timescale DB", metavar="PASSWORD", required=False, default="Ri6chaeb")
     parser.add_argument("--log", dest="log", help="The Python logging module's log level to use", type=lambda x: getattr(logging, x), required=False, default=logging.INFO)
     args = parser.parse_args()
@@ -67,6 +68,6 @@ if __name__ == "__main__":
     with args.sqlFile as sql_file:
         sql = sql_file.read().strip()
 
-    connect_info="dbname='%s' user='%s' host='%s' password='%s'" % (args.database, args.username, args.address, args.password)
+    connect_info="dbname='%s' user='%s' host='%s' port='%s' password='%s'" % (args.database, args.username, args.address, args.ip_port, args.password)
     logging.debug(connect_info)
     ts_batch_upload(batch_file=args.spotsFile, sql=sql, connect_info=connect_info)
