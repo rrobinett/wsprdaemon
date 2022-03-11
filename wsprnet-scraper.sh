@@ -20,12 +20,12 @@ function wn_spots_batch_upload() {
         wd_logger 1 "ERROR: Can't find expected file '${UPLOAD_WN_BATCH_PYTHON_CMD}'"
         return 1
     fi
-    python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}  # "${UPLOAD_SPOT_SQL}" "${UPLOAD_WN_BATCH_TS_CONNECT_INFO}"
+    python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}  # "${UPLOAD_SPOT_SQL}" "${UPLOAD_WN_BATCH_TS_CONNECT_INFO}"
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' => ${ret_code}"
+        wd_logger 1 "ERROR: 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' => ${ret_code}"
     else
-        wd_logger 2 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
+        wd_logger 2 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
     fi
     return ${ret_code}
 }
@@ -520,7 +520,7 @@ function wsprnet_gap_daemon()
             local gap_count=$(( gap_seq_end - gap_seq_start + 1 ))
             wd_logger 1 "$(printf "Attempt to fill gap reported at ${WD_TIME_FMT} of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}" ${gap_report_epoch})"
 
-            local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h localhost -p 5432 -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+            local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h localhost -p ${TS_IP_PORT-5432} -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: psql query of localhost failed when verifying that gap file spots are really missing from the local TS DB"
@@ -536,7 +536,7 @@ function wsprnet_gap_daemon()
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
-                local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h ${host} -p 5432 -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+                local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h ${host} -p ${TS_IP_PORT-5432} -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
                 local rc=$?
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: psql query of ${host} failed"
