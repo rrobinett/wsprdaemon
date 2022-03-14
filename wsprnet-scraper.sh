@@ -5,27 +5,21 @@ declare -r WSPRNET_SCRAPER_TMP_PATH=${WSPRDAEMON_TMP_DIR}/scraper.d
 mkdir -p ${WSPRNET_SCRAPER_TMP_PATH}
 declare -r WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
 
-################### API scrape section ##########################################################
-
-declare UPLOAD_WN_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/wn_upload_batch.py
-declare UPLOAD_SPOT_SQL='INSERT INTO spots (wd_time, "Spotnum", "Date", "Reporter", "ReporterGrid", "dB", "MHz", "CallSign", "Grid", "Power", "Drift", distance, azimuth, "Band", version, code, 
-    wd_band, wd_c2_noise, wd_rms_noise, wd_rx_az, wd_rx_lat, wd_rx_lon, wd_tx_az, wd_tx_lat, wd_tx_lon, wd_v_lat, wd_v_lon ) 
-    VALUES( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s );'
-
+################### Code which gets spots from wsprnet.org using its API and records them into our TS 'wsprnet' database table 'spots'  ##########################################################
 function wn_spots_batch_upload() {
     local csv_file=$1
 
-    wd_logger 2 "Record ${csv_file} to TS"
-    if [[ ! -f ${UPLOAD_WN_BATCH_PYTHON_CMD} ]]; then
-        wd_logger 1 "ERROR: Can't find expected file '${UPLOAD_WN_BATCH_PYTHON_CMD}'"
+    wd_logger 2 "Record ${csv_file} to TS Wsprnet spots table"
+    if [[ ! -f ${TS_BATCH_UPLOAD_PYTHON_CMD} ]]; then
+        wd_logger 1 "ERROR: Can't find expected file '${TS_BATCH_UPLOAD_PYTHON_CMD}'"
         return 1
     fi
-    python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}  # "${UPLOAD_SPOT_SQL}" "${UPLOAD_WN_BATCH_TS_CONNECT_INFO}"
+    python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${csv_file} --sql ${TS_WN_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WN_DB} --username ${TS_WN_WO_USER} --password ${TS_WN_WO_PASSWORD}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' => ${ret_code}"
+        wd_logger 1 "ERROR: 'python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${csv_file} --sql ${TS_WN_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WN_DB} --username ${TS_WN_WO_USER} --password ${TS_WN_WO_PASSWORD}' => ${ret_code}"
     else
-        wd_logger 2 "Spot files were recorded by 'python3 ${UPLOAD_WN_BATCH_PYTHON_CMD} --input ${csv_file} --sql ${WSPRDAEMON_ROOT_DIR}/insert-spots.sql --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}' "
+        wd_logger 2 "Spot files were recorded by 'python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${csv_file} --sql ${TS_WN_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WN_DB} --username ${TS_WN_WO_USER} --password ${TS_WN_WO_PASSWORD}'"
     fi
     return ${ret_code}
 }
@@ -79,10 +73,10 @@ function wpsrnet_get_spots() {
         ### Get the largest Spotnum from the TS DB
         ### I need to redirect the output to a file or the psql return code gets lost
         local psql_output_file=${WSPRNET_SCRAPER_TMP_PATH}/psql.out
-        PGPASSWORD=${TS_PASSWORD}  psql -t -U ${TS_USER} -d ${TS_DB}  -c 'select "Spotnum" from spots order by "Spotnum" desc limit 1 ;' > ${psql_output_file}
+        PGPASSWORD=${TS_WN_RO_PASSWORD}  psql -t -U ${TS_WN_RO_USER} -d ${TS_WN_DB}  -c 'select "Spotnum" from spots order by "Spotnum" desc limit 1 ;' > ${psql_output_file}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: psql( ${TS_USER}/${TS_PASSWORD}/${TS_DB}) for latest TS returned error => ${ret_code}"
+            wd_logger 1 "ERROR: psql( ${TS_WN_RO_USER}/${TS_WN_RO_PASSWORD}/${TS_WN_DB}) for latest TS returned error => ${ret_code}"
             exit 1
         fi
         local psql_output=$(cat ${psql_output_file})
@@ -520,7 +514,7 @@ function wsprnet_gap_daemon()
             local gap_count=$(( gap_seq_end - gap_seq_start + 1 ))
             wd_logger 1 "$(printf "Attempt to fill gap reported at ${WD_TIME_FMT} of ${gap_count} spots from ${gap_seq_start} to ${gap_seq_end}" ${gap_report_epoch})"
 
-            local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h localhost -p ${TS_IP_PORT-5432} -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+            local psql_response=$(PGPASSWORD=${TS_WN_RO_PASSWORD}  psql -h localhost -p ${TS_IP_PORT-5432} -U ${TS_WN_RO_USER} -d ${TS_WN_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: psql query of localhost failed when verifying that gap file spots are really missing from the local TS DB"
@@ -536,7 +530,7 @@ function wsprnet_gap_daemon()
             local host
             for host in ${GAP_FILLER_HOST_LIST[@]}; do
                 wd_logger 1 "Querying ${host} for missing spots"
-                local psql_response=$(PGPASSWORD=${TS_PASSWORD}  psql -h ${host} -p ${TS_IP_PORT-5432} -U ${TS_USER} -d ${TS_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
+                local psql_response=$(PGPASSWORD=${TS_WN_RO_PASSWORD}  psql -h ${host} -p ${TS_IP_PORT-5432} -U ${TS_WN_RO_USER} -d ${TS_WN_DB} -c "\COPY (SELECT * FROM spots where \"Spotnum\" >= ${gap_seq_start}  and \"Spotnum\" <= ${gap_seq_end} ) TO ${tmp_ts_csv_file} DELIMITER ',' CSV")
                 local rc=$?
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: psql query of ${host} failed"
