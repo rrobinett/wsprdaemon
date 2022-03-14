@@ -1,7 +1,6 @@
 #!/bin/bash
 
 declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
-declare UPLOAD_BATCH_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_upload_batch.py
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
 ### The extended spot lines created by WD 2.x have these 32 fields:
@@ -12,12 +11,6 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 ###  WD 3.0 adds two additional fields at the end of each extended spot line for a total of 34 fields:
 ###                         overload_counts  pkt_mode
 
-### When recording these lines to TS and CH condense the first two field 'spot_date' and 'spot_time' into one time field in the TS format, and add the receiver_name field derived from the path name of the spot file.
-### So there are 34 values recorded in TS/CH for each spot:
-#declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, mode, receiver, ov_count, wsprnet_info) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-declare UPLOAD_SPOT_SQL='INSERT INTO wsprdaemon_spots_s (time, sync_quality, "SNR", dt, freq, tx_call, tx_grid, "tx_dBm", drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, mode, rms_noise, c2_noise,  band, rx_grid, rx_id, km, rx_az, rx_lat, rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, ov_count, wsprnet_info, receiver ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-
-declare UPLOAD_NOISE_SQL='INSERT INTO wsprdaemon_noise_s (time, site, receiver, rx_grid, band, rms_level, c2_level, ov) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);'
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
 declare MAX_RM_ARGS=5000     ### Limit of the number of files in the 'rm ...' cmd line
 
@@ -40,9 +33,6 @@ function tbz_service_daemon()
         wd_logger 1 "Created symlink 'ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log'"
     fi
 
-    ### Most of the file read/write happens in /tmp/wsprdaemon
-    echo "UPLOAD_SPOT_SQL=${UPLOAD_SPOT_SQL}" > upload_spot.sql       ### helps debugging from cmd line
-    echo "UPLOAD_NOISE_SQL=${UPLOAD_NOISE_SQL}" > upload_noise.sql
     shopt -s nullglob
     
     while true; do
@@ -215,8 +205,8 @@ function record_spot_files()
             wd_logger 2 "Split ${ts_spots_csv_file} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 2 "Recording ${split_csv_file}"
-                python3 ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} "${UPLOAD_SPOT_SQL}"
+                wd_logger 2 "Recording spots ${split_csv_file}"
+                python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
@@ -283,7 +273,7 @@ function format_spot_lines()
 function record_noise_files()
 {
     ### Record the noise files
-    local TS_NOISE_CSV_FILE=ts_noise.csv
+    local noise_csv_file=ts_noise.csv
     local noise_file_list=()
     local max_noise_files=${MAX_RM_ARGS}
     while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
@@ -293,18 +283,18 @@ function record_noise_files()
         else
             wd_logger 1 "Found ${#noise_file_list[@]} noise files to be processed"
         fi
-        awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${TS_NOISE_CSV_FILE}
+        awk -f ${TS_NOISE_AWK_SCRIPT} ${noise_file_list[@]} > ${noise_csv_file}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: while recording ${#noise_file_list[@]} noise files, 'awk noise_file_list[@]' => ${ret_code}"
             exit
         fi
-        python3 ${UPLOAD_BATCH_PYTHON_CMD} ${TS_NOISE_CSV_FILE}  "${UPLOAD_NOISE_SQL}"
+        python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${noise_csv_file} --sql ${TS_WD_BATCH_INSERT_NOISE_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Python failed to record $( wc -l < ${TS_NOISE_CSV_FILE}) noise lines to  the wsprdaemon_noise_s table from \${noise_file_list[@]}"
+            wd_logger 1 "ERROR: Python failed to record $( wc -l < ${noise_csv_file}) noise lines to  the wsprdaemon_noise_s table from \${noise_file_list[@]}"
         else
-            wd_logger 2 "Recorded $( wc -l < ${TS_NOISE_CSV_FILE} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
+            wd_logger 1 "Recorded $( wc -l < ${noise_csv_file} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
         fi
         wd_rm ${noise_file_list[@]}
         local ret_code=$?

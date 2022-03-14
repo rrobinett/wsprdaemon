@@ -54,12 +54,12 @@ def ts_batch_upload(batch_file, sql, connect_info):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Upload WSPRNET spots to Timescale DB')
     parser.add_argument("-i", "--input", dest="spotsFile", help="FILE is a CSV containing WSPRNET spots", metavar="FILE", required=True, nargs='?', type=argparse.FileType('r'), default=sys.stdin)
-    parser.add_argument("-s", "--sql", dest="sqlFile", help="FILE is a SQL file containing an INSERT query", metavar="FILE", required=False, type=argparse.FileType('r'), default="insert-spots.sql")
+    parser.add_argument("-s", "--sql", dest="sqlFile", help="FILE is a SQL file containing an INSERT query", metavar="FILE", required=True, type=argparse.FileType('r'), default="insert-spots.sql")
     parser.add_argument("-a", "--address", dest="address", help="ADDRESS is the hostname of the Timescale DB", metavar="ADDRESS", required=False, default="localhost")
-    parser.add_argument("-d", "--database", dest="database", help="DATABASE is the database name in Timescale DB", metavar="DATABASE", required=False, default="wsprnet")
-    parser.add_argument("-u", "--username", dest="username", help="USERNAME is the username to use with Timescale DB", metavar="USERNAME", required=False, default="wsprnet")
     parser.add_argument("-o", "--ip_port", dest="ip_port", help="The IP port of the Timescale DB", metavar="IPPORT", required=False, default="5432")
-    parser.add_argument("-p", "--password", dest="password", help="PASSWORD is the password to use with Timescale DB", metavar="PASSWORD", required=False, default="Ri6chaeb")
+    parser.add_argument("-d", "--database", dest="database", help="DATABASE is the database name in Timescale DB", metavar="DATABASE", required=True, default="wsprnet")
+    parser.add_argument("-u", "--username", dest="username", help="USERNAME is the username to use with Timescale DB", metavar="USERNAME", required=True, default="wsprnet")
+    parser.add_argument("-p", "--password", dest="password", help="PASSWORD is the password to use with Timescale DB", metavar="PASSWORD", required=True, default="secret")
     parser.add_argument("--log", dest="log", help="The Python logging module's log level to use", type=lambda x: getattr(logging, x), required=False, default=logging.INFO)
     args = parser.parse_args()
 
