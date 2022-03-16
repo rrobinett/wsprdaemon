@@ -2,6 +2,10 @@
 declare -i verbosity=${verbosity:-1}
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+
+### This is used by two .sh files, so it need to be declared here
+declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
+
 ################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
 declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
 if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
@@ -241,7 +245,7 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.2}"
+declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
