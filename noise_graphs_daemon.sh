@@ -8,8 +8,6 @@ declare NOISE_GRAPHS_WWW_ROOT_DIR=/var/www/html/graphs      ### Root of individu
 declare NOISE_GRAPHS_ROOT_INDEX_FILE=${NOISE_GRAPHS_WWW_ROOT_DIR}/index.html
 declare NOISE_GRAPHS_ROOT_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_root_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
 
-declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
-
 declare NOISE_GRAPHS_POLLING_INTERVAL_SECS=5
 declare MAX_PNG_FILES_TO_POST=1000 
 function publish_latest_noisegraph_pngs()
