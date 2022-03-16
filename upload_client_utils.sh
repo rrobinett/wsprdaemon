@@ -47,7 +47,7 @@ declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 ### wsprnet.org upload daemon files
 declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d
 mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}
-declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/_spots.txt
+declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/spots.txt
 declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
 declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
 
@@ -141,11 +141,13 @@ function upload_wsprnet_create_spot_file_list_file()
         if [[ ${cycle_spots_count} -eq 0 ]]; then
             wd_logger 1 "Found the complete set of files in cycle ${cycle} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} below and leave it to the calling function to delete them"
         fi
-        wd_logger 1 "Found ${cycle_spots_count} spots in cycle ${cycle}"
+        wd_logger 2 "Found ${cycle_spots_count} spots in cycle ${cycle}"
 
         local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-        if [[ ${new_count} -gt ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-            wd_logger 1 "Found that adding the ${cycle_spots_count} spots in cycle ${cycle} will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+        if [[ ${new_count} -le ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+            wd_logger 1 "Adding the ${cycle_spots_count} spots in cycle ${cycle} will increase upload to ${new_count} spot which is less than the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload"
+        else
+            wd_logger 1 "Adding the ${cycle_spots_count} spots in cycle ${cycle} to the exisiting ${cycle_spots_count} spots will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
             echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
             return
         fi
@@ -271,7 +273,7 @@ function upload_to_wsprnet_daemon() {
             curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
             if [[ $ret_code -ne 0 ]]; then
-                wd_logger 1 "curl returned error code => ${ret_code} and logged:\n$( cat ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
+                wd_logger 1 "curl returned error code => ${ret_code} and logged:\n$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
                 continue
             fi
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
