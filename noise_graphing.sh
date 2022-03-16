@@ -57,9 +57,10 @@ function setup_noise_graphs()
             wd_logger 1 "ERROR: 'install_debian_package  apache2' => $?"
             exit 1
         fi
-       if ! diff ${index_tmp_file} ${NOISE_GRAPHS_WWW_INDEX_FILE} > /dev/null; then
+
+       if ! diff ${NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE} ${NOISE_GRAPHS_WWW_INDEX_FILE} > /dev/null; then
             sudo cp -p  ${NOISE_GRAPHS_WWW_INDEX_FILE} ${NOISE_GRAPHS_WWW_INDEX_FILE}.orig
-            sudo mv     ${index_tmp_file}               ${NOISE_GRAPHS_WWW_INDEX_FILE}
+            sudo cp -p  ${NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE} ${NOISE_GRAPHS_WWW_INDEX_FILE}
         fi
         if [[ ! -f ${NOISE_GRAPH_WWW_FILE} ]]; then
             ## /var/html/www/noise_grapsh.png doesn't exist. It can't be a symnlink ;=(
