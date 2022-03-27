@@ -381,7 +381,7 @@ function kiwirecorder_manager_daemon()
 
         if [[ ! -f ${OVERLOADS_LOG_FILE} ]]; then
             ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
-            printf "%(%s)T 0\n" -1  > ${OVERLOADS_LOG_FILE}
+            printf "%(%s)T 0" -1  > ${OVERLOADS_LOG_FILE}
         fi
 
         if [[ ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
@@ -389,17 +389,21 @@ function kiwirecorder_manager_daemon()
         else
             local current_time=$(printf "%(%s)T" -1 )
             if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
-                ### there may be  new OV events.  
+                ### there may be new OV events.  
                 local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
                 local old_ov_count=${old_ov_info[1]}
 
                 local new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
                 if [[ -z "${new_ov_count}" ]]; then
-                    wd_logger 1 "Found"
+                    wd_logger 1 "Found no lines with 'OV' in ${KIWI_RECORDER_LOG_FILE}"
+                    new_ov_count=0
                 fi
                 local new_ov_time=${current_time}
-                if [[ "${new_ov_count}" -le "${old_ov_count}" ]]; then
-                    wd_logger 1 "Found '${KIWI_RECORDER_LOG_FILE}' has changed, but new OV count '${new_ov_count}' is not greater than old count ''"
+                if [[ "${new_ov_count}" -lt "${old_ov_count}" ]]; then
+                    wd_logger 1 "Found '${KIWI_RECORDER_LOG_FILE}' has changed, but new OV count '${new_ov_count}' is less than old count '${old_ov_count}', so kiwirecorder job must have restarted"
+                    printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
+                elif [[ "${new_ov_count}" -eq "${old_ov_count}" ]]; then
+                     wd_logger 1 "WARNING: Found '${KIWI_RECORDER_LOG_FILE}' has changed but new OV count '${new_ov_count}' is the same as old count '${old_ov_count}', which is unexpected"
                     touch ${OVERLOADS_LOG_FILE}
                 else
                     printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
