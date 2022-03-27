@@ -39,44 +39,110 @@ function wd_logger_flush_all_logs {
     find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.printed' -exec rm {} \;
 }
 
-function wd_logger_check_all_logs {
-    wd_logger 2 "Checking log files"
-    local log_files=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.log' ) )
-    for log_file in ${log_files[@]}; do
-        local log_file_last_printed=${log_file}.printed
-        if [[ ! -s ${log_file} ]]; then
-            wd_logger 2 "Log file ${log_file} is empty"
-        else
-            ### The log file is not empty
-            local new_log_lines
-            if [[ ! -f ${log_file_last_printed} ]]; then
-                ### None of the log file lines have been printed
-                wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file} (if any) have been printed"
-                new_log_lines=$( < ${log_file} )
-            else
-                ### Some lines have been previously printed
-                local last_printed_line=$( < ${log_file_last_printed} )
+declare WD_LOGGING_EXCLUDE_LOG_FILENAMES="add_derived.log curl.log kiwi_recorder.log kiwi_recorder_overloads_count.log merged.log"
+declare WD_LOGGING_EXCLUDE_DIR_NAMES="kiwi_gps_status"
 
-                if grep -q "${last_printed_line}" ${log_file} ; then
-                    wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file}, so print only the lines which follow it"
-                    new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file} | tail -n +2 )
-                else
-                    wd_logger 2 "Can't find that the line in ${log_file_last_printed} is in ${log_file}, so print the whole log file"
-                    new_log_lines=$( < ${log_file} )
-                fi
-            fi
-            if [[ -z "${new_log_lines}" ]]; then
-                wd_logger 2 "There are no lines or no new lines in ${log_file} to be printed"
+function wd_logger_check_all_logs 
+{
+    local check_only_for_errors=${1-no}
+
+    local log_file_paths_list=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.log' | sort -r ) )
+    wd_logger 2 "Checking ${#log_file_paths_list[@]} log files"
+
+    for log_file_path in ${log_file_paths_list[@]} ; do
+        local log_file_path_list=( ${log_file_path//\// } )
+        local log_file_name=${log_file_path_list[-1]}
+        local log_dir_name=${log_file_path_list[-2]}
+
+        if [[ " ${WD_LOGGING_EXCLUDE_DIR_NAMES} " =~ " ${log_dir_name}" ]] || [[ " ${WD_LOGGING_EXCLUDE_LOG_FILENAMES} " =~ " ${log_file_name} " ]]; then
+            wd_logger 2 "Skipping ${log_file_path}"
+            continue
+        fi
+        wd_logger 2 "Checking ${log_file_path}"
+        local log_file_last_printed=${log_file_path}.printed
+        if [[ ! -s ${log_file_path} ]]; then
+            wd_logger 1 "Log file ${log_file_path} is empty"
+            continue
+        fi
+        ### The log file is not empty
+        local new_log_lines
+        if [[ ! -f ${log_file_last_printed} ]]; then
+            ### None of the log file lines have been printed
+            wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file_path} (if any) have been printed"
+            new_log_lines=$( < ${log_file_path} )
+        else
+            ### Some lines have been previously printed
+            local last_printed_line=$( < ${log_file_last_printed} )
+
+            if grep -q "${last_printed_line}" ${log_file_path} ; then
+                wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
+                new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file_path} | tail -n +2 )
             else
-                local new_log_lines_count=$( wc -l <<< "${new_log_lines}" )
-                wd_logger 2 "There are ${new_log_lines_count} new lines to be printed"
-                local new_last_printed_line=$(tail -1 <<< "${new_log_lines}")
-                echo "${new_last_printed_line}" > ${log_file_last_printed}
-                local new_lines_to_print=$(awk "{print \"${log_file}: \" \$0}" <<< "${new_log_lines}")
-                wd_logger -1 "\n${new_lines_to_print}"
+                wd_logger 1 "Can't find that the line in ${log_file_last_printed} is in ${log_file_path}, so print the whole log file"
+                new_log_lines=$( < ${log_file_path} )
             fi
         fi
+        if [[ ${check_only_for_errors} == "check_only_for_new_errors" ]]; then
+            local new_error_log_lines=$(grep -A 100000 ERROR: <<< "${new_log_lines}")
+            if [[ -z "${new_error_log_lines}" ]]; then
+                wd_logger 2 "Found no new 'ERROR:' lines in the new log lines"
+                new_log_lines=""
+            else
+                wd_logger 1 "Found $(wc -l <<< "${new_error_log_lines}") new ERROR: lines"
+                new_log_lines="${new_error_log_lines}"
+            fi
+        fi
+        
+        if [[ -z "${new_log_lines}" ]]; then
+            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to be printed"
+        else
+            local new_log_lines_count=$( wc -l <<< "${new_log_lines}" )
+            wd_logger 1 "There are ${new_log_lines_count} new lines to be printed"
+            local new_last_printed_line=$(tail -1 <<< "${new_log_lines}")
+            echo "${new_last_printed_line}" > ${log_file_last_printed}
+            local new_lines_to_print=$(awk "{print \"${log_file_path}: \" \$0}" <<< "${new_log_lines}")
+            wd_logger -1 "\n$(head -n 8 <<< "${new_lines_to_print}")"
+            [[ ${verbosity} -ge 1 ]] && read -p "Press <ENTER> to check the next log file > "
+        fi
     done
+}
+
+declare CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS=10
+function print_new_log_lines()
+{
+    wd_logger -1 "Checking every ${CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS} seconds for new ERROR lines in all the log files.  Press <CONTROL C> to exit"
+    while true; do
+        wd_logger_check_all_logs "check_only_for_new_errors"
+        sleep ${CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS}
+    done
+}
+
+function tail_log_file()
+{
+    local log_file=${1}
+
+    tail -F ${log_file}
+    less ${log_file}
+}
+
+function log_file_viewing()
+{
+    local action=${1-e}
+
+    case ${action} in
+        e)
+            print_new_log_lines
+            ;;
+        n)
+            tail_log_file ${UPLOADS_WSPRNET_SPOTS_LOG_FILE}
+            ;;
+        d)
+            tail_log_file ${UPLOADS_WSPRDAEMON_SPOTS_LOG_FILE}
+            ;;
+        *)
+            wd_logger 1 "ERROR: invalid action ${action}"
+            ;;
+    esac
 }
 
 function wd_logger() {

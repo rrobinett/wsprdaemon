@@ -92,8 +92,11 @@ source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZshij:pvVw:dDu:U:r: opt ; do
+while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
     case $opt in
+        l)
+            log_file_viewing  $OPTARG
+            ;;
         r)
             spawn_wav_recording ${OPTARG//,/ }
             ;;

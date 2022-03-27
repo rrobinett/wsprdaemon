@@ -434,6 +434,9 @@ function upload_to_wsprdaemon_daemon() {
 }
 
 ############## Top level which spawns/kill/shows status of all of the upload daemons
+declare UPLOADS_WSPRNET_SPOTS_LOG_FILE=${UPLOADS_WSPRNET_SPOTS_DIR}/upload_to_wsprnet_daemon.log
+declare UPLOADS_WSPRDAEMON_SPOTS_LOG_FILE=${UPLOADS_WSPRDAEMON_ROOT_DIR}/upload_to_wsprdaemon_daemon.log
+
 declare client_upload_daemon_list=(
    "upload_to_wsprnet_daemon         ${UPLOADS_WSPRNET_SPOTS_DIR}"
    "upload_to_wsprdaemon_daemon      ${UPLOADS_WSPRDAEMON_ROOT_DIR}"
