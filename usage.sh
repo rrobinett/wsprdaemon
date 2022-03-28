@@ -39,6 +39,8 @@ usage:                VERSION = ${VERSION}
     -a                            => stArt watchdog daemon which will start all scheduled jobs ( -w a )
     -z                            => stop watchdog daemon and all jobs it is currently running (-w z )   (i.e.zzzz => go to sleep)
     -s                            => show Status of watchdog and jobs it is currently running  (-w s ; -j s )
+    -l     [e,n,d]                => show log files lines using 'tail -F'.  'e' = new ERROR lines from all logs files.  'n' = wsprnet.org uploading. 'd' = wsprdaemon.org uploading 
+
     -p HOURS                      => generate ~/wsprdaemon/signal-levels.jpg for the last HOURS of SNR data
 
     These flags are mostly intended for advanced configuration:

@@ -2,7 +2,7 @@
 
 ###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
 
-###    Copyright (C) 2020  Robert S. Robinett
+###    Copyright (C) 2020-2022  Robert S. Robinett
 ###
 ###    This program is free software: you can redistribute it and/or modify
 ###    it under the terms of the GNU General Public License as published by

@@ -332,6 +332,7 @@ function kiwirecorder_manager_daemon()
     while true ; do
         local kiwi_recorder_pid=""
         if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
+            ### Check that the pid specified in the pid file is active
             kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})
             local ps_output=$( ps ${kiwi_recorder_pid} )
             local ret_code=$?
@@ -342,36 +343,39 @@ function kiwirecorder_manager_daemon()
                 kiwi_recorder_pid=""
                 rm ${KIWI_RECORDER_PID_FILE}
             fi
+        fi
+        if [[ -z "${kiwi_recorder_pid}" ]]; then
+            ### There was no pid file or the pid in that file is dead
+            ### Check for a zombie kwiirecorder and kill if if one is found
+            local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:*}" | grep -v grep )
+            if [[ -n "${ps_output}" ]]; then
+                local pid_list=( $(awk '{print $2}' <<< "${ps_output}") )
+                wd_logger 1 "ERROR: killing ${#pid_list} zombie kiwirecorders:\n${ps_output}"
+                kill ${pid_list[@]}
             fi
+        fi
 
-            if [[ -z "${kiwi_recorder_pid}" ]]; then
-                ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
-                wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
+        if [[ -z "${kiwi_recorder_pid}" ]]; then
+            ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
+            wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                 --OV --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
-                            local ret_code=$?
-                            if [[ ${ret_code} -ne 0 ]]; then
-                                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
-                                sleep 1
-                                continue
-                            fi
-                            kiwi_recorder_pid=$!
-                            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
-                            wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
-                            fi
-
-        ### Monitor the operation of the kiwirecorder we spawned
-        if ! ps ${kiwi_recorder_pid} > /dev/null; then
-            wd_logger 1 "kiwirecorder with PID ${kiwi_recorder_pid} died unexpectedly. Wait for ${KIWIRECORDER_KILL_WAIT_SECS} seconds before restarting it."
-            rm -f ${KIWI_RECORDER_PID_FILE}
-            sleep ${KIWIRECORDER_KILL_WAIT_SECS}
-            continue
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
+                sleep 1
+                continue
+            fi
+            kiwi_recorder_pid=$!
+            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
+            wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
         fi
-        if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
+
+       if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
             wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwirecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
             kill ${kiwi_recorder_pid}
             rm ${KIWI_RECORDER_PID_FILE}
