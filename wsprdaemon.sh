@@ -271,7 +271,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
-        git clone git://github.com/jks-prv/kiwiclient
+        git clone https://github.com/jks-prv/kiwiclient
         echo "Downloading the kiwirecorder SW from Github..." 
         if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then 
             echo "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
