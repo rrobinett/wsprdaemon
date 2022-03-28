@@ -73,12 +73,15 @@ function wd_logger_check_all_logs
         else
             ### Some lines have been previously printed
             local last_printed_line=$( < ${log_file_last_printed} )
-
-            if grep -q "${last_printed_line}" ${log_file_path} ; then
+            if [[ -z "${last_printed_line}" ]]; then
+                wd_logger 1 "The last_printed_line in ${log_file_last_printed} is empty, so delete that file and print all lines"
+                wd_rm ${log_file_last_printed}
+                new_log_lines=$( < ${log_file_path} )
+            elif grep -q "${last_printed_line}" ${log_file_path} ; then
                 wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
                 new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file_path} | tail -n +2 )
             else
-                wd_logger 1 "Can't find that the line in ${log_file_last_printed} is in ${log_file_path}, so print the whole log file"
+                wd_logger 1 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}, so print the whole log file"
                 new_log_lines=$( < ${log_file_path} )
             fi
         fi
