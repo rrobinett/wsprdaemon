@@ -341,7 +341,7 @@ function upload_to_wsprdaemon_daemon() {
     mkdir -p ${source_root_dir}
     cd ${source_root_dir}
 
-    wd_logger "Starting in ${PWD}"   ### Now .log and .pid files are in permanent storage
+    wd_logger 1 "Starting in ${PWD}. Create '${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}'"   ### Now .log and .pid files are in permanent storage
 
     mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 
