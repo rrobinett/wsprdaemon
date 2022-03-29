@@ -52,7 +52,7 @@ function setup_noise_graphs()
 
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "yes" ]] ; then
         ## Ensure that Apache is installed and running
-        wd_logger 1 "We are confgiured for local display of noise graphs, so check that Apache is installed"
+        wd_logger 2 "We are confgiured for local display of noise graphs, so check that Apache is installed"
         if ! install_debian_package  apache2 ; then
             wd_logger 1 "ERROR: 'install_debian_package  apache2' => $?"
             exit 1
