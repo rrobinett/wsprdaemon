@@ -486,6 +486,7 @@ function update_hhmm_sched_file() {
         job_array_temp[${job_array_temp_index}]="${job_line[*]}"
         ((job_array_temp_index++))
     done
+    wd_logger 2 "Created job_array_temp[${#job_array_temp[@]}]"
 
     ### Sort the now only HH:MM elements of job_array_temp[] by time into jobs_sorted[]
     IFS=$'\n' 
@@ -501,6 +502,7 @@ function update_hhmm_sched_file() {
         jobs_sorted[${index_sorted}]="${job_time} ${job_line[*]}"              ### and put the sorted schedule entry back where it came from
     done
     unset IFS
+    wd_logger 2 "Created jobs_sorted[${#jobs_sorted[@]}]"
 
     ### Now that all jobs have numeric HH:MM times and are sorted, ensure that the first job is at 00:00
     unset job_array_temp
@@ -519,12 +521,12 @@ function update_hhmm_sched_file() {
         job_array_temp[$job_array_temp_index]="${jobs_sorted[$index]}"
         ((++job_array_temp_index))
     done
-    wd_logger 1 "Created job_array_temp[]='${job_array_temp[*]}'"
+    wd_logger 2 "Created job_array_temp[${#job_array_temp[*]}]='${job_array_temp[*]}'"
 
     ### Save the sorted schedule starting with 00:00 and with only HH:MM jobs to ${HHMM_SCHED_FILE}
-    echo -n "declare HHMM_SCHED=(" > ${HHMM_SCHED_FILE}
+    printf "declare HHMM_SCHED=(\n" > ${HHMM_SCHED_FILE}
     local sched_line
-    for sched_line in "${job_array_temp[*]}"  ; do
+    for sched_line in "${job_array_temp[@]}"  ; do
         local job_line_list=(${sched_line})
         local job_time=${job_line_list[0]}
 
@@ -537,7 +539,7 @@ function update_hhmm_sched_file() {
         local schedule_job
         for schedule_job in "${job_line_list[@]:1}"; do
             ### Look at one job
-            wd_logger 1 "Processing schedule_job ${schedule_job}"
+            wd_logger 2 "Processing schedule_job ${schedule_job}"
             local job_list=(${schedule_job//,/ })
             if [[ ${#job_list[@]} -lt 3 ]]; then
                 ### conf file job doesn't have a ',MODE' field
@@ -546,15 +548,15 @@ function update_hhmm_sched_file() {
             local output_schedule_job="${job_list[*]}"
                   output_schedule_job="${output_schedule_job// /,}"
             output_jobs_list+=( ${output_schedule_job} )
-            wd_logger 1 "Added processed job ${output_schedule_job} to schedule for time ${output_jobs_list[0]}"
+            wd_logger 2 "Added processed job ${output_schedule_job} to schedule for time ${output_jobs_list[0]}"
         done
-        wd_logger 1 "Processed sched line into '${output_jobs_list[*]}'"
+        wd_logger 2 "Processed sched line into '${output_jobs_list[*]}'"
 
         ### Done processing one schedule time line
         wd_logger 1 "Appending '${output_jobs_list[*]}' to ${HHMM_SCHED_FILE}"
-        echo -n " \"${output_jobs_list[*]}\" " >> ${HHMM_SCHED_FILE}
+        printf "  \"${output_jobs_list[*]}\" \n" >> ${HHMM_SCHED_FILE}
     done
-    echo ")" >> ${HHMM_SCHED_FILE}
+    printf ")\n" >> ${HHMM_SCHED_FILE}
     wd_logger 1 "Finished updating HHMM_SCHED_FILE"
 }
 
