@@ -124,6 +124,9 @@ function tail_log_file()
 {
     local log_file=${1}
 
+    wd_logger -1 "To view the full log file execute the command: 'less ${log_file}'\n"
+    sleep 2
+    wd_logger -1 "Running 'tail -F ${log_file}':\n"
     tail -F ${log_file}
     less ${log_file}
 }
