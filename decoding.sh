@@ -296,9 +296,9 @@ declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare RAW_FILE_FULL_SIZE=1440000                       ### Approximate number of bytes in a full size one minute long raw or wav file
-declare ONE_MINUTE_WAV_FILE_MIN_SIZE=${ONE_MINUTE_WAV_FILE_MIN_SIZE-1438000}   ### In bytes
-declare ONE_MINUTE_WAV_FILE_MAX_SIZE=${ONE_MINUTE_WAV_FILE_MAX_SIZE-1450000}
-
+### So this code gets the time duration of the wave file into an integer which has the form HHMMSSUU and thus can be compared by a bash expression
+declare WAV_FILE_MIN_HHMMSSUU=5900        ### == 59 seconds
+declare WAV_FILE_MAX_HHMMSSUU=10100       ### == 61 seconds
 
 ### If the wav recording daemon is running, we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
 function sleep_until_raw_file_is_full() {
@@ -322,21 +322,40 @@ function sleep_until_raw_file_is_full() {
         wd_logger 1 "ERROR: file ${filename} disappeared after ${loop_seconds} seconds"
         return 1
     fi
-    if [[ ${new_file_size} -lt ${ONE_MINUTE_WAV_FILE_MIN_SIZE} ]]; then
-        wd_logger 1 "The wav file stabilized at invalid too small size ${new_file_size} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+
+    local file_start_minute=${filename:11:2}
+    local file_start_second=${filename:13:2}
+    if [[ ${file_start_second} != "00" ]]; then
+        wd_logger 1 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup"
         wd_rm ${filename}
         return 2
     fi
-    if [[ ${new_file_size} -gt ${ONE_MINUTE_WAV_FILE_MAX_SIZE} ]]; then
+
+    ### Previously, I had just checked the size of the wav file to validate the duration of the recording
+    ### My guesess of the min and max valid wav file size in bytes were too narrow and useful wav files were being thrown away
+    local wav_file_duration_hh_mm_sec_msec=$(soxi ${filename} | awk '/Duration/{print $3}')
+    local wav_file_duration_integer=$(sed 's/[\.:]//g' <<< "${wav_file_duration_hh_mm_sec_msec}")
+
+    if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
+        wd_logger 1 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        wd_rm ${filename}
+        return 2
+    fi
+    if [[ 10#${wav_file_duration_integer} -gt ${WAV_FILE_MAX_HHMMSSUU} ]]; then
+	### If the wav file has grown to longer than one minute, then it is likely there are two kiwirecorder jobs running 
+	### We really need to know the IP address of the Kiwi recording this band, since this freq may be recorded by other other Kiwis in a Merged group
+	local this_dir_path_list=( ${PWD//\// } )
+        local kiwi_name=${this_dir_path_list[-2]}
+	local kiwi_ip_addr=$(get_receiver_ip_from_name ${kiwi_name})
         local kiwi_freq=${filename#*_}
               kiwi_freq=${kiwi_freq::3}
-        local ps_output=$(ps aux | grep "kiwirecorder.*freq=${kiwi_freq}" | grep -v grep)
+        local ps_output=$(ps aux | grep "${KIWI_RECORD_COMMAND}.*${kiwi_freq}.*${kiwi_ip_addr/:*}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: wav file stabilized at invalid too large size ${new_file_size}, but can't find any kiwirecorder processes which would be creating it"
+            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it"
         else
             kill ${kiwirecorder_pids[@]}
-            wd_logger 1 "ERROR: wav file stabilized at invalid too large size ${new_file_size}, so there may be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
+            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
         fi
         return 1
     fi
@@ -961,7 +980,7 @@ function decoding_daemon() {
                     if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
                         wd_logger 1 "wsprd found no spots"
                     else
-                        wd_logger 2 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
+                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
                         awk -v pkt_mode=${returned_minutes} '{printf "%s %s\n", $0, pkt_mode}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt                       ### Add the wspr pkt mode (== 2 or 15 minutes) to each ALL_WSPR.TXT spot line
                     fi
 
