@@ -502,7 +502,7 @@ function get_status_of_daemon() {
 
     wd_logger 3 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 2 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
+        wd_logger 1 "daemon '${daemon_function_name}' is not running since it has no pid file '${daemon_pid_file_path}'"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -513,7 +513,7 @@ function get_status_of_daemon() {
             rm -f ${daemon_pid_file_path}
             return 3
         else
-            wd_logger 2 "daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid} which is running"
+            wd_logger -1 "$(printf "Daemon '%30s' with pid %6d is running" ${daemon_function_name} ${daemon_pid})"
             wd_logger 2 "daemon '${daemon_function_name}' with  pid ${daemon_pid} is running"
         fi
     fi

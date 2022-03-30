@@ -34,7 +34,7 @@ function setup_noise_graphs()
         wd_logger 2 "Whether to upload noise graphs has been set by SIGNAL_LEVEL_UPLOAD_GRAPHS=${SIGNAL_LEVEL_UPLOAD_GRAPHS} in WD.conf file"
     fi
     if [[ ${NOISE_GRAPHS_LOCAL_ENABLED-no} == "no" && ${NOISE_GRAPHS_UPLOAD_ENABLED-no} == "no" ]] ; then
-        wd_logger 1 "Noise graphing is disabled, so skip installation of libraries needed for it"
+        wd_logger 2 "Noise graphing is disabled, so skip installation of libraries needed for it"
         return 0
     fi
 
