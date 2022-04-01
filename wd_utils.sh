@@ -452,7 +452,7 @@ function spawn_daemon()
     fi
     local spawned_pid=$!
     echo ${spawned_pid} > ${daemon_pid_file_path}
-    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
+    wd_logger -1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
     return 0
 }
 
@@ -531,7 +531,7 @@ function daemons_list_action()
     local acton_to_perform=$1        ### 'a', 'z', or 's'
     local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
 
-    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${daemon_list_name}'"
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${2}'"
 
     for spawn_line in "${daemon_list_name[@]}"; do
         local daemon_info_list=(${spawn_line})

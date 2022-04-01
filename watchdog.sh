@@ -40,6 +40,18 @@ function watchdog_daemon()
     done
 }
 
+function get_status_watchdog_daemon()
+{
+    daemons_list_action  s  watchdog_daemon_list
+    get_status_upload_daemons
+}
+
+function kill_watchdog_daemon()
+{
+    daemons_list_action  z watchdog_daemon_list
+    kill_upload_daemons
+}
+
 ############## Top level which spawns/kill/shows status of all of the watchdog daemons
 declare watchdog_daemon_list=(
    "watchdog_daemon         ${WSPRDAEMON_ROOT_DIR}"
@@ -55,8 +67,14 @@ function watchdog_cmd() {
     wd_logger 2 "Executing cmd $1"
     
     case $1 in
-        a|z|s)
+        a)
             daemons_list_action  $1 watchdog_daemon_list
+            ;;
+        s)
+            get_status_watchdog_daemon
+            ;;
+        z)
+            kill_watchdog_daemon
             ;;
         l)
             tail_watchdog_log
@@ -67,5 +85,3 @@ function watchdog_cmd() {
     esac
     wd_logger 2 "Finished  cmd $1"
 }
-
-

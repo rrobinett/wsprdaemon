@@ -121,7 +121,6 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
         s)
             proxy_connection_status
             jobs_cmd     s
-            upload_daemons_status
             watchdog_cmd s
             ;;
         i)

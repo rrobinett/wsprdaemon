@@ -454,7 +454,7 @@ function kill_upload_daemons()
     daemons_list_action  z client_upload_daemon_list
 }
 
-function upload_daemons_status()
+function get_status_upload_daemons()
 {
     wd_logger 2 "Get status on the ${#client_upload_daemon_list[@]} daemons in client_upload_daemon_list[]"
     daemons_list_action  s client_upload_daemon_list

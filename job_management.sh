@@ -73,12 +73,12 @@ function check_for_zombies() {
 
     ### Next check that all of the pids associated with RUNNING_JOBS are active
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
-        wd_logger 1 "${RUNNING_JOBS_FILE} doesn't exist so skip checking for jobs"
+        wd_logger 2 "${RUNNING_JOBS_FILE} doesn't exist so skip checking for jobs"
     elif !  source ${RUNNING_JOBS_FILE} ; then
         local ret_code=$?
         wd_logger 1 "'ERROR: source ${RUNNING_JOBS_FILE}' => ${ret_code}, so skip checking for jobs"
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger 1 "No entries in RUNNING_JOBS[@], so skip checking for jobs"
+        wd_logger -2 "There are no running jobs"
     else
         ### There are jobs in ${#RUNNING_JOBS[@]} to be checked
 
@@ -195,7 +195,7 @@ function check_for_zombies() {
         done
     fi    
 
-    wd_logger 1 "Checking all pids for 'wsprdaemon.sh -a' programs"
+    wd_logger 2 "Checking all pids for 'wsprdaemon.sh -a' programs"
     local kill_pid_list=()
     local running_wsprdaemon_a_pid_list=( $(ps aux | awk '/wsprdaemon\/wsprdaemon.sh -a/{print $2}' ) )
     if [[ ${#running_wsprdaemon_a_pid_list[@]} -ne 0 ]]; then
@@ -204,7 +204,7 @@ function check_for_zombies() {
     fi
 
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
-    wd_logger 1 "Checking all pids for kiwirecorder.py programs"
+    wd_logger 2 "Checking all pids for kiwirecorder.py programs"
     local running_kiwirecorder_pid_list=( $(ps aux | awk '/kiwiclient\/kiwirecorder.py/{print $2}' ) )
     
     for running_pid in ${running_kiwirecorder_pid_list[@]} ; do
@@ -229,10 +229,9 @@ function check_for_zombies() {
            fi
        fi
     done
-    wd_logger 1 "Found ${#expected_and_running_pids[*]} expected_and_running_pids[] and ${#kill_pid_list[@]} kill_pid_list[] pids = '${kill_pid_list[*]}'" 
     if [[ ${#kill_pid_list[@]} -gt 0 ]]; then
         kill ${kill_pid_list[@]}
-        wd_logger 1 "Killed zombie pids:  '${kill_pid_list[*]}'"
+        wd_logger -1 "Killed zombie pids:  '${kill_pid_list[*]}'"
     fi
 }
 
@@ -260,7 +259,7 @@ function show_running_jobs() {
         wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
         return 2
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger 1 "There are no running jobs"
+        wd_logger -1 "There are no running jobs"
         return 3
     fi
 
@@ -716,12 +715,12 @@ function stop_running_jobs() {
 
     wd_logger 2 "Start with args: $1,${2-} => ${stop_receiver},${stop_band}"
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
-        wd_logger 1 "Found no RUNNING_JOBS_FILE, so nothing to do"
+        wd_logger -1 "Found no RUNNING_JOBS_FILE, so nothing to do"
         return 0
     fi
     source ${RUNNING_JOBS_FILE}
     if [[ ${#RUNNING_JOBS[@]} -eq 0 ]]; then
-       wd_logger 1 "No jobs in RUNNING_JOBS[]"
+       wd_logger -1 "There are no running jobs"
        return 0
     fi
 
