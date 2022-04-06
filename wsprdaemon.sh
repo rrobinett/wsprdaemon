@@ -80,7 +80,8 @@ shopt -s -o nounset          	    ### bash stops with error if undeclared variab
 #declare -r VERSION=2.10h            ### Client mode:  fix race condition on check for kiwirecorder.py
 #declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
-declare -r VERSION=2.10k            ### Add 'WD_...' rx site sw version number to spots uploaded to wsprnet.org
+#declare -r VERSION=2.10k            ### Add 'WD_...' rx site sw version number to spots uploaded to wsprnet.org
+declare -r VERSION=2.10l           ### Fix downloading of kiwiredorder by using 'git https:// ...'
                                     ### TODO: Support FST4W decoding through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
@@ -271,7 +272,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
-        git clone git://github.com/jks-prv/kiwiclient
+        git clone https://github.com/jks-prv/kiwiclient
         echo "Downloading the kiwirecorder SW from Github..." 
         if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then 
             echo "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
