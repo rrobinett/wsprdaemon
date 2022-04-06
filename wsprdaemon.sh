@@ -81,7 +81,7 @@ shopt -s -o nounset          	    ### bash stops with error if undeclared variab
 #declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
 #declare -r VERSION=2.10k            ### Add 'WD_...' rx site sw version number to spots uploaded to wsprnet.org
-declare -r VERSION=2.10l           ### Fix downloading of kiwiredorder by using 'git https:// ...'
+declare -r VERSION=2.10l           ### Fix downloading of kiwirecorder by using 'git https:// ...'
                                     ### TODO: Support FST4W decoding through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
