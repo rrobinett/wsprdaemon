@@ -334,12 +334,12 @@ function kiwirecorder_manager_daemon()
         if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
             ### Check that the pid specified in the pid file is active
             kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})
-            local ps_output=$( ps ${kiwi_recorder_pid} )
+            ps ${kiwi_recorder_pid} > ps.txt
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
                 wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
-                wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n${ps_output}"
+                wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
                 kiwi_recorder_pid=""
                 rm ${KIWI_RECORDER_PID_FILE}
             fi
