@@ -378,7 +378,7 @@ function upload_to_mirror_site_daemon() {
 
             wd_logger 2 "Starting curl of ${#curl_upload_file_list[@]} files using: 'curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/'"
             ### curl -sS == don't print progress, but print errors
-            curl -sS -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/ > curl.log 2>&1 
+            curl -sS --limit-rate ${UPLOAD_TO_MIRROR_SERVER_MAX_BYTES_PER_SECOND-20000} -m ${UPLOAD_TO_MIRROR_SERVER_SECS} -T "{${curl_upload_file_string}}" --user ${url_login_name}:${url_login_password} ftp://${url_addr}/ > curl.log 2>&1 
             local ret_code=$?
             local curl_output=$(< curl.log)
             if [[ ${ret_code} -ne 0 ]]; then
