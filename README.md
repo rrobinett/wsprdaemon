@@ -1,7 +1,7 @@
 # wsprdaemon (WD) Under development version v3.0a
 
 This branch is currently under development.   Server mode is largely finished, debugged and running at wsprdaemon.org and wd1.wsprdeamon.org 
-The client mode is running at AI6VN/KH6 but it isn't really ready for even alpha testing at other sites.
+The client mode is running well at many sites, although there is a memory leak problem being debugged on the Pi "bullseye" OS and at one Ubuntu 20.0.5 LTS site.  But many Pi and i86 sites are running well
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
