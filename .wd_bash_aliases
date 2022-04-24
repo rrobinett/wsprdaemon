@@ -43,11 +43,14 @@ alias cdu='cd /tmp/wsprdaemon/uploads.d/'
 
 function vi() 
 {
-    if [[ -f ~/wsprdaemon/.vimrc ]]; then
-        vim -u ~/wsprdaemon/.vimrc $*
-    else
-        vim $*
+    local vim_rc_file=~/.vimrc
+    local wd_vim_rc_file=~/wsprdaemon/.vimrc
+
+    if [[ ! -f ${vim_rc_file} ]] || ! grep wsprdaemon ${vim_rc_file}  > /dev/null ; then
+        echo "Adding 'source ${wd_vim_rc_file}' to ${vim_rc_file}"
+        echo "source ${wd_vim_rc_file}" >> ${vim_rc_file}
     fi
+    vim $*
 }
 
 alias vib='vi ~/wsprdaemon/.wd_bash_aliases'
