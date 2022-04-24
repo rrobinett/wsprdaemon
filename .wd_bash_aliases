@@ -1,0 +1,247 @@
+#!/bin/bash 
+
+### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
+
+alias rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
+
+### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
+function rci() 
+{
+    if [[ ! -f ~/.bash_aliases ]] || ! grep wd_bash_aliases ~/.bash_aliases > /dev/null ; then
+        echo "
+if [[ -f ~/wsprdaemon/.wd_bash_aliases ]]; then
+    source ~/wsprdaemon/.wd_bash_aliases
+fi
+" >> ~/.bash_aliases
+         echo "A reference to '~/wsprdaemon/.wd_bash_aliases' has been added to ' ~/.bash_aliases'"
+    else
+         echo ".wd_bash_aliases has already been installed in ~/.bash_aliases"
+    fi
+}
+
+### Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
+alias rcc='source ~/.bash_aliases'
+
+### Common usasges of linux commands
+alias l='ls -CF'
+alias ll='ls -l'
+alias lrt='ls -lrt'
+alias la='ls -A'
+
+alias pd=pushd
+alias d=dirs
+
+alias ag='alias | grep'
+
+alias h=history
+alias hg='history | grep'
+alias j=jobs
+
+alias cdw='cd ~/wsprdaemon/'
+alias cdt='cd /tmp/wsprdaemon/'
+alias cdu='cd /tmp/wsprdaemon/uploads.d/'
+
+function vi() 
+{
+    if [[ -f ~/wsprdaemon/.vimrc ]]; then
+        vim -u ~/wsprdaemon/.vimrc $*
+    else
+        vim $*
+    fi
+}
+
+alias vib='vi ~/wsprdaemon/.wd_bash_aliases'
+alias vibb='vi ~/.bash_aliases'
+alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
+alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
+
+alias wd='v=no ~/wsprdaemon/wsprdaemon.sh'
+alias wda='v=no ~/wsprdaemon/wsprdaemon.sh -a'
+alias wdz='v=no ~/wsprdaemon/wsprdaemon.sh -z'
+alias wds='v=no ~/wsprdaemon/wsprdaemon.sh -s'
+alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
+
+alias wdd='v=no ~/wsprdaemon/wsprdaemon.sh -d'       ### Increment the verbosity level of all running daemons in CWD
+alias wddd='v=no ~/wsprdaemon/wsprdaemon.sh -D'       ### Decrement
+
+alias g='git'
+alias gd='git diff'
+alias gs='git status'
+
+alias tf='tail -F'
+
+
+alias catss='cat ~/.ssh/*pub'
+
+function setup-ubuntu() {
+    local remote_ip=$1
+
+    if [[ -z "${remote_ip}" ]]; then
+        echo "usage: ${FUNCNAME[0]} USER@IPADDRESS"
+        return 0
+    fi
+    local url_list=( ${remote_ip/@/ } )
+    if [[ ${#url_list[@]} -ne 2 ]]; then
+        echo "ERROR: URL '${remote_ip}' doesn't contain a 'USER@IP'"
+    fi
+    scp -p ~/.ssh/authorized_keys ${remote_ip}:.ssh/
+    scp -p ~/.vimrc ~/.bash_aliases ${remote_ip}:
+    ### In an interactive login session:  run visudo to setup NOPASSWD:, install vim, disable VNC encrytion so RealVNC clients can login
+    ssh ${remote_ip} "echo 'sudo visudo
+    sudo apt update 
+    sudo apt install vim -y
+    sudo apt install git -y
+    sudo apt install sox -y
+    gsettings set org.gnome.Vino require-encryption false
+    ' > setup-ubuntu.sh; chmod +x setup-ubuntu.sh"
+    echo
+    echo "Run './setup-ubuntu.sh' to finish this installation"
+    echo
+    ssh ${remote_ip} 
+}
+
+# Get status of all active kiwis
+function kiwi-stats(){
+    local wsprconf_file=~/wsprdaemon/wsprdaemon.conf
+
+    if [[ ! -f ${wsprconf_file} ]] ; then
+        echo "ERROR: can't find config file ${wsprconf_file}"
+        return
+    fi
+    source ${wsprconf_file}
+
+    ## Construct a list of configured and present Kiwis
+    local kiwi_list=()
+    for rx_line in "${RECEIVER_LIST[@]}"; do
+        local rx_fields=(${rx_line})
+        local rx_name=${rx_fields[0]}
+        local rx_ip_port=${rx_fields[1]}
+        if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]] ; then
+            [[ ${verbosity} -ge 1 ]] && echo "skipping rx ${rx_name}"
+        else
+            local rx_ip=${rx_ip_port/:*/}
+            if ! ping -c 1 -W 1 ${rx_ip} > /dev/null ; then
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't repond to pings"
+            else
+                kiwi_list+=(${rx_name},${rx_ip_port})
+                [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}"
+            fi
+        fi
+    done
+    [[ ${verbosity} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}"
+    [[ ${verbosity} -ge 1 ]] && echo
+
+    local users
+    local users_max
+    local gps_good
+    local users_total=0
+    local wsprdaemon_total=0
+    local channels_total=0
+    for kiwi_info in "${kiwi_list[@]}" ; do
+        local kiwi_name=${kiwi_info%,*}
+        local kiwi_ip=${kiwi_info#*,}
+        local kiwi_status="$(curl -s http://${kiwi_ip}/status)"
+        users=$(sed -n '/users=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        channels_total=$((channels_total + users_max))
+        gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        [[ ${verbosity} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}"
+
+        ### I was unable to parse the curl output when it was assigned to a bash variable. After some frustration I am using the hack of
+        ### piping curl's output to a /tmp file and reading and parsing it from there
+
+        curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log
+        while read user_line; do
+            if grep -q wsprdaemon <<< "${user_line}" ; then
+                [[ ${verbosity} -ge 1 ]] && echo "skipping WD user"
+                wsprdaemon_total=$((wsprdaemon_total + 1))
+            else
+                if [[ -n "${user_line:1}" ]]; then
+                    eval declare $(echo "${user_line:1}" | sed '/"\([^"]*\)":/s//\1=/g')
+                    local listener_channel="${user_line:0:1}"
+                    local listener_name="$(echo "$n" | sed 's/%20/ /g')"
+                    local listener_location="$(echo "$g" | sed 's/%20//g')"
+                    local listener_freq="$f"
+                    local listener_mode="$m"
+                    local listener_ip="$a"
+                    local listener_time="$t"
+                    printf "%12s:%s %15s %8s %3s %s %20s %s\n" "${kiwi_name}" "${listener_channel}" "'${listener_name}'" "${listener_freq}" "${listener_mode}" "${listener_time}" "${listener_ip}" "${listener_location}"
+                    users_total=$((users_total + 1))
+                fi
+            fi
+        done < /tmp/curl.log
+    done
+    printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total  $users_total $wsprdaemon_total
+}
+
+function show_ovs(){
+    local log_file
+
+    cd /tmp/wspr* 2> /dev/null
+    for log_file in $(ls -rt */*/recording.log); do
+         local lines=$(grep "(OV)" ${log_file})
+         if [[ -n "${lines}" ]]; then
+             local rx_band=($(echo ${log_file%/*} | sed 's;/; ;'))
+             local rx=${rx_band[0]}
+             local band=${rx_band[1]}
+             local latest_line=$(echo "${lines}" | tail -n 1)
+             printf "%4s %4s: %s\n" "${rx}" "${band}" "${latest_line}"
+         fi
+     done
+     cd - > /dev/null
+}
+
+function show-ovs() {
+    ls -lrt `find /tmp/wsprdaemon/ -name recording.log`
+}
+function show-merged() {
+    ls -lrt `find /tmp/wsprdaemon/ -name merged.log`
+}
+
+function show-zkd() {
+    curl -s http://jimlill.com:8088/today_int.html | html2text | grep 'KH6KR\|KFS\|WA2TP\|W6SB\|K6PZB\|KPH\|KK6PR\|AI6VN/KH6\|KJ6MKI\|N6GN\|WA2ZKD\|KD2OM\|OE9GHV\|OE9HLH\|IW2NKE\|KA7OEI\|KP4MD'
+}
+
+function show-kh6() {
+    curl -s http://jimlill.com:8088/today_int.html | html2text | grep R$'\b'Ra'\|AI6VN/KH6\|KH6KR'
+}
+
+function show-mki() {
+    local day
+    local date_str
+
+    for day in $(seq -7 -1 ); do
+        date_str=$(date -v ${day}d  +%Y-%m-%d)
+        curl -s http://jimlill.com:8088/previous/${date_str} | html2text | awk "/KJ6MKI/{ printf \"${date_str}: %s\\n\", \$0}"
+     done
+     date_str=$(date +%Y-%m-%d)
+     curl -s http://jimlill.com:8088/today.html | html2text | awk "/KJ6MKI/{ printf \"${date_str}: %s\\n\", \$0}"
+
+}
+function find_unused_vars() {
+    local sh_file=$1
+
+    local var
+    local vars=$(cat ${sh_file} | sed -n '/^declare /s///p' | sed 's/=.*//')
+    for var in ${vars}; do
+        local lines=$(grep -v '^declare' ${sh_file} | grep ${var})
+        if [[ -z "${lines}" ]]; then
+            echo "Found no usage of variable ${var}"
+        fi
+    done
+}
+
+function pinge() 
+{
+   if [[ -z "$1" ]]; then
+       echo "usage:  pinge DEST"
+       return 1
+   fi
+   local dest=$1
+   local pong
+
+   ping ${dest} | while read pong; do echo "$(date): ${pong}"; done
+}
+
+
+
