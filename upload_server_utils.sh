@@ -276,7 +276,7 @@ function record_noise_files()
     local noise_csv_file=ts_noise.csv
     local noise_file_list=()
     local max_noise_files=${MAX_RM_ARGS}
-    while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_wspr_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
+    while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
         if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
             wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
             noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )
@@ -668,9 +668,9 @@ function get_status_upload_services()
     get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
+        wd_logger -2 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
     else
-        wd_logger -1 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
+        wd_logger -2 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
     fi
 
     for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
