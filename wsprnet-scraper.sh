@@ -91,7 +91,7 @@ function wpsrnet_get_spots() {
     wd_logger 2 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
     local start_seconds=${SECONDS}
     local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
-    curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str}  i\
+    curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-1000000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str}  i\
                "http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0" > ${html_spot_file}
     local ret_code=$?
     local end_seconds=${SECONDS}
@@ -312,7 +312,7 @@ function wsprnet_add_azi() {
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR:  'python3 ${WSPRNET_AZI_PYTHON_CMD} --input ${api_spot_file_path} --output ${api_azi_file_path}' => ${ret_code}"
     else
-        wd_logger 2 "python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file_path} ${api_azi_file_path} => ${ret_code}"
+        wd_logger 1 "python3 ${WSPRNET_AZI_PYTHON_CMD} ${api_spot_file_path} ${api_azi_file_path} => ${ret_code}"
     fi
     return ${ret_code}
 }
