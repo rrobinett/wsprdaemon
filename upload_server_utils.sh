@@ -668,9 +668,9 @@ function get_status_upload_services()
     get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
+        wd_logger -2 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
     else
-        wd_logger -1 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
+        wd_logger -2 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
     fi
 
     for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do

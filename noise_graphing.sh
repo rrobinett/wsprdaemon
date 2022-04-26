@@ -241,7 +241,7 @@ function plot_noise() {
     return 0
 }
 
-declare NOISE_LINE_FIELDS_COUNT=16         ### The graphing program expects that every noise line has 16 fields (??)
+declare NOISE_LINE_FIELDS_COUNT=15         ### The TS DB expects 15 fields, while the graphing program expects that every noise line in addition starts with DATE-TIME, so 16 fields
 function queue_noise_signal_levels_to_wsprdaemon() 
 {
     local spot_date=$1
@@ -251,7 +251,7 @@ function queue_noise_signal_levels_to_wsprdaemon()
     local signal_levels_log_file=$5
     local wsprdaemon_noise_directory=$6
  
-    local noise_line="${spot_date}-${spot_time}: ${sox_signals_rms_fft_and_overload_info}"
+    local noise_line="${sox_signals_rms_fft_and_overload_info}"
     local noise_line_list=( ${noise_line} )
 
     if [[ ${#noise_line_list[@]} -ne ${NOISE_LINE_FIELDS_COUNT} ]]; then
@@ -260,7 +260,7 @@ function queue_noise_signal_levels_to_wsprdaemon()
     fi
 
     wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
-    echo "${noise_line}" >> ${signal_levels_log_file}
+    echo "${spot_date}-${spot_time}: ${noise_line}" >> ${signal_levels_log_file}
 
     if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
         wd_logger 1 "Not configured to upload noise, so not queuing a noise file"
