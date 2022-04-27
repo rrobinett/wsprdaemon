@@ -432,7 +432,8 @@ function cleanup_wav_file_list()
             else
                 ### Size is valid, see if it is one minute earlier than the previous file
                 local test_file_minute=${test_file_name:11:2}
-                if [[ 10#${last_file_minute} -lt 0 ]]; then
+                wd_logger 2 "Checking time fields in valid wav file '${test_file_name}' => test_file_minute=${test_file_minute}, last_file_minute=${last_file_minute}"
+                if [[ ${last_file_minute} == "-1" ]]; then
                     wd_logger 1 "First clean file is at minute ${test_file_minute}"
                     last_file_minute=${test_file_minute}
                     return_clean_files_string="${test_file_name}"
