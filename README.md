@@ -1,4 +1,23 @@
-# wsprdaemon (WD) Latest version is v2.10k
+# WsprDaemon (WD) Latest version is v2.10k
+# Version 3.0a Beta is available for testing
+The WD 3.0 software has been running at my AI6VN/KH6, KPH and KFS sites for several months, and in the last two weeks I have helped bring it up on an additional 8 sites.  In most of those installations it seems to run as stably as 2.10k and 3.0 includes many 'behind-the-scenes' enhancements to slightly improve the number of spots reported. WD 3.0 includes a remote support option which when enabled in your conf file will, with your permission, allow me to log on to your WD server to help with installation and debugging.
+
+So I am inviting those who are interested in joining the 3.0 beta program to install it.
+
+For existing WD 2.10 users:  
+
+cd ~/wsprdaemon
+./wsprdaemon.sh -z            
+git pull
+git checkout v3.0
+./wsprdaemon.sh -a
+
+The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
+
+I have also just created a Telegram 'Wsprdaemon' channel which I will monitor to support both legacy and beta users.
+
+===========================
+
 2.10k Add WD's version number to spots uploaded to wsprnet.org
 
 2.10j Upload WSJT-x 2.3.0 binaries
