@@ -58,22 +58,20 @@ alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
 
-alias wd='v=no ~/wsprdaemon/wsprdaemon.sh'
-alias wdl='v=no ~/wsprdaemon/wsprdaemon.sh -l'
-alias wda='v=no ~/wsprdaemon/wsprdaemon.sh -a'
-alias wdz='v=no ~/wsprdaemon/wsprdaemon.sh -z'
-alias wds='v=no ~/wsprdaemon/wsprdaemon.sh -s'
-alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
+alias wd='v=no nice -n 19 ~/wsprdaemon/wsprdaemon.sh'
+alias wdl='wd -l'
+alias wda='wd -a'
+alias wdz='wd -z'
+alias wds='wd -s'
+alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
+alias wddd='wd -D'       ### Decrement
 
-alias wdd='v=no ~/wsprdaemon/wsprdaemon.sh -d'       ### Increment the verbosity level of all running daemons in CWD
-alias wddd='v=no ~/wsprdaemon/wsprdaemon.sh -D'       ### Decrement
+alias tf='tail -F'
+alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
 
 alias g='git'
 alias gd='git diff'
 alias gs='git status'
-
-alias tf='tail -F'
-
 
 alias catss='cat ~/.ssh/*pub'
 
