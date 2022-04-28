@@ -59,6 +59,7 @@ alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
 
 alias wd='v=no ~/wsprdaemon/wsprdaemon.sh'
+alias wdl='v=no ~/wsprdaemon/wsprdaemon.sh -l'
 alias wda='v=no ~/wsprdaemon/wsprdaemon.sh -a'
 alias wdz='v=no ~/wsprdaemon/wsprdaemon.sh -z'
 alias wds='v=no ~/wsprdaemon/wsprdaemon.sh -s'

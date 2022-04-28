@@ -199,7 +199,7 @@ function post_files()
     wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
     local call
     for call in ${calls_list[@]}; do
-        local best_line=$( awk -v call=${call} '$7 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 4,4n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
+        local best_line=$( awk -v call=${call} '$7 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 5,5n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
         local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
         local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
         local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
