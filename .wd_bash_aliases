@@ -63,6 +63,7 @@ alias wdl='wd -l'
 alias wda='wd -a'
 alias wdz='wd -z'
 alias wds='wd -s'
+alias wdv='wd -V'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
 alias wddd='wd -D'       ### Decrement
 
