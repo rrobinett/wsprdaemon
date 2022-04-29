@@ -50,7 +50,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
 #declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
-declare -r VERSION=3.0.1             ### Fix selections of best SNR in MERGEd receivers.  Change VERSION to 3.0.N
+#declare -r VERSION=3.0.1             ### Fix selections of best SNR in MERGEd receivers.  Change VERSION to 3.0.N
+declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
+                                     ### and  direct tunnel ssh traffice to local ssh server which is not configured to listen on the standard port 22
+                                     ### and after spawning the frpc client service, check its status report to be sure it says is is "running"
                                     ### TODO: Fix kiwirecorder arguments
                                     ### TODO: Support FST4W decoding through the use of 'jt9'
                                     ### TODO: Flush antique ~/signal_level log files

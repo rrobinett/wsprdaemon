@@ -39,10 +39,13 @@ function proxy_connection_status() {
 ### Else verify proxy is running and spawn a proxy client session if no proxy is running
 function proxy_connection_manager() {
     local proxy_pid=$(proxy_connection_pid)     ### Returns 0 if there is no pid file or the pid is dead
-    if [[ -z "${REMOTE_ACCESS_CHANNEL-}" || "${REMOTE_ACCESS_CHANNEL}" -ne "${REMOTE_ACCESS_CHANNEL}" ]]; then
+    if [[ -z "${REMOTE_ACCESS_CHANNEL-}" ]] || ! is_uint "${REMOTE_ACCESS_CHANNEL-}"; then
+        ### A remote access channel is not defined or defined as "no"
         if [[ -z "${REMOTE_ACCESS_CHANNEL-}" ]]; then
+            ### If REMOTE_ACCESS_CHANNEL is not defined in the conf file, normally there is no need for a printout
             wd_logger 2 "Proxy service is not enabled"
-        elif [[ "${REMOTE_ACCESS_CHANNEL}" -ne "${REMOTE_ACCESS_CHANNEL}" ]]; then
+        elif [[ "${REMOTE_ACCESS_CHANNEL-}" != "no" ]]; then
+            ### Only print if it isn't a number and it isn't "no".  No need to printout if it is "no"
             wd_logger 0 "ERROR: Proxy service channel is defined as ${REMOTE_ACCESS_CHANNEL}, but that is not an integer number"
         fi
 
@@ -129,6 +132,16 @@ function proxy_connection_manager() {
     fi
 
     if [[ ! -f ${FRPC_INI_FILE} ]]; then
+        local local_ssh_server_port=22        ### By default the ssh server listens on port 22
+        declare SSHD_CONFIG_FILE=/etc/ssh/sshd_config
+        if [[ -f ${SSHD_CONFIG_FILE} ]]; then
+            local sshd_config_port=$(awk '/^Port /{print $2}' ${SSHD_CONFIG_FILE})
+            if [[ -n "${sshd_config_port}" ]]; then
+                wd_logger 1 "Ssh service on this server is configured to the non-standard port ${sshd_config_port}, not the ssh default port ${local_ssh_server_port}"
+                local_ssh_server_port=${sshd_config_port}
+            fi
+        fi
+
         wd_logger 0 "Creating ${FRPC_INI_FILE}"
         cat > ${FRPC_INI_FILE} <<EOF
 [common]
@@ -140,7 +153,7 @@ server_port = ${WD_FRPS_PORT}
 [${SIGNAL_LEVEL_UPLOAD_ID}]
 type = tcp
 local_ip = 127.0.0.1
-local_port = 22
+local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
 EOF
         wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${frpc_remote_port} of that server"
@@ -160,4 +173,9 @@ EOF
     fi
     echo ${frpc_daemon_pid} > ${WSPRDAEMON_PROXY_PID_FILE}
     wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
+    local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${SIGNAL_LEVEL_UPLOAD_ID} '$1 == id{print $2}')
+    if [[ -z "${frpc_status}" || "${frpc_status}" != "running" ]]; then
+        wd_logger 0 "ERROR: the remote access service is running but it failed to connect to wsprdaemon.org and it reports:\n$(${FRPC_CMD} -c ${FRPC_INI_FILE} status)"
+    fi
+
 }

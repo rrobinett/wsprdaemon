@@ -33,6 +33,10 @@ fi
 ### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
 trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
 
+###  Returns 0 if arg is an unsigned integer, else 1
+function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; esac ;}
+
+###
 function wd_logger_flush_all_logs {
     wd_logger 2 "Flushing all .log and .printed files"
     find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.log'     -exec rm {} \;
