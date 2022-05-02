@@ -7,9 +7,13 @@ So I am inviting those who are interested in joining the 3.0 beta program to ins
 For existing WD 2.10 users:  
 
 cd ~/wsprdaemon
-./wsprdaemon.sh -z            
+
+./wsprdaemon.sh -z        
+
 git pull
+
 git checkout v3.0
+
 ./wsprdaemon.sh -a
 
 The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
