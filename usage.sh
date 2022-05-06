@@ -4,7 +4,7 @@
 ##########################################################################################################################################################
 function usage() {
     echo "
-###    Copyright (C) 2020  Robert S. Robinett
+###    Copyright (C) 2020-2022  Robert S. Robinett
 ###
 ###    This program is free software: you can redistribute it and/or modify
 ###    it under the terms of the GNU General Public License as published by
@@ -37,7 +37,9 @@ usage:                VERSION = ${VERSION}
     -h                            => print this help message (execute '-vh' to get a description of the architecture of this program)
 
     -a                            => stArt watchdog daemon which will start all scheduled jobs ( -w a )
+    -A                            => install wsprdaemon as a service started at linux boot/reboot/powerup time and then stArt it
     -z                            => stop watchdog daemon and all jobs it is currently running (-w z )   (i.e.zzzz => go to sleep)
+    -Z                            => stop any running WD and also remove it from being run by Linux at boot/reboot/powerup time
     -s                            => show Status of watchdog and jobs it is currently running  (-w s ; -j s )
     -l     [e,n,d]                => show log files lines using 'tail -F'.  'e' = new ERROR lines from all logs files.  'n' = wsprnet.org uploading. 'd' = wsprdaemon.org uploading 
 
