@@ -109,8 +109,8 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             uploading_controls $OPTARG
             ;;
         A)
-            enable_systemctl_daemon ## edit to daemon but do the parallel for all of the same in other wd_utils.sh
-            watchdog_cmd a
+            enable_systemctl_daemon 
+            sudo systemctl start wsprdaemon
             ;;
         a)
             watchdog_cmd a
@@ -121,7 +121,8 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             check_for_zombies yes   ## silently kill any zombies
             ;;
         Z)
-            check_for_zombies no   ## prompt before killing any zombies
+            sudo systemctl stop wsprdaemon
+            disable_systemctl_daemon 
             ;;
         s)
             proxy_connection_status

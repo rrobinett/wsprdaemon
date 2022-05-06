@@ -311,9 +311,16 @@ EOF
 }
 
 function enable_systemctl_daemon() {
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        setup_systemctl_daemon
+    fi
     sudo systemctl enable wsprdaemon.service
 }
 function disable_systemctl_daemon() {
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        wd_logger 1 "The wsprdaemon service has not been installed."
+        return 0
+    fi
     sudo systemctl disable wsprdaemon.service
 }
 
