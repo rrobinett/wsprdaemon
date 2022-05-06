@@ -30,7 +30,7 @@ function proxy_connection_status() {
     if [[ ${proxy_pid} -eq 0 ]]; then
         wd_logger 2 "No proxy client connection daemon is active"
     else
-        wd_logger 1 "Proxy client connection daemon is active with pid ${proxy_pid}"
+        wd_logger 2 "Proxy client connection daemon is active with pid ${proxy_pid}"
     fi
     return 0
 }
@@ -39,14 +39,29 @@ function proxy_connection_status() {
 ### Else verify proxy is running and spawn a proxy client session if no proxy is running
 function proxy_connection_manager() {
     local proxy_pid=$(proxy_connection_pid)     ### Returns 0 if there is no pid file or the pid is dead
-    if [[ -z "${REMOTE_ACCESS_CHANNEL-}" ]] || ! is_uint "${REMOTE_ACCESS_CHANNEL-}"; then
+
+    local conf_file
+    if [[ -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
+        conf_file=${WSPRDAEMON_CONFIG_FILE}
+    elif [[ -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
+        wd_logger 1 "wdpraemon.conf has not yet been configured. Edit it and run this again"
+        cp -p ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
+        exit 1
+    else
+        wd_logger 1 "ERROR: can't find either ${WSPRDAEMON_CONFIG_FILE} or ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}"
+        exit 1
+    fi
+    local remote_access_channel=$(sed 's/ //g; s/#.*//; s/"//g' ${WSPRDAEMON_CONFIG_FILE} | awk -F = '/^ *REMOTE_ACCESS_CHANNEL/{print $2}')
+
+    if [[ -z "${remote_access_channel-}" ]] || ! is_uint "${remote_access_channel-}"; then
         ### A remote access channel is not defined or defined as "no"
-        if [[ -z "${REMOTE_ACCESS_CHANNEL-}" ]]; then
-            ### If REMOTE_ACCESS_CHANNEL is not defined in the conf file, normally there is no need for a printout
+        if [[ -z "${remote_access_channel-}" ]]; then
+            ### If remote_access_channel is not defined in the conf file, normally there is no need for a printout
             wd_logger 2 "Proxy service is not enabled"
-        elif [[ "${REMOTE_ACCESS_CHANNEL-}" != "no" ]]; then
+        elif [[ "${remote_access_channel-}" != "no" ]]; then
             ### Only print if it isn't a number and it isn't "no".  No need to printout if it is "no"
-            wd_logger 0 "ERROR: Proxy service channel is defined as ${REMOTE_ACCESS_CHANNEL}, but that is not an integer number"
+            wd_logger 0 "ERROR: Proxy service channel is defined as ${remote_access_channel}, but that is not an integer number"
+            exit 1
         fi
 
         if [[ ${proxy_pid} -ne 0 ]]; then
@@ -58,7 +73,16 @@ function proxy_connection_manager() {
         fi
         return
     fi
-    wd_logger 2 "Proxy connection is enabled"
+    local signal_level_upload_id=$( sed 's/ //g; s/#.*//; s/"//g' ${WSPRDAEMON_CONFIG_FILE} | awk -F = '/^ *SIGNAL_LEVEL_UPLOAD_ID/{print $2}')
+    if [[ -z "${signal_level_upload_id}" ]]; then
+        wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID is not defined"
+        exit 2
+    fi
+    if [[ "${signal_level_upload_id}" == "AI6VN" ]]; then
+        wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID='AI6VN', so change it to your own ID"
+        exit 3
+    fi
+    wd_logger 2 "Proxy connection REMOTE_ACCESS_CHANNEL=${remote_access_channel}, SIGNAL_LEVEL_UPLOAD_ID='${signal_level_upload_id}' is enabled"
 
     mkdir -p ${WD_BIN_DIR}
     if [[ ! -x ${FRPC_CMD} ]]; then
@@ -71,6 +95,9 @@ function proxy_connection_manager() {
                 ;;
             armv7l)
                 frp_tar_file=frp_${FRP_REQUIRED_VERSION}_linux_arm.tar.gz
+                ;;
+            aarch64)
+                frp_tar_file=frp_${FRP_REQUIRED_VERSION}_linux_arm64.tar.gz
                 ;;
             *)
                 wd_logger 0 "ERROR: CPU architecture '${cpu_arch}' is not supported by this program"
@@ -104,16 +131,16 @@ function proxy_connection_manager() {
         wd_logger 0 "Installed openssh_server"
     fi
 
-    local frpc_remote_port=$(( ${WD_FRPS_PORT} + 100 - (${WD_FRPS_PORT} % 100 ) + ${REMOTE_ACCESS_CHANNEL} ))
+    local frpc_remote_port=$(( ${WD_FRPS_PORT} + 100 - (${WD_FRPS_PORT} % 100 ) + ${remote_access_channel} ))
     if [[ -f ${FRPC_INI_FILE} ]]; then
         wd_logger 2 "Validating ${FRPC_INI_FILE}"
         local fprc_ini_file_port=$( awk '/remote_port/{print $3}' ${FRPC_INI_FILE} )
         local fprc_ini_file_channel=$(( ${fprc_ini_file_port} - (${WD_FRPS_PORT} + 100 - (${WD_FRPS_PORT} % 100) ) ))
         if [[ -z "${fprc_ini_file_port}" || ${fprc_ini_file_port} -ne ${frpc_remote_port} ]]; then
             if [[ -z "${fprc_ini_file_port}" ]]; then
-                wd_logger 0 "Found no REMOTE_ACCESS_CHANNEL specified in ${FRPC_INI_FILE}"
+                wd_logger 0 "Found no remote_access_channel specified in ${FRPC_INI_FILE}"
             else
-                wd_logger 0 "Remote access channel ${REMOTE_ACCESS_CHANNEL} specified in .conf file does not match access channel ${fprc_ini_file_channel} specified the in ${FRPC_INI_FILE}.  So kill the currently running session and restart it"
+                wd_logger 0 "Remote access channel ${remote_access_channel} specified in .conf file does not match access channel ${fprc_ini_file_channel} specified the in ${FRPC_INI_FILE}.  So kill the currently running session and restart it"
             fi
             if [[ ${proxy_pid} -ne 0 ]]; then
                 wd_logger 0 "Kill running proxy client with pid ${proxy_pid}"
@@ -150,7 +177,7 @@ admin_port = 7500
 server_addr = ${WD_FRPS_URL}
 server_port = ${WD_FRPS_PORT}
 
-[${SIGNAL_LEVEL_UPLOAD_ID}]
+[${signal_level_upload_id}]
 type = tcp
 local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
@@ -173,7 +200,7 @@ EOF
     fi
     echo ${frpc_daemon_pid} > ${WSPRDAEMON_PROXY_PID_FILE}
     wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
-    local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${SIGNAL_LEVEL_UPLOAD_ID} '$1 == id{print $2}')
+    local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
     if [[ -z "${frpc_status}" || "${frpc_status}" != "running" ]]; then
         wd_logger 0 "ERROR: the remote access service is running but it failed to connect to wsprdaemon.org and it reports:\n$(${FRPC_CMD} -c ${FRPC_INI_FILE} status)"
     fi

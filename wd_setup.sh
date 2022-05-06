@@ -2,6 +2,8 @@
 declare -i verbosity=${verbosity:-1}
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
+declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
+declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.conf
 
 ### This is used by two .sh files, so it need to be declared here
 declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
@@ -17,6 +19,11 @@ fi
 
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
+### If the user has enabled a remote proxy connection in the conf file, then start up that connection now.
+declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
+source ${WSPRDAEMON_PROXY_UTILS_FILE}
+proxy_connection_manager      
+
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
@@ -26,6 +33,10 @@ case ${CPU_ARCH} in
             QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
         fi
         declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf ${QT5_PACKAGE})
+        ;;
+    aarch64)
+        ### This is a 64 bit bullseye Pi4
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:arm64 libqt5core5a:arm64 )
         ;;
     x86_64)
         declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:amd64 qt5-default:amd64)
@@ -52,9 +63,6 @@ else
 fi
 declare -r DPKG_CMD="/usr/bin/dpkg"
 declare -r GREP_CMD="/bin/grep"
-
-declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
-declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.conf
 
 ### Check that there is a conf file
 if [[ ! -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
@@ -84,11 +92,6 @@ source ${WSPRDAEMON_CONFIG_FILE}
 ### Additional bands can be defined in the conf file (i.e. WWV, CHU,...)
 WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
-
-### If the user has enabled a remote proxy connection in the conf file, then start up that connection now.
-declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
-source ${WSPRDAEMON_PROXY_UTILS_FILE}
-proxy_connection_manager      
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
@@ -383,7 +386,7 @@ function load_wsjtx_commands()
     local wsprd_version=""
     if [[ -x ${WSPRD_VERSION_CMD} ]]; then
         wsprd_version=$( ${WSPRD_VERSION_CMD} )
-    else
+    elif false; then
         wsprd_version=$(awk '/wsjtx /{print $3}' <<< "${dpkg_list}")
         if [[ -n "${wsprd_version}" ]] && [[ -x ${WSPRD_CMD} ]] && [[ ! -x ${WSPRD_VERSION_CMD} ]]; then
             sudo sh -c "echo 'echo ${wsprd_version}' > ${WSPRD_VERSION_CMD}"
@@ -397,9 +400,33 @@ function load_wsjtx_commands()
         if [[ -f /etc/os-release ]]; then
             ### See if we are running on Ubuntu 20.04
             ### can't use 'source /etc/os-release' since the variable names in that conflict with variables in WD
-            os_name=$(awk -F = '/^VERSION=/{print $2}' /etc/os-release | sed 's/"//g')
+            os_name=$(awk -F = '/^VERSION_CODENAME=/{print $2}' /etc/os-release | sed 's/"//g')
         fi
 
+        if [[ "${os_name}" == "bullseye" && "${CPU_ARCH}" == "aarch64" ]]; then
+            if [[ "${wsprd_version}" == "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.3.0}" ]]; then
+                wd_logger 2 "Found the expected wsprd version '${wsprd_version}' on 64 bit Pi bulleye"
+                return 0
+            fi
+            wd_logger 1 "Installing wsjtx on a 64 bit Pi bullseye from 'apt'"
+            sudo apt install wsjtx -y
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'sudo apt install wsjtx' failed on 64 bit Pi 'bullseye'"
+                exit 1
+            fi
+            wsjtx_version=$( /usr/bin/wsjtx_app_version -v | awk '{print $2}' )
+            if [[ "${wsjtx_version}" != "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.3.0}" ]]; then
+                wd_logger 1 "ERROR: wrong wsjtx version '${wsjtx_version}' on 64 bit Pi bulleye"
+                exit
+            fi
+            mkdir -p ${WSPRD_BIN_DIR}
+            cp /usr/bin/{wsprd,jt9} ${WSPRD_BIN_DIR}
+            echo "echo ${wsjtx_version}" > ${WSPRD_VERSION_CMD}
+            chmod +x ${WSPRD_VERSION_CMD}
+            wd_logger 1 "Installed WSJT-x version ${wsjtx_version} on this 64 bit Pi bullseye"
+            return 0
+        fi
         local wsjtx_pkg=""
         case ${CPU_ARCH} in
             x86_64)

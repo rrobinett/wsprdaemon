@@ -17,7 +17,7 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-[[ ${v:-yes} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020  Robert S. Robinett
+[[ ${v:-yes} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020-2022  Robert S. Robinett
 This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
 This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
 wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
@@ -51,7 +51,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
 #declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
 #declare -r VERSION=3.0.1             ### Fix selections of best SNR in MERGEd receivers.  Change VERSION to 3.0.N
-declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
+#declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
+declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
                                      ### and  direct tunnel ssh traffice to local ssh server which is not configured to listen on the standard port 22
                                      ### and after spawning the frpc client service, check its status report to be sure it says is is "running"
                                     ### TODO: Fix kiwirecorder arguments
