@@ -122,12 +122,14 @@ function proxy_connection_manager() {
         cd -
         wd_logger 0 "Installed ${FRPC_CMD}"
     fi
-    if ! dpkg -l openssh-server > /dev/null; then
+    if ! sudo systemctl status ssh >& /dev/null; then
         wd_logger 0 "Installing openssh-server"
         if ! sudo apt install openssh-server ; then
             wd_logger 0 "ERROR: failed to Install openssh-server"
             return 1
         fi
+        sudo systemctl enable ssh
+        sudo systemctl start  ssh
         wd_logger 0 "Installed openssh_server"
     fi
 
