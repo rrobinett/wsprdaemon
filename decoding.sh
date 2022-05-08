@@ -901,9 +901,27 @@ function decoding_daemon() {
     cd ${recording_dir}
     local old_kiwi_ov_lines=0
 
+    local my_daemon_pid=$(< ${DECODING_DAEMON_PID_FILE})
+    local proc_file=/proc/${my_daemon_pid}/status
+    local VmRSS_val=$(awk '/VmRSS/{print $2}' ${proc_file})
+    local last_rss_epoch
+    wd_logger 1 "At start VmRSS_val=${VmRSS_val} for my PID ${my_daemon_pid} was found in ${PWD}/${DECODING_DAEMON_PID_FILE}"
+    if [[ -n "${VM_RSS_LOG_FILENAME-}" ]]; then
+        wd_logger 1 "Logging VmRSS_val for my PID ${my_daemon_pid} found in ${PWD}/${DECODING_DAEMON_PID_FILE} and finding VmRSS in ${proc_file} and logging it to ${VM_RSS_LOG_FILENAME-}"
+        printf "${WD_TIME_FMT}: %8d\n" -1 ${VmRSS_val} > ${VM_RSS_LOG_FILENAME}
+        last_rss_epoch=${EPOCHSECONDS}
+    fi
+
     rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
+        VmRSS_val=$(awk '/VmRSS/{print $2}' ${proc_file} )
+        wd_logger 1 "My PID ${my_daemon_pid} VmRSS_val=${VmRSS_val}"
+        if [[ -n "${VM_RSS_LOG_FILENAME-}" && $(( ${EPOCHSECONDS} - ${last_rss_epoch})) -ge 60  ]]; then
+            printf "${WD_TIME_FMT}: %8d\n" -1 "${VmRSS_val}" >> ${VM_RSS_LOG_FILENAME}
+            wd_logger 1 "Logged VmRSS_val=${VmRSS_val}"
+            last_rss_epoch=${EPOCHSECONDS}
+        fi
         wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
@@ -913,7 +931,7 @@ function decoding_daemon() {
             sleep 1
             continue
         fi
-        local -a mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
+        local  mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
 
 
