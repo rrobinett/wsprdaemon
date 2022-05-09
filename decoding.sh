@@ -401,23 +401,23 @@ function get_file_start_time_info()
 function cleanup_wav_file_list()
 {
     local __return_clean_files_string_name=$1
-    local raw_file_list=( $2 )
+    local check_file_list=( $2 )
 
-    if [[ ${#raw_file_list[@]} -eq 0 ]]; then
+    if [[ ${#check_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Was given an empty file list"
         eval ${__return_clean_files_string_name}=\"\"
         return 0
     fi
-    wd_logger 1 "Testing list of raw files: '${raw_file_list[*]}'"
+    wd_logger 1 "Testing list of raw files: '${check_file_list[*]}'"
 
     local last_file_minute=-1
     local flush_files="no"
     local test_file_name
     local return_clean_files_string=""
 
-    local raw_file_index=$(( ${#raw_file_list[@]} - 1 ))
+    local raw_file_index=$(( ${#check_file_list[@]} - 1 ))
     while [[ ${raw_file_index} -ge 0 ]]; do
-        local test_file_name=${raw_file_list[${raw_file_index}]}
+        local test_file_name=${check_file_list[${raw_file_index}]}
         wd_logger 1 "Testing file ${test_file_name}"
         if [[ ${flush_files} == "yes" ]]; then
             wd_logger 1 "ERROR: flushing file ${test_file_name}"
@@ -448,7 +448,7 @@ function cleanup_wav_file_list()
                         return_clean_files_string="${test_file_name} ${return_clean_files_string}"
                         last_file_minute=${test_file_minute}
                     else
-                        wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next file in the list ${raw_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
+                        wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next file in the list ${check_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
                         rm ${test_file_name}
                         flush_files="yes"
                     fi
@@ -460,9 +460,9 @@ function cleanup_wav_file_list()
     done
     local clean_files_list=( ${return_clean_files_string} )
 
-    wd_logger 1 "Given raw_file_list[${#raw_file_list[@]}]='${raw_file_list[*]}', returning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
-    if [[ ${#raw_file_list[@]} -ne ${#clean_files_list[*]} ]]; then
-        wd_logger 1 "ERROR: cleaned list raw_file_list[${#raw_file_list[@]}]='${raw_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
+    wd_logger 1 "Given check_file_list[${#check_file_list[@]}]='${check_file_list[*]}', returning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
+    if [[ ${#check_file_list[@]} -ne ${#clean_files_list[*]} ]]; then
+        wd_logger 1 "ERROR: cleaned list check_file_list[${#check_file_list[@]}]='${check_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
     fi
     eval ${__return_clean_files_string_name}=\"${return_clean_files_string}\"
     return 0
@@ -600,12 +600,12 @@ function get_wav_file_list() {
                 wd_logger 2 "There is only one wav_raw pkt ${wav_raw_pkt_list[@]}, so leave it alone"
             else
                 local flush_count=$(( ${#wav_raw_pkt_list[@]} - 1 ))
-                local flush_list=( ${wav_raw_pkt_list[@]:0:${flush_count}} )
-                if [[ ${#flush_list[*]} -gt 0 ]]; then
-                    wd_logger 2 "Flushing ${#flush_list[@]} files '${flush_list[*]}' leaving only ${wav_raw_pkt_list[-1]}"
-                    rm ${flush_list[*]}
+                local inner_flush_list=( ${wav_raw_pkt_list[@]:0:${flush_count}} )
+                if [[ ${#inner_flush_list[*]} -gt 0 ]]; then
+                    wd_logger 2 "Flushing ${#inner_flush_list[@]} files '${inner_flush_list[*]}' leaving only ${wav_raw_pkt_list[-1]}"
+                    rm ${inner_flush_list[*]}
                 else
-                    wd_logger 1 "ERROR: wav_raw_pkt_list[] has ${#wav_raw_pkt_list[@]} files, but flush_list[] is empty"
+                    wd_logger 1 "ERROR: wav_raw_pkt_list[] has ${#wav_raw_pkt_list[@]} files, but inner_flush_list[] is empty"
                 fi
             fi
 
@@ -912,6 +912,11 @@ function decoding_daemon() {
         last_rss_epoch=${EPOCHSECONDS}
     fi
 
+    ### Move declarations of arrays outside the loop
+    local mode_wav_file_list=()
+    local wav_file_list=()
+    local wav_time_list=()
+
     rm -f *.raw *.wav*
     shopt -s nullglob
     while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
@@ -931,7 +936,7 @@ function decoding_daemon() {
             sleep 1
             continue
         fi
-        local  mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
+        mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
 
 
@@ -941,8 +946,8 @@ function decoding_daemon() {
             local returned_minutes=$(( returned_seconds / 60 ))
             local comma_separated_files=${returned_files#*:}
             local wav_files=${comma_separated_files//,/ }
-            local wav_file_list=( ${wav_files} )
-            local wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
+            wav_file_list=( ${wav_files} )
+            wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
 
             wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
 
