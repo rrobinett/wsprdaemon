@@ -410,23 +410,6 @@ declare -r HHMM_SCHED_FILE=${WSPRDAEMON_ROOT_DIR}/hhmm.sched       ### Contains 
 declare -r EXPECTED_JOBS_FILE=${WSPRDAEMON_ROOT_DIR}/expected.jobs ### Based upon current HHMM, this is the job list from EXPECTED_JOBS_FILE[] which should be running in EXPECTED_LIST[]
 declare -r RUNNING_JOBS_FILE=${WSPRDAEMON_ROOT_DIR}/running.jobs   ### This is the list of jobs we programmed to be running in RUNNING_LIST[]
 
-### Once per day, cache the sunrise/sunset times for the grids of all receivers
-function update_suntimes_file() {
-    if [[ -f ${SUNTIMES_FILE} ]] \
-        && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
-        && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
-        ## Only update once a day
-        return
-    fi
-    rm -f ${SUNTIMES_FILE}
-    source ${WSPRDAEMON_CONFIG_FILE}
-    local maidenhead_list=$( ( IFS=$'\n' ; echo "${RECEIVER_LIST[*]}") | awk '{print $4}' | sort | uniq)
-    for grid in ${maidenhead_list[@]} ; do
-        echo "${grid} $(get_sunrise_sunset ${grid} )" >> ${SUNTIMES_FILE}
-    done
-    [[ $verbosity -ge 2 ]] && echo "$(date): Got today's sunrise and sunset times"
-}
-
 ### Reads wsprdaemon.conf and if there are sunrise/sunset job times it gets the current sunrise/sunset times
 ### After calculating HHMM for sunrise and sunset array elements, it creates hhmm.sched with job times in HHMM_SCHED[]
 function update_hhmm_sched_file() {
@@ -471,18 +454,15 @@ function update_hhmm_sched_file() {
         if [[ ${job_line[0]} =~ sunrise|sunset ]] ; then
             local receiver_name=${job_line[1]%,*}               ### I assume that all of the Receivers in this job are in the same grid as the Receiver in the first job 
             local receiver_grid="$(get_receiver_grid_from_name ${receiver_name})"
-            job_line[0]=$(get_index_time ${job_line[0]} ${receiver_grid})
-            local job_time=${job_line[0]}
-            if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+            local job_time=""
+            get_index_time job_time ${job_line[0]} ${receiver_grid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
                 ### I don't think that get_index_time() can return a bad time for a sunrise/sunset job, but this is to be sure of that
                 wd_logger 1 "ERROR: Found and invalid configured sunrise/sunset job time '${job_line[0]}' in wsprdaemon.conf, so skipping this job."
                 continue ## to the next index
             fi
-        fi
-        if [[ ! ${job_line[0]} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
-            ### validate all lines, whether a computed sunrise/sunset or simple HH:MM
-            wd_logger 1 "ERROR: invalid job time '${job_line[0]}' in wsprdaemon.conf, expecting HH:MM so skipping this job."
-            continue ### to the next index
+            job_line[0]=${job_time}
         fi
         job_array_temp[${job_array_temp_index}]="${job_line[*]}"
         ((job_array_temp_index++))
@@ -572,7 +552,7 @@ function setup_expected_jobs_file () {
     local -a expected_jobs=()
     local -a hhmm_job
     local    index_max_hhmm_sched=$(( ${#HHMM_SCHED[*]} - 1))
-    local    index_time
+    local    index_time=""
 
     ### Find the current schedule
     local index_now=0
@@ -581,11 +561,13 @@ function setup_expected_jobs_file () {
         hhmm_job=( ${HHMM_SCHED[${index}]}  )
         local receiver_name=${hhmm_job[1]%,*}   ### I assume that all of the Receivers in this job are in the same grid as the Kiwi in the first job
         local receiver_grid="$(get_receiver_grid_from_name ${receiver_name})"
-        index_time=$(get_index_time ${hhmm_job[0]} ${receiver_grid})  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
-        if [[ ! ${index_time} =~ ^[0-9]+ ]]; then
-            wd_logger 1 "ERROR: invalid configured job time '${index_time}'"
+        get_index_time index_time ${hhmm_job[0]} ${receiver_grid}  ## remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: skipping test of invalid configured job time '${index_time}'"
             continue ### to the next index
         fi
+        index_time=${index_time/:/}
         index_time=$((10#${index_time}))  ### remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
         if [[ ${current_time} -ge ${index_time} ]] ; then
             expected_jobs=(${HHMM_SCHED[${index}]})

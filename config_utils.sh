@@ -15,6 +15,7 @@
 #            60m--------------5.364700---------------5.366200 (+- 100Hz) (valid for 60m band in Germany or other EU countries, check local band plan prior TX!)
 #            40m--------------7.038600---------------7.040100 (+- 100Hz)
 #            30m-------------10.138700--------------10.140200 (+- 100Hz)
+#            22m-------------13.553900--------------13.554500 (+- 100Hz)
 #            20m-------------14.095600--------------14.097100 (+- 100Hz)
 #            17m-------------18.104600--------------18.106100 (+- 100Hz)
 #            15m-------------21.094600--------------21.096100 (+- 100Hz)
@@ -42,6 +43,7 @@ declare WSPR_BAND_LIST=(
 "60eu    5364.7   W2"
 "40      7038.6   W2"
 "30     10138.7   W2"
+"22     13553.9   W2"
 "20     14095.6   W2"
 "17     18104.6   W2"
 "15     21094.6   W2"
@@ -249,80 +251,121 @@ function maidenhead_to_long_lat() {
 }
 
 declare ASTRAL_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes.py
-function get_astral_sun_times() {
-    local lat=$1
-    local lon=$2
-    local zone=$3
+declare ASTRAL2_2_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes_astral2-2.py
+function get_astral_sun_times() 
+{
+    local _return_times_var=$1
+    local lat=$2
+    local lon=$3
+    local zone=$4
 
-    if [[ ! -f ${ASTRAL_SUN_TIMES_SCRIPT} ]]; then
-        wd_logger 0 "Can't find the expected '${ASTRAL_SUN_TIMES_SCRIPT}' script"
+    local astral_suntimes_program
+    local os_version_codename="$(awk -F = '/VERSION_CODENAME/{print $2}' /etc/os-release)"
+    if [[ "${os_version_codename}" != "bullseye" ]]; then
+        astral_suntimes_program=${ASTRAL_SUN_TIMES_SCRIPT}
+    else
+        ### We re running on a Pi OS "bullseye
+        if ! python3 -c "import astral" 2> /dev/null ; then
+           wd_logger 1 "Running on 'bullseye but need to import 'astral'"
+           if ! sudo pip3 install astral; then
+               wd_logger 1 "ERROR: failed 'sudo pip3 install astral' needed for suntimes calculations"
+               exit 1
+           fi
+        fi
+        astral_suntimes_program=${ASTRAL2_2_SUN_TIMES_SCRIPT}
+    fi
+    if ! python3 ${astral_suntimes_program} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null; then
+        wd_logger 1 "ERROR: 'python3 ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => $?"
         exit 1
     fi
-    local sun_times=$(python3 ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone})
-    echo "${sun_times}"
+    local _astral_sun_times=$(< suntimes.txt)
+    eval ${_return_times_var}=\"\${_astral_sun_times}\"
+    wd_logger 1 "Got suntimes='${_astral_sun_times}' and assigned it to _return_times_var=${_return_times_var}"
+    return 0
 }
 
-function get_sunrise_sunset() {
-    local maiden=$1
+function get_sunrise_sunset() 
+{
+    local _return_sunrise_hm=$1
+    local maiden=$2
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
-    [[ $verbosity -gt 2 ]] && echo "$(date): get_sunrise_sunset() for Maidenhead ${maiden} at long/lat  ${long_lat[@]}"
 
-    if [[ ${GET_SUNTIMES_FROM_ASTRAL-yes} == "yes" ]]; then
-        local long=${long_lat[0]}
-        local lat=${long_lat[1]}
-        local zone=$(timedatectl | awk '/Time/{print $3}')
-        if [[ "${zone}" == "n/a" ]]; then
-            zone="UTC"
-        fi
-        local astral_times=($(get_astral_sun_times ${lat} ${long} ${zone}))
-        local sunrise_hm=${astral_times[0]}
-        local sunset_hm=${astral_times[1]}
-    else
-        local query_results=$( curl "https://api.sunrise-sunset.org/json?lat=${long_lat[1]}&lng=${long_lat[0]}&formatted=0" 2> /dev/null )
-        local query_lines=$( echo ${query_results} | sed 's/[,{}]/\n/g' )
-        local sunrise=$(echo "$query_lines" | sed -n '/sunrise/s/^[^:]*//p'| sed 's/:"//; s/"//')
-        local sunset=$(echo "$query_lines" | sed -n '/sunset/s/^[^:]*//p'| sed 's/:"//; s/"//')
-        local sunrise_hm=$(date --date=$sunrise +%H:%M)
-        local sunset_hm=$(date --date=$sunset +%H:%M)
+    wd_logger 1 "Get sunrise/sunset for Maidenhead ${maiden} at long/lat  ${long_lat[*]}"
+
+    local long=${long_lat[0]}
+    local lat=${long_lat[1]}
+    local zone=$(timedatectl | awk '/Time/{print $3}')
+    if [[ "${zone}" == "n/a" ]]; then
+        wd_logger 1 "Couldn't determine the time zone from 'timedatectl', so do sunrise/sunet calculations assuming this server is configured for zone 'UTC'"
+        zone="UTC"
     fi
-    echo "$sunrise_hm $sunset_hm"
+    local astral_times=""
+    get_astral_sun_times astral_times  ${lat} ${long} ${zone}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => ${rc}"
+        exit 1
+    fi
+    eval ${_return_sunrise_hm}=\"\${astral_times}\"
+    wd_logger 1 "'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => 0.  astral_times=${astral_times}"
+    return 0
 }
 
-function get_index_time() {   ## If sunrise or sunset is specified, Uses Receiver's name to find it's Maidenhead and from there lat/long leads to sunrise and sunset
-    local time_field=$1
-    local receiver_grid=$2
+### Once per day, cache the sunrise/sunset times for the grids of all receivers
+function update_suntimes_file() 
+{
+    if [[ -f ${SUNTIMES_FILE} ]] \
+        && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
+        && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
+        ## Only update once a day
+        wd_logger 2 "Skipping update"
+        return 0
+    fi
+    rm -f ${SUNTIMES_FILE}
+    source ${WSPRDAEMON_CONFIG_FILE}
+    local maidenhead_list=$( ( IFS=$'\n' ; echo "${RECEIVER_LIST[*]}") | awk '{print $4}' | sort | uniq)
+    for grid in ${maidenhead_list} ; do
+        local suntimes=""
+        get_sunrise_sunset  suntimes ${grid}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'get_sunrise_sunset  suntimes ${grid}' => ${rc}"
+            return ${rc}
+        fi
+        echo "${grid} ${suntimes}" >> ${SUNTIMES_FILE}
+        wd_logger 1 "Added line '${grid} ${suntimes}' to '${SUNTIMES_FILE}'"
+    done
+    wd_logger 1 "Refreshed '${SUNTIMES_FILE}'"
+    return 0
+}
+
+function get_index_time() 
+{
+    local _return_hh_mm=$1
+    local time_field=$2
+    local receiver_grid=$3
+
     local hour
     local minute
-    local -a time_field_array
+    local hh_mm
 
     if [[ ${time_field} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
         ### This is a properly formatted HH:MM time spec
-        time_field_array=(${time_field/:/ })
-        hour=${time_field_array[0]}
-        minute=${time_field_array[1]}
-        echo "$((10#${hour}))${minute}"
-        return
+        hour=${time_field%:*}
+        minute=${time_field#*:}
+        hh_mm="${hour}:${minute}"
+        eval ${_return_hh_mm}=\"\${hh_mm}\"
+        wd_logger 2 "time_field=${time_field} contains valid HH:MM value ${hh_mm} and returned it to  _return_hh_mm=${_return_hh_mm}"
+        return 0
     fi
     if [[ ! ${time_field} =~ sunrise|sunset ]]; then
-        echo "ERROR: time specification '${time_field}' is not valid"
-        exit 1
+        wd_logger 1 "ERROR: time specification '${time_field}' is not valid"
+        return 1
     fi
+
+    update_suntimes_file
     ## Sunrise or sunset has been specified. Uses Receiver's name to find it's Maidenhead and from there lat/long leads to sunrise and sunset
-    if [[ ! -f ${SUNTIMES_FILE} ]] || [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -gt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
-        ### Once per day, cache the sunrise/sunset times for the grids of all receivers
-        rm -f ${SUNTIMES_FILE}
-        local maidenhead_list=$( ( IFS=$'\n' ; echo "${RECEIVER_LIST[*]}") | awk '{print $4}' | sort | uniq) 
-        for grid in ${maidenhead_list[@]} ; do
-            local suntimes=($(get_sunrise_sunset ${grid}))
-            if [[ ${#suntimes[@]} -ne 2 ]]; then
-                echo "ERROR: get_index_time() can't get sun up/down times"
-                exit 1
-            fi
-            echo "${grid} ${suntimes[@]}" >> ${SUNTIMES_FILE}
-        done
-        echo "$(date): Got today's sunrise and sunset times"  1>&2
-    fi
-    if [[ ${time_field} =~ sunrise ]] ; then
+   if [[ ${time_field} =~ sunrise ]] ; then
         index_time=$(awk "/${receiver_grid}/{print \$2}" ${SUNTIMES_FILE} )
     else  ## == sunset
         index_time=$(awk "/${receiver_grid}/{print \$3}" ${SUNTIMES_FILE} )
@@ -336,12 +379,13 @@ function get_index_time() {   ## If sunrise or sunset is specified, Uses Receive
         sign="-"
     fi
     local offset_time=$(time_math $index_time $sign $offset)
-    if [[ ${offset_time} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
-       echo ${offset_time}
-    else 
-       ### It would surprise me if we ever got to this line, since sunrise/sunset will be good and time_math() should always return a valid HH:MM
-       echo "ERROR:  get_index_time() calculated an invalid sunrise/sunset job time '${offset_time}' from the specified field '${time_field}" 1>&2
+    if [[ ! ${offset_time} =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+        wd_logger 1 "ERROR: failed to translate the sunrise/sunset+offset value ${time_field} to a valid offset_time ${offset_time}"
+        return 3
     fi
+    eval ${_return_hh_mm}=\"\${offset_time}\"
+    wd_logger 2 "Translated a valid sunrise/sunset+offset value ${time_field} to ${offset_time} and returned it to  _return_hh_mm=${_return_hh_mm}"
+    return 0
 }
 
 ### Validate the schedule
@@ -394,16 +438,14 @@ function validate_configured_schedule()
                found_error="yes"
             fi
             local job_grid="$(get_receiver_grid_from_name ${job_rx})"
-            local job_time_resolved=$(get_index_time ${job_time} ${job_grid})
+            local job_time_resolved=""
+            get_index_time job_time_resolved ${job_time} ${job_grid}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
                 exit 1
             fi
-            if ${GREP_CMD} -qi ERROR <<< "${job_time_resolved}" ; then
-                echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
-                exit 1
-            fi
+            wd_logger 2 "Found valid job '${job}' == job_time_resolved=${job_time_resolved}"
         done
     done
     [[ ${found_error} == "no" ]] && return 0 || return 1
