@@ -52,7 +52,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
 #declare -r VERSION=3.0.1             ### Fix selections of best SNR in MERGEd receivers.  Change VERSION to 3.0.N
 #declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
-declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
+#declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
+declare -r VERSION=3.0.2.2            ### Fix installaion of python 'astral' package on both buster and bullseye
                                      ### and  direct tunnel ssh traffice to local ssh server which is not configured to listen on the standard port 22
                                      ### and after spawning the frpc client service, check its status report to be sure it says is is "running"
                                     ### TODO: Fix kiwirecorder arguments

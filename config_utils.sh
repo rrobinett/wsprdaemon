@@ -250,7 +250,6 @@ function maidenhead_to_long_lat() {
         $((  $(( $(alpha_to_integer ${1:1:1}) * 10 )) + $(digit_to_integer ${1:3:1}) - 90))
 }
 
-declare ASTRAL_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes.py
 declare ASTRAL2_2_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes_astral2-2.py
 function get_astral_sun_times() 
 {
@@ -259,22 +258,13 @@ function get_astral_sun_times()
     local lon=$3
     local zone=$4
 
-    local astral_suntimes_program
-    local os_version_codename="$(awk -F = '/VERSION_CODENAME/{print $2}' /etc/os-release)"
-    if [[ "${os_version_codename}" != "bullseye" ]]; then
-        astral_suntimes_program=${ASTRAL_SUN_TIMES_SCRIPT}
-    else
-        ### We re running on a Pi OS "bullseye
-        if ! python3 -c "import astral" 2> /dev/null ; then
-           wd_logger 1 "Running on 'bullseye but need to import 'astral'"
-           if ! sudo pip3 install astral; then
-               wd_logger 1 "ERROR: failed 'sudo pip3 install astral' needed for suntimes calculations"
-               exit 1
-           fi
+    if ! python3 -c "import astral" 2> /dev/null ; then
+        if ! sudo pip3 install astral; then
+            wd_logger 1 "ERROR: failed 'sudo pip3 install astral' needed for suntimes calculations"
+            exit 1
         fi
-        astral_suntimes_program=${ASTRAL2_2_SUN_TIMES_SCRIPT}
     fi
-    if ! python3 ${astral_suntimes_program} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null; then
+    if ! python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null; then
         wd_logger 1 "ERROR: 'python3 ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => $?"
         exit 1
     fi
