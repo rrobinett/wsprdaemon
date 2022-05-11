@@ -264,8 +264,29 @@ function get_astral_sun_times()
             exit 1
         fi
     fi
-    if ! python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null; then
-        wd_logger 1 "ERROR: 'python3 ${ASTRAL_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => $?"
+    python3 -c "from astral import LocationInfo" 2> /dev/null 
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "python3 -c 'from astral import LocationInfo' => ${rc}.  So try to upgrade to astral2.2"
+        pip3 install --upgrade astral > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'pip3 install --upgrade astral' => ${rc}"
+            exit 1
+        fi
+        python3 -c "from astral import LocationInfo" 2> /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: even after pip3 upgrade, 'python3 -c 'from astral import LocationInfo' => ${rc}"
+            exit 1
+        fi
+        wd_logger 1 "Successfully installed and tested 'astral' library"
+    fi
+
+    python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => ${rc}"
         exit 1
     fi
     local _astral_sun_times=$(< suntimes.txt)
