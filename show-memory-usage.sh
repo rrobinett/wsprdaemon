@@ -35,4 +35,8 @@ function get_mem_usage()
     echo "${output_str}" >> show-memory-usage.txt
     echo "${output_str}"
 }
-get_mem_usage
+
+while true; do
+    get_mem_usage
+    sleep 10
+done
