@@ -17,9 +17,11 @@ function get_mem_usage()
             mem_total=$(( mem_total + pid_rss_val))
         else
             echo "pid file ${pid_file} contains pid # ${pid_val} which isn't active"
-            rm 
+            rm  ${pid_file}
         fi
     done
-    echo "Found ${#pid_file_list[@]} pid files with a VmRSS total of ${mem_total}"
+    local output_str="$(date): Found ${#pid_file_list[@]} pid files with a VmRSS total of ${mem_total}" 
+    echo "${output_str}" >> show-memory-usage.txt
+    echo "${output_str}"
 }
 get_mem_usage
