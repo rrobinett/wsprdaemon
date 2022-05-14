@@ -978,23 +978,29 @@ function decoding_daemon() {
             local rms_line
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
-            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
+            ### The 'wsprd' and 'jt9' commands require a single wav file, so use 'sox to create one from the list of one minute wav files
+            local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+            local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
+            wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
+
+           > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
 
                 local decode_dir="W_${returned_seconds}"
                 mkdir -p ${decode_dir}
 
-                ### The 'wsprd' cmd requires a single 2/15 wav file, so use 'sox to create one from 2/15 one minute wav files
-                local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
-                sox ${wav_file_list[@]} ${decode_dir}/${decoder_input_wav_filename} 
-
                 cd ${decode_dir}
+
+                ### wsprd get the spotline date/time from the filename, so we can't pass the full filepath to wsprd
+                ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
                 local start_time=${SECONDS}
                 decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
                 local ret_code=$?
 
+                rm  ${decoder_input_wav_filename}
                 cd - >& /dev/null
                 ### Back to recoding directory
 
@@ -1025,10 +1031,10 @@ function decoding_daemon() {
                     local fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
                     wd_logger 1 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
 
-                    get_rms_levels  sox_rms_noise_level rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}
+                    get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level rms_line ${decode_dir}/${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
+                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
                         return 1
                     fi
 
@@ -1052,33 +1058,32 @@ function decoding_daemon() {
 
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
-                rm ${decode_dir}/${decoder_input_wav_filename}   ### wait until now to delete it so RMS and C2 calculations wd_logger lines go to logfile in this directory
 
                 processed_wav_files="yes"
             fi
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
-                wd_logger 1 "FST4W decode a ${returned_seconds} wav file by running cmd: '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 \"${wav_file_list[*]}\" >& jt9_output.txt'"
+                wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
 
                 local decode_dir="F_${returned_seconds}"
                 mkdir -p ${decode_dir}
-                ln ${wav_file_list[*]} ${decode_dir}     ### Create links so that jt8 refers to $CWD files
                 rm -f ${decode_dir}/decoded.txt
                 ### NOTE; wd_logger output will go to log file in that directory
                 cd ${decode_dir}
+                ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename}
                 local start_time=${SECONDS}
-                ${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 "${wav_file_list[@]}" >& jt9_output.txt
+                ${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                 local ret_code=$?
-                rm ${wav_file_list[@]}   ### Flush the links we just used
+                rm ${decoder_input_wav_filename}
                 cd - >& /dev/null
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${wav_file_list[*]}' >& jt9_output.txt' => ${ret_code}"
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
                 else
                     if [[ ! -s ${decode_dir}/decoded.txt ]]; then
                         wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     else
-                        local spot_date="${wav_file_list[0]:2:6}"
-                        local spot_time="${wav_file_list[0]:9:4}"
-                            local pkt_mode=$(( ${returned_minutes} + 1 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 3 => FST4W-120,  6 => FST4W-300, ...
+                        local spot_date="${decoder_input_wav_filename:0:6}"
+                        local spot_time="${decoder_input_wav_filename:7:4}"
+                        local pkt_mode=$(( ${returned_minutes} + 0 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 3 => FST4W-120,  6 => FST4W-300, ...
                         if [[ -n "${sox_signals_rms_fft_and_overload_info}" ]]; then
                             ### This wav was processed, so 'wsprd' (and the Kiwi, if it created the wav) gave us rms_noise, fft_noise and ov_count data.  But the mode field must be incremented to mark this as an FST4W spot
                             wd_logger 1 "FST4W noise line '${sox_signals_rms_fft_and_overload_info}' was generated by WSPR code"
@@ -1096,8 +1101,9 @@ function decoding_daemon() {
                 fi
                 processed_wav_files="yes"
             fi
+            rm ${decoder_input_wav_filepath}
             if [[ ${processed_wav_files} == "yes" ]]; then 
-                wd_logger 1 "Processed files '${wav_files}' for WSPR packet of length ${returned_seconds} seconds"
+                wd_logger 1 "Processed files '${wav_files}' concatenated into '${decoder_input_wav_filename}' for packet of length ${returned_seconds} seconds"
             else
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"
             fi
