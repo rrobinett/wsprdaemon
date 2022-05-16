@@ -408,7 +408,7 @@ function cleanup_wav_file_list()
         eval ${__return_clean_files_string_name}=\"\"
         return 0
     fi
-    wd_logger 1 "Testing list of raw files: '${check_file_list[*]}'"
+    wd_logger 2 "Testing list of raw files: '${check_file_list[*]}'"
 
     local last_file_minute=-1
     local flush_files="no"
@@ -418,10 +418,10 @@ function cleanup_wav_file_list()
     local raw_file_index=$(( ${#check_file_list[@]} - 1 ))
     while [[ ${raw_file_index} -ge 0 ]]; do
         local test_file_name=${check_file_list[${raw_file_index}]}
-        wd_logger 1 "Testing file ${test_file_name}"
+        wd_logger 2 "Testing file ${test_file_name}"
         if [[ ${flush_files} == "yes" ]]; then
             wd_logger 1 "ERROR: flushing file ${test_file_name}"
-            rm ${test_file_name}
+            wd_rm ${test_file_name}
         else
             is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECONDS} ${MAX_VALID_RAW_WAV_SECONDS}
             local ret_code=$?
@@ -434,7 +434,7 @@ function cleanup_wav_file_list()
                 local test_file_minute=${test_file_name:11:2}
                 wd_logger 2 "Checking time fields in valid wav file '${test_file_name}' => test_file_minute=${test_file_minute}, last_file_minute=${last_file_minute}"
                 if [[ ${last_file_minute} == "-1" ]]; then
-                    wd_logger 1 "First clean file is at minute ${test_file_minute}"
+                    wd_logger 2 "First clean file is at minute ${test_file_minute}"
                     last_file_minute=${test_file_minute}
                     return_clean_files_string="${test_file_name}"
                 else
@@ -444,23 +444,23 @@ function cleanup_wav_file_list()
                     fi
                     local minute_difference=$(( 10#${last_file_minute} - 10#${test_file_minute} ))
                     if [[ ${minute_difference} -eq 1 ]]; then
-                        wd_logger 1 "'${test_file_name}' size is OK and it is one minute earlier than the next file in the list"
+                        wd_logger 2 "'${test_file_name}' size is OK and it is one minute earlier than the next file in the list"
                         return_clean_files_string="${test_file_name} ${return_clean_files_string}"
                         last_file_minute=${test_file_minute}
                     else
                         wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next file in the list ${check_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
-                        rm ${test_file_name}
+                        wd_rm ${test_file_name}
                         flush_files="yes"
                     fi
                 fi
             fi
         fi
-        wd_logger 1 "Done checking '${test_file_name}' from index ${raw_file_index}"
+        wd_logger 2 "Done checking '${test_file_name}' from index ${raw_file_index}"
         (( --raw_file_index ))
     done
     local clean_files_list=( ${return_clean_files_string} )
 
-    wd_logger 1 "Given check_file_list[${#check_file_list[@]}]='${check_file_list[*]}', returning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
+    wd_logger 1 "Given check_file_list[${#check_file_list[@]}]='${check_file_list[*]}'\nReturning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
     if [[ ${#check_file_list[@]} -ne ${#clean_files_list[*]} ]]; then
         wd_logger 1 "ERROR: cleaned list check_file_list[${#check_file_list[@]}]='${check_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
     fi
@@ -476,7 +476,7 @@ function get_wav_file_list() {
     local receiver_band=$3           
     local receiver_modes=$4
     local      target_modes_list=( ${receiver_modes//:/ } )    ### Argument has form MODE1[:MODE2...] put it in local array  
-    local -ia 'target_minutes_list=( $( tr " " "\n" <<< "${target_modes_list[@]/?/}" | sort -u | tr "\n" " " ) )'        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
+    local -ia 'target_minutes_list=( $( tr " " "\n" <<< "${target_modes_list[@]/?/}" | sort -nu | tr "\n" " " ) )'        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
     local -ia 'target_seconds_list=( "${target_minutes_list[@]/%/*60}" )' ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
     local oldest_file_needed=${target_seconds_list[-1]}
 
@@ -489,28 +489,27 @@ function get_wav_file_list() {
         return ${ret_code}
     fi
 
-    shopt -s nullglob
-    local raw_file_list=( minute-*.raw *_usb.wav)        ### Get list of the one minute long 'raw' wav files being created by the Kiwi (.wav) or SDR ((.raw)
-    shopt -u nullglob
-
-    wd_logger 1 "Found raw/wav files '${raw_file_list[*]}'"
+    local raw_file_list=( $( find -maxdepth 1 \( -name \*.wav -o -name \*.raw \) | sed 's/\.\///' | sort ) ) ### minute-*.raw *_usb.wav)        ### Get list of the one minute long 'raw' wav files being created by the Kiwi (.wav) or SDR ((.raw)
+    wd_logger 1 "Found ${#raw_file_list[@]} raw/wav files: '${raw_file_list[*]}'"
 
     case ${#raw_file_list[@]} in
         0 )
             wd_logger 2 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
-            shopt -s nullglob
+declare WAIT_FOR_FIRST_WAV_SECS=10
+
             local timeout=0
-            while raw_file_list=( minute-*.raw *_usb.wav) && [[ ${#raw_file_list[@]} -eq 0 ]] && [[ ${timeout} -lt 10 ]]; do
+            while     raw_file_list=( $( find -maxdepth 1 \( -name \*.wav -o -name \*.raw \) | sed 's/\.\///' | sort ) ) \
+                   && [[ ${#raw_file_list[@]} -eq 0 ]] \
+                   && [[ ${timeout} -lt ${WAIT_FOR_FIRST_WAV_SECS}  ]]; do
                 sleep 1
                 (( ++timeout ))
             done
-            shopt -u nullglob
             if [[ ${#raw_file_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Timeout after ${timeout} seconds while waiting for the first wav file to appear"
             else
                 wd_logger 2 "First file appeared after waiting ${timeout} seconds"
             fi
-            return 1
+            return 1         ### Signal to  calling function to try again
             ;;
         1 )
             wd_logger 2 "There is only 1 raw file ${raw_file_list[0]} and all modes need at least 2 minutes. So wait for this file to be filled"
@@ -526,7 +525,7 @@ function get_wav_file_list() {
             local second_from_file_name=${raw_file_list[0]:13:2}
             if [[ 10#${second_from_file_name} -ne 0 ]]; then
                 wd_logger 2 "Raw file '${raw_file_list[0]}' name says the first file recording starts at second ${second_from_file_name}, not at second 0, so flushing it"
-                rm ${raw_file_list[0]}
+                wd_rm ${raw_file_list[0]}
                 return 3
             fi
             sleep_until_raw_file_is_full ${raw_file_list[-1]}
@@ -570,7 +569,7 @@ function get_wav_file_list() {
     local seconds_in_wspr_pkt
     for seconds_in_wspr_pkt in  ${target_seconds_list[@]} ; do
         local raw_files_in_wav_file_count=$((seconds_in_wspr_pkt / 60))
-        wd_logger 2 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
+        wd_logger 1 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
 
         ### Check to see if we have previously returned some of these files in a previous call to this function
         shopt -s nullglob
@@ -726,7 +725,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                       ### then the posting daemon will modify this last field to '1' to signal to the upload_server to forward this spot to wsprnet.org
     local cached_spots_file_name="${spot_file_date}_${spot_file_time}_spots.txt"
 
-    wd_logger 1 "Enhance the spot lines from ALL_WSPR_TXT in ${real_receiver_wspr_spots_file} into ${cached_spots_file_name}"
+    wd_logger 2 "Enhance the spot lines from ALL_WSPR_TXT in ${real_receiver_wspr_spots_file} into ${cached_spots_file_name}"
     > ${cached_spots_file_name}         ### truncates or creates a zero length file
     local spot_line
     while read spot_line ; do
@@ -779,7 +778,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     done < ${real_receiver_wspr_spots_file}
 
     if [[ ! -s ${cached_spots_file_name} ]]; then
-        wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
+        wd_logger 2 "Found no spots to queue, so queuing zero length spot file"
     else
         wd_logger 2 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
     fi
@@ -799,12 +798,12 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         if [[ -s ${decoding_client_spot_file_name} ]]; then
             wd_logger 1 "ERROR: file ${decoding_client_spot_file_name} already exists, so dropping this new ${cached_spots_file_name}"
         else
-            wd_logger 1 "Creating link from ${cached_spots_file_name} to ${decoding_client_spot_file_name} which is monitored by a posting daemon"
+            wd_logger 2 "Creating link from ${cached_spots_file_name} to ${decoding_client_spot_file_name} which is monitored by a posting daemon"
             ln ${cached_spots_file_name} ${decoding_client_spot_file_name}
         fi
     done
     rm ${cached_spots_file_name}    ### The links will persist until all the posting daemons delete them
-    wd_logger 1 "Done creating and queuing '${cached_spots_file_name}'"
+    wd_logger 2 "Done creating and queuing '${cached_spots_file_name}'"
 }
 
 function get_wsprdaemon_noise_queue_directory()
@@ -939,7 +938,6 @@ function decoding_daemon() {
         mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
 
-
         local returned_files
         for returned_files in ${mode_wav_file_list[@]}; do
             local returned_seconds=${returned_files%:*}
@@ -951,20 +949,22 @@ function decoding_daemon() {
 
             wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
 
-            ### This is a block of diagnostic code 
-            local found_all_files="yes"
-            local index
-            for (( index=0; index < ${#wav_file_list[@]}; ++index )); do
-                local file_to_test=${wav_file_list[${index}]}
-                 wav_time_list+=( ${file_to_test:11:2} )
-                if ! [[ -f ${file_to_test} ]]; then
-                    wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_file_list[${index}] does not exist"
-                    found_all_files="no"
+            if [[ "${CHECK_WAV_FILES-no}" == "yes" ]]; then
+                ### This is a block of diagnostic code 
+                local found_all_files="yes"
+                local index
+                for (( index=0; index < ${#wav_file_list[@]}; ++index )); do
+                    local file_to_test=${wav_file_list[${index}]}
+                    wav_time_list+=( ${file_to_test:11:2} )
+                    if ! [[ -f ${file_to_test} ]]; then
+                        wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_file_list[${index}] does not exist"
+                        found_all_files="no"
+                    fi
+                done
+                if [[ ${found_all_files} == "no" ]]; then
+                    wd_logger 1 "ERROR: one or more wav files returned by get_wav_file_list are missing, so skip processing minute ${returned_minutes} wav files"
+                    continue
                 fi
-            done
-            if [[ ${found_all_files} == "no" ]]; then
-               wd_logger 1 "ERROR: one or more wav files returned by get_wav_file_list are missing, so skip processing minute ${returned_minutes} wav files"
-               continue
             fi
 
             local wd_string="${wav_time_list[*]}"
@@ -981,6 +981,27 @@ function decoding_daemon() {
             ### The 'wsprd' and 'jt9' commands require a single wav file, so use 'sox to create one from the list of one minute wav files
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
+
+            ### Make sure there will be enough space on the disk for the wav file which will created by this sox omd
+            local new_wav_file_size_kb=$( du -c ${wav_file_list[@]} | awk '/total/{print $1}')
+declare ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS=${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS-30}     ### How long to try to alllocate file system space for the wav file copy 
+            local allocate_filespace_timeout=0
+            local rc=1
+            while [[ ${rc} -ne 0 && ${allocate_filespace_timeout} -lt ${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS} ]]; do
+                truncate -s "${new_wav_file_size_kb}K" ${decoder_input_wav_filepath}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "Couldn't create ${new_wav_file_size_kb}KB '${decoder_input_wav_filepath}':\n$(df .)"
+                    (( ++allocate_filespace_timeout ))
+                    sleep 1
+                fi
+            done
+            if [[ ${allocate_filespace_timeout} -eq ${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS} ]]; then
+                wd_logger 1 "ERROR: timeout while trying to allocate the ${new_wav_file_size_kb}KB copy of the wav files"
+                exit 1
+            fi
+            wd_logger 1 "Found enough space for ${new_wav_file_size_kb}KB '${decoder_input_wav_filepath}'"
+
             sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
 
@@ -1029,7 +1050,7 @@ function decoding_daemon() {
                         c2_fft_nl=0
                     fi
                     local fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
-                    wd_logger 1 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
+                    wd_logger 2 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
 
                     get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}
                     local ret_code=$?
