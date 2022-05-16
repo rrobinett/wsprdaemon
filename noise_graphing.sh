@@ -255,15 +255,15 @@ function queue_noise_signal_levels_to_wsprdaemon()
     local noise_line_list=( ${noise_line} )
 
     if [[ ${#noise_line_list[@]} -ne ${NOISE_LINE_FIELDS_COUNT} ]]; then
-        wd_logger 1 "ERROR: dumping invalid noise line '${noise_line}'"
+        wd_logger 2 "Ignoring empty noise line which should have come from a FST4W-300/-900 job decdoing at an odd minute 5/15/25/..."
         return 1
     fi
 
-    wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
+    wd_logger 2 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
     echo "${spot_date}-${spot_time}: ${noise_line}" >> ${signal_levels_log_file}
 
     if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
-        wd_logger 1 "Not configured to upload noise, so not queuing a noise file"
+        wd_logger 2 "Not configured to upload noise, so not queuing a noise file"
     else
         local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
         wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
