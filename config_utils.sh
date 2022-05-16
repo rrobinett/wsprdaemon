@@ -399,28 +399,34 @@ function get_index_time()
     return 0
 }
 
+
 ### Validate the schedule
 ###
+declare POSTING_DIR_MAX_SPACE=1000
+declare RECORDING_DIR_WAV_FILE_SPACE_PER_MINUTE=1500
+
 function validate_configured_schedule()
 {
     local found_error="no"
     local sched_line
 
     if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
-        echo "ERROR: WSPR_SCHEDULE[] is not defined in the conf file"
-        exti 1
-    fi
-    if [[ ${#WSPR_SCHEDULE[@]} -lt 1 ]]; then
-        echo "ERROR: WSPR_SCHEDULE[] is defined in the conf file but has no schedule entries"
+        wd_logger 1  "ERROR: WSPR_SCHEDULE[] is not defined in the conf file"
         exit 1
     fi
+    if [[ ${#WSPR_SCHEDULE[@]} -lt 1 ]]; then
+        wd_logger 1  "ERROR: WSPR_SCHEDULE[] is defined in the conf file but has no schedule entries"
+        exit 2
+    fi
     wd_logger 2 "Starting"
+    local max_tmp_file_space=0
     for sched_line in "${WSPR_SCHEDULE[@]}" ; do
         wd_logger 2 "Checking line ${sched_line}"
+        local sched_tmp_file_space=0
 
         local sched_line_list=( ${sched_line} )
         if [[ ${#sched_line_list[@]} -lt 2 ]]; then
-            echo "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields. Remember that each schedule entry must have the form \"HH:MM RECEIVER,BAND[,MODES]... \""
+            wd_logger 1  "ERROR: WSPR_SCHEDULE[@] line '${sched_line}' does not have the required minimum 2 fields. Remember that each schedule entry must have the form \"HH:MM RECEIVER,BAND[,MODES]... \""
             exit 1
         fi
         local job_time=${sched_line_list[0]}
@@ -429,10 +435,11 @@ function validate_configured_schedule()
         local job
         for job in ${sched_line_list[@]:1}; do
             wd_logger 2 "Testing job $job"
+
             local -a job_elements=(${job//,/ })
             local    job_elements_count=${#job_elements[@]}
             if [[ $job_elements_count -lt 2 ]]; then
-                echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' doesn't have the form 'RECEIVER,BAND'"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' doesn't have the form 'RECEIVER,BAND'"
                 exit 1
             fi
             local job_rx=${job_elements[0]}
@@ -440,12 +447,12 @@ function validate_configured_schedule()
             local rx_index
             rx_index=$(get_receiver_list_index_from_name ${job_rx})
             if [[ -z "${rx_index}" ]]; then
-                echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies receiver '${job_rx}' not found in RECEIVER_LIST"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies receiver '${job_rx}' not found in RECEIVER_LIST"
                found_error="yes"
             fi
             band_freq=$(get_wspr_band_freq ${job_band})
             if [[ -z "${band_freq}" ]]; then
-                echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies band '${job_band}' not found in WSPR_BAND_LIST"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies band '${job_band}' not found in WSPR_BAND_LIST"
                found_error="yes"
             fi
             local job_grid="$(get_receiver_grid_from_name ${job_rx})"
@@ -453,13 +460,60 @@ function validate_configured_schedule()
             get_index_time job_time_resolved ${job_time} ${job_grid}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                echo "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
                 exit 1
             fi
             wd_logger 2 "Found valid job '${job}' == job_time_resolved=${job_time_resolved}"
+
+            ### Calculate the maximum /tmp/wsprdaemon disk space in KBytes which could be used by this job
+
+            ### For each job in this schedule there will be only one posting directory which occupies at most about 1000 KBytes
+            ### There will be one recording dir for each simple job, but N recording jobs for MERGed receivers and each of those will occupy at most ((MAX_MODE_MINUTES * 1500 Kbytes) * 2) + 1500
+            local job_field_list=( ${job//,/ } )
+            if [[ ${#job_field_list[@]} -eq 2 ]]; then
+                job_field_list[2]="W2"
+            fi
+            local job_mode_list=( ${job_field_list[2]//:/ } )
+            local job_max_mode_minutes=$( IFS=$'\n'; echo "${job_mode_list[*]/?/}" | sort -nu | tail -n 1 )
+
+            wd_logger 2 "Found job '${job}' with a max time length mode of ${job_max_mode_minutes} minutes"
+
+            local job_rx_name=${job_field_list[0]}
+            local job_rx_name_list=()
+            if [[ ${job_rx_name} =~ ^MERG ]] ; then
+                local merged_receiver_address=$(get_receiver_ip_from_name ${job_rx_name})   ### In a MERGed rx, the real rxs feeding it are in a comma-separated list in the IP column
+                job_rx_name_list=( ${merged_receiver_address//,/ } )
+            else
+                job_rx_name_list[0]=${job_rx_name}
+            fi
+            local posting_dir_max_space=${POSTING_DIR_MAX_SPACE}
+            local recording_dir_one_minute_wav_file_max_space=$(( ${RECORDING_DIR_WAV_FILE_SPACE_PER_MINUTE} * ${job_max_mode_minutes} ))
+            local recording_dir_longest_minute_wav_copy_file_max_space=${recording_dir_one_minute_wav_file_max_space}
+            local recording_dir_log_files_file_max_space=1000
+            local recording_dir_total_max_space=$(( ${recording_dir_one_minute_wav_file_max_space} + ${recording_dir_longest_minute_wav_copy_file_max_space} + ${recording_dir_log_files_file_max_space} ))
+            local all_recording_dirs_total_max_space=$(( ${#job_rx_name_list[@]} * ${recording_dir_total_max_space} ))
+            local job_max_disk_space=$(( ${posting_dir_max_space} + ${all_recording_dirs_total_max_space} ))
+            sched_tmp_file_space=$(( ${sched_tmp_file_space} + ${job_max_disk_space} ))
+            wd_logger 2 "$(printf "'${job}' requires there be 1 posting daemon directory and ${#job_rx_name_list[@]} recording directories.  Alltogether they will consume at most %'d KB, so sched_tmp_file_space=%'d KB\n" ${job_max_disk_space} ${sched_tmp_file_space})"
         done
+        if [[ ${sched_tmp_file_space} -gt ${max_tmp_file_space} ]]; then
+            max_tmp_file_space=${sched_tmp_file_space}
+        fi
     done
-    [[ ${found_error} == "no" ]] && return 0 || return 1
+
+    local tmp_filesystem_size=$(df /tmp/wsprdaemon | awk '/tmpfs/{print $2}')
+    if [[ ${max_tmp_file_space} -ge ${tmp_filesystem_size} ]]; then
+        wd_logger 1 "$( printf "ERROR: the schedule in the conf file will require a /tmp/wsprdaemon file system with %'d KBytes of space, but /tmp/wsprdaemon is configured in /etc/fstab for only %'d KBytes of space. Either increase its size in /etc/fstab or change the schedule" \
+            ${max_tmp_file_space} ${tmp_filesystem_size} ) "
+        exit 3
+    else
+        wd_logger 2 "$( printf "The schedule in the conf file will require a /tmp/wsprdaemon file system with %'d KBytes of space and /tmp/wsprdaemon is configured in /etc/fstab for %'d KBytes which is enough space" \
+            ${max_tmp_file_space} ${tmp_filesystem_size} ) "
+    fi
+    if [[ ${found_error} == "yes" ]]; then
+        return 1
+    fi
+    return 0
 }
 
 ###
@@ -523,5 +577,3 @@ function validate_configuration_file()
     fi
     validate_configured_schedule   
 }
-
-
