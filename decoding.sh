@@ -251,7 +251,7 @@ function get_rms_levels()
     local signal_level_line="              ${output_line}   ${return_rms_value}"
     eval ${__return_var_name}=${return_rms_value}
     eval ${__return_string_name}=\"${signal_level_line}\"
-    wd_logger 1 "Returning rms_value=${return_rms_value} and signal_level_line='${signal_level_line}'"
+    wd_logger 2 "Returning rms_value=${return_rms_value} and signal_level_line='${signal_level_line}'"
     return 0
 }
 
@@ -475,9 +475,9 @@ function get_wav_file_list() {
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
     local receiver_band=$3           
     local receiver_modes=$4
-    local      target_modes_list=( ${receiver_modes//:/ } )    ### Argument has form MODE1[:MODE2...] put it in local array  
-    local -ia 'target_minutes_list=( $( tr " " "\n" <<< "${target_modes_list[@]/?/}" | sort -nu | tr "\n" " " ) )'        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
-    local -ia 'target_seconds_list=( "${target_minutes_list[@]/%/*60}" )' ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
+    local     target_modes_list=( ${receiver_modes//:/ } )     ### Argument has form MODE1[:MODE2...] put it in local array
+    local -ia target_minutes_list=( $( IFS=$'\n' ; echo "${target_modes_list[*]/?/}" | sort -nu ) )        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
+    local -ia target_seconds_list=( "${target_minutes_list[@]/%/*60}" ) ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
     local oldest_file_needed=${target_seconds_list[-1]}
 
     wd_logger 1 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
@@ -982,27 +982,16 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
-            ### Make sure there will be enough space on the disk for the wav file which will created by this sox omd
-            local new_wav_file_size_kb=$( du -c ${wav_file_list[@]} | awk '/total/{print $1}')
-declare ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS=${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS-30}     ### How long to try to alllocate file system space for the wav file copy 
-            local allocate_filespace_timeout=0
-            local rc=1
-            while [[ ${rc} -ne 0 && ${allocate_filespace_timeout} -lt ${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS} ]]; do
-                truncate -s "${new_wav_file_size_kb}K" ${decoder_input_wav_filepath}
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "Couldn't create ${new_wav_file_size_kb}KB '${decoder_input_wav_filepath}':\n$(df .)"
-                    (( ++allocate_filespace_timeout ))
-                    sleep 1
-                fi
-            done
-            if [[ ${allocate_filespace_timeout} -eq ${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS} ]]; then
-                wd_logger 1 "ERROR: timeout while trying to allocate the ${new_wav_file_size_kb}KB copy of the wav files"
-                exit 1
-            fi
-            wd_logger 1 "Found enough space for ${new_wav_file_size_kb}KB '${decoder_input_wav_filepath}'"
-
             sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
+                if [[ -f ${decoder_input_wav_filepath} ]]; then
+                    wd_rm ${decoder_input_wav_filepath}
+                fi
+                sleep 1
+                continue
+            fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
 
            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
@@ -1023,7 +1012,7 @@ declare ALLOCATE_WAV_FILE_SPACE_TIMEOUT_SECS=${ALLOCATE_WAV_FILE_SPACE_TIMEOUT_S
 
                 rm  ${decoder_input_wav_filename}
                 cd - >& /dev/null
-                ### Back to recoding directory
+                ### Back to recording directory
 
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
