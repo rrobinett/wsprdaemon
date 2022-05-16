@@ -54,7 +54,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
 #declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
 #declare -r VERSION=3.0.2.2            ### Fix installaion of python 'astral' package on both buster and bullseye
-declare -r VERSION=3.0.2.3            ### Fix FST4W-300 decoding
+#declare -r VERSION=3.0.2.3            ### Fix FST4W-300 decoding
+declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
                                      ### and  direct tunnel ssh traffice to local ssh server which is not configured to listen on the standard port 22
                                      ### and after spawning the frpc client service, check its status report to be sure it says is is "running"
                                     ### TODO: Fix kiwirecorder arguments
