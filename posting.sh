@@ -204,8 +204,7 @@ function post_files()
         local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
         local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
 
-        local fixed_fields_line=$( printf "For call %-12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )
-        wd_logger 2 "${fixed_fields_line}"
+        wd_logger 1 "$( printf "For call %-12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )"
 
         echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
         if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
@@ -321,7 +320,7 @@ function log_merged_snrs()
     wd_logger 1 "Log the source of the ${posted_spots_count} posted spots taken from the total ${source_spots_count} spots reported by the ${#real_receiver_list[@]} receivers '${real_receiver_list[*]}' in the MERGEd pool"
     
     TZ=UTC printf "${WD_TIME_FMT}: %10s %8s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
-   local receiver
+    local receiver
     for receiver in ${real_receiver_list[@]}; do
         printf "%12s" ${receiver}                            >> merged.log
     done

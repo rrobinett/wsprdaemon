@@ -11,17 +11,17 @@ NF == 34 {
         $8 = "      "
     }
     wd_pkt_mode = $18
-    if ( wd_pkt_mode == 2 )      
+    if ( wd_pkt_mode == 2 )           ### produced by 'wsprd'
         wn_pkt_mode = 2               ### WSPR-2
-    else if ( wd_pkt_mode == 15 )             
+    else if ( wd_pkt_mode == 15 )     ### produced by 'wsprd'
         wn_pkt_mode = 2               ### WSPR-15
-    else if (  wd_pkt_mode == 3 )             
-        wn_pkt_mode = 2               ### FST4W-120
-    else if (  wd_pkt_mode == 5 )             
+    else if (  wd_pkt_mode == 3 )     ### added by WD to the lines produced by 'jt9'
+        wn_pkt_mode = 3               ### FST4W-120
+    else if (  wd_pkt_mode == 6 )     ### added by WD to the lines produced by 'jt9'   
         wn_pkt_mode = 5               ### FST4W-300
-    else if (  wd_pkt_mode == 16 )             
-        wn_pkt_mode =15               ### FST4W-900
-    else if (  wd_pkt_mode == 30 )
+    else if (  wd_pkt_mode == 16 )    ### added by WD to the lines produced by 'jt9'
+        wn_pkt_mode = 15              ### FST4W-900
+    else if (  wd_pkt_mode == 31 )    ### added by WD to the lines produced by 'jt9'
         wn_pkt_mode = 30              ### FST4W-1800
     else {
         wn_pkt_mod= 2
