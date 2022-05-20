@@ -505,7 +505,7 @@ function validate_configured_schedule()
     if [[ ${max_tmp_file_space} -ge ${tmp_filesystem_size} ]]; then
         wd_logger 1 "$( printf "ERROR: the schedule in the conf file will require a /tmp/wsprdaemon file system with %'d KBytes of space, but /tmp/wsprdaemon is configured in /etc/fstab for only %'d KBytes of space. Either increase its size in /etc/fstab or change the schedule" \
             ${max_tmp_file_space} ${tmp_filesystem_size} ) "
-        exit 3
+        read -p "Increase the size of '/tmp/wsprdaemon' in '/etc/fstab' before trying to run this confguration.  Press <ENTER> to continue with WD installation and validation => "
     else
         wd_logger 2 "$( printf "The schedule in the conf file will require a /tmp/wsprdaemon file system with %'d KBytes of space and /tmp/wsprdaemon is configured in /etc/fstab for %'d KBytes which is enough space" \
             ${max_tmp_file_space} ${tmp_filesystem_size} ) "
