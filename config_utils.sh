@@ -31,7 +31,7 @@
 ### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-separated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
 ###       e.g. "W2" == classic WSPR decode by the wsprd of a 2 minute long wav file
 
-declare VALID_MODE_LIST=( W2 F2 F5 F15 F30 )
+declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 )
 
 declare WSPR_BAND_LIST=(
 "2200     136.0   W2"
@@ -54,16 +54,16 @@ declare WSPR_BAND_LIST=(
 "2     144489.0   W2"
 "1     432300.0   W2"
 "0    1296500.0   W2"
-"WWVB      58.5   W2"
-"WWV_2_5 2498.5   W2"
-"WWV_5   4998.5   W2"
-"WWV_10  9998.5   W2"
-"WWV_15 14998.5   W2"
-"WWV_20 19998.5   W2"
-"WWV_25 24998.5   W2"
-"CHU_3   3328.5   W2"
-"CHU_7   7848.5   W2"
-"CHU_14 14668.5   W2"
+"WWVB      58.5   W0"
+"WWV_2_5 2498.5   W0"
+"WWV_5   4998.5   W0"
+"WWV_10  9998.5   W0"
+"WWV_15 14998.5   W0"
+"WWV_20 19998.5   W0"
+"WWV_25 24998.5   W0"
+"CHU_3   3328.5   W0"
+"CHU_7   7848.5   W0"
+"CHU_14 14668.5   W0"
 )
 
 function is_valid_mode_list() {
@@ -71,6 +71,10 @@ function is_valid_mode_list() {
     local test_mode_entry_list=( ${test_mode_entry//:/ } )
 
     wd_logger 2 "Starting validation of '${test_mode_entry}'"
+    if [[ ${#test_mode_entry_list[@]} -gt 1 && " ${test_mode_entry_list[@]} " =~ " W0 " ]] ; then
+        wd_logger 1 "ERROR: mode 'W0' cannot be mixed with other modes"
+        return 1
+    fi
     for mode_entry in ${test_mode_entry_list[@]} ; do
         if ! [[ " ${VALID_MODE_LIST[@]} " =~ " ${mode_entry} " ]]; then
             wd_logger 1 "Error: ${mode_entry} is not a member of '${VALID_MODE_LIST[*]}'"
@@ -443,24 +447,31 @@ function validate_configured_schedule()
                 exit 1
             fi
             local job_rx=${job_elements[0]}
-            local job_band=${job_elements[1]}
             local rx_index
             rx_index=$(get_receiver_list_index_from_name ${job_rx})
             if [[ -z "${rx_index}" ]]; then
-                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies receiver '${job_rx}' not found in RECEIVER_LIST"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[*]}', job '${job}' specifies receiver '${job_rx}' not found in RECEIVER_LIST"
                found_error="yes"
             fi
+            local job_band=${job_elements[1]}
             band_freq=$(get_wspr_band_freq ${job_band})
             if [[ -z "${band_freq}" ]]; then
-                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', job '${job}' specifies band '${job_band}' not found in WSPR_BAND_LIST"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[*]}', job '${job}' specifies band '${job_band}' not found in WSPR_BAND_LIST"
                found_error="yes"
+            fi
+            local job_modes=${job_elements[2]-W2}
+            is_valid_mode_list ${job_modes}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[*]}', job '${job}' specifies invalid mode(s)"
+                found_error="yes"
             fi
             local job_grid="$(get_receiver_grid_from_name ${job_rx})"
             local job_time_resolved=""
             get_index_time job_time_resolved ${job_time} ${job_grid}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[@]}', time specification '${job_time}' is not valid"
+                wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[*]}', time specification '${job_time}' is not valid"
                 exit 1
             fi
             wd_logger 2 "Found valid job '${job}' == job_time_resolved=${job_time_resolved}"

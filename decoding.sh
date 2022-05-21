@@ -260,9 +260,9 @@ function decode_wpsr_wav_file() {
     local wspr_decode_capture_freq_hz=$2
     local rx_khz_offset=$3
     local stdout_file=$4
+    local wsprd_cmd_flags="$5"        ### ${WSPRD_CMD_FLAGS}
 
-    wd_logger 1 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}"
-    local wsprd_cmd_flags=${WSPRD_CMD_FLAGS}
+    wd_logger 1 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}, wsprd_cmd_flags='${wsprd_cmd_flags}'"
     local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
     wspr_decode_capture_freq_hzx=${wspr_decode_capture_freq_hz%_*}    ### Remove the _usb.wav
     local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
@@ -477,6 +477,12 @@ function get_wav_file_list() {
     local receiver_modes=$4
     local     target_modes_list=( ${receiver_modes//:/ } )     ### Argument has form MODE1[:MODE2...] put it in local array
     local -ia target_minutes_list=( $( IFS=$'\n' ; echo "${target_modes_list[*]/?/}" | sort -nu ) )        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
+    if [[ " ${target_minutes_list[*]} " =~ " 0 " ]] ; then
+        ### The configuration validtor verified that jobs which have mode 'W0' specified will have no other modes
+        ### In mode W0 we are only goign to run the wsprd decoder in order to get the RMS can C2 noise levels
+        wd_logger 1 "Found that mode 'W0' has been specified"
+        target_minutes_list=( 2 )
+    fi
     local -ia target_seconds_list=( "${target_minutes_list[@]/%/*60}" ) ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
     local oldest_file_needed=${target_seconds_list[-1]}
 
@@ -495,8 +501,8 @@ function get_wav_file_list() {
     case ${#raw_file_list[@]} in
         0 )
             wd_logger 2 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
-declare WAIT_FOR_FIRST_WAV_SECS=10
 
+            declare WAIT_FOR_FIRST_WAV_SECS=10
             local timeout=0
             while     raw_file_list=( $( find -maxdepth 1 \( -name \*.wav -o -name \*.raw \) | sed 's/\.\///' | sort ) ) \
                    && [[ ${#raw_file_list[@]} -eq 0 ]] \
@@ -995,11 +1001,24 @@ function decoding_daemon() {
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
 
            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
-            if [[ " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
+            if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" || " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
 
                 local decode_dir="W_${returned_seconds}"
                 mkdir -p ${decode_dir}
+
+                ###  For mode "W0":  wsprd -o 0 -q -s -H <everything else>
+                ### -o - use a ZERO as the number
+                ### -q - "quick" decoding
+                ### -s - single-pass
+                ### - H - Do not use the hash table
+                declare DEFAULT_WO_WSPSRD_CMD_FLAGS="-o 0 -q -s -H"
+
+                local wsprd_flags=${WSPRD_CMD_FLAGS}
+                if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" ]]; then
+                    wsprd_flags="${WO_WSPSRD_CMD_FLAGS-${DEFAULT_WO_WSPSRD_CMD_FLAGS}}"
+                    wd_logger 1 "Decoding mode W0, so run 'wsprd ${wsprd_flags}"
+                fi
 
                 cd ${decode_dir}
 
@@ -1007,7 +1026,7 @@ function decoding_daemon() {
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
                 local start_time=${SECONDS}
-                decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt
+                decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}"
                 local ret_code=$?
 
                 rm  ${decoder_input_wav_filename}
