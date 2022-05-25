@@ -180,26 +180,20 @@ function kiwi-stats(){
     printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total  $users_total $wsprdaemon_total
 }
 
-function show_ovs(){
+function show-ovs(){
     local log_file
 
-    cd /tmp/wspr* 2> /dev/null
-    for log_file in $(ls -rt */*/recording.log); do
-         local lines=$(grep "(OV)" ${log_file})
-         if [[ -n "${lines}" ]]; then
-             local rx_band=($(echo ${log_file%/*} | sed 's;/; ;'))
-             local rx=${rx_band[0]}
-             local band=${rx_band[1]}
-             local latest_line=$(echo "${lines}" | tail -n 1)
-             printf "%4s %4s: %s\n" "${rx}" "${band}" "${latest_line}"
+    for log_file in $(find /tmp/wsprdaemon/recording.d -name wav_recording_daemon.log) ; do
+         local log_line=$(grep OV ${log_file} | sort -k15,15n | tail -n 1)
+         if [[ -n "${log_line}" ]]; then
+             local log_path_list=(${log_file//\// })
+             local rx_name=${log_path_list[3]}
+             local rx_band=${log_path_list[4]}
+             printf "%12s %4s: %s\n" "${rx_name}" "${rx_band}" "${log_line}"
          fi
      done
-     cd - > /dev/null
 }
 
-function show-ovs() {
-    ls -lrt `find /tmp/wsprdaemon/ -name recording.log`
-}
 function show-merged() {
     ls -lrt `find /tmp/wsprdaemon/ -name merged.log`
 }
