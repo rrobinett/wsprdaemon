@@ -1,4 +1,30 @@
-# wsprdaemon (WD) Latest version is v2.10i
+# WsprDaemon (WD) Latest version is v2.10k
+# Version 3.0a Beta is available for testing
+The WD 3.0 software has been running at my AI6VN/KH6, KPH and KFS sites for several months, and in the last two weeks I have helped bring it up on an additional 8 sites.  In most of those installations it seems to run as stably as 2.10k and 3.0 includes many 'behind-the-scenes' enhancements to slightly improve the number of spots reported. WD 3.0 includes a remote support option which when enabled in your conf file will, with your permission, allow me to log on to your WD server to help with installation and debugging.
+
+So I am inviting those who are interested in joining the 3.0 beta program to install it.
+
+For existing WD 2.10 users:  
+
+cd ~/wsprdaemon
+
+./wsprdaemon.sh -z        
+
+git pull
+
+git checkout v3.0
+
+./wsprdaemon.sh -a
+
+The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
+
+I have also just created a Telegram 'Wsprdaemon' channel which I will monitor to support both legacy and beta users.
+
+===========================
+
+2.10k Add WD's version number to spots uploaded to wsprnet.org
+
+2.10j Upload WSJT-x 2.3.0 binaries
 
 2.10i Fix installation of python-numpy on Ubuntu 20.04.1 LTE 
 
@@ -6,22 +32,22 @@
 
 2.10g Fix uninitialized variable bug which was causing recording jobs to abort
 
-2.10f Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file.  Disabled by default, but even when enabled DOES NOT UPOLOAD FSTW4 SPOTS!!!!
+2.10f Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file.  Disabled by default, but even when enabled DOES NOT UPLOAD FSTW4 SPOTS!!!!
 
-2.10e  At the sugguestionof Joe Taylor, I have added the GNU GPL license.
+2.10e  At the suggestion of Joe Taylor, I have added the GNU GPL license.
 
 2.10d Check and loads if missing the libgfortran5 library used by the new version of wsprd
 
 2.10b Attempts to get installation working on Ubuntu 20.04 servers.
 Also, installs the new 'wsprd' decoder from WSJT-x V2.3.0. I have been told this new wsprd supports a newly introduced modulation mode being heavily used on 2200 and 630
 
-2.10a Support for installation on Ubuntu 20.04.  This required changes to the installation of the 'wsprd' decoding binary we take from WSJT-x.  Instead of installing the whole WSHT-x, we extract only the '/usr/bin/wsprd' program from the WSJT-x package file.  This greatly reduces the number of libraries and packages installed during installation.  However, I cannot easily test this new installation proceedure on other Linux distros, so I have incremented the minor version number to alert users to this change in installation operations.  So please contact me if you have problems running this new code.
+2.10a Support for installation on Ubuntu 20.04.  This required changes to the installation of the 'wsprd' decoding binary we take from WSJT-x.  Instead of installing the whole WSHT-x, we extract only the '/usr/bin/wsprd' program from the WSJT-x package file.  This greatly reduces the number of libraries and packages installed during installation.  However, I cannot easily test this new installation procedure on other Linux distros, so I have incremented the minor version number to alert users to this change in installation operations.  So please contact me if you have problems running this new code.
 
 2.9j WD Server fixes:  to get correct format of rx/tx GRIDs and add rx name to spot records
 
-2.9i Add supplort for offset frequency assicated with VHF/UHF downconvertors
+2.9i Add support for offset frequency associated with VHF/UHF downconvertors
 
-2.9h Fixes a number of installation and error handling problems.  Unless you are having problems with your installation, I don't think exisiting installatons need to upgrade to this build
+2.9h Fixes a number of installation and error handling problems.  Unless you are having problems with your installation, I don't think existing installatons need to upgrade to this build
 
 2.9g Installs WSJT-x 2.2.2 which includes an enhanced wsprd decoding utility capable of extracting up to 6% more spots from your receiver
 
@@ -39,7 +65,7 @@ This is a large bash script which utilizes [kiwirecorder.py](https://github.com/
 
 Schedules can be configured to switch between bands at different hours of the day, or at sunrise/sunset-relative times.
 
-Signals obtained from multiple receievers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).
+Signals obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).
 
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
 
@@ -49,7 +75,7 @@ WD can run on almost any Debian Linux system and is tested on Stretch and Buster
 
 On a Raspberry Pi, install as user 'pi'.
 
-On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page. 
+On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page. 
 
 To configure user 'wsprdaemon' to sudo:
 ```bash
@@ -69,9 +95,9 @@ cd wsprdaemon
 ./wsprdaemon.sh -V
 ```
 
-This first run of WD will install many, many utilities and libraries, and for some you will be prompted to agree to the insallation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus are never prompted for a password, but your experience may vary.
+This first run of WD will install many, many utilities and libraries, and for some you will be prompted to agree to the installation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus am never prompted for a password, but your experience may vary.
 
-At then end of a sucessful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once confgured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
+At the end of a successful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once configured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
 
 ## To upgrade from 2.6*:
 
@@ -88,7 +114,7 @@ Stop WD with:
 ```bash
 './wsprdaemon.sh -z'
 ````
-Save away (i.e.rename) your exisiting ~/wsprdaemon directory, including its wsprdaemon.conf file:
+Save away (i.e.rename) your existing ~/wsprdaemon directory, including its wsprdaemon.conf file:
 ```bash
 mv ~/wsprdaemon/ ~/wsprdaemon.save"
 ````
@@ -110,7 +136,7 @@ Execute 'git pull'
 
 ## Usage
 
-After installtion and configuration is completed, run:
+After installation and configuration is completed, run:
 
 | Command | Description |
 | ------- | ----------- |
