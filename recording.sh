@@ -291,7 +291,7 @@ function kiwirecorder_manager_daemon_kill_handler() {
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no pid in ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
         else
-            kill ${kiwi_recorder_pid}
+            sudo kill ${kiwi_recorder_pid}
             local timeout
             for (( timeout=0; timeout < ${KIWIRECORDER_KILL_WAIT_SECS}; ++timeout )); do
                 if ! ps ${kiwi_recorder_pid} > /dev/null; then
@@ -301,7 +301,7 @@ function kiwirecorder_manager_daemon_kill_handler() {
             done
             if ps ${kiwi_recorder_pid} > /dev/null; then
                 wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${timeout} seconds.  Trying 'kill -9 ${kiwi_recorder_pid}"
-                kill -9 ${kiwi_recorder_pid}
+                sudo kill -9 ${kiwi_recorder_pid}
                 echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ timed out after ${timeout} seconds after waiting for kiwi_recorder_pid=${kiwi_recorder_pid}, so ran 'kill -9'" > kiwirecorder_manager_daemon_kill_handler.log
             else
                 wd_logger 1 "Killed kiwi_recorder_pid=${kiwi_recorder_pid}"
@@ -360,11 +360,13 @@ function kiwirecorder_manager_daemon()
             wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-            python3 -u ${KIWI_RECORD_COMMAND} \
+            ### By default raise the priority of the kiwirecorder.py job to the highest possible level 
+            ${KIWIRECORDER_NICE_CMD-sudo nice --adjustment=-40} python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
-                --OV --user=${recording_client_name}  --password=${my_receiver_password} \
+                ${KIWIRECORDER_OV_FLAG---OV} --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
+            set +x
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
                 sleep 1

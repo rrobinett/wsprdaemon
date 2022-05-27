@@ -230,7 +230,7 @@ function check_for_zombies() {
        fi
     done
     if [[ ${#kill_pid_list[@]} -gt 0 ]]; then
-        kill ${kill_pid_list[@]}
+        sudo kill ${kill_pid_list[@]}
         wd_logger -1 "Killed zombie pids:  '${kill_pid_list[*]}'"
     fi
 }

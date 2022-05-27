@@ -55,20 +55,13 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
 #declare -r VERSION=3.0.2.2            ### Fix installaion of python 'astral' package on both buster and bullseye
 #declare -r VERSION=3.0.2.3            ### Fix FST4W-300 decoding
-declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
-                                     ### and  direct tunnel ssh traffice to local ssh server which is not configured to listen on the standard port 22
-                                     ### and after spawning the frpc client service, check its status report to be sure it says is is "running"
-                                    ### TODO: Fix kiwirecorder arguments
-                                    ### TODO: Support FST4W decoding through the use of 'jt9'
+#declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
+declare -r VERSION=3.0.2.5            ### Raise priority of kiwirecorder.py to max in an attempt to ensure that wav file recordings are not interrupted by Linux
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
-                                    ### TODO: Split Python utilities in separate files maintained by git
-                                    ### TODO: enhance config file validate_configuration_file() to check that all MERGEd receivers are defined.
-                                    ### TODO: Try to extract grid for type 2 spots from ALL_WSPR.TXT 
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VOACAP support
                                     ### TODO: Add VHF/UHF support using Soapy API
-                                    ### TODO: Uploader should flush all spots, not just ones for current scheduled rxs 
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
