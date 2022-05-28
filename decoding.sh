@@ -354,7 +354,7 @@ function sleep_until_raw_file_is_full() {
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it"
         else
-            kill ${kiwirecorder_pids[@]}
+            sudo kill ${kiwirecorder_pids[@]}
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
         fi
         return 1

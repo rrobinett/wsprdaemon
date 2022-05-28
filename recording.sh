@@ -351,7 +351,7 @@ function kiwirecorder_manager_daemon()
             if [[ -n "${ps_output}" ]]; then
                 local pid_list=( $(awk '{print $2}' <<< "${ps_output}") )
                 wd_logger 1 "ERROR: killing ${#pid_list} zombie kiwirecorders:\n${ps_output}"
-                kill ${pid_list[@]}
+                sudo kill ${pid_list[@]}
             fi
         fi
 
@@ -379,7 +379,7 @@ function kiwirecorder_manager_daemon()
 
        if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
             wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwirecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
-            kill ${kiwi_recorder_pid}
+            sudo kill ${kiwi_recorder_pid}
             rm ${KIWI_RECORDER_PID_FILE}
             sleep 1
             continue
@@ -436,7 +436,7 @@ function kiwirecorder_manager_daemon()
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
                 wd_logger 1 "${KIWI_RECORDER_LOG_FILE} has grown too large (${kiwi_recorder_log_size} bytes), so killing kiwi_recorder"
-                kill ${kiwi_recorder_pid}
+                sudo kill ${kiwi_recorder_pid}
                 rm ${KIWI_RECORDER_PID_FILE}
             fi
         fi
@@ -514,7 +514,7 @@ function spawn_wav_recording_daemon() {
     if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
         wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
     else
-        kill ${kiwirecorder_pids[@]}
+        sudo kill ${kiwirecorder_pids[@]}
         wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}' and then spawn a new job"
     fi
 
@@ -591,7 +591,7 @@ function kill_wav_recording_daemon()
         wd_logger 1 "pid '${recording_pid}' is not active"
         return 0
     fi
-    kill ${recording_pid}
+    sudo kill ${recording_pid}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: kill ${recording_pid} => $?"
