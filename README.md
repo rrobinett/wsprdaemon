@@ -1,7 +1,20 @@
-# wsprdaemon (WD) Under development version v3.0a
+# wsprdaemon (WD) 3.0.1
 
-This branch is currently under development.   Server mode is largely finished, debugged and running at wsprdaemon.org and wd1.wsprdeamon.org 
-The client mode is running well at many sites, although there is a memory leak problem being debugged on the Pi "bullseye" OS and at one Ubuntu 20.0.5 LTS site.  But many Pi and i86 sites are running well
+For existing WD 2.10 users:  
+
+cd ~/wsprdaemon
+
+./wsprdaemon.sh -z        
+
+git checkout master
+
+git pull
+
+./wsprdaemon.sh -a
+
+The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
+
+I have also just created a Telegram 'Wsprdaemon' channel which I will monitor to support both legacy and beta users.
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
@@ -58,7 +71,7 @@ Stop WD with:
 ```bash
 './wsprdaemon.sh -z'
 ````
-Save away (i.e.rename) your exisiting ~/wsprdaemon directory, including its wsprdaemon.conf file:
+Save away (i.e.rename) your existing ~/wsprdaemon directory, including its wsprdaemon.conf file:
 ```bash
 mv ~/wsprdaemon/ ~/wsprdaemon.save"
 ````
