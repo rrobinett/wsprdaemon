@@ -1,8 +1,4 @@
-# WsprDaemon (WD) Latest version is v2.10k
-# Version 3.0a Beta is available for testing
-The WD 3.0 software has been running at my AI6VN/KH6, KPH and KFS sites for several months, and in the last two weeks I have helped bring it up on an additional 8 sites.  In most of those installations it seems to run as stably as 2.10k and 3.0 includes many 'behind-the-scenes' enhancements to slightly improve the number of spots reported. WD 3.0 includes a remote support option which when enabled in your conf file will, with your permission, allow me to log on to your WD server to help with installation and debugging.
-
-So I am inviting those who are interested in joining the 3.0 beta program to install it.
+# wsprdaemon (WD) 3.0.1
 
 For existing WD 2.10 users:  
 
@@ -10,54 +6,15 @@ cd ~/wsprdaemon
 
 ./wsprdaemon.sh -z        
 
-git pull
+git checkout master
 
-git checkout v3.0
+git pull
 
 ./wsprdaemon.sh -a
 
 The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
 
 I have also just created a Telegram 'Wsprdaemon' channel which I will monitor to support both legacy and beta users.
-
-===========================
-
-2.10k Add WD's version number to spots uploaded to wsprnet.org
-
-2.10j Upload WSJT-x 2.3.0 binaries
-
-2.10i Fix installation of python-numpy on Ubuntu 20.04.1 LTE 
-
-2.10h Fix a bug which on fast CPUs caused loss of connection to Kiwis.  There is no need to upgrade to 2.10h unless your installation is failing to connect to your Kiwis.
-
-2.10g Fix uninitialized variable bug which was causing recording jobs to abort
-
-2.10f Add FSTW4-120 decoding on all bands if JT9_DECODE_ENABLED="yes" is in wd.conf file.  Disabled by default, but even when enabled DOES NOT UPLOAD FSTW4 SPOTS!!!!
-
-2.10e  At the suggestion of Joe Taylor, I have added the GNU GPL license.
-
-2.10d Check and loads if missing the libgfortran5 library used by the new version of wsprd
-
-2.10b Attempts to get installation working on Ubuntu 20.04 servers.
-Also, installs the new 'wsprd' decoder from WSJT-x V2.3.0. I have been told this new wsprd supports a newly introduced modulation mode being heavily used on 2200 and 630
-
-2.10a Support for installation on Ubuntu 20.04.  This required changes to the installation of the 'wsprd' decoding binary we take from WSJT-x.  Instead of installing the whole WSHT-x, we extract only the '/usr/bin/wsprd' program from the WSJT-x package file.  This greatly reduces the number of libraries and packages installed during installation.  However, I cannot easily test this new installation procedure on other Linux distros, so I have incremented the minor version number to alert users to this change in installation operations.  So please contact me if you have problems running this new code.
-
-2.9j WD Server fixes:  to get correct format of rx/tx GRIDs and add rx name to spot records
-
-2.9i Add support for offset frequency associated with VHF/UHF downconvertors
-
-2.9h Fixes a number of installation and error handling problems.  Unless you are having problems with your installation, I don't think existing installatons need to upgrade to this build
-
-2.9g Installs WSJT-x 2.2.2 which includes an enhanced wsprd decoding utility capable of extracting up to 6% more spots from your receiver
-
-2.9f Fixes parsing of the config file so that WD supports multiple call/grid definitions
-
-2.9e Adds a small fix to code which runs only on the upload server at wsprdaemon.org.
-
-2.9d Adds enhanced spots logging to wsprnet.org and a number of error resiliency enhancements.
-
-It is a very low risk upgrade, so I encourage all users to 'git pull' it
 
 A Debian/Raspberry Pi [WSPR](https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)) decoding and noise level graphing service
 
@@ -69,7 +26,7 @@ Signals obtained from multiple receivers on the same band ( e.g a 40M vertical a
 
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
 
-WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decoder 30+ bands.
+WD can run on almost any Debian Linux system and is tested on Stretch and Buster for Raspberry Pi 3 and 4, and Ubuntu 18.04LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decode 30+ bands.
 
 ## Greenfield Installation
 

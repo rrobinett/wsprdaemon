@@ -1,6 +1,8 @@
-wsprdaemon.status
+.*.swp
+*.deb
+save
+bin
 uploads.d
-.wsprdaemon.sh.swp
 expected.jobs
 hashtable.d
 hhmm.sched
@@ -12,4 +14,5 @@ suntimes
 wsprdaemon.log
 wsprdaemon.pid
 wsprdaemon.conf
-save
+wsprdaemon.status
+proxy.pid
