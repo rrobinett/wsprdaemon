@@ -70,32 +70,37 @@ function wd_logger_check_all_logs
         fi
         ### The log file is not empty
         local new_log_lines
-        if [[ ! -f ${log_file_last_printed} ]]; then
-            ### None of the log file lines have been printed
+        if [[ ! -f ${log_file_last_printed} ]] ; then
+            ### There is no *printed file, so search the whole log file
             wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file_path} (if any) have been printed"
             new_log_lines=$( < ${log_file_path} )
         else
-            ### Some lines have been previously printed
+            ###  There is a *.printed file
             local last_printed_line=$( < ${log_file_last_printed} )
             if [[ -z "${last_printed_line}" ]]; then
+                ### But that file is empty
                 wd_logger 1 "The last_printed_line in ${log_file_last_printed} is empty, so delete that file and print all lines"
                 wd_rm ${log_file_last_printed}
                 new_log_lines=$( < ${log_file_path} )
-            elif grep -q "${last_printed_line}" ${log_file_path} ; then
-                wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
-                new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file_path} | tail -n +2 )
             else
-                wd_logger 1 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}, so print the whole log file"
-                new_log_lines=$( < ${log_file_path} )
+                ### There is a line in the *printed file
+                if ! grep -q "${last_printed_line}" ${log_file_path} ; then
+                    wd_logger 2 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}"
+                    wd_rm ${log_file_last_printed}
+                    new_log_lines=$( < ${log_file_path} )
+                else
+                    wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
+                    new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file_path} | tail -n +2 )
+                fi
             fi
         fi
         if [[ ${check_only_for_errors} == "check_only_for_new_errors" ]]; then
-            local new_error_log_lines=$(grep -A 100000 ERROR: <<< "${new_log_lines}")
+            local new_error_log_lines=$( echo "${new_log_lines}" | grep -A 100000 "ERROR:")
             if [[ -z "${new_error_log_lines}" ]]; then
                 wd_logger 2 "Found no new 'ERROR:' lines in the new log lines"
                 new_log_lines=""
             else
-                wd_logger 1 "Found $(wc -l <<< "${new_error_log_lines}") new ERROR: lines"
+                wd_logger 1 "Found $( echo "${new_error_log_lines}" | wc -l ) new ERROR: lines"
                 new_log_lines="${new_error_log_lines}"
             fi
         fi
@@ -103,12 +108,12 @@ function wd_logger_check_all_logs
         if [[ -z "${new_log_lines}" ]]; then
             wd_logger 2 "There are no lines or no new lines in ${log_file_path} to be printed"
         else
-            local new_log_lines_count=$( wc -l <<< "${new_log_lines}" )
+            local new_log_lines_count=$( echo "${new_error_log_lines}" | wc -l  )
             wd_logger 1 "There are ${new_log_lines_count} new lines to be printed"
-            local new_last_printed_line=$(tail -1 <<< "${new_log_lines}")
+            local new_last_printed_line=$( echo "${new_error_log_lines}" | tail -1)
             echo "${new_last_printed_line}" > ${log_file_last_printed}
-            local new_lines_to_print=$(awk "{print \"${log_file_path}: \" \$0}" <<< "${new_log_lines}")
-            wd_logger -1 "\n$(head -n 8 <<< "${new_lines_to_print}")"
+            local new_lines_to_print=$( echo "${new_log_lines}" | awk "{print \"${log_file_path}: \" \$0}")
+            wd_logger -1 "\n$( echo "${new_lines_to_print}" | head -n 8 )"
             [[ ${verbosity} -ge 1 ]] && read -p "Press <ENTER> to check the next log file > "
         fi
     done
