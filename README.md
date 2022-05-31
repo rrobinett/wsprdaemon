@@ -1,6 +1,8 @@
-# wsprdaemon (WD) 3.0.1
+# wsprdaemon (WD) 3.0.2.5
 
-For existing WD 2.10 users:  
+I have just merged in the WD 3.0 code into the master, so 3.0 is now the default.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
+
+For existing WD 2.10 users:
 
 cd ~/wsprdaemon
 
@@ -11,8 +13,6 @@ git checkout master
 git pull
 
 ./wsprdaemon.sh -a
-
-The ./wsprdaemon.conf file formats are backwards compatible, and you can return to use 2.10 by executing 'git checkout main' in the above commands.
 
 I have also just created a Telegram 'Wsprdaemon' channel which I will monitor to support both legacy and beta users.
 
@@ -56,14 +56,6 @@ This first run of WD will install many, many utilities and libraries, and for so
 
 At the end of a successful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once configured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.
 
-## To upgrade from 2.6*:
-
-1) cd ~/wsprdaemon
-2) stop WD with '~/wsprdaemon/wsprdaemon.sh -z'
-3) execute 'git pull'
-4) free disk space with 'rm -rf /tmp/wsprdaemon/*'
-5) clean out legacy noise data with 'rm -rf /home/pi/wsprdaemon/signal_levels/*'
-6) start WD with '~/wsprdaemon/wsprdaemon.sh -a'
 
 ## Installation on a system running wsprdaemon that was not installed using 'git clone'
 
