@@ -69,11 +69,11 @@ function wd_logger_check_all_logs
             continue
         fi
         ### The log file is not empty
-        local new_log_lines
+        local new_log_lines_file=${WSPRDAEMON_TMP_DIR}/new_log_lines.txt
         if [[ ! -f ${log_file_last_printed} ]] ; then
             ### There is no *printed file, so search the whole log file
             wd_logger 2 "No ${log_file_last_printed} file, so none of the log lines in ${log_file_path} (if any) have been printed"
-            new_log_lines=$( < ${log_file_path} )
+            cp ${log_file_path} ${new_log_lines_file}
         else
             ###  There is a *.printed file
             local last_printed_line=$( < ${log_file_last_printed} )
@@ -81,27 +81,45 @@ function wd_logger_check_all_logs
                 ### But that file is empty
                 wd_logger 1 "The last_printed_line in ${log_file_last_printed} is empty, so delete that file and print all lines"
                 wd_rm ${log_file_last_printed}
-                new_log_lines=$( < ${log_file_path} )
+                cp ${log_file_path} ${new_log_lines_file}
             else
                 ### There is a line in the *printed file
                 if ! grep -q "${last_printed_line}" ${log_file_path} ; then
                     wd_logger 2 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}"
                     wd_rm ${log_file_last_printed}
-                    new_log_lines=$( < ${log_file_path} )
+                    cp ${log_file_path} ${new_log_lines_file}
                 else
                     wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
-                    new_log_lines=$(grep -A20 "${last_printed_line}" ${log_file_path} | tail -n +2 )
+                    grep -A 100000 "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
+                    if [[ ! -s ${new_log_lines_file} ]]; then
+                        wd_logger 1 "Found no lines to print in ${log_file_path}, so nothing to print"
+                        continue
+                    fi
+                    if [[ $( wc -l < ${new_log_lines_file}) -lt 2 ]]; then
+                         wd_logger 2 "Last line of the log file has already been printed"
+                         continue
+                    fi
                 fi
             fi
         fi
+        ### There are new lines
         if [[ ${check_only_for_errors} == "check_only_for_new_errors" ]]; then
-            local new_error_log_lines=$( echo "${new_log_lines}" | grep -A 100000 "ERROR:")
-            if [[ -z "${new_error_log_lines}" ]]; then
-                wd_logger 2 "Found no new 'ERROR:' lines in the new log lines"
-                new_log_lines=""
+            local new_error_log_lines_file=${WSPRDAEMON_TMP_DIR}/new_error_log_lines.txt 
+            grep -A 100000 "ERROR:" ${new_log_lines_file} > ${new_error_log_lines_file}
+            if [[ ! -s ${new_error_log_lines_file} ]]; then
+                local new_log_lines_count=$( wc -l < ${new_log_lines_file} )
+                wd_logger 2 "$( printf "Found no 'ERROR:' lines in the %'6d new log lines of '${log_file_path}', so remember the last line of current log file '${log_file_last_printed} " ${new_log_lines_count})" 
+                tail -n 1 ${log_file_path} > ${log_file_last_printed}
+                continue
             else
-                wd_logger 1 "Found $( echo "${new_error_log_lines}" | wc -l ) new ERROR: lines"
-                new_log_lines="${new_error_log_lines}"
+                wd_logger 1 "\nFound $( grep "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines.  Here is the first ERROR: line:"
+                grep "ERROR:" ${new_error_log_lines_file} | head -n 1
+                read -p "Press <ENTER> to check the next log file or 'l' to 'less all the new lines after that new ERROR line ${new_error_log_lines_file} > "
+                if [[ -n "${REPLY}" ]]; then
+                    less ${new_error_log_lines_file}
+                fi
+                tail -n 1 ${log_file_path} > ${log_file_last_printed}
+                continue
             fi
         fi
         
