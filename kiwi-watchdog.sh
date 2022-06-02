@@ -214,14 +214,23 @@ function kill_kiwi_watchdog_daemon()
     if [[ -f ${KIWI_POWER_WATCH_DAEMON_PID_FILE} ]]; then
         local daemon_pid=$( < ${KIWI_POWER_WATCH_DAEMON_PID_FILE}) 
         if ps ${daemon_pid} > /dev/null ; then
-            kill ${daemon_pid}
-            echo "Killed running kiwi_watchdog_daemon which had pid = ${daemon_pid}"
+            wd_kill ${daemon_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: ' wd_kill ${daemon_pid}' => ${rc}"
+            else
+               wd_logger 1 "Killed running kiwi_watchdog_daemon which had pid = ${daemon_pid}"
+            fi
         else
-            echo "Found kiwi_watchdog_daemon pid ${daemon_pid} in ${KIWI_POWER_WATCH_DAEMON_PID_FILE} is not active."
+            wd_logger 1 "Found kiwi_watchdog_daemon pid ${daemon_pid} in ${KIWI_POWER_WATCH_DAEMON_PID_FILE} is not active."
         fi
-        rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}
+        wd_rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'wd_rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}' => ${rc}"
+        fi
     else
-        echo "There is no file ${KIWI_POWER_WATCH_DAEMON_PID_FILE}, so kiwi_watchdog_daemon was not running"
+        wd_logger 1 "There is no file ${KIWI_POWER_WATCH_DAEMON_PID_FILE}, so kiwi_watchdog_daemon was not running"
     fi
 }
 

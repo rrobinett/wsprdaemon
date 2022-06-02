@@ -200,7 +200,11 @@ function check_for_zombies() {
     local running_wsprdaemon_a_pid_list=( $(ps aux | awk '/wsprdaemon\/wsprdaemon.sh -a/{print $2}' ) )
     if [[ ${#running_wsprdaemon_a_pid_list[@]} -ne 0 ]]; then
         wd_logger 1 "Found ${#running_wsprdaemon_a_pid_list[*]} 'wsprdaemon/wsprdaemon.sh -a'. Kill them"
-        kill ${running_wsprdaemon_a_pid_list[@]}
+        wd_kill ${running_wsprdaemon_a_pid_list[@]}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'wd_kill ${running_wsprdaemon_a_pid_list[*]}' => ${rc}"
+        fi
     fi
 
     ### We have checked all the pid files, now look at all running kiwirecorder programs reported by 'ps'
@@ -223,14 +227,18 @@ function check_for_zombies() {
                    wd_logger 1 "Found zombie ${running_pid} stopped running after running an extra 'sleep 1'"
                else
                    local ps_cmd_info=$( tail -n 1 <<< "${ps_output}" )
-                   wd_logger 1 "Adding running zombie '${ps_cmd_info}' to kill list"
+                   wd_logger 1 "Adding running zombie '${ps_cmd_info}' to wd_kill list"
                    kill_pid_list+=(${running_pid})
                fi
            fi
        fi
     done
     if [[ ${#kill_pid_list[@]} -gt 0 ]]; then
-        sudo kill ${kill_pid_list[@]}
+        wd_kill ${kill_pid_list[@]}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+             wd_logger 1 "ERROR: 'wd_kill ${kill_pid_list[*]}' => ${rc}"
+        fi
         wd_logger -1 "Killed zombie pids:  '${kill_pid_list[*]}'"
     fi
 }

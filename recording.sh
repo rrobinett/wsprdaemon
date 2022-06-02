@@ -284,32 +284,42 @@ declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecor
 ### NOTE: This function assumes it is executing in the KIWI/BAND directory of the job to be killed
 function kiwirecorder_manager_daemon_kill_handler() {
     if [[ ! -f ${KIWI_RECORDER_PID_FILE} ]]; then
-        echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
+        wd_logger 1 "ERROR: ound no ${KIWI_RECORDER_PID_FILE}" 
     else
         local kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE} )
-        rm ${KIWI_RECORDER_PID_FILE}
+        wd_rm ${KIWI_RECORDER_PID_FILE}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
+        fi
         if [[ -z "${kiwi_recorder_pid}" ]]; then
-            echo "$(date): kiwirecorder_manager_daemon_kill_handler() ran but found no pid in ${KIWI_RECORDER_PID_FILE}" > kiwirecorder_manager_daemon_kill_handler.log
+            wd_logger 1 "ERROR: ${KIWI_RECORDER_PID_FILE} is empty" 
+        elif !  ps ${kiwi_recorder_pid} > /dev/null ; then
+            wd_logger 1 "ERROR: kiwi_recorder_daemon is already dead"
         else
-            sudo kill ${kiwi_recorder_pid}
-            local timeout
-            for (( timeout=0; timeout < ${KIWIRECORDER_KILL_WAIT_SECS}; ++timeout )); do
-                if ! ps ${kiwi_recorder_pid} > /dev/null; then
-                    break
-                fi
+            wd_kill ${kiwi_recorder_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
+            fi
+            local timeout=0
+            while [[ ${timeout} < ${KIWIRECORDER_KILL_WAIT_SECS} ]] &&  ps ${kiwi_recorder_pid} > /dev/null; do
+                wd_logger 1 "Waiting for kiwi_recorder_daemon(0 to die"
+                (( ++timeout ))
                 sleep 1
             done
             if ps ${kiwi_recorder_pid} > /dev/null; then
-                wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${timeout} seconds.  Trying 'kill -9 ${kiwi_recorder_pid}"
-                sudo kill -9 ${kiwi_recorder_pid}
-                echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ timed out after ${timeout} seconds after waiting for kiwi_recorder_pid=${kiwi_recorder_pid}, so ran 'kill -9'" > kiwirecorder_manager_daemon_kill_handler.log
+                wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
             else
-                wd_logger 1 "Killed kiwi_recorder_pid=${kiwi_recorder_pid}"
-                echo "$(date): kiwirecorder_manager_daemon_kill_handler() running as pid=$$ found kiwi_recorder_pid=${kiwi_recorder_pid} died as expected after ${timeout} seconds" > kiwirecorder_manager_daemon_kill_handler.log
+                wd_logger 1 "kiwi_recorder_daemon() has died after ${timeout} seconds"
             fi
         fi
     fi
-    rm ${WAV_RECORDING_DAEMON_PID_FILE}
+    wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}' => ${rc}"
+    fi
     exit
 }
 
@@ -339,19 +349,23 @@ function kiwirecorder_manager_daemon()
             if [[ ${ret_code} -eq 0 ]]; then
                 wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
-                wd_logger 1 " 'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
+                wd_logger 1 "ERROR: found pid in ${KIWI_RECORDER_PID_FILE}, but  'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
                 kiwi_recorder_pid=""
-                rm ${KIWI_RECORDER_PID_FILE}
+                wd_rm ${KIWI_RECORDER_PID_FILE}
             fi
         fi
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             ### There was no pid file or the pid in that file is dead
-            ### Check for a zombie kwiirecorder and kill if if one is found
+            ### Check for a zombie kwiirecorder and kill if one or more zombies are  found
             local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:*}" | grep -v grep )
             if [[ -n "${ps_output}" ]]; then
                 local pid_list=( $(awk '{print $2}' <<< "${ps_output}") )
-                wd_logger 1 "ERROR: killing ${#pid_list} zombie kiwirecorders:\n${ps_output}"
-                sudo kill ${pid_list[@]}
+                wd_logger 1 "ERROR: killing ${#pid_list[@]} zombie kiwirecorders:\n${ps_output}"
+                wd_kill ${pid_list[@]}
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                     wd_logger 1 "ERROR: 'wd_kill ${pid_list[*]}' => ${rc}"
+                fi
             fi
         fi
 
@@ -366,7 +380,6 @@ function kiwirecorder_manager_daemon()
                 ${KIWIRECORDER_OV_FLAG---OV} --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
-            set +x
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
                 sleep 1
@@ -377,10 +390,18 @@ function kiwirecorder_manager_daemon()
             wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
         fi
 
-       if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
+        if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
             wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwirecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
-            sudo kill ${kiwi_recorder_pid}
-            rm ${KIWI_RECORDER_PID_FILE}
+            wd_kill ${kiwi_recorder_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
+            fi
+            wd_rm ${KIWI_RECORDER_PID_FILE}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: ' wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
+            fi
             sleep 1
             continue
         fi
@@ -436,8 +457,16 @@ function kiwirecorder_manager_daemon()
             if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
                 ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
                 wd_logger 1 "${KIWI_RECORDER_LOG_FILE} has grown too large (${kiwi_recorder_log_size} bytes), so killing kiwi_recorder"
-                sudo kill ${kiwi_recorder_pid}
-                rm ${KIWI_RECORDER_PID_FILE}
+                wd_kill ${kiwi_recorder_pid}
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: when restarting after log file overflow, 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
+                fi
+                wd_rm ${KIWI_RECORDER_PID_FILE}
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: when restarting after log file overflow, 'wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
+                fi
             fi
         fi
         sleep 1
@@ -514,8 +543,13 @@ function spawn_wav_recording_daemon() {
     if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
         wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
     else
-        sudo kill ${kiwirecorder_pids[@]}
-        wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}' and then spawn a new job"
+        wd_kill ${kiwirecorder_pids[@]}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz, but 'wd_kill ${kiwirecorder_pids[*]}' => ${rc} when trying to kill those jobs"
+        else
+            wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}' on them.  Now go on to spawn a new job"
+        fi
     fi
 
     ### No recording daemon is running
@@ -591,10 +625,10 @@ function kill_wav_recording_daemon()
         wd_logger 1 "pid '${recording_pid}' is not active"
         return 0
     fi
-    sudo kill ${recording_pid}
+    wd_kill ${recording_pid}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: kill ${recording_pid} => $?"
+        wd_logger 1 "ERROR: 'wd_kill ${recording_pid}' => $?"
         return 1
     fi
     wd_logger 1 "killed ${receiver_name} ${receiver_rx_band} job which had pid ${recording_pid}"

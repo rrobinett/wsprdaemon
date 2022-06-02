@@ -66,7 +66,11 @@ function proxy_connection_manager() {
 
         if [[ ${proxy_pid} -ne 0 ]]; then
             wd_logger 0 "Proxy disabled, but found running proxy client job ${proxy_pid}. Kill it"
-            kill ${proxy_pid}
+            wd_kill ${proxy_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'wd_kill ${proxy_pid}' => ${rc}"
+            fi
             wd_rm ${WSPRDAEMON_PROXY_PID_FILE}
         else
             wd_logger 2 "Proxy disabled and found no pid file as expected"
@@ -146,7 +150,11 @@ function proxy_connection_manager() {
             fi
             if [[ ${proxy_pid} -ne 0 ]]; then
                 wd_logger 0 "Kill running proxy client with pid ${proxy_pid}"
-                kill ${proxy_pid}
+                wd_kill ${proxy_pid}
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 0 "ERROR: 'wd_kill ${proxy_pid}' => ${rc}"
+                fi
                 proxy_pid=0
             fi
             wd_rm ${WSPRDAEMON_PROXY_PID_FILE}
@@ -202,9 +210,18 @@ EOF
     fi
     echo ${frpc_daemon_pid} > ${WSPRDAEMON_PROXY_PID_FILE}
     wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
-    local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
-    if [[ -z "${frpc_status}" || "${frpc_status}" != "running" ]]; then
-        wd_logger 0 "ERROR: the remote access service is running but it failed to connect to wsprdaemon.org and it reports:\n$(${FRPC_CMD} -c ${FRPC_INI_FILE} status)"
-    fi
-
+    local timeout=0
+    while [[ ${timeout} -lt ${FRPC_STARTUP_TIMEOUT} ]]; do
+        local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
+        if [[ "${frpc_status}" == "running" ]]; then
+            wd_logger 1 "The emote access service is running"
+            return 0
+        fi
+        (( ++timeout ))
+        sleep 1
+    done
+    wd_logger 0 "ERROR: the remote access service is running but it failed to connect to wsprdaemon.org after ${FRPC_STARTUP_TIMEOUT} seconds, and it reports:\n$(${FRPC_CMD} -c ${FRPC_INI_FILE} status)"
+    return 1
 }
+
+declare FRPC_STARTUP_TIMEOUT=${FRPC_STARTUP_TIMEOUT-5}      ### Wait seconds for frpc client to connect

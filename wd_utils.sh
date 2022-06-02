@@ -406,6 +406,37 @@ function wd_rm()
     fi
 }
 
+function wd_kill()
+{
+    local kill_pid_list=($@)
+
+    if [[ ${#kill_pid_list[@]} -eq 0 ]]; then
+        wd_logger 1 "ERROR: no pid(s) were supplied"
+        return 1
+    fi
+    local not_running_errors=0
+    local kill_errors=0
+    local kill_pid
+    for kill_pid in ${kill_pid_list[@]}; do
+        if ! ps ${kill_pid} > /dev/null ; then
+            wd_logger 1 "ERROR: pid ${kill_pid} is not running"
+            (( ++not_running_errors ))
+        else
+            sudo kill ${kill_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'sudo kill ${kill_pid}' => ${rc}"
+                (( ++kill_errors ))
+            fi
+        fi
+    done
+    if [[ ${not_running_errors} -ne 0 || ${kill_errors} -ne 0 ]]; then
+        wd_logger 1 "ERROR: not_running_errors=${not_running_errors}, kill_errors=${kill_errors}"
+        return 2
+    fi
+    return 0
+}
+
 ################# Daemon management functions ==============================
 ###
 ###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
@@ -444,18 +475,13 @@ function kill_and_wait_for_death() {
         wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
         return 1
     fi
-    kill ${pid_to_kill}
-
-    local timeout=0
-    while [[ ${timeout} < ${KILL_TIMEOUT_MAX_SECS} ]] && ps ${pid_to_kill} > /dev/null ; do
-        (( ++timeout ))
-        sleep 1
-    done
-    if ps ${pid_to_kill} > /dev/null; then
-         wd_logger 1 "ERROR: timeout after ${timeout} seconds while waiting for pid ${pid_to_kill} is already dead"
-        return 1
+    wd_kill ${pid_to_kill}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wd_kill ${pid_to_kill}' => ${rc}"
+        return 2
     fi
-    wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
+    wd_logger 1 "Killed ${pid_to_kill}"
     return 0
 }
 
@@ -506,18 +532,18 @@ function kill_daemon() {
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
-        rm -f ${daemon_pid_file_path}
+        wd_rm ${daemon_pid_file_path}
         if ! ps ${daemon_pid} > /dev/null ; then
             wd_logger 1 "ERROR: ${daemon_function_name} pid file reported pid ${daemon_pid}, but that isn't running"
             return 3
         else
-            kill ${daemon_pid}
+            wd_kill ${daemon_pid}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'kill ${daemon_pid}' failed for active pid ${daemon_pid}"
+                wd_logger 1 "ERROR: 'wd_kill ${daemon_pid}' => ${rc} == failed to kill an active pid ${daemon_pid}"
                 return 4
             else
-                wd_logger 2 "'kill ${daemon_pid}' was successful"
+                wd_logger 2 "'wd_kill ${daemon_pid}' was successful"
             fi
         fi
     fi

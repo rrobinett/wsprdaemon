@@ -415,8 +415,13 @@ function kill_posting_daemon() {
         else
             local posting_pid=$(cat ${posting_daemon_pid_file})
             if ps ${posting_pid} > /dev/null ; then
-                kill ${posting_pid}
-                wd_logger 1 "Killed active posting_daemon() pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
+                wd_kill ${posting_pid}
+                local rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'wd_kill ${posting_pid}' => ${rs}"
+                else
+                    wd_logger 1 "Killed active posting_daemon() pid ${posting_pid} and deleting '${posting_daemon_pid_file}'"
+                fi
             else
                 wd_logger 1 "Pid ${posting_pid} was dead. Deleting '${posting_daemon_pid_file}' it came from"
             fi

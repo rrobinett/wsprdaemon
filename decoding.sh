@@ -354,8 +354,12 @@ function sleep_until_raw_file_is_full() {
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it"
         else
-            sudo kill ${kiwirecorder_pids[@]}
-            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'kill ${kiwirecorder_pids[*]}'"
+            wd_kill ${kiwirecorder_pids[@]}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                 wd_logger 1 "ERROR: 'wd_kill ${kiwirecorder_pids[*]}' => ${rc}"
+            fi
+            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
         fi
         return 1
     fi
@@ -1209,7 +1213,7 @@ function kill_decoding_daemon() {
     local ret_code=$?
 
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'kill ${decoding_pid} => ${ret_code}"
+        wd_logger 1 "ERROR: 'kill_and_wait_for_death ${decoding_pid}' => ${ret_code}"
         return 3
     fi
     wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
