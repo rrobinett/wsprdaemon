@@ -141,13 +141,20 @@ function get_wav_levels()
     local sample_length_secs=$4
     local rms_adjust=$5
 
-    ### To see if the AGC might need to change from its default 60, check to see if any samples in the whole wav  file closely approach the MAX or MIN sample values
-    local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)
-    local full_wav_min_level=$(echo "${full_wav_stats}" | awk '/Min level/{print $3}')
-    local full_wav_max_level=$(echo "${full_wav_stats}" | awk '/Max level/{print $3}')
+    if [[ ${sample_start_sec} == ${SIGNAL_LEVEL_PRE_TX_SEC} ]]; then
+        ### This function is called three times for each wav file.  We only need to check the whole wav file once to determine the min/max values
+        ### So execute this check only the first time
+        ### To see if the AGC might need to change from its default 60, check to see if any samples in the whole wav  file closely approach the MAX or MIN sample values
+        local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)
+        local full_wav_min_level=$(echo "${full_wav_stats}" | awk '/Min level/{print $3}')
+        local full_wav_max_level=$(echo "${full_wav_stats}" | awk '/Max level/{print $3}')
+        local full_wav_bit_depth=$(echo "${full_wav_stats}" | awk '/Bit-depth/{print $2}')
  
-    if [[ $(echo "${full_wav_min_level} < ${WAV_MIN_LEVEL}" | bc) -eq 1 ||  $(echo "${full_wav_max_level} > ${WAV_MAX_LEVEL}" | bc) ]]; then
-        wd_logger 1 "ERROR: full_wav_min_level=${full_wav_min_level} < ${WAV_MIN_LEVEL}  AND/OR  full_wav_max_level=${full_wav_max_level} > ${WAV_MAX_LEVEL}"
+        if [[ $(echo "${full_wav_min_level} < ${WAV_MIN_LEVEL}" | bc) -eq 1 ||  $(echo "${full_wav_max_level} > ${WAV_MAX_LEVEL}" | bc) -eq 1 ]]; then
+            wd_logger 1 "ERROR: In file ${wav_filename} with Bit-depth=${full_wav_bit_depth}: full_wav_min_level=${full_wav_min_level} < ${WAV_MIN_LEVEL}  AND/OR  full_wav_max_level=${full_wav_max_level} > ${WAV_MAX_LEVEL}"
+        else
+            wd_logger 1 "In file ${wav_filename} with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+        fi
     fi
 
     local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
