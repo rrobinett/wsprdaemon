@@ -77,7 +77,8 @@ function proxy_connection_manager() {
         fi
         return
     fi
-    local signal_level_upload_id=$( sed 's/ //g; s/#.*//; s/"//g' ${WSPRDAEMON_CONFIG_FILE} | awk -F = '/^ *SIGNAL_LEVEL_UPLOAD_ID/{print $2}')
+    ### Get the last SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
+    local signal_level_upload_id=$( awk -F = '/^ *SIGNAL_LEVEL_UPLOAD_ID/{id = $2; gsub( /"/, "", id)}; END {print id}' ${WSPRDAEMON_CONFIG_FILE})
     if [[ -z "${signal_level_upload_id}" ]]; then
         wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID is not defined"
         exit 2
@@ -193,10 +194,10 @@ local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
 EOF
-        wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${frpc_remote_port} of that server"
+        wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's signal_level_upload_id=${signal_level_upload_id} and ssh port on port ${frpc_remote_port} of that server"
     fi
 
-    wd_logger 0 "Spawning the frpc daemon connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this clients ssh port on port ${frpc_remote_port} of that server"
+    wd_logger 0 "Spawning the frpc daemon connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's ssh port on port ${frpc_remote_port} of that server"
     ${FRPC_CMD} -c ${FRPC_INI_FILE} > ${FRPC_LOG_FILE} 2>&1 & #-c ${FRPC_INI_FILE} &
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
@@ -209,12 +210,13 @@ EOF
         exit 1
     fi
     echo ${frpc_daemon_pid} > ${WSPRDAEMON_PROXY_PID_FILE}
-    wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
+    wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and signal_level_upload_id=${signal_level_upload_id} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
+
     local timeout=0
     while [[ ${timeout} -lt ${FRPC_STARTUP_TIMEOUT} ]]; do
         local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
         if [[ "${frpc_status}" == "running" ]]; then
-            wd_logger 1 "The emote access service is running"
+            wd_logger 1 "The remote access service is running"
             return 0
         fi
         (( ++timeout ))
