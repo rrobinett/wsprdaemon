@@ -15,6 +15,26 @@ function get_posting_dir_path(){
     echo ${receiver_posting_path}
 }
 
+function get_posting_pid_file_path()
+{
+    local __return_pid_file_path=$1
+    local receiver_name=$2
+    local receiver_rx_band=$3
+
+    local receiver_posting_path="${WSPRDAEMON_TMP_DIR}/posting.d/${receiver_name}/${receiver_rx_band}"
+    local pid_file_path=${receiver_posting_path}/posting_daemon.pid
+
+    if [[ ! -f ${pid_file_path} ]]; then
+        wd_logger 1 "There is no pid_file_path'${pid_file_path}"
+        eval ${__return_pid_file_path}=""
+        return 1
+    fi
+    wd_logger 1 "Found pid_file_path=${pid_file_path}"
+    eval ${__return_pid_file_path}=\${pid_file_path}
+    return 0
+}
+
+
 ### This daemon creates links from the posting dirs of all the $4 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
 function posting_daemon() 
