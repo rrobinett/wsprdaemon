@@ -56,7 +56,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.2.2            ### Fix installaion of python 'astral' package on both buster and bullseye
 #declare -r VERSION=3.0.2.3            ### Fix FST4W-300 decoding
 #declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
-declare -r VERSION=3.0.2.5            ### Raise priority of kiwirecorder.py to max in an attempt to ensure that wav file recordings are not interrupted by Linux
+#declare -r VERSION=3.0.2.5            ### Raise priority of kiwirecorder.py to max in an attempt to ensure that wav file recordings are not interrupted by Linux
+declare -r VERSION=3.0.2.6            ### Cleanup schedule change handling
                                     ### TODO: Flush antique ~/signal_level log files
                                     ### TODO: Fix inode overflows when SIGNAL_LEVEL_UPLOAD="no" (e.g. at LX1DQ)
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org

@@ -130,6 +130,9 @@ declare WAV_SAMPLES_LIST=(
     "${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN}"
 )
 
+declare WAV_MIN_LEVEL=${WAV_MIN_LEVEL--0.90}
+declare WAV_MAX_LEVEL=${WAV_MAX_LEVEL=0.90}
+
 function get_wav_levels() 
 {
     local __return_levels_var=$1
@@ -137,6 +140,15 @@ function get_wav_levels()
     local sample_start_sec=$3
     local sample_length_secs=$4
     local rms_adjust=$5
+
+    ### To see if the AGC might need to change from its default 60, check to see if any samples in the whole wav  file closely approach the MAX or MIN sample values
+    local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)
+    local full_wav_min_level=$(echo "${full_wav_stats}" | awk '/Min level/{print $3}')
+    local full_wav_max_level=$(echo "${full_wav_stats}" | awk '/Max level/{print $3}')
+ 
+    if [[ $(echo "${full_wav_min_level} < ${WAV_MIN_LEVEL}" | bc) -eq 1 ||  $(echo "${full_wav_max_level} > ${WAV_MAX_LEVEL}" | bc) ]]; then
+        wd_logger 1 "ERROR: full_wav_min_level=${full_wav_min_level} < ${WAV_MIN_LEVEL}  AND/OR  full_wav_max_level=${full_wav_max_level} > ${WAV_MAX_LEVEL}"
+    fi
 
     local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
     if [[ ${#wav_levels_list[@]} -ne 4 ]]; then
@@ -959,7 +971,7 @@ function decoding_daemon() {
 
             wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
 
-            if [[ "${CHECK_WAV_FILES-no}" == "yes" ]]; then
+            if [[ "${CHECK_WAV_FILES-yes}" == "yes" ]]; then
                 ### This is a block of diagnostic code 
                 local found_all_files="yes"
                 local index
