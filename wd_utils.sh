@@ -92,7 +92,7 @@ function wd_logger_check_all_logs
                     wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
                     grep -A 100000 "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
                     if [[ ! -s ${new_log_lines_file} ]]; then
-                        wd_logger 1 "Found no lines to print in ${log_file_path}, so nothing to print"
+                        wd_logger 2 "Found no lines to print in ${log_file_path}, so nothing to print"
                         continue
                     fi
                     if [[ $( wc -l < ${new_log_lines_file}) -lt 2 ]]; then

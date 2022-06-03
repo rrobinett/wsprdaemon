@@ -374,8 +374,7 @@ function kiwirecorder_manager_daemon()
             wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-            ### By default raise the priority of the kiwirecorder.py job to the highest possible level 
-            ${KIWIRECORDER_NICE_CMD-sudo nice --adjustment=-40} python3 -u ${KIWI_RECORD_COMMAND} \
+            python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                 ${KIWIRECORDER_OV_FLAG---OV} --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
@@ -388,6 +387,17 @@ function kiwirecorder_manager_daemon()
             kiwi_recorder_pid=$!
             echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
             wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
+
+            ### To try to ensure that wav files are not corrupted (i.e. too short, too long, or missing) because of CPU starvation:
+            #### Raise the priority of the kiwirecorder.py job to (by default) -15 so that wsprd, jt9 or other programs are less likely to preempt it
+            local before_nice_level=$(ps --no-headers -o ni ${kiwi_recorder_pid} )
+            sudo renice --priority ${KIWI_RECORDER_PRIORITY--15} ${kiwi_recorder_pid}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'renice --priority -15 ${kiwi_recorder_pid}' => ${rc}"
+            fi
+            local after_nice_level=$(ps --no-headers -o ni ${kiwi_recorder_pid} )
+            wd_logger 1 "renice(d) kiwirecorder from ${before_nice_level} to ${after_nice_level}"
         fi
 
         if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
