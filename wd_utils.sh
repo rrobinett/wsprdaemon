@@ -84,13 +84,13 @@ function wd_logger_check_all_logs
                 cp ${log_file_path} ${new_log_lines_file}
             else
                 ### There is a line in the *printed file
-                if ! grep -q "${last_printed_line}" ${log_file_path} ; then
+                if ! grep -F -q "${last_printed_line}" ${log_file_path} ; then
                     wd_logger 2 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}"
                     wd_rm ${log_file_last_printed}
                     cp ${log_file_path} ${new_log_lines_file}
                 else
                     wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
-                    grep -A 100000 "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
+                    grep -F -A 100000 "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
                     if [[ ! -s ${new_log_lines_file} ]]; then
                         wd_logger 2 "Found no lines to print in ${log_file_path}, so nothing to print"
                         continue
@@ -105,15 +105,15 @@ function wd_logger_check_all_logs
         ### There are new lines
         if [[ ${check_only_for_errors} == "check_only_for_new_errors" ]]; then
             local new_error_log_lines_file=${WSPRDAEMON_TMP_DIR}/new_error_log_lines.txt 
-            grep -A 100000 "ERROR:" ${new_log_lines_file} > ${new_error_log_lines_file}
+            grep -F -A 100000 "ERROR:" ${new_log_lines_file} > ${new_error_log_lines_file}
             if [[ ! -s ${new_error_log_lines_file} ]]; then
                 local new_log_lines_count=$( wc -l < ${new_log_lines_file} )
                 wd_logger 2 "$( printf "Found no 'ERROR:' lines in the %'6d new log lines of '${log_file_path}', so remember the last line of current log file '${log_file_last_printed} " ${new_log_lines_count})" 
                 tail -n 1 ${log_file_path} > ${log_file_last_printed}
                 continue
             else
-                wd_logger 1 "\nFound $( grep "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines.  Here is the first ERROR: line:"
-                grep "ERROR:" ${new_error_log_lines_file} | head -n 1
+                wd_logger 1 "\nFound $( grep -F "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines.  Here is the first ERROR: line:"
+                grep -F "ERROR:" ${new_error_log_lines_file} | head -n 1
                 read -p "Press <ENTER> to check the next log file or 'l' to 'less all the new lines after that new ERROR line ${new_error_log_lines_file} > "
                 if [[ -n "${REPLY}" ]]; then
                     less ${new_error_log_lines_file}
