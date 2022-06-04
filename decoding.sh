@@ -149,12 +149,9 @@ function get_wav_levels()
         local full_wav_min_level=$(echo "${full_wav_stats}" | awk '/Min level/{print $3}')
         local full_wav_max_level=$(echo "${full_wav_stats}" | awk '/Max level/{print $3}')
         local full_wav_bit_depth=$(echo "${full_wav_stats}" | awk '/Bit-depth/{print $2}')
- 
-        if [[ $(echo "${full_wav_min_level} < ${WAV_MIN_LEVEL}" | bc) -eq 1 ||  $(echo "${full_wav_max_level} > ${WAV_MAX_LEVEL}" | bc) -eq 1 ]]; then
-            wd_logger 1 "ERROR: In file ${wav_filename} with Bit-depth=${full_wav_bit_depth}: full_wav_min_level=${full_wav_min_level} < ${WAV_MIN_LEVEL}  AND/OR  full_wav_max_level=${full_wav_max_level} > ${WAV_MAX_LEVEL}"
-        else
-            wd_logger 1 "In file ${wav_filename} with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
-        fi
+        local full_wav_len_secs=$(echo "${full_wav_stats}" | awk '/Length/{print $3}')
+
+        wd_logger 1 "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
     fi
 
     local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
