@@ -194,6 +194,11 @@ function show-ovs(){
      done
 }
 
+function show-wav(){
+    awk -f ~/wsprdaemon/.show-wav.awk `find /tmp/wsprdaemon/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
+}
+alias sw=show-wav
+
 function show-merged() {
     ls -lrt `find /tmp/wsprdaemon/ -name merged.log`
 }
