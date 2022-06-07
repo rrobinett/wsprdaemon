@@ -38,12 +38,22 @@ function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; e
 
 ###
 function wd_logger_flush_all_logs {
-    wd_logger 2 "Flushing all .log and .printed files"
-    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.log'     -exec rm {} \;
-    find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.printed' -exec rm {} \;
+    wd_logger 2 "Flushing .log files"
+
+    local restart_line=$(TZ=UTC printf "\n\n=============== ${WD_TIME_FMT}: ERROR: start ================\n\n" -1)
+    local log_file
+    for log_file in $(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -type f -name '*.log'); do
+        if [[ -s ${log_file} ]]; then
+            if grep -q "UTC: " ${log_file} > /dev/null ; then
+                ### Only add seperator to log files which already have wd_logger() lines in them
+                truncate_file ${log_file} ${WD_LOGFILE_SIZE_MAX}
+                echo "${restart_line}" >> ${log_file}
+            fi
+        fi
+    done
 }
 
-declare WD_LOGGING_EXCLUDE_LOG_FILENAMES="add_derived.log curl.log kiwi_recorder.log kiwi_recorder_overloads_count.log merged.log"
+declare WD_LOGGING_EXCLUDE_LOG_FILENAMES="add_derived.log curl.log kiwi_recorder.log kiwi_recorder_overloads_count/n .log merged.log"
 declare WD_LOGGING_EXCLUDE_DIR_NAMES="kiwi_gps_status"
 
 function wd_logger_check_all_logs 
@@ -112,13 +122,15 @@ function wd_logger_check_all_logs
                 tail -n 1 ${log_file_path} > ${log_file_last_printed}
                 continue
             else
-                wd_logger 1 "\nFound $( grep -F "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines.  Here is the first ERROR: line:"
-                grep -F "ERROR:" ${new_error_log_lines_file} | head -n 1
-                read -p "Press <ENTER> to check the next log file or 'l' to 'less all the new lines after that new ERROR line ${new_error_log_lines_file} > "
-                if [[ -n "${REPLY}" ]]; then
-                    less ${new_error_log_lines_file}
+                wd_logger 1 "\nFound $( grep -F "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines."
+                if  ! grep -F "ERROR: start =======" > /dev/null ${new_error_log_lines_file}; then
+                    grep -F "ERROR:" ${new_error_log_lines_file} | head -n 1
+                    read -p "That is the first ERROR: line. Press <ENTER> to check the next log file or 'l' to 'less all the new lines after that new ERROR line ${new_error_log_lines_file} => "
+                    if [[ -n "${REPLY}" ]]; then
+                        less ${new_error_log_lines_file}
+                    fi
                 fi
-                tail -n 1 ${log_file_path} > ${log_file_last_printed}
+                 tail -n 1 ${log_file_path} > ${log_file_last_printed}
                 continue
             fi
         fi

@@ -1011,8 +1011,10 @@ function decoding_daemon() {
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
-            local sox_rms_noise_level
-            local rms_line
+            local sox_rms_noise_level=""
+            local fft_noise_level=""
+            local new_kiwi_ov_count=0
+            local rms_line=""
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
             ### The 'wsprd' and 'jt9' commands require a single wav file, so use 'sox to create one from the list of one minute wav files
@@ -1088,7 +1090,7 @@ function decoding_daemon() {
                         wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}"
                         c2_fft_nl=0
                     fi
-                    local fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
+                    fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
                     wd_logger 2 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
 
                     get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}
@@ -1099,7 +1101,6 @@ function decoding_daemon() {
                     fi
 
                     ### If this is a KiwiSDR, then discover the number of 'ADC OV' events recorded since the last cycle
-                    local new_kiwi_ov_count
                     if [[ ! -f kiwi_recorder.log ]]; then
                         new_kiwi_ov_count=0
                         wd_logger 1 "Not a KiwiSDR, so there is no overload information"
@@ -1181,7 +1182,7 @@ function decoding_daemon() {
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} ${sox_rms_noise_level} ${fft_noise_level} ${new_kiwi_ov_count} ${receiver_call} ${receiver_grid}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_kiwi_ov_count}" ${receiver_call} ${receiver_grid}
         done
         sleep 1
     done
