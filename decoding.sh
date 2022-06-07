@@ -171,10 +171,15 @@ function get_wav_levels()
     return 0
 }
 
-declare MIN_VALID_RAW_WAV_SECONDS=${MIN_VALID_RAW_WAV_SECONDS-59}
-declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_RAW_WAV_SECONDS-60}
-declare MIN_VALID_WSPR_WAV_SECONDS=${MIN_VALID_WSPR_WAV_SECONDS-119}
-declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-120}
+declare WAV_SECOND_RANGE=${WAV_SECOND_RANGE-5}         ### wav files of +/- this number of seconds are deemed OK for wsprd to decode
+
+declare TARGET_RAW_WAV_SECONDS=60
+declare MIN_VALID_RAW_WAV_SECONDS=${MIN_VALID_RAW_WAV_SECONDS-$(( ${TARGET_RAW_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
+declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_RAW_WAV_SECONDS-$(( ${TARGET_RAW_WAV_SECONDS} + ${WAV_SECOND_RANGE} )) }
+
+declare TARGET_WSPR_WAV_SECONDS=120
+declare MIN_VALID_WSPR_WAV_SECONDS=${MIN_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
+declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
 
 function is_valid_wav_file()
 {
@@ -312,9 +317,15 @@ declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare RAW_FILE_FULL_SIZE=1440000                       ### Approximate number of bytes in a full size one minute long raw or wav file
+
+### We use 'soxi' to check the length of the 1 minute long wav files created by kiwirecorder.py in a field with the form HOURS:MINUTES:SECONDS.MILLISECONDS
+### Because bash can only do integer comparisons, we strip the ':'s and '.' from that field
+### As a result, valid wav files will bein the ranges from  6000 - (${MIN_VALID_RAW_WAV_SECONDS} * 100) to 5999
+### or in the range from 10000 to (10000 + ${MIN_VALID_RAW_WAV_SECONDS})
 ### So this code gets the time duration of the wave file into an integer which has the form HHMMSSUU and thus can be compared by a bash expression
-declare WAV_FILE_MIN_HHMMSSUU=5900        ### == 59 seconds
-declare WAV_FILE_MAX_HHMMSSUU=10100       ### == 61 seconds
+### Because the field rolls over from second 59 to minute 1, There can be no fields which have the values 6000 through 9999
+declare WAV_FILE_MIN_HHMMSSUU=$(( ${MIN_VALID_RAW_WAV_SECONDS}  * 100  ))       ### by default this = 55 seconds ==  5500
+declare WAV_FILE_MAX_HHMMSSUU=$(( 10000 + ( ${WAV_SECOND_RANGE} * 100) ))       ### by default this = 65 seconds == 10500
 
 ### If the wav recording daemon is running, we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
 function sleep_until_raw_file_is_full() {
@@ -379,7 +390,7 @@ function sleep_until_raw_file_is_full() {
         fi
         return 1
     fi
-    wd_logger 2 "File ${filename} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
+    wd_logger 1 "File ${filename} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
     return 0
 }
 
