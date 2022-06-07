@@ -171,7 +171,7 @@ function get_wav_levels()
     return 0
 }
 
-declare WAV_SECOND_RANGE=${WAV_SECOND_RANGE-5}         ### wav files of +/- this number of seconds are deemed OK for wsprd to decode
+declare WAV_SECOND_RANGE=${WAV_SECOND_RANGE-10}         ### wav files of +/- this number of seconds are deemed OK for wsprd to decode
 
 declare TARGET_RAW_WAV_SECONDS=60
 declare MIN_VALID_RAW_WAV_SECONDS=${MIN_VALID_RAW_WAV_SECONDS-$(( ${TARGET_RAW_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
@@ -179,7 +179,7 @@ declare MAX_VALID_RAW_WAV_SECONDS=${MAX_VALID_RAW_WAV_SECONDS-$(( ${TARGET_RAW_W
 
 declare TARGET_WSPR_WAV_SECONDS=120
 declare MIN_VALID_WSPR_WAV_SECONDS=${MIN_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
-declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
+declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} + ${WAV_SECOND_RANGE} )) }
 
 function is_valid_wav_file()
 {
@@ -221,7 +221,7 @@ function is_valid_wav_file()
         return 1
     fi
     if [[ ${wav_length_secs} -lt ${min_valid_secs} || ${wav_length_secs} -gt ${max_valid_secs} ]]; then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length of ${wav_length_secs} seconds"
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length of ${wav_length_secs} seconds. valid min=${min_valid_secs}, valid max=${max_valid_secs}"
         return 1
     fi
     return 0
@@ -235,7 +235,8 @@ function get_rms_levels()
     local rms_adjust=$4
 
     if ! is_valid_wav_file ${wav_filename} ${MIN_VALID_WSPR_WAV_SECONDS} ${MAX_VALID_WSPR_WAV_SECONDS} ; then
-        wd_logger 1 "ERROR: 'valid_wav_file ${wav_filename}' => $?"
+        local rc=$?
+        wd_logger 1 "ERROR: 'valid_wav_file ${wav_filename}' => ${rc}"
         return 1
     fi
     local output_line=""
@@ -1032,6 +1033,7 @@ function decoding_daemon() {
                 continue
             fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
+            wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" || " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
