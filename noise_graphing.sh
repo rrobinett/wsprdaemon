@@ -176,7 +176,8 @@ function plot_noise() {
     fi
     wd_logger 2 "Got list of ${#signal_levels_log_list[@]} current .txt files: ${signal_levels_log_list[*]}"
 
-    for log_file in "${signal_levels_log_list[@]}" ; do
+    local csv_file_list=()
+    for log_file in ${signal_levels_log_list[@]} ; do
         local csv_file=${log_file%.txt}.csv
         local log_file_data_lines_count=$(( $( wc -l < ${log_file} ) - 2 ))  
         if [[ "${log_file_data_lines_count}" -le 0 ]]; then
@@ -198,14 +199,13 @@ function plot_noise() {
             | awk -F ',' '{ print $0 }'  > ${NOISE_GRAPHS_TMP_CSV_FILE}
 	if [[ -s ${NOISE_GRAPHS_TMP_CSV_FILE} ]]; then
             mv ${NOISE_GRAPHS_TMP_CSV_FILE} ${csv_file}  ### only create .csv if it has at least one line of data
+            csv_file_list+=(${csv_file})
             wd_logger 2 "Created '${csv_file}'"
         else
             wd_logger 1 "ERROR: failed to create '${csv_file}'"
         fi
     done
 
-    ### Only plot the newly created .csv files
-    local csv_file_list=( ${signal_levels_log_list[@]/.txt/.csv} )    ### $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
     if [[ ${#csv_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no .csv files to plot"
         return 0
@@ -219,12 +219,14 @@ function plot_noise() {
         return 0 
     fi
 
+    wd_logger 1 "Creating  ${NOISE_GRAPH_TMP_FILE}"
     local plot_csv_file_list_string=$( echo ${sorted_csv_file_list[@]} | tr '\n' ' ')
     python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}" \
                ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} >& noise_plot.log
     local ret_code=$?
-    wd_logger 1 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]} ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} ' => ${ret_code}"
-    if [[ ${ret_code} -ne 0 ]]; then
+    if [[ ${ret_code} -eq 0 ]]; then
+        wd_logger 2 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]} ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} ' => ${ret_code}"
+    else
         wd_logger 1 "ERROR: 'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} ...' => ${ret_code}:\n$(< noise_plot.log)"
         return ${ret_code}
     fi
