@@ -166,12 +166,15 @@ function plot_noise() {
         wd_logger 1 "'${signal_levels_root_dir}' doesn't exist"
         return 0
     fi
+
+    ### Get a list of log files which are less than 1 day old
     local signal_levels_log_list=()
-    signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -print ) ) 
+    signal_levels_log_list=( $(find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_LOG_FILE_NAME} -mtime -1 ) ) 
     if [[ ${#signal_levels_log_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no signal-levels.log files, so nothing to plot"
         return 0
     fi
+    wd_logger 2 "Got list of ${#signal_levels_log_list[@]} current .txt files: ${signal_levels_log_list[*]}"
 
     for log_file in "${signal_levels_log_list[@]}" ; do
         local csv_file=${log_file%.txt}.csv
@@ -201,11 +204,14 @@ function plot_noise() {
         fi
     done
 
-    local csv_file_list=( $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
-    if [[ ${#csv_file_list[0]} -eq 0 ]]; then
+    ### Only plot the newly created .csv files
+    local csv_file_list=( ${signal_levels_log_list[@]/.txt/.csv} )    ### $( find ${signal_levels_root_dir} -type f -name ${SIGNAL_LEVEL_CSV_FILE_NAME} -print) )  
+    if [[ ${#csv_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no .csv files to plot"
         return 0
     fi
+    wd_logger 2 "Created list of ${#csv_file_list[@]} .csv files: ${csv_file_list[*]}"
+
     local sort_field_number=$(( $(awk -F / '{print NF}' <<< "${csv_file_list[0]}") - 1 ))        ### Sort on the .../BAND/... in the path to the .csv file
     local sorted_csv_file_list=( $( local path; for path in ${csv_file_list[@]}; do echo ${path}; done | sort -n -t / -k ${sort_field_number},${sort_field_number} ) )
     if [[ ${#sorted_csv_file_list[@]} -eq 0 ]] ; then 
@@ -214,11 +220,12 @@ function plot_noise() {
     fi
 
     local plot_csv_file_list_string=$( echo ${sorted_csv_file_list[@]} | tr '\n' ' ')
-    python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}"
+    python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}" \
+               ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} >& noise_plot.log
     local ret_code=$?
-    wd_logger 1 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]}' => ${ret_code}"
+    wd_logger 1 "'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} '${sorted_csv_file_list[*]} ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} ' => ${ret_code}"
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} ...' => ${ret_code}"
+        wd_logger 1 "ERROR: 'python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} ...' => ${ret_code}:\n$(< noise_plot.log)"
         return ${ret_code}
     fi
     mv ${NOISE_GRAPH_TMP_FILE} ${NOISE_GRAPH_FILE}

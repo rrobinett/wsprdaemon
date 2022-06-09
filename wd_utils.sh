@@ -75,7 +75,7 @@ function wd_logger_check_all_logs
         wd_logger 2 "Checking ${log_file_path}"
         local log_file_last_printed=${log_file_path}.printed
         if [[ ! -s ${log_file_path} ]]; then
-            wd_logger 1 "Log file ${log_file_path} is empty"
+            wd_logger 2 "Log file ${log_file_path} is empty"
             continue
         fi
         ### The log file is not empty

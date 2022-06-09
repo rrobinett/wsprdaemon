@@ -26,6 +26,12 @@ maidenhead=sys.argv[2]
 output_png_filepath=sys.argv[3]
 calibration_file_path=sys.argv[4]
 csv_file_path_list=sys.argv[5].split()    ## noise_plot.py KPH "/home/pi/.../2200 /home/pi/.../630 ..."
+y_db_low_arg=int(sys.argv[6])
+y_db_hi_arg=int(sys.argv[7])
+x_pixel_arg=int(sys.argv[8])
+y_pixel_arg=int(sys.argv[9])
+
+# print ( "y_db_low_arg=%d, y_db_hi_arg=%d, x_pixel_arg=%d, y_pixel_arg=%d" % (y_db_low_arg, y_db_hi_arg, x_pixel_arg, y_pixel_arg) )
 
 # read in the reporter-specific calibration file and print out
 # if one didn't exist the bash script would have created one
@@ -44,8 +50,8 @@ if nom_bw==500:
 else:
     freq_ne_bw=ne_bw
 
-x_pixel=40
-y_pixel=30
+x_pixel=x_pixel_arg
+y_pixel=y_pixel_arg
 my_dpi=50         # set dpi and size for plot - these values are largest I can get on Pi window, resolution is good
 fig = plt.figure(figsize=(x_pixel, y_pixel), dpi=my_dpi)
 fig.subplots_adjust(hspace=0.4, wspace=0.4)
@@ -101,8 +107,8 @@ for csv_file_path in csv_file_path_list:
     ax1.xaxis.set_major_locator(loc)
 
     #   set y axes lower and upper limits
-    y_dB_lo=-175
-    y_dB_hi=-105
+    y_dB_lo=y_db_low_arg
+    y_dB_hi=y_db_hi_arg
     y_K_lo=10**((y_dB_lo-30)/10.)*1e23/1.38
     y_K_hi=10**((y_dB_hi-30)/10.)*1e23/1.38
     ax1.set_ylim([y_dB_lo, y_dB_hi])
