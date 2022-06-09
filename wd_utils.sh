@@ -122,15 +122,17 @@ function wd_logger_check_all_logs
                 tail -n 1 ${log_file_path} > ${log_file_last_printed}
                 continue
             else
-                wd_logger 1 "\nFound $( grep -F "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines."
-                if  ! grep -F "ERROR: start =======" > /dev/null ${new_error_log_lines_file}; then
+                if  grep -F "ERROR: start =======" > /dev/null ${new_error_log_lines_file}; then
+                    wd_logger 2 "Ignore ERROR line logged at startup of WD"
+                else
+                    wd_logger 1 "\nFound $( grep -F "ERROR:" ${new_error_log_lines_file} | wc -l ) new 'ERROR:' lines in ${log_file_path} among its $( wc -l < ${new_log_lines_file}) new log lines."
                     grep -F "ERROR:" ${new_error_log_lines_file} | head -n 1
                     read -p "That is the first ERROR: line. Press <ENTER> to check the next log file or 'l' to 'less all the new lines after that new ERROR line ${new_error_log_lines_file} => "
                     if [[ -n "${REPLY}" ]]; then
                         less ${new_error_log_lines_file}
                     fi
                 fi
-                 tail -n 1 ${log_file_path} > ${log_file_last_printed}
+                 tail -n 1 ${log_file_path} > ${log_file_last_printed}       ### Start next search for new ERROR lines after the last line we have just searched
                 continue
             fi
         fi
