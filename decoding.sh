@@ -813,6 +813,14 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         # field#:  1           2               10                 3         4              5             6           7            8             9          11              12               13              14              15               16             17               18                  19                      20             21            22                   23                   24        25         26        27         28      29        30       31      32                  33                              34    \
         printf "%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\n" \
              ${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_decodetype} ${spot_ipass} ${spot_nhardmin} ${spot_pkt_mode} ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${band} ${real_receiver_grid} ${real_receiver_call_sign} ${km} ${rx_az}  ${rx_lat}  ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot} >> ${cached_spots_file_name}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: printf \"%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\" \
+             '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_cycles}' '${spot_jitter}' '${spot_blocksize}' '${spot_metric}' '${spot_decodetype}' \
+             '${spot_ipass}' '${spot_nhardmin}' '${spot_pkt_mode}' '${wspr_cycle_rms_noise}' '${wspr_cycle_fft_noise}' '${band}' '${real_receiver_grid}' '${real_receiver_call_sign}' '${km}' '${rx_az}  ${rx_lat}  ${rx_lon}' '${tx_az}' '${tx_lat}' '${tx_lon}' \
+             '${v_lat}' '${v_lon}' '${wspr_cycle_kiwi_overloads_count}' '${proxy_upload_this_spot}'   => ${rc}"
+        fi
+
     done < ${real_receiver_wspr_spots_file}
 
     if [[ ! -s ${cached_spots_file_name} ]]; then
