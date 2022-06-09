@@ -70,7 +70,9 @@ alias wdv='wd -V'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
 alias wddd='wd -D'       ### Decrement
 
-alias tf='tail -F'
+alias tf='tail -F -n 40'
+alias tfd='tf decoding_daemon.log'
+alias tfr='tf wav_recording_daemon.log'
 alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
 
 alias g='git'
