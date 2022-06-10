@@ -407,7 +407,7 @@ function wd_rm()
         if [[ ! -f ${rm_file} ]]; then
             wd_logger 1 "ERROR: can't find supplied file ${rm_file}"
         else
-            rm ${rm_file}
+            rm ${rm_file} >& /dev/null
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: failed to 'rm ${rm_file}' requested by function"
@@ -416,7 +416,7 @@ function wd_rm()
         fi
     done
     if [[ ${rm_errors} -gt 0 ]]; then
-        wd_logger 1 "ERROR: Encountered ${rm_errors} errors when executing 'rm ${rm_list[*]}'"
+        wd_logger 1 "ERROR: When called by ${FUNCNAME[0]}, encountered ${rm_errors} errors when executing 'rm ${rm_list[*]}'"
     fi
 }
 
@@ -436,7 +436,7 @@ function wd_kill()
             wd_logger 1 "ERROR: pid ${kill_pid} is not running"
             (( ++not_running_errors ))
         else
-            sudo kill ${kill_pid}
+            kill ${kill_pid}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sudo kill ${kill_pid}' => ${rc}"
@@ -445,16 +445,15 @@ function wd_kill()
         fi
     done
     if [[ ${not_running_errors} -ne 0 || ${kill_errors} -ne 0 ]]; then
-        wd_logger 1 "ERROR: not_running_errors=${not_running_errors}, kill_errors=${kill_errors}"
+        wd_logger 1 "ERROR: When called by ${FUNCNAME[0]} got not_running_errors=${not_running_errors}, kill_errors=${kill_errors}"
         return 2
     fi
     return 0
 }
 
-################# Daemon management functions ==============================
-###
 ###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
-function get_pid_from_file(){
+function get_pid_from_file()
+{
     local pid_var_name=$1   ### Where to return the PID found in $2 file
     local pid_file_name=$2
     
@@ -482,22 +481,55 @@ function get_pid_from_file(){
 
 declare KILL_TIMEOUT_MAX_SECS=${KILL_TIMEOUT_MAX_SECS-10}
 
-function kill_and_wait_for_death() {
+function wd_kill_and_wait_for_death() 
+{
     local pid_to_kill=$1
 
     if ! ps ${pid_to_kill} > /dev/null ; then
         wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
         return 1
     fi
-    wd_kill ${pid_to_kill}
+    local timeout=0
+
+    while [[ ${timeout} -lt ${KILL_TIMEOUT_MAX_SECS} ]]; do
+        wd_kill ${pid_to_kill}
+        local rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "Killed after ${timeout} seconds"
+            return 0
+        fi
+        (( ++timeout ))
+    done
+    wd_logger 1 "ERROR: timeout after ${timeout} seconds  trying to kill ${pid_to_kill}"
+    return 2
+}
+
+function wd_kill_pid_file()
+{
+    local local recording_pid_file=$1
+    local recording_pid
+
+    get_pid_from_file recording_pid ${recording_pid_file}
     local rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_kill ${pid_to_kill}' => ${rc}"
-        return 2
+        wd_logger 3 "ERROR: 'get_pid_from_file recording_pid ${recording_pid_file}' => ${rc}"
     fi
-    wd_logger 1 "Killed ${pid_to_kill}"
+
+    wd_rm ${recording_pid_file}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 3 "ERROR: 'wd_rm ${recording_pid_file}' => ${rc}"
+    fi
+
+    wd_kill_and_wait_for_death ${recording_pid}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wd_kill ${recording_pid}' => $?"
+        return 4
+    fi
     return 0
 }
+
 
 function spawn_daemon() 
 {

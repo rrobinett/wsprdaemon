@@ -113,9 +113,9 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             watchdog_cmd a
             ;;
         z)
-            watchdog_cmd z
-            jobs_cmd     z
-            check_for_zombies yes   ## silently kill any zombies
+            #watchdog_cmd z
+            #jobs_cmd     z
+            wd_kill_all    ## silently kill everything
             ;;
         Z)
             sudo systemctl stop wsprdaemon

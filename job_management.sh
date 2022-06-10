@@ -45,6 +45,49 @@ function check_for_zombie_daemon(){
     fi
 }
  
+declare CHECK_FOR_ZOMBIES_TIMEOUT=3     ### How many times to search fpid files and kill the pids recorded in them
+function wd_kill_all()
+{
+    wd_logger 1 "Force kill of all WD programs"
+
+    local pid_file_list=($(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid' | grep -v proxy.pid) )
+    if [[ ${#pid_file_list[@]} -eq 0 ]]; then
+        wd_logger 1 "Found no pid files"
+    else 
+        local pid_val_list=( $( cat ${pid_file_list[@]} ) )
+        if [[ ${#pid_val_list[@]} -eq 0 ]]; then
+            wd_logger 1 "ERROR: Found no pid values which are expected to be in the *.pid files"
+        else
+            kill ${pid_val_list[@]} >& /dev/null
+            local rc=$?
+            wd_rm  ${pid_file_list[@]}
+            local rc2=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'kill ${pid_val_list[*]}' => ${rc}"
+            fi
+            if [[ ${rc2} -ne 0 ]]; then
+                wd_logger 2 "ERROR: 'wd_rm ${pid_file_list[*]}' => ${rc2}"
+            fi
+            wd_logger 1 "Killed ${#pid_val_list[@]} pids and removed the pid files they came from"
+        fi
+    fi
+
+    ps aux > ps.log            ### Don't pipe the output.  That creates mutlilple addtional bash programs which are really zombies
+    grep "${WSPRDAEMON_ROOT_PATH}\|${KIWI_RECORD_COMMAND}" ps.log | grep -v $$ > grep.log         
+    local zombie_pid_list=( $(awk '{print $2}'  grep.log) )
+
+    if [[ ${#zombie_pid_list[@]} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Killing ${#zombie_pid_list[@]} zombie pids '${zombie_pid_list[*]}'"
+        kill ${zombie_pid_list[@]}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: for zombie pids 'kill ${zombie_pid_list[*]}' => ${rc}"
+        fi
+    fi
+    echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
+    return 0
+}
+
 function check_for_zombies() {
     local force_kill=${1:-yes}   
     local job_index
@@ -54,7 +97,7 @@ function check_for_zombies() {
     local found_job="no"
     local expected_and_running_pids=()
 
-    wd_logger 2 "Starting"
+   wd_logger 2 "Starting"
     if [[ ${ZOMBIE_CHECKING_ENABLED} != "yes" ]]; then
         wd_logger 1 "Checking has been disabled"
         return 0
@@ -557,7 +600,7 @@ function setup_expected_jobs_file () {
 
     local    current_time=$(date +%H%M)
     current_time=$((10#${current_time}))   ### remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
-    local -a expected_jobs=()
+    local -a hhmm_expected_jobs=()
     local -a hhmm_job
     local    index_max_hhmm_sched=$(( ${#HHMM_SCHED[*]} - 1))
     local    index_time=""
@@ -578,16 +621,35 @@ function setup_expected_jobs_file () {
         index_time=${index_time/:/}
         index_time=$((10#${index_time}))  ### remove the ':' from HH:MM, then force it to be a decimal number (i.e suppress leading 0s)
         if [[ ${current_time} -ge ${index_time} ]] ; then
-            expected_jobs=(${HHMM_SCHED[${index}]})
-            expected_jobs=(${expected_jobs[*]:1})          ### Chop off first array element which is the schedule start time
+            hhmm_expected_jobs=(${HHMM_SCHED[${index}]})
+            hhmm_expected_jobs=(${hhmm_expected_jobs[*]:1})          ### Chop off first array element which is the schedule start time
             index_now=index                                ### Remember the index of the HHMM job which should be active at this time
             index_now_time=$index_time                     ### And the time of that HHMM job
-            wd_logger 1 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so expected_jobs[*] =${expected_jobs[*]}'"
+            wd_logger 1 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so hhmm_expected_jobs[*] =${hhmm_expected_jobs[*]}'"
         fi
     done
-    if [[ -z "${expected_jobs[*]}" ]]; then
+    if [[ -z "${hhmm_expected_jobs[*]}" ]]; then
         wd_logger 1 "ERROR: couldn't find a schedule"
         return 
+    fi
+    if [[ ${JOB_DEBUG} == "no" ]]; then
+        wd_logger 1 "JOB_DEBUG == no, hhmm_expected_jobs[-1]=${hhmm_expected_jobs[-1]}"
+    else
+        source ${EXPECTED_JOBS_FILE}
+        wd_logger 1 "JOB_DEBUG == yes, hhmm_expected_jobs[-1]=${hhmm_expected_jobs[-1]}"
+        hhmm_expected_jobs=( ${EXPECTED_JOBS[@]} )
+        local update_expected_jobs_file="no"
+        if [[ ${hhmm_expected_jobs[-1]} == "maui75,10,DEFAULT" ]]; then
+            hhmm_expected_jobs[-1]="maui75,12,DEFAULT"
+            wd_logger 1 "Job diags switched to ${hhmm_expected_jobs[-1]}"
+            update_expected_jobs_file="yes"
+        elif [[ ${hhmm_expected_jobs[-1]} == "maui75,12,DEFAULT" ]]; then
+            hhmm_expected_jobs[-1]="maui75,10,DEFAULT"
+            wd_logger 1 "Job diags switched to ${hhmm_expected_jobs[-1]}"
+            update_expected_jobs_file="yes"
+        else
+            wd_logger 1 "Job diags no switch because last job '${hhmm_expected_jobs[-1]}' is not for band 12M or 10M"
+        fi
     fi
 
     if [[ ! -f ${EXPECTED_JOBS_FILE} ]]; then
@@ -595,19 +657,22 @@ function setup_expected_jobs_file () {
         wd_logger 1 "Creating new ${EXPECTED_JOBS_FILE}"
     fi
     source ${EXPECTED_JOBS_FILE}
-    if [[ "${EXPECTED_JOBS[*]-}" == "${expected_jobs[*]}" ]]; then
+
+    if [[ "${EXPECTED_JOBS[*]-}" == "${hhmm_expected_jobs[*]}" ]]; then
+        wd_logger 1 "No need to update EXPECTED_JOBS_FILE at time${current_time} since:\n     EXPECTED_JOBS=${EXPECTED_JOBS[*]-}\nhhmm_expected_jobs=${hhmm_expected_jobs[*]}"
         wd_logger 1 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
     else
-        wd_logger 1 "A new schedule from EXPECTED_JOBS[] for time ${current_time} is needed for current time ${current_time}"
-
+        wd_logger 1 "Writing  new schedule for time ${current_time} to ${EXPECTED_JOBS_FILE}: '${hhmm_expected_jobs[*]}'"
         ### Save the new schedule to be read by the calling function and for use the next time this function is run
-        printf "EXPECTED_JOBS=( ${expected_jobs[*]} )\n" > ${EXPECTED_JOBS_FILE}
+        printf "EXPECTED_JOBS=( ${hhmm_expected_jobs[*]} )\n" > ${EXPECTED_JOBS_FILE}
     fi
 }
 
-### Read the expected.jobs and running.jobs files and terminate and/or add jobs so that they match
-function update_running_jobs_to_match_expected_jobs() {
+declare JOB_DEBUG=${JOB_DEBUG-no}
 
+### Read the expected.jobs and running.jobs files and terminate and/or add jobs so that they match
+function update_running_jobs_to_match_expected_jobs() 
+{
     setup_expected_jobs_file
     source ${EXPECTED_JOBS_FILE}
     wd_logger 1 "EXPECTED_JOBS='${EXPECTED_JOBS[*]}'"

@@ -723,22 +723,6 @@ function get_wav_file_list() {
     return 0
 }
 
-function decoding_daemon_kill_handler() {
-    local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
-    local receiver_band=${2}
-
-    echo "$(date): decoding_daemon_kill_handler() running in $PWD with pid $$ is processing SIGTERM to stop decoding on ${receiver_name},${receiver_band}" > decoding_daemon_kill_handler.log
-    kill_wav_recording_daemon ${receiver_name} ${receiver_band}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        echo "$(date): ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?" >> decoding_daemon_kill_handler.log
-    else
-        echo "$(date): Successful: 'kill_wav_recording_daemon running as pid $$ for ${receiver_name} ${receiver_band} => $?" >> decoding_daemon_kill_handler.log
-    fi
-    rm ${DECODING_DAEMON_PID_FILE}
-    exit
-}
-
 ### Called by the decoding_daemon() to create an enhanced_spot file from the output of ALL_WSPR.TXT
 ### That enhanced_spot file is then posted to the subdirectory where the posting_daemon will process it (and other enhanced_spot files if this receiver is part of a MERGEd group)
 
@@ -900,7 +884,6 @@ function decoding_daemon() {
 
     wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}"
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
-    trap "decoding_daemon_kill_handler ${receiver_name} ${receiver_band}" SIGTERM
 
     local receiver_modes
     get_decode_mode_list  receiver_modes ${receiver_modes_arg} ${receiver_band}
@@ -1231,30 +1214,47 @@ function spawn_decoding_daemon() {
 function kill_decoding_daemon() {
     local receiver_name=$1
     local receiver_band=$2
-    wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
+
+    wd_logger 1 "Kill '${receiver_name},${receiver_band},${receiver_modes}'"
+
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
     if [[ ! -d ${recording_dir} ]]; then
         wd_logger 1 "ERROR: ${recording_dir} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
         return 1
     fi
-    cd ${recording_dir}
-    if [[ ! -s ${DECODING_DAEMON_PID_FILE} ]] ; then
-        wd_logger 1 "ERROR: Decoding pid file '${DECODING_DAEMON_PID_FILE} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist or is empty"
-        cd - > /dev/null
+
+    local decoding_pid_file=${recording_dir}/${DECODING_DAEMON_PID_FILE}
+ 
+    if [[ ! -s ${decoding_pid_file} ]] ; then
+        wd_logger 1 "ERROR: Decoding pid file '${decoding_pid_file} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist or is empty"
         return 2
     fi
-    local decoding_pid=$( < ${DECODING_DAEMON_PID_FILE} )
-    cd - > /dev/null
-
-    kill_and_wait_for_death  ${decoding_pid}
-    local ret_code=$?
-
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'kill_and_wait_for_death ${decoding_pid}' => ${ret_code}"
+ 
+    local decoding_pid=$( < ${decoding_pid_file} )
+    wd_rm ${decoding_pid_file}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+         cd - > /dev/null
+        wd_logger 1 "ERROR: 'wd_rm ${decoding_pid_file}' => ${rc}"
         return 3
     fi
-    wd_logger 1 "Killed decoding_daemon with pid ${decoding_pid}"
+
+    wd_kill_and_wait_for_death  ${decoding_pid}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wd_kill_and_wait_for_death ${decoding_pid}' => ${ret_code}"
+        return 4
+    fi
+ 
+    kill_wav_recording_daemon ${receiver_name} ${receiver_band}
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?"
+        return 5
+    fi
+    wd_logger 1 "Killed  $receiver_name} ${receiver_band} => $?"
+    return 0
 }
 
 ###

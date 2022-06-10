@@ -284,7 +284,7 @@ declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecor
 ### NOTE: This function assumes it is executing in the KIWI/BAND directory of the job to be killed
 function kiwirecorder_manager_daemon_kill_handler() {
     if [[ ! -f ${KIWI_RECORDER_PID_FILE} ]]; then
-        wd_logger 1 "ERROR: ound no ${KIWI_RECORDER_PID_FILE}" 
+        wd_logger 2 "ERROR: found no ${KIWI_RECORDER_PID_FILE}" 
     else
         local kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE} )
         wd_rm ${KIWI_RECORDER_PID_FILE}
@@ -335,7 +335,6 @@ function kiwirecorder_manager_daemon()
     local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
 
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
-    trap kiwirecorder_manager_daemon_kill_handler SIGTERM
 
     wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
 
@@ -608,44 +607,6 @@ function spawn_wav_recording_daemon() {
     return 0
 }
 
-###
-### This will be called by the decoding_daemon_kill_handler() 
-function kill_wav_recording_daemon() 
-{
-    local receiver_name=$1
-    local receiver_rx_band=$2
-
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
-
-    if [[ ! -d ${recording_dir} ]]; then
-        wd_logger 1 "ERROR: '${recording_dir}' does not exist"
-        return 1
-    fi
-    local recording_pid_file=${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
-    if [[ ! -f ${recording_pid_file} ]]; then
-        wd_logger 1 "No pid file '${recording_pid_file}'"
-        return 0
-    fi
-    local recording_pid=$(cat ${recording_pid_file})
-    if [[ -z "${recording_pid}" ]]; then
-        wd_logger 1 "Found no pid file '${recording_pid_file}'"
-        return 0
-    fi
-    if ! ps ${recording_pid} > /dev/null; then
-        wd_logger 1 "pid '${recording_pid}' is not active"
-        return 0
-    fi
-    wd_kill ${recording_pid}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_kill ${recording_pid}' => $?"
-        return 1
-    fi
-    wd_logger 1 "killed ${receiver_name} ${receiver_rx_band} job which had pid ${recording_pid}"
-    return 0
-}
-
-
 ##############################################################
 function get_recording_status() {
     local rx_name=$1
@@ -670,35 +631,62 @@ function get_recording_status() {
     return 0
 }
 
-#############################################################
-declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
-function purge_stale_recordings() {
-    local find_output=$(find ${WSPRDAEMON_TMP_DIR} -type f -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} -print -exec rm {} \;)
-    if [[ -n "${find_output}" ]]; then
-        wd_logger 1 "Found stale wav files:\n${find_output}"
-    else
-        wd_logger 2 "Found no stale wav files"
+### This will be called by decoding_daemon() 
+function kill_wav_recording_daemon() 
+{
+    local receiver_name=$1
+    local receiver_rx_band=$2
+
+    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
+
+    if [[ ! -d ${recording_dir} ]]; then
+        wd_logger 1 "ERROR: '${recording_dir}' does not exist"
+        return 1
     fi
+
+    ### Kill the wav_recording_daemon()   This is really the wav recording monitoring daemon
+    local recording_pid_file=${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
+    wd_kill_pid_file ${recording_pid_file}
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'wd_kill_pid_file ${recording_pid_file}' => ${rc}"
+    fi
+
+    ### Kill the daemon which it spawned which is recording the series of 1 minute long wav files
+    for recorder_app in kiwi_recorder; do
+        local recording_pid_file=${recording_dir}/${recorder_app}.pid
+        wd_kill_pid_file ${recording_pid_file}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'wd_kill_pid_file ${recording_pid_file}' => ${rc}"
+        fi
+    done
+
+    wd_logger 1 "killed the wav recording monitoring daemon for ${receiver_name} ${receiver_rx_band} and the wav recording daemons it spawned"
     return 0
 }
 
-function old_purge_stale_recordings() {
-    local show_recordings_receivers
-    local show_recordings_band
+#############################################################
+declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
+function purge_stale_recordings() 
+{
+    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN}) )
 
-    for show_recordings_receivers in $(list_receivers) ; do
-        for show_recordings_band in $(list_bands) ; do
-            local recording_dir=$(get_recording_dir_path ${show_recordings_receivers} ${show_recordings_band})
-            shopt -s nullglob    ### *.wav expands to NULL if there are no .wav wav_file_names
-            for wav_file in ${recording_dir}/*.wav ; do
-                local wav_file_time=$($GET_FILE_MOD_TIME_CMD ${wav_file} )
-                if [[ ! -z "${wav_file_time}" ]] &&  [[ $(( $(date +"%s") - ${wav_file_time} )) -gt ${MAX_WAV_FILE_AGE_SECS} ]]; then
-                    wd_logger 1 "Purging stale recording file ${wav_file}"
-                    rm -f ${wav_file}
-                fi
-            done
-        done
+    if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
+        return 0
+    fi
+    wd_logger 1 "Found ${#old_wav_file_list[@]} old files"
+    local old_file
+    for old_file in ${old_wav_file_list[@]} ; do
+        wd_rm ${old_file}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'wd_rm ${old_file}' => ${rc}"
+        else
+             wd_logger 1 "INFO: deleted ${old_file}"
+        fi
     done
+    wd_logger 1 "Done flushing ${#old_wav_file_list[@]} old files"
+    return 0
 }
-
 

@@ -214,7 +214,7 @@ EOF
 
     local timeout=0
     while [[ ${timeout} -lt ${FRPC_STARTUP_TIMEOUT} ]]; do
-        local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status | awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
+        local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status |& awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
         if [[ "${frpc_status}" == "running" ]]; then
             wd_logger 1 "The remote access service is running"
             return 0
