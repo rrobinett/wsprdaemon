@@ -1144,8 +1144,12 @@ function decoding_daemon() {
                         else
                             ### This wav file was not processed by 'wsprd', so there is no sox signal_level, rms_noise, fft_noise, or ov_count data 
                             sox_signals_rms_fft_and_overload_info="-999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 0"
+                            sox_rms_noise_level="-999.0"
+                            fft_noise_level="-999.0"
                         fi
-                           
+
+                        local fst4w_spot_fields_count_list=( $(awk '{print NF}' ${decode_dir}/decoded.txt | sort -un) )
+                        wd_logger "Found spots of length(s) ${fst4w_spot_fields_count_list[*]}"
                         awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
                                  '{printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
                                          ${decode_dir}/decoded.txt > ${decode_dir}/fst4w_spots.txt
