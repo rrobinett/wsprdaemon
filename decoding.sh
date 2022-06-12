@@ -1116,23 +1116,27 @@ function decoding_daemon() {
                 processed_wav_files="yes"
             fi
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
-                wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
 
                 local decode_dir="F_${returned_seconds}"
-                mkdir -p ${decode_dir}
-                rm -f ${decode_dir}/decoded.txt
-                ### NOTE; wd_logger output will go to log file in that directory
-                cd ${decode_dir}
+                local decode_dir_path=$(realpath ${decode_dir})
+                mkdir -p ${decode_dir_path}
+                rm -f ${decode_dir_path}/decoded.txt
+                wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
+
+                ### Don't linger in that F_xxx subdir, since wd_logger ... will get logged there
+                cd ${decode_dir_path}
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename}
                 local start_time=${SECONDS}
-                ${JT9_CMD} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                 local ret_code=$?
                 rm ${decoder_input_wav_filename}
                 cd - >& /dev/null
+                ### Out of the subdir
+
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
                 else
-                    if [[ ! -s ${decode_dir}/decoded.txt ]]; then
+                    if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
                         wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     else
                         local spot_date="${decoder_input_wav_filename:0:6}"
@@ -1148,13 +1152,41 @@ function decoding_daemon() {
                             fft_noise_level="-999.0"
                         fi
 
-                        local fst4w_spot_fields_count_list=( $(awk '{print NF}' ${decode_dir}/decoded.txt | sort -un) )
-                        wd_logger  1 "Found spots of length(s) ${fst4w_spot_fields_count_list[*]}"
-                        awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
-                                 '{printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
-                                         ${decode_dir}/decoded.txt > ${decode_dir}/fst4w_spots.txt
-                        wd_logger 1 "FST4W found some mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds:\n$( < ${decode_dir}/decoded.txt)\nconverted to uploadable lines:\n$( < ${decode_dir}/fst4w_spots.txt )"
-                        cat ${decode_dir}/fst4w_spots.txt >> decodes_cache.txt
+                        wd_logger  1 "Found FST4W spots. These log lines have the format  NUM_FIELDS : SPOT_LINE:\n$(awk '{printf "%d: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
+                        if  grep -q -F "<...>" ${decode_dir_path}/decoded.txt ; then
+                             wd_logger  1 "Found one or more  '<...>' FST4W spots.  Filtering them out"
+                             grep -v  -F "<...>" ${decode_dir_path}/decoded.txt > ${decode_dir_path}/decoded.tmp
+                             mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/decoded.txt
+                        fi
+                        if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
+                            wd_logger  1 "Found no FST4W spots after filtering out '<...>' FST4W spots"
+                        else
+                            awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
+                                 'NF == 10 {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
+                                         ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_type1_and_type3_spots.txt
+                            if [[ -s ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ]]; then
+                                wd_logger  1 "Found FST4W type 1 and/or type 3 spots:\n$(<${decode_dir_path}/fst4w_type1_and_type3_spots.txt)"
+                            fi
+                            awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
+                                 'NF == 9  {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
+                                         ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_type2_spots.txt
+                            if [[ -s ${decode_dir_path}/fst4w_type2_spots.txt ]]; then
+                                wd_logger  1 "Found FST4W type 2 spots:\n$(<${decode_dir_path}/fst4w_type2_spots.txt)"
+                            fi
+                            awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
+                                 'NF != 9  && NF != 10 {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
+                                         ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_bad_spots.txt
+                            if [[ -s ${decode_dir_path}/fst4w_bad_spots.txt ]]; then
+                                wd_logger  1 "ERROR: Dumping bad FST4W spots (i.e. NF != 9 or 10):\n$(<${decode_dir_path}/fst4w_bad_spots.txt)"
+                            fi
+                            cat ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ${decode_dir_path}/fst4w_type2_spots.txt > ${decode_dir_path}/fst4w_spots.txt
+                        fi
+                        if [[ ! -s ${decode_dir_path}/fst4w_spots.txt ]]; then
+                            wd_logger 1 "After filtering and reformating, found no valid FST4W spots"
+                        else
+                            wd_logger 1 "FST4W found some mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds:\n$( < ${decode_dir_path}/decoded.txt)\nWhich were formatted into uploadable lines:\n$( < ${decode_dir_path}/fst4w_spots.txt )"
+                            cat ${decode_dir_path}/fst4w_spots.txt >> decodes_cache.txt
+                        fi
                     fi
                 fi
                 processed_wav_files="yes"
