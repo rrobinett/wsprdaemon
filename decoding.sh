@@ -1152,27 +1152,31 @@ function decoding_daemon() {
                             fft_noise_level="-999.0"
                         fi
 
-                        wd_logger  1 "Found FST4W spots. These log lines have the format  NUM_FIELDS : SPOT_LINE:\n$(awk '{printf "%d: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
+                        wd_logger  1 "Found FST4W spots. These spot log lines have the format  NUM_FIELDS : SPOT_LINE:\n$(awk '{printf "%d: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
                         if  grep -q -F "<...>" ${decode_dir_path}/decoded.txt ; then
                              wd_logger  1 "Found one or more  '<...>' FST4W spots.  Filtering them out"
                              grep -v  -F "<...>" ${decode_dir_path}/decoded.txt > ${decode_dir_path}/decoded.tmp
                              mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/decoded.txt
                         fi
+                        > ${decode_dir_path}/fst4w_spots.txt
                         if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
                             wd_logger  1 "Found no FST4W spots after filtering out '<...>' FST4W spots"
                         else
+                            > ${decode_dir_path}/fst4w_type1_and_type3_spots.txt
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
                                  'NF == 10 {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
                                          ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_type1_and_type3_spots.txt
                             if [[ -s ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ]]; then
                                 wd_logger  1 "Found FST4W type 1 and/or type 3 spots:\n$(<${decode_dir_path}/fst4w_type1_and_type3_spots.txt)"
                             fi
+                            > ${decode_dir_path}/fst4w_type2_spots.txt
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
                                  'NF == 9  {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
                                          ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_type2_spots.txt
                             if [[ -s ${decode_dir_path}/fst4w_type2_spots.txt ]]; then
                                 wd_logger  1 "Found FST4W type 2 spots:\n$(<${decode_dir_path}/fst4w_type2_spots.txt)"
                             fi
+                            > ${decode_dir_path}/fst4w_bad_spots.txt
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
                                  'NF != 9  && NF != 10 {printf "%6s %4s %3d %s %s %s 0 0 0 0 0 0 0 0 0 %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 32, 32), pkt_mode}' \
                                          ${decode_dir_path}/decoded.txt > ${decode_dir_path}/fst4w_bad_spots.txt
