@@ -1,6 +1,6 @@
-# wsprdaemon (WD) 3.0.2.5
+# wsprdaemon (WD) 3.0.3
 
-I have just merged in the WD 3.0 code into the master, so 3.0 is now the default.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
+I have just finished beta tests of the WD 3.0 master which is now running on almost all top spotting sites.  So I would like to encourage all WD users to upgrade using  the proceedure desribed below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
 
 For existing WD 2.10 users:
 
