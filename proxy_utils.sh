@@ -51,7 +51,16 @@ function proxy_connection_manager() {
         wd_logger 1 "ERROR: can't find either ${WSPRDAEMON_CONFIG_FILE} or ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}"
         exit 1
     fi
-    local remote_access_channel=$(sed 's/ //g; s/#.*//; s/"//g' ${WSPRDAEMON_CONFIG_FILE} | awk -F = '/^ *REMOTE_ACCESS_CHANNEL/{print $2}')
+    source ${WSPRDAEMON_CONFIG_FILE} > /dev/null
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: there is a format error in ${WSPRDAEMON_CONFIG_FILE}"
+        return 0
+    fi
+    if [[ -z "${REMOTE_ACCESS_CHANNEL-}" && -n "${RAC-}" ]]; then
+        REMOTE_ACCESS_CHANNEL="${RAC}"
+    fi
+    local remote_access_channel="${REMOTE_ACCESS_CHANNEL-}"
 
     if [[ -z "${remote_access_channel-}" ]] || ! is_uint "${remote_access_channel-}"; then
         ### A remote access channel is not defined or defined as "no"
