@@ -512,7 +512,7 @@ function validate_configured_schedule()
         fi
     done
 
-    local tmp_filesystem_size=$(df /tmp/wsprdaemon | awk '/tmpfs/{print $2}')
+    local tmp_filesystem_size=$(df ${WSPRDAEMON_TMP_DIR} | awk '/tmpfs/{print $2}')
     if [[ ${max_tmp_file_space} -ge ${tmp_filesystem_size} ]]; then
         wd_logger 1 "$( printf "ERROR: the schedule in the conf file will require a /tmp/wsprdaemon file system with %'d KBytes of space, but /tmp/wsprdaemon is configured in /etc/fstab for only %'d KBytes of space. Either increase its size in /etc/fstab or change the schedule" \
             ${max_tmp_file_space} ${tmp_filesystem_size} ) "

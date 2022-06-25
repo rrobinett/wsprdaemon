@@ -9,11 +9,15 @@ declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.co
 declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
 
 ################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
-declare WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
-if df ${WSPRDAEMON_TMP_DIR} > /dev/null 2>&1; then
+declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
+mkdir -p /dev/shm/wsprdaemon
+if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
+    ### The user has configured a TMP dir
+    echo "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
+elif df /tmp/wspr-captures > /dev/null 2>&1; then
     ### Legacy name for /tmp file system.  Leave it alone
-    true
-else
+    WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+elif df /tmp/wsprdaemon > /dev/null 2>&1; then
     WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
 fi
 
