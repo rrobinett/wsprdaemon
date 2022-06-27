@@ -2,6 +2,12 @@
 
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+if [[ -d /dev/shm/wsprdaemon ]]; then
+    WD_TMP_ROOT=/dev/shm/wsprdaemon
+else
+    WD_TMP_ROOT=/tmp/wsprdaemon
+fi
+
 alias rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
 
 ### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
@@ -38,8 +44,8 @@ alias hg='history | grep'
 alias j=jobs
 
 alias cdw='cd ~/wsprdaemon/'
-alias cdt='cd /tmp/wsprdaemon/'
-alias cdu='cd /tmp/wsprdaemon/uploads.d/'
+alias cdt='cd ${WD_TMP_ROOT}/'
+alias cdu='cd ${WD_TMP_ROOT}/uploads.d/'
 
 function vi() 
 {
@@ -185,7 +191,7 @@ function kiwi-stats(){
 function show-ovs(){
     local log_file
 
-    for log_file in $(find /tmp/wsprdaemon/recording.d -name wav_recording_daemon.log) ; do
+    for log_file in $(find ${WD_TMP_ROOT}/recording.d -name wav_recording_daemon.log) ; do
          local log_line=$(grep OV ${log_file} | sort -k15,15n | tail -n 1)
          if [[ -n "${log_line}" ]]; then
              local log_path_list=(${log_file//\// })
@@ -197,12 +203,12 @@ function show-ovs(){
 }
 
 function show-wav(){
-    awk -f ~/wsprdaemon/.show-wav.awk `find /tmp/wsprdaemon/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
+    awk -f ~/wsprdaemon/.show-wav.awk `find ${WD_TMP_ROOT}/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
 }
 alias sw=show-wav
 
 function show-merged() {
-    ls -lrt `find /tmp/wsprdaemon/ -name merged.log`
+    ls -lrt `find ${WD_TMP_ROOT}/ -name merged.log`
 }
 
 function show-zkd() {

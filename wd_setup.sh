@@ -13,7 +13,7 @@ declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
 mkdir -p /dev/shm/wsprdaemon
 if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
     ### The user has configured a TMP dir
-    echo "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
+    wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
 elif df /tmp/wspr-captures > /dev/null 2>&1; then
     ### Legacy name for /tmp file system.  Leave it alone
     WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
