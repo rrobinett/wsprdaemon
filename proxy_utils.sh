@@ -87,7 +87,7 @@ function proxy_connection_manager() {
         return
     fi
     ### Get the last SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
-    local signal_level_upload_id=$( awk -F = '/^ *SIGNAL_LEVEL_UPLOAD_ID/{id = $2; gsub( /"/, "", id)}; END {print id}' ${WSPRDAEMON_CONFIG_FILE})
+    local signal_level_upload_id=$(source ${WSPRDAEMON_CONFIG_FILE}; echo ${SIGNAL_LEVEL_UPLOAD_ID})
     if [[ -z "${signal_level_upload_id}" ]]; then
         wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID is not defined"
         exit 2
