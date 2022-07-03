@@ -149,36 +149,44 @@ check_tmp_filesystem
 ################## Check that kiwirecorder is installed and running #######################
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
-declare   KIWI_RECORD_TMP_LOG_FILE="./kiwiclient.log"
+declare   KIWI_RECORD_TMP_LOG_FILE="kiwiclient.log"
 
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
+        wd_logger 1 "Found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
-        local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
+        wd_logger 1 "Found  ${KIWI_RECORD_COMMAND}"
+        local log_file=/tmp/$$_${KIWI_RECORD_TMP_LOG_FILE}
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-            echo "Currently installed version of kiwirecorder.py fails to run:"
-            cat ${log_file}
+            wd_logger 1 "Currently installed version of kiwirecorder.py fails to run:\n$(< ${log_file})"
             if ! ${GREP_CMD} "No module named 'numpy'" ${log_file}; then
-                echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+                wd_logger 1 "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+                if ! wd_rm ${log_file} ; then
+                    wd_logger 1 "ERROR: 'wd_rm ${log_file}' failed"
+                fi
                 exit 1
             fi
             if sudo apt install python3-numpy ; then
-                echo "Successfully installed numpy"
+                wd_logger 2 "Successfully installed numpy"
             else
-                echo "'sudo apt install python3-numpy' failed to install numpy"
+                wd_logger 1 "ERROR: 'sudo apt install python3-numpy' failed to install numpy"
                 if ! pip3 install numpy; then 
-                    echo "Installation command 'pip3 install numpy' failed"
+                    wd_logger 1 "ERROR: Installation command 'pip3 install numpy' failed"
+                    if ! wd_rm ${log_file} ; then
+                        wd_logger 1 "ERROR: 'wd_rm ${log_file}' failed"
+                    fi
                     exit 1
                 fi
-                echo "Installation command 'pip3 install numpy' was successful"
+                wd_logger 1 "Installation command 'pip3 install numpy' was successful"
                 if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-                    echo "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    wd_logger 1 "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    if ! wd_rm ${log_file} ; then
+                        wd_logger 1 "ERROR: 'wd_rm ${log_file}' failed"
+                    fi
                     exit 1
                 fi
             fi
@@ -186,12 +194,16 @@ function check_for_kiwirecorder_cmd() {
         ### kwirecorder.py ran successfully
         if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
-            echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
+            wd_logger 1 "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
+            wd_logger 2 "Found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
+        if ! wd_rm ${log_file} ; then
+            wd_logger 1 "ERROR: 'wd_rm ${log_file}' failed"
+        fi
+
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
         cd ${WSPRDAEMON_ROOT_DIR}
