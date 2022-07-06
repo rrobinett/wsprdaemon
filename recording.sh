@@ -327,6 +327,10 @@ function kiwirecorder_manager_daemon_kill_handler() {
 declare KIWI_RECORDER_PID_FILE="kiwi_recorder.pid"
 declare KIWI_RECORDER_LOG_FILE="kiwi_recorder.log"
 declare OVERLOADS_LOG_FILE="kiwi_recorder_overloads_count.log"   ### kiwirecorder_manager_daemon logs the OV
+if [[ -n "${KIWI_TIMEOUT_PASSWORD-}" ]]; then
+    KIWI_TIMEOUT_DISABLE_COMMAND_ARG="--tlimit-pw=${KIWI_TIMEOUT_PASSWORD}"
+fi
+
 function kiwirecorder_manager_daemon()
 {
     local receiver_ip=$1
@@ -376,7 +380,7 @@ function kiwirecorder_manager_daemon()
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                 ${KIWIRECORDER_OV_FLAG---OV} --user=${recording_client_name}  --password=${my_receiver_password} \
-                --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
+                --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
