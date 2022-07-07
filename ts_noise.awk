@@ -9,9 +9,9 @@ NF == 15 {
     gsub(/=/,"/",site)
     rx_grid=call_grid_array[2]
 
-    receiver=path_array[4]
-    band=path_array[5]
-    time_freq=path_array[6]
+    receiver=path_array[n-2]
+    band=path_array[n-1]
+    time_freq=path_array[n]
 
     split (time_freq, time_freq_array, "_")
     date=time_freq_array[1]

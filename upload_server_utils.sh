@@ -2,6 +2,8 @@
 
 declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
+declare TAR_FILE_DATE_CHARS=19
+declare UNTAR_ROOT_SUBDIR=untar.d
 
 ### The extended spot lines created by WD 2.x have these 32 fields:
 ### spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid spot_pwr spot_drift spot_decode_cycles spot_jitter spot_blocksize spot_metric spot_osd_decode spot_ipass spot_nhardmin       <=== Taken directly from the ALL_WSPR.TXT spot lines
@@ -26,6 +28,8 @@ function tbz_service_daemon()
 
     mkdir -p ${UPLOADS_TMP_ROOT_DIR}
     cd ${UPLOADS_TMP_ROOT_DIR}
+    local UPLOADS_TMP_UNTAR_DIR=${UPLOADS_TMP_ROOT_DIR}/untar.d
+    mkdir -p ${UPLOADS_TMP_UNTAR_DIR}
 
     ### wd_logger will write to $PWD in UPLOADS_TMP_ROOT_DIR.  We want the log to be kept on a permanent file system, so create a symlink to a log file over there
     if [[ ! -L tbz_service_daemon.log ]]; then
@@ -44,7 +48,16 @@ function tbz_service_daemon()
         done
 
         ### Untar one .tbz file at a time, throwing away bad and old files, until we run out of .tbz files or we fill up the /tmp/wsprdaemon file system.
-        rm -rf wsprdaemon.d wsprnet.d
+
+        ### Flush previously untared files
+        local flush_list=($(find ${UPLOADS_TMP_UNTAR_DIR} -maxdepth 1 ! -path ${UPLOADS_TMP_UNTAR_DIR}) )
+        if [[ ${#flush_list[@]} -gt 0 ]]; then
+            wd_logger 1 "Flushing ${#flush_list[@]} old untared files: '${flush_list[*]}'"
+
+            if ! rm -rf  ${flush_list[@]} ; then
+                wd_logger 1 "ERROR: ' rm -rf ... => $?' when flushing ${#flush_list[@]} old untared files: '${flush_list[*]}'"
+            fi
+        fi
         local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
         local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
         wd_logger 2 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} kByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
@@ -52,8 +65,14 @@ function tbz_service_daemon()
         local valid_tbz_list=() 
         local tbz_file 
         for tbz_file in ${tbz_file_list[@]}; do
-            wd_logger 3 "In $PWD: Running 'tar xf ${tbz_file}'"
-            if tar xf ${tbz_file} &> /dev/null ; then
+            ### Extract the reporter's name from the tar filename which has the form REPORTER_DDDDDD_HHMM_SS.tbz.  So chop off the last 19 chars to get the reporter
+            local tbz_reporter_name=${tbz_file##*/}                                  ### Chop off the path to the tbz file
+                  tbz_reporter_name=${tbz_reporter_name::-${TAR_FILE_DATE_CHARS}}    ### Chop off the "_YYMMDD_HHMM_SS.tbz" at the end of the tbz filename
+            local untar_dir=${UNTAR_ROOT_SUBDIR}/${tbz_reporter_name}
+            mkdir -p ${untar_dir}
+
+            wd_logger 1 "Running 'tar xf ${tbz_file} --directory ${untar_dir}' for reporter ${tbz_reporter_name}"
+            if tar xf ${tbz_file} --directory ${untar_dir} &> /dev/null ; then
                 wd_logger 2 "Found a valid tar file: ${tbz_file}"
                 valid_tbz_list+=(${tbz_file})
                 local file_system_usage=$(df . | awk '/^tmpfs/{print $3}')
@@ -120,7 +139,7 @@ function tbz_service_daemon()
         flush_empty_spot_files
 
         record_spot_files
-     
+
         record_noise_files
 
         wd_logger 1 "Deleting the ${#valid_tbz_list[@]} valid tar files"
@@ -159,10 +178,11 @@ function kill_tbz_service_daemon()
     fi
 }
 
+### Clean out all reporters' empty spot files 
 function flush_empty_spot_files()
 {
     local spot_file_list=()
-    while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
+    while [[ -d ${UNTAR_ROOT_SUBDIR} ]] && spot_file_list=( $(find  ${UNTAR_ROOT_SUBDIR} -name '*_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
         wd_logger 1 "Flushing ${#spot_file_list[@]} empty spot files"
         if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
             wd_logger 1 "${#spot_file_list[@]} empty spot files are too many to 'rm ..' in one call, so 'rm' the first ${MAX_RM_ARGS} spot files"
@@ -176,54 +196,103 @@ function flush_empty_spot_files()
         fi
     done
 }
+
+###
+
+### This csv file contains one line for each WD reporting site which contains a comma seperated list of fields:
+### EPOCH_RRECEIVED,REPORTER_ID,REPORTER_MAIDENHEAD,REPORTER_SW_VERSION,
+declare REPORTERS_STATUS_CSV_FILE=i${UPLOADS_TMP_ROOT_DIR}/wd_reporters.csv
+function update_reporters_csv_file()
+{
+   local reporter_call=$1
+   local reporter_wd_version=$2
+   local reporter_info=$3
+   local reporter_running_jobs_list=$4
+
+   wd_logger 1 "Got reporter_call=${reporter_call}, reporter_wd_version=${reporter_wd_version}, reporter_info=${reporter_info}, reporter_running_jobs_list=${reporter_running_jobs_list}"
+}
+
+
+### Since we need to add the recorder's SW to each extended spot and we also want to create a file with a tabel of recorder calls
+### We need to seperately extract the recorder's SW CLIENT_VERSION and RUNNING_JOBS from the config file in each tar file
 function record_spot_files()
 {
-    wd_logger 1 "Starting"
-    ### Process non-empty spot files
-    while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
-        if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
-            wd_logger 1 "${#spot_file_list[@]} spot files are too many to process in one pass, so processing the first ${MAX_RM_ARGS} spot files"
-            spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
-        fi
-        local ts_spots_csv_file=./ts_spots.csv    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
-        format_spot_lines ${ts_spots_csv_file}    ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
-        # mv ${ts_spots_csv_file} testing.csv
-        # > ${ts_spots_csv_file}
-       if [[ ! -s ${ts_spots_csv_file} ]]; then
-            wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
+    wd_logger 1 "Starting in $PWD"
+
+    for reporter_root_dir in $(find ${UNTAR_ROOT_SUBDIR} -maxdepth 1 -type d ! -path ${UNTAR_ROOT_SUBDIR} ); do
+        local reporter_untar_root_dir=${reporter_root_dir}/wsprdaemon.d
+        local reporter_untar_spots_dir=${reporter_root_dir}/wsprdaemon.d/spots.d
+        local reporter_call=${reporter_root_dir##*/}
+        wd_logger 1 "Processing spots from reporter ${reporter_call}  found under ${reporter_root_dir}"
+
+
+        local reporter_config_file=${reporter_untar_root_dir}/uploads_config.txt
+        local reporter_wd_version=""
+        local reporter_running_jobs_list=()
+        if [[ ! -f ${reporter_config_file}  ]] ; then
+            wd_logger 1 "ERROR: can't find the expected config file ${reporter_config_file}"
         else
-            declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
-            declare SPLIT_CSV_PREFIX="split_spots_"
-            rm -f ${SPLIT_CSV_PREFIX}*
-            split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: couldn't split ${ts_spots_csv_file}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
-                exit
+            source ${reporter_config_file}
+            reporter_wd_version=${CLIENT_VERSION-not_specified}
+            reporter_running_jobs_list=( ${RUNNING_JOBS[@]} )
+            wd_logger 1 "Reporter ${reporter_call} is running version '${reporter_wd_version}' and running ${#reporter_running_jobs_list[@]} jobs: '${reporter_running_jobs_list[*]}'"
+        fi
+
+        local reporter_info=""   ### update_reporters_csv_file() will extract the reporter's maidenhead from the last line (most recent spot) of the csv file so the maidenhead can be added to this reporter's status line
+        ### Process non-empty spot files
+        while [[ -d ${reporter_untar_spots_dir} ]] && spot_file_list=( $(find ${reporter_untar_spots_dir} -name '*_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
+            if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
+                wd_logger 1 "${#spot_file_list[@]} spot files are too many to process in one pass, so processing the first ${MAX_RM_ARGS} spot files"
+                spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
+            else
+                wd_logger 1 "Formating ${#spot_file_list[@]} spot files"
             fi
-            local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-            wd_logger 2 "Split ${ts_spots_csv_file} into ${#split_file_list[@]} splitXXX.csv files"
-            local split_csv_file
-            for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 2 "Recording spots ${split_csv_file}"
-                python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD}
+            local TS_SPOTS_CSV_FILE="ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
+            format_spot_lines ${TS_SPOTS_CSV_FILE} ${reporter_root_dir}   ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
+            if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
+                wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
+            else
+                wd_logger 1 "Got valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files"
+
+                reporter_info=$(tail -n 1 ${TS_SPOTS_CSV_FILE})   ###  To give the recorder's maidenhead to update_reporters_csv_file()
+
+                declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
+                declare SPLIT_CSV_PREFIX="split_spots_"
+                rm -f ${SPLIT_CSV_PREFIX}*
+                split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${TS_SPOTS_CSV_FILE} ${SPLIT_CSV_PREFIX}
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
-                else
-                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
+                    wd_logger 1 "ERROR: couldn't split ${TS_SPOTS_CSV_FILE}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${TS_SPOTS_CSV_FILE} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
+                    exit
                 fi
-                #wd_rm ${split_csv_file}
-            done
-            wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
-        fi
-        wd_logger 1 "Finished recording ${ts_spots_csv_file}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-        wd_rm ${ts_spots_csv_file} ${spot_file_list[@]}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: while flushing ${ts_spots_csv_file} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
-        fi
+                local split_file_list=( ${SPLIT_CSV_PREFIX}* )
+                wd_logger 2 "Split ${TS_SPOTS_CSV_FILE} into ${#split_file_list[@]} splitXXX.csv files"
+                local split_csv_file
+                for split_csv_file in ${split_file_list[@]} ; do
+                    wd_logger 2 "Recording spots ${split_csv_file}"
+                    python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD}
+                    local ret_code=$?
+                    if [[ ${ret_code} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: ' ${UPLOAD_BATCH_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table"
+                    else
+                        wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
+                    fi
+                    #wd_rm ${split_csv_file}
+                done
+                wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
+
+                wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
+                wd_rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
+                local ret_code=$?
+                if [[ ${ret_code} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
+                fi
+            fi 
+        done
+        ### Finished processing spots from this reporter, now update its status line
+        update_reporters_csv_file ${reporter_call} ${reporter_wd_version} "${reporter_info-none}" "${reporter_running_jobs_list[*]}"
     done
+    wd_logger 1 "Done processing tgz files"
 }
 
 ###  Format of the extended spot line delivered by WD clients:
@@ -248,6 +317,7 @@ declare WD_SPOTS_TO_TS_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wd_spots_to_ts.awk
 function format_spot_lines()
 {
     local fixed_spot_lines_file=$1
+    local reporter_sw_version=$2
 
     if [[ ! -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ]]; then
         wd_logger 1 "ERROR: can't find awk program file '${WD_SPOTS_TO_TS_AWK_PROGRAM}'"
@@ -272,11 +342,11 @@ function format_spot_lines()
 
 function record_noise_files()
 {
-    ### Record the noise files
-    local noise_csv_file=ts_noise.csv
+    ### Record the noise files.  Since there is no additional information to be added to the noise records, we can process records from all reporters in one operation
+    local noise_csv_file="ts_noise.csv"
     local noise_file_list=()
     local max_noise_files=${MAX_RM_ARGS}
-    while [[ -d wsprdaemon.d/noise.d ]] && noise_file_list=( $(find wsprdaemon.d/noise.d -name '*_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
+    while [[ -d ${UNTAR_ROOT_SUBDIR} ]] && noise_file_list=( $(find ${UNTAR_ROOT_SUBDIR} -name '*_noise.txt') ) && [[ ${#noise_file_list[@]} -gt 0 ]] ; do
         if [[ ${#noise_file_list[@]} -gt ${max_noise_files} ]]; then
             wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
             noise_file_list=( ${noise_file_list[@]:0:${max_noise_files}} )

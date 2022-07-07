@@ -159,7 +159,7 @@ function check_for_kiwirecorder_cmd() {
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
-        wd_logger 1 "Found  ${KIWI_RECORD_COMMAND}"
+        wd_logger 2 "Found  ${KIWI_RECORD_COMMAND}"
         local log_file=/tmp/$$_${KIWI_RECORD_TMP_LOG_FILE}
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             wd_logger 1 "Currently installed version of kiwirecorder.py fails to run:\n$(< ${log_file})"
