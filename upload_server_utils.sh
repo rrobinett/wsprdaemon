@@ -201,15 +201,88 @@ function flush_empty_spot_files()
 
 ### This csv file contains one line for each WD reporting site which contains a comma seperated list of fields:
 ### EPOCH_RRECEIVED,REPORTER_ID,REPORTER_MAIDENHEAD,REPORTER_SW_VERSION,
-declare REPORTERS_STATUS_CSV_FILE=i${UPLOADS_TMP_ROOT_DIR}/wd_reporters.csv
+declare REPORTERS_STATUS_CSV_FILE=${UPLOADS_TMP_ROOT_DIR}/wd_reporters.csv
+
+function find_band_in_configured_band_list()
+{
+    local __return_config_var=$1
+    local search_for_band=$2
+    local configured_band_list=($3)
+    local return_modes_list="---"
+
+    wd_logger 2 "Got search_for_band=${search_for_band}, configured_band_list[]='${configured_band_list[*]}"
+
+    local configured_band
+    for configured_band in ${configured_band_list[@]}; do
+        wd_logger 3 "Check configured band '${configured_band}'"
+        local configured_band_info_list=(${configured_band/,/ })
+        local configured_band=${configured_band_info_list[0]}
+
+        if [[ ${configured_band} == ${search_for_band} ]]; then
+            if [[ ${#configured_band_info_list[@]} -eq 1 ]]; then
+                return_modes_list="W2"
+            else
+                return_modes_list="${configured_band_info_list[1]}"
+            fi
+            eval ${__return_config_var}="${return_modes_list}"
+            return 0
+        fi
+    done
+    wd_logger 2 "Site has not configured band ${search_for_band}"
+    eval ${__return_config_var}="---"
+    return 1
+}
+
+function fomat_band_fields()
+{
+    local __return_line_var=$1
+    local configured_band_list=($2)
+    local band_info_list
+
+    wd_logger 2 "Format WD configured bands '${configured_band_list[*]}'"
+
+    local output_line=""
+    for band_info_list in "${WSPR_BAND_LIST[@]}" ; do         ### Remeber to put the "" !!!
+        local band_fields_list=(${band_info_list})
+        local band_name=${band_fields_list[0]}
+
+        wd_logger 2 "Check if band ${band_name} taken from the ${#band_fields_list[@]} fields in the bands list can be found in the configured_band_list[]"
+        local band_field
+        find_band_in_configured_band_list band_field ${band_name} "${configured_band_list[*]}"
+        if [[ "${band_field}" == "DEFAULT" ]]; then
+            band_field="${band_fields_list[2]}"
+        fi
+        if [[ -z "${output_line}" ]]; then
+            output_line="$(printf "%s,%-16s" ${band_name}  ${band_field})"
+        else
+            output_line="${output_line} $(printf "%s,%-16s" ${band_name}  ${band_field})"
+        fi
+        if [[ ${band_name} == "10" ]]; then
+            break
+        fi
+    done
+    eval ${__return_line_var}="\${output_line}"
+}
 function update_reporters_csv_file()
 {
    local reporter_call=$1
    local reporter_wd_version=$2
    local reporter_info=$3
-   local reporter_running_jobs_list=$4
+   local reporter_running_jobs_list=($4)
+   local spot_time=${reporter_info%%,*}
+   local spot_maidenhead=$(echo "${reporter_info}" | awk -F , '{print $21}')
+   local running_bands_list=(${reporter_running_jobs_list[@]#*,})      ### Stip off the decoder name for each job
+   local running_bands_string
 
-   wd_logger 1 "Got reporter_call=${reporter_call}, reporter_wd_version=${reporter_wd_version}, reporter_info=${reporter_info}, reporter_running_jobs_list=${reporter_running_jobs_list}"
+   fomat_band_fields  running_bands_string  "${running_bands_list[*]}"
+   local report_line=$(printf "%20s %-6s %-8s %8s %s" ${reporter_call} ${spot_maidenhead} ${reporter_wd_version} ${spot_time} "${running_bands_string}" )
+
+   wd_logger 1 "Updating ${REPORTERS_STATUS_CSV_FILE} with: ${report_line}"
+
+   touch ${REPORTERS_STATUS_CSV_FILE}      ### in case this is the first run and it doesn't exist
+   grep -v ${reporter_call} ${REPORTERS_STATUS_CSV_FILE} > tmp.txt
+   echo "${report_line}" >> tmp.txt
+   sort -k 2,2 tmp.txt > ${REPORTERS_STATUS_CSV_FILE}
 }
 
 
@@ -250,7 +323,7 @@ function record_spot_files()
             local TS_SPOTS_CSV_FILE="ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
             format_spot_lines ${TS_SPOTS_CSV_FILE} ${reporter_root_dir}   ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
             if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
-                wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
+                wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are no spots to record in the DB"
             else
                 wd_logger 1 "Got valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files"
 
@@ -281,18 +354,37 @@ function record_spot_files()
                 done
                 wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
 
-                wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-                wd_rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
-                local ret_code=$?
-                if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
-                fi
             fi 
+            wd_logger 1 "Finished recording ${TS_SPOTS_CSV_FILE}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
+            wd_rm ${TS_SPOTS_CSV_FILE} ${spot_file_list[@]}
+            local ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: while flushing ${TS_SPOTS_CSV_FILE} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
+            fi
         done
         ### Finished processing spots from this reporter, now update its status line
-        update_reporters_csv_file ${reporter_call} ${reporter_wd_version} "${reporter_info-none}" "${reporter_running_jobs_list[*]}"
+        local record_status="yes"
+        if [[ -z "${reporter_call-}" ]]; then
+            wd_logger 1 "ERROR: found empty reporter_call, so don't record status"
+            record_status="no"
+        fi
+        if [[ -z "${reporter_wd_version-}" ]]; then
+            wd_logger 1 "ERROR: found empty reporter_wd_version, so don't record status"
+            record_status="no"
+        fi
+        if [[ -z "${reporter_info-}" ]]; then
+            wd_logger 1 "ERROR: found empty reporter_info, so don't record status"
+            record_status="no"
+        fi
+        if [[ ${#reporter_running_jobs_list[@]} -eq 0 ]]; then
+            wd_logger 1 "ERROR: found empty reporter_running_jobs_list[], so don't record status"
+            record_status="no"
+        fi
+        if [[ ${record_status} == "yes" ]]; then
+            update_reporters_csv_file "${reporter_call}" "${reporter_wd_version}" "${reporter_info}" "${reporter_running_jobs_list[*]}"
+        fi
     done
-    wd_logger 1 "Done processing tgz files"
+    wd_logger 1 "Done processing all the tgz files"
 }
 
 ###  Format of the extended spot line delivered by WD clients:
