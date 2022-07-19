@@ -1198,7 +1198,7 @@ function decoding_daemon() {
                                     wd_logger  1 "ERROR: Dumping bad FST4W spots (i.e. NF != 9 or 10):\n$(<${decode_dir_path}/fst4w_bad_spots.txt)"
                                 fi
                                 cat ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ${decode_dir_path}/fst4w_type2_spots.txt > ${decode_dir_path}/fst4w_spots.txt
-                                wd_logger  1 "Found spots with spectral_width:\n$(${decode_dir_path}/fst4w_spots.txt)"
+                                wd_logger  1 "Found spots with spectral_width:\n$(< ${decode_dir_path}/fst4w_spots.txt)"
                             else
                                  > ${decode_dir_path}/fst4w_type1_and_type3_spots.txt
                                 awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
@@ -1222,7 +1222,7 @@ function decoding_daemon() {
                                     wd_logger  1 "ERROR: Dumping bad FST4W spots (i.e. NF != 9 or 10):\n$(<${decode_dir_path}/fst4w_bad_spots.txt)"
                                 fi
                                 cat ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ${decode_dir_path}/fst4w_type2_spots.txt > ${decode_dir_path}/fst4w_spots.txt
-                                wd_logger  1 "Found spots without spectral_width:\n$(${decode_dir_path}/fst4w_spots.txt)"
+                            wd_logger  1 "Found spots without spectral_width:\n$(< ${decode_dir_path}/fst4w_spots.txt)"
                            fi
                             cat ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ${decode_dir_path}/fst4w_type2_spots.txt > ${decode_dir_path}/fst4w_spots.txt
                         fi
