@@ -1166,7 +1166,7 @@ function decoding_daemon() {
                         if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
                             wd_logger  1 "Found no FST4W spots after filtering out '<...>' FST4W spots"
                         else
-                            if [[ ${GET_FST4W_SPECTRAL_WIDTH-no} == "yes" ]]; then
+                            if [[ ${GET_FST4W_SPECTRAL_WIDTH-yes} == "yes" ]]; then
                                 > ${decode_dir_path}/fst4w_type1_and_type3_spots.txt
                                  # In WSJT-x v 2.2+, the wsprd decoder was enhanced.  That new wsprd can be detected because it outputs 17 fields to each line of ALL_WSPR.TXT
                                  #    fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
