@@ -1,7 +1,33 @@
 #!/bin/bash
 
-declare MAX_WAV_FILE_SYSTEM_PERCENT=75
-declare WAV_FILE_ARCHIVE_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/wav-archive.d
+declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/wav-archive.d     ### Copy/move the wav files here
+declare WAV_FILE_ARCHIVE_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/wav-archive.d        ### Store the compressed archive of them here
+declare MAX_WAV_FILE_SYSTEM_PERCENT=75                                        ### Limit the usage of that fiel system
+
+function get_wav_archive_queue_directory()
+{
+    local __return_directory_name_return_variable=$1
+    local receiver_name=$2
+    local receiver_band=$3
+
+    local receiver_call_grid
+
+    receiver_call_grid=$( get_call_grid_from_receiver_name ${receiver_name} )
+    local ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find receiver '${receiver_name}"
+        return 1
+    fi
+    ### Linux directory names can't have the '/' character in them which is so common in ham callsigns.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal
+    local call_dir_name=${receiver_call_grid//\//=}
+    local wav_queue_directory=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}
+
+    mkdir -p ${wav_queue_directory}
+    eval ${__return_directory_name_return_variable}=${wav_queue_directory}
+
+    wd_logger 1 "Wav files from receiver_name=${receiver_name} receiver_band=${receiver_band} will be queued in ${wav_queue_directory}"
+    return 0
+}
 
 function wd_root_file_system_has_space()
 {
@@ -39,7 +65,7 @@ function queue_wav_file()
 
     mkdir -p ${archive_dir}
 
-    if ! cp -p ${source_wav_file_path} ${archive_file_path} ; then
+    if ! mv ${source_wav_file_path} ${archive_file_path} ; then
         wd_logger 1 "ERROR: 'cp -p ${source_wav_file_path} ${archive_file_path}' => $?"
         return 1
     fi
@@ -72,8 +98,7 @@ function queue_wav_file()
 function wd_tar_wavs()
 {
 
-    set +x
-    local wav_file_list=( $(find wav-archive.d -type f -name '*.wav' | sort -t / -k 5,5) )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
+    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.wav') )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
     if [[ ${#wav_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no wav files"
         return 0
@@ -81,11 +106,18 @@ function wd_tar_wavs()
 
     truncate_wav_file_archive
 
-    local newest_date=${wav_file_list[-1]##*/}
+    set +x
+    local wav_file_path_list=( ${wav_file_list[0]//\// } )
+
+    ### Find the date of the newest wav file by sorting on the filenames
+    local wav_list_sort_key=${#wav_file_path_list[@]}
+    local newest_wav_file=$(IFS=$'\n'; echo "${wav_file_list[*]}" | sort -t / -k ${wav_list_sort_key} | tail -n 1)
+    local newest_date=${newest_wav_file##*/}
           newest_date=${newest_date%.wav}
-    local file_path_list=( ${wav_file_list[-1]//\// } )
-    local rx_site_id=${file_path_list[1]}
+    local wav_list_rx_site_index=$((wav_list_sort_key - 4))
+    local rx_site_id=${wav_file_path_list[${wav_list_rx_site_index}]}
     local tar_file_name=${WAV_FILE_ARCHIVE_ROOT_DIR}/${rx_site_id}_${newest_date}.tar.zst
+    set +x
 
     if [[ -f ${tar_file_name} ]]; then
         local old_file_name=${tar_file_name/.tar/_a.tar}
@@ -95,14 +127,18 @@ function wd_tar_wavs()
 
     wd_logger 1 "Found ${#wav_file_list[@]} wav files.  Date of newest ${newest_date}. creating ${tar_file_name}"
 
-    echo "${wav_file_list[@]}" | tr " " "\n" > tar_file.list    ### bash expands "${wav_file_list[@]}" into a  single long argument to tar, so use this hack to get around that
+    cd ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}
+    echo "${wav_file_list[@]#*wav-archive.d/}" | tr " " "\n" > tar_file.list    ### bash expands "${wav_file_list[@]}" into a  single long argument to tar, so use this hack to get around that
     if ! tar -acf ${tar_file_name} --files-from=tar_file.list ; then
+        cd - > /dev/null
         wd_logger 1 "ERROR: tar => $?"
     else
+        cd - > /dev/null
         local tar_size=$(stat --printf="%s" ${tar_file_name})
         wd_logger 1 "Created ${tar_size} byte ${tar_file_name} from ${#wav_file_list[@]} wav files"
         rm ${wav_file_list[@]}
     fi
+
     return 0
 }
 
