@@ -129,8 +129,9 @@ function wd_tar_wavs()
     cd ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}
     echo "${wav_file_list[@]#*wav-archive.d/}" | tr " " "\n" > tar_file.list    ### bash expands "${wav_file_list[@]}" into a  single long argument to tar, so use this hack to get around that
     if ! tar -acf ${tar_file_name} --files-from=tar_file.list ; then
+        local rc=$?
         cd - > /dev/null
-        wd_logger 1 "ERROR: tar => $?"
+        wd_logger 1 "ERROR: tar => ${rc}"
     else
         cd - > /dev/null
         local tar_size=$(stat --printf="%s" ${tar_file_name})
