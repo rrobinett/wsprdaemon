@@ -36,14 +36,14 @@ case ${CPU_ARCH} in
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
             QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
         fi
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:armhf ${QT5_PACKAGE})
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:armhf ${QT5_PACKAGE})
         ;;
     aarch64)
         ### This is a 64 bit bullseye Pi4
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:arm64 libqt5core5a:arm64 )
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:arm64 libqt5core5a:arm64 )
         ;;
     x86_64)
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox libgfortran5:amd64 qt5-default:amd64)
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64)
         ;;
     *)
         wd_logger 1 "ERROR: wsrpdaemon doesn't know what libraries are needed when running on CPU_ARCH=${CPU_ARCH}"
