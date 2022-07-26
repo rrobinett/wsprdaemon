@@ -106,7 +106,6 @@ function wd_tar_wavs()
 
     truncate_wav_file_archive
 
-    set +x
     local wav_file_path_list=( ${wav_file_list[0]//\// } )
 
     ### Find the date of the newest wav file by sorting on the filenames
@@ -117,7 +116,7 @@ function wd_tar_wavs()
     local wav_list_rx_site_index=$((wav_list_sort_key - 4))
     local rx_site_id=${wav_file_path_list[${wav_list_rx_site_index}]}
     local tar_file_name=${WAV_FILE_ARCHIVE_ROOT_DIR}/${rx_site_id}_${newest_date}.tar.zst
-    set +x
+    mkdir -p ${WAV_FILE_ARCHIVE_ROOT_DIR}
 
     if [[ -f ${tar_file_name} ]]; then
         local old_file_name=${tar_file_name/.tar/_a.tar}

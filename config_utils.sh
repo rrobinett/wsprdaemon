@@ -72,7 +72,7 @@ function get_config_file_variable()
     local __return_varaiable=$1
     local _variable_name=$2
 
-    local conf_file_value=$( source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
+    local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
 
     echo "${_variable_name} = ${conf_file_value}"
     eval ${__return_varaiable}=\${conf_file_value}
