@@ -61,6 +61,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.3            ### Finished beta testing.  Decodes FST4W except type 3 packets which require use of shared memory interface to jt9
 #declare -r VERSION=3.0.3.1            ### Use /dev/shm/wsprdaemon for TMP files
 declare -r VERSION=3.0.3.2            ### Record FST4W spectral_spreading to the 'metric' field of the extended_spot lines
+                                    ### Add support for archiving of wav files to WD3
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VHF/UHF support using Soapy API
 
@@ -91,6 +92,7 @@ source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
+source ${WSPRDAEMON_ROOT_DIR}/wav_archive.sh
 
 [[ -z "$*" ]] && usage
 

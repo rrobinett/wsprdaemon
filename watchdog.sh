@@ -31,6 +31,7 @@ function watchdog_daemon()
             check_kiwi_rx_channels
             check_kiwi_gps
             print_new_ov_lines 
+            wd_tar_wavs
             wd_logger 2 "Finished odd minute processing"
         fi
         last_minute=${current_minute}

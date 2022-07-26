@@ -916,6 +916,10 @@ function decoding_daemon() {
     fi
     wd_logger 1 "Queuing wsprdaemon noise files in ${wsprdaemon_noise_queue_directory}"
 
+    ### It is something of a hack to derive it this way, but it avoids adding another function
+    local wav_archive_dir=${wsprdaemon_noise_queue_directory/uploads.d\/wsprdaemon.d\/noise.d/wav-archive.d}
+    wd_logger 1 "If ARCHIVE_WAV_FILES=\"yes\" is defined in the conf file, then wav files wll be archived to ${wav_archive_dir}"
+
     local rms_nl_adjust
     local fft_nl_adjust
     calculate_nl_adjustments  rms_nl_adjust fft_nl_adjust ${receiver_band}
@@ -1235,6 +1239,18 @@ function decoding_daemon() {
                     fi
                 fi
                 processed_wav_files="yes"
+            fi
+
+            ### Check the value of ARCHIVE_WAV_FILES in the conf file each time we are finished decoding
+            local config_archive_wav_files
+            get_config_file_variable config_archive_wav_files "ARCHIVE_WAV_FILES"
+
+            if [[ "${config_archive_wav_files}" == "yes" ]]; then
+               if queue_wav_file ${decoder_input_wav_filepath} ${wav_archive_dir}; then
+                    wd_logger 1 "Archived wav file ${decoder_input_wav_filepath}"
+                else
+                    wd_logger 1 "'queue_wav_file ${decoder_input_wav_filepath}' => $?"
+               fi
             fi
             rm ${decoder_input_wav_filepath}
             if [[ ${processed_wav_files} == "yes" ]]; then 

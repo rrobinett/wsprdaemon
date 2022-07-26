@@ -66,6 +66,19 @@ declare WSPR_BAND_LIST=(
 "CHU_14 14668.5   W0"
 )
 
+### Get the current value of a variable stored in the wsprdaemon.conf file without perturbing any currently defined .conf file variables in the calling function
+function get_config_file_variable()
+{
+    local __return_varaiable=$1
+    local _variable_name=$2
+
+    local conf_file_value=$( source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
+
+    echo "${_variable_name} = ${conf_file_value}"
+    eval ${__return_varaiable}=\${conf_file_value}
+}
+
+
 function is_valid_mode_list() {
     local test_mode_entry=$1
     local test_mode_entry_list=( ${test_mode_entry//:/ } )
