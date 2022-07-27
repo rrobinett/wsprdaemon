@@ -75,6 +75,8 @@ NF == 32 || NF == 34 {
     rx_name = file_path_array[ file_path_count - 2]
     fields[++field_count] = rx_name                ### Taken from path to the file which contains this spot line
 
+    fields[++field_count] = reporter_sw_version   
+
     for ( i = 3; i <= field_count; ++ i) {
         printf ( ",%s",  fields[i])
     }

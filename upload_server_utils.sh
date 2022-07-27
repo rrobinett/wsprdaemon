@@ -321,7 +321,7 @@ function record_spot_files()
                 wd_logger 1 "Formating ${#spot_file_list[@]} spot files"
             fi
             local TS_SPOTS_CSV_FILE="ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
-            format_spot_lines ${TS_SPOTS_CSV_FILE} ${reporter_root_dir}   ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
+            format_spot_lines ${TS_SPOTS_CSV_FILE} ${reporter_wd_version}  ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
             if [[ ! -s ${TS_SPOTS_CSV_FILE} ]]; then
                 wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are no spots to record in the DB"
             else
@@ -415,7 +415,7 @@ function format_spot_lines()
         wd_logger 1 "ERROR: can't find awk program file '${WD_SPOTS_TO_TS_AWK_PROGRAM}'"
         exit 1
     fi
-    awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${fixed_spot_lines_file}
+    awk -v reporter_sw_version=${reporter_sw_version} -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${fixed_spot_lines_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM}' => ${ret_code}"
@@ -428,7 +428,7 @@ function format_spot_lines()
         wd_logger 1 "ERROR: found some invalid spots which are not being recorded:\n$(< fixed_error_spots.csv)"
     fi
 
-   wd_logger 1 "Formatted WD spot lines into TS spot lines of ${fixed_spot_lines_file}:\n$(head -n 4 ${fixed_spot_lines_file})"
+    wd_logger 1 "Formatted WD spot lines into TS spot lines of ${fixed_spot_lines_file}:\n$(head -n 4 ${fixed_spot_lines_file})"
     return 0
 }
 
