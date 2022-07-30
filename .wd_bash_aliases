@@ -64,7 +64,7 @@ alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
 
-alias wd='v=no nice -n 19 ~/wsprdaemon/wsprdaemon.sh'
+alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wdln='wd -l n'
