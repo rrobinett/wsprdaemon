@@ -3,6 +3,7 @@
 declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/wav-archive.d     ### Copy/move the wav files here
 declare WAV_FILE_ARCHIVE_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/wav-archive.d        ### Store the compressed archive of them here
 declare MAX_WAV_FILE_SYSTEM_PERCENT=75                                        ### Limit the usage of that fiel system
+declare MIN_WAV_ARCHIVE_FILE_COUNT=10
 
 function get_wav_archive_queue_directory()
 {
@@ -80,7 +81,7 @@ function queue_wav_file()
         return 0
     fi
     wd_logger 1 "The ${WAV_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so we need to flush some older wav files"
-    local wav_file_list=( $(find wav-archive.d -type f -name '*.wav' | sort -t / -k 5,5) )
+    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_ROOT_DIR} -type f -printf '%T+,%p\n' | sort) )
     local wav_file_count=${#wav_file_list[@]}
 
     if [[ ${wav_file_count} -lt ${MIN_WAV_ARCHIVE_FILE_COUNT} ]]; then
@@ -88,23 +89,30 @@ function queue_wav_file()
         return 0
     fi
     local wav_file_flush_max_index=$(( ${wav_file_count} / 4 ))
-    local flush_list=( ${wav_file_list[@]:0:${wav_file_flush_max_index}} )
-    wd_logger 1 "FLushing wav files [0] through [${wav_file_flush_max_index}]"
-    rm ${flush_list[@]}
+    wd_logger 1 "Flushing wav files [0]='${wav_file_list[0]}' through [${wav_file_flush_max_index}]='${wav_file_list[${wav_file_flush_max_index}]}" 
+    local wav_info_index
+    for (( wav_info_index=0; wav_info_index < ${wav_file_flush_max_index}; ++wav_info_index )); do
+        wd_logger 2 "Flushing [${wav_info_index}] = '${wav_file_list[${wav_info_index}]}'"
+        local wav_info_list=(${wav_file_list[${wav_info_index}]/,/ } )
+        local wav_file_name=${wav_info_list[1]}
+
+        wd_logger 2 "Flushing ${wav_file_name}"
+        rm ${wav_file_name}
+    done
+    wd_logger 1 "Done flushing oldest 25% of files"
 
     return 0
 }
 
 function wd_tar_wavs()
 {
+    truncate_wav_file_archive
 
     local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.wav') )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
     if [[ ${#wav_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no wav files"
         return 0
     fi
-
-    truncate_wav_file_archive
 
     local wav_file_path_list=( ${wav_file_list[0]//\// } )
 
