@@ -256,5 +256,4 @@ function pinge()
    ping ${dest} | while read pong; do echo "$(date): ${pong}"; done
 }
 
-
-
+alias wd-wav='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
