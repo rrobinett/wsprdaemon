@@ -1108,11 +1108,21 @@ function decoding_daemon() {
                         new_kiwi_ov_count=0
                         wd_logger 1 "Not a KiwiSDR, so there is no overload information"
                     else
-                        local current_kiwi_ov_lines=0
-                        current_kiwi_ov_lines=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
-                        if [[ ${current_kiwi_ov_lines} -lt ${old_kiwi_ov_lines} ]]; then
-                            ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
-                            old_kiwi_ov_lines=0
+                        local rc
+                        get_kiwirecorder_ov_count  current_kiwi_ov_lines ${receiver_name}           ### here I'm reusing current_kiwi_ov_lines since it also equals the number of OV events since the kiwi started
+                        rc=$?
+                        if [[ ${rc} -eq 0 ]]; then
+                            wd_logger 1 "'get_current_ov_count  current_kiwi_ov_lines ${receiver_name}' -> current_kiwi_ov_lines=${current_kiwi_ov_lines}"
+                            new_kiwi_ov_count=$(( ${current_kiwi_ov_lines} - ${old_kiwi_ov_lines} ))
+                            old_kiwi_ov_lines=${current_kiwi_ov_lines}
+                        else
+                            wd_logger 1 "ERROR: 'get_current_ov_count  current_ov_count ${receiver_name}' => ${rc}, so trying old OV count method"
+                            local current_kiwi_ov_lines=0
+                            current_kiwi_ov_lines=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
+                            if [[ ${current_kiwi_ov_lines} -lt ${old_kiwi_ov_lines} ]]; then
+                                ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
+                                old_kiwi_ov_lines=0
+                            fi
                         fi
                         new_kiwi_ov_count=$(( ${current_kiwi_ov_lines} - ${old_kiwi_ov_lines} ))
                         old_kiwi_ov_lines=${current_kiwi_ov_lines}

@@ -4,7 +4,8 @@ declare WSPRD_COMPARE="no"      ### If "yes" and a new version of wsprd was inst
 declare WSPRDAEMON_TMP_WSPRD_DIR=${WSPRDAEMON_TMP_WSPRD_DIR-${WSPRDAEMON_TMP_DIR}/wsprd.old}
 declare WSPRD_PREVIOUS_CMD="${WSPRDAEMON_TMP_WSPRD_DIR}/wsprd"   ### If WSPRD_COMPARE="yes" and a new version of wsprd was installed, then the old wsprd was moved here
 
-function list_receivers() {
+function list_receivers() 
+{
      local i
      for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
         local receiver_info=(${RECEIVER_LIST[i]})
@@ -16,7 +17,8 @@ function list_receivers() {
 }
 
 ##############################################################
-function list_known_receivers() {
+function list_known_receivers() 
+{
     echo "
         Index    Recievers Name          IP:PORT"
     for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
@@ -29,7 +31,8 @@ function list_known_receivers() {
 }
 
 ##############################################################
-function list_kiwis() {
+function list_kiwis() 
+{
      local i
      for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
         local receiver_info=(${RECEIVER_LIST[i]})
@@ -42,6 +45,27 @@ function list_kiwis() {
     done
 }
 
+function get_kiwi_ip_port()
+{
+    local __return_kiwi_ip_port=$1
+    local target_kiwi_name=$2
+
+     local i
+     for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
+        local receiver_info=(${RECEIVER_LIST[i]})
+        local receiver_name=${receiver_info[0]}
+
+        if [[ ${receiver_name} == ${target_kiwi_name} ]]; then
+          
+            local receiver_ip_address=${receiver_info[1]}
+            wd_logger 1 "Found ${target_kiwi_name} in RECEIVER_LIST[], its IP = ${receiver_ip_address}"
+            eval ${__return_kiwi_ip_port}=\${receiver_ip_address}
+            return 0
+        fi
+    done
+    wd_logger 1 "ERROR: couldn't find  ${target_kiwi_name} in RECEIVER_LIST[]"
+    return 1
+}
 
 ########################
 function list_audio_devices()
@@ -331,6 +355,80 @@ if [[ -n "${KIWI_TIMEOUT_PASSWORD-}" ]]; then
     KIWI_TIMEOUT_DISABLE_COMMAND_ARG="--tlimit-pw=${KIWI_TIMEOUT_PASSWORD}"
 fi
 
+function get_kiwirecorder_status()
+{
+    local __return_status_var=$1
+    local kiwi_ip_port=$2
+
+    local rc
+    curl --silent ${kiwi_ip_port}/status > curl.log 
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'curl ${kiwi_ip_port}/status' => ${rc}"
+        return ${rc}
+    fi
+    local status_lines=$(<curl.log)
+    eval ${__return_status_var}="\${status_lines}"
+    return 0
+}
+
+function get_kiwirecorder_ov_count_from_ip_port()
+{
+    local __return_ov_count_var=$1
+    local kiwi_ip_port=$2
+ 
+    local rc
+    local kiwi_status_lines
+
+    get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
+        return 2
+    fi
+    local ov_value
+    ov_value=$( echo "${kiwi_status_lines}" | awk -F = '/^adc_ov/{print $2}' )
+    if [[ -z "${ov_value}" ]]; then
+        wd_logger 1 "ERROR: couldn't extract 'adc_ov' from kiwi's status lines"
+        return 3
+    fi
+    wd_logger "Got current adc_ov = ${ov_value}"
+    eval ${__return_ov_count_var}=\${ov_value}
+    return 0
+}
+
+function get_kiwirecorder_ov_count()
+{
+    local __return_ov_count_var=$1
+    local kiwi_name=$2
+
+    local kiwi_ip_port
+    local rc
+    get_kiwi_ip_port  kiwi_ip_port  ${kiwi_name}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_kiwi_ip_port  kiwi_ip_port  ${kiwi_name}' => ${rc}"
+        return 1
+    fi
+
+    local kiwi_status_lines
+    get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
+        return 2
+    fi
+    local ov_value
+    ov_value=$( echo "${kiwi_status_lines}" | awk -F = '/^adc_ov/{print $2}' )
+    if [[ -z "${ov_value}" ]]; then
+        wd_logger 1 "ERROR: couldn't extract 'adc_ov' from kiwi's status lines"
+        return 3
+    fi
+    wd_logger "Got current adc_ov = ${ov_value}"
+    eval ${__return_ov_count_var}=\${ov_value}
+    return 0
+}
+
 function kiwirecorder_manager_daemon()
 {
     local receiver_ip=$1
@@ -341,6 +439,22 @@ function kiwirecorder_manager_daemon()
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
     wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
+
+    ### If the Kiwi returns the OV count in its status page, then don't have the Kiwi output 'ADC OV' lines to its log file
+    ### By polling the /status page, there is no potential of filling the kiwi's log file which requires the kiwirecord job to be killed and restarted
+    ### So Kiwis should no longer need intermittent restarts.
+    local kiwirecorder_ov_flag
+    local rc 
+    local ov_count_var
+    get_kiwirecorder_ov_count_from_ip_port  ov_count_var  ${receiver_ip}
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 1 "The kiwi's /status page reports the current adc_ov count = ${ov_count_var}, so disabling the kiwi's 'ADC OV' logging since that data is available in the kiwi's status page"
+        kiwirecorder_ov_flag=""
+    else
+        wd_logger 1 "ERROR: (not really), but this kiwi at ${receiver_ip} is running an old version of SW which doesn't output OV on its status page, so we have to enabled the output of 'ADC OV' lines to the kiwirecord's log"
+        kiwirecorder_ov_flag="--OV"
+    fi
 
     while true ; do
         local kiwi_recorder_pid=""
@@ -379,7 +493,7 @@ function kiwirecorder_manager_daemon()
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
             python3 -u ${KIWI_RECORD_COMMAND} \
                 --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
-                ${KIWIRECORDER_OV_FLAG---OV} --user=${recording_client_name}  --password=${my_receiver_password} \
+                ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
