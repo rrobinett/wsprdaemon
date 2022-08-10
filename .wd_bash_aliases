@@ -257,3 +257,4 @@ function pinge()
 }
 
 alias wd-wav='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
+alias wd-ovs='grep "[^0] overload events in this 2 minute cycle" `find /dev/shm/wsprdaemon/ -name decoding_daemon.log` | sort -k 11,11n '
