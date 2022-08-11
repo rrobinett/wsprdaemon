@@ -258,3 +258,19 @@ function pinge()
 
 alias wd-wav='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 alias wd-ovs='grep "[^0] overload events in this 2 minute cycle" `find /dev/shm/wsprdaemon/ -name decoding_daemon.log` | sort -k 11,11n '
+
+function wd-ovt()
+{
+    local log_file
+    for log_file in `find /dev/shm/wsprdaemon/ -name decoding_daemon.log`; do
+        local ov_lines
+        ov_lines=$(grep "[^0] overload events in this 2 minute cycle" ${log_file})
+        if [[ -n "${ov_lines}" ]]; then
+            local ov_lines_count=$(echo "${ov_lines}" | wc -l)
+            echo "${log_file} has ${ov_lines_count} OV lines, the most recent 4 are:"
+            echo "${ov_lines}" | tail -n 4
+            echo
+        fi
+    done
+}
+
