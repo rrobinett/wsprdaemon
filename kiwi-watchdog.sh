@@ -1,6 +1,6 @@
 #!/bin/bash
 
-###  kiwi-watchdog:   pings Kiwis and power cycles them if they don't respond
+###  kiwi-watchdog:   pings Kiwis and powe cycles them if they don't respond
 
 ###    Copyright (C) 2021  Robert S. Robinett
 ###
@@ -12,18 +12,20 @@
 ###    This program is distributed in the hope that it will be useful,
 ###    but WITHOUT ANY WARRANTY; without even the implied warranty of
 ###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-###    GNU General Public License for more details.
+###   GNU General Public License for more details.
 ###
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ### This program uses a Sain brand ethernet controller to control a bank of 8 mechanical relays
-### The Sain controller has a fixed IP address of 192.168.1.4, so the Pi running this program must have a LOCAL path to that address i.e. IP traffic can't go through a router
+### The Sain controller has a fixed IP address of 192.168.1.4, so the Pi running this program must have a LOCAL path to the that address i.e. IP traffic can't go through a router
 ### So this program needs to run on a Pi attached to the same LAN as the Sain controller and the Pi must be configured 
-### with an additional IP address on eth0 by executing:  'ip address add 192.168.1.xx/24 dev etho'
+### with an additional IP addresss on eth0 by executing:  'ip address add 192.168.1.xx/24 dev etho'
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
-declare    verbosity=2
+
+declare -r VERSION=0.2
+declare    VERBOSITY=${VERBOSITY-1}     ### default to level 1
 declare -r CMD_NAME=${0##*/}
 declare -r CMD_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r CMD_PATH="${CMD_DIR}/${CMD_NAME}"
@@ -33,17 +35,16 @@ declare -r KIWI_BASE_IP="10.14.70"           ### Append ${KIWI_ID_LIST[x]} to ge
 declare -r KIWI_ID_LIST=( 72 73 74 75 76 77 78 )
 declare -r KIWI_POWER_WATCH_DAEMON_PID_FILE=${CMD_DIR}/kiwi-watchdog-daemon.pid
 declare -r KIWI_POWER_WATCH_DAEMON_LOG_FILE=${CMD_DIR}/kiwi-watchdog-daemon.log
-declare    verbosity=1
 
 ###  Manage 
 declare -r KIWI_STARTUP_DELAY_SECONDS=60   ### When starting the Pi wait this long before checking the Kiwis which may be powering up at the same time.
-declare    SYSTEMCTL_UNIT_FILE_NAME=${0##*/}
-declare -r SYSTEMCTL_SERVICE_NAME=${SYSTEMCTL_UNIT_FILE_NAME%.*}
-           SYSTEMCTL_UNIT_FILE_NAME=${SYSTEMCTL_SERVICE_NAME}.service
-declare -r SYSTEMCTL_UNIT_DIR=/lib/systemd/system
-declare -r SYSTEMCTL_UNIT_PATH=${SYSTEMCTL_UNIT_DIR}/${SYSTEMCTL_UNIT_FILE_NAME}
+declare    SYSTEMNCTL_UNIT_FILE_NAME=${0##*/}
+declare -r SYSTEMNCTL_SERVICE_NAME=${SYSTEMNCTL_UNIT_FILE_NAME%.*}
+           SYSTEMNCTL_UNIT_FILE_NAME=${SYSTEMNCTL_SERVICE_NAME}.service
+declare -r SYSTEMNCTL_UNIT_DIR=/lib/systemd/system
+declare -r SYSTEMNCTL_UNIT_PATH=${SYSTEMNCTL_UNIT_DIR}/${SYSTEMNCTL_UNIT_FILE_NAME}
 
-cat > ${SYSTEMCTL_UNIT_FILE_NAME} <<EOF
+cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
     [Unit]
     Description= ${CMD_DESCRIPTION}
     After=multi-user.target
@@ -61,48 +62,54 @@ cat > ${SYSTEMCTL_UNIT_FILE_NAME} <<EOF
     WantedBy=multi-user.target
 EOF
 
-function setup_systemctl_daemon() 
+function setup_systemctl_deamon() 
 {
-    if [[ ! -d ${SYSTEMCTL_UNIT_DIR} ]]; then
-        echo "WARNING: this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
+    if [[ ! -d ${SYSTEMNCTL_UNIT_DIR} ]]; then
+        echo "WARNING: this server appears to not be configured to use 'systemnctl' needed to start the kiwiwspr daemon at startup"
         return
     fi
-    if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
-        if diff ${SYSTEMCTL_UNIT_FILE_NAME} ${SYSTEMCTL_UNIT_PATH} ; then
+    if [[ -f ${SYSTEMNCTL_UNIT_PATH} ]]; then
+        if diff ${SYSTEMNCTL_UNIT_FILE_NAME} ${SYSTEMNCTL_UNIT_PATH} ; then
             echo "This service is already setup"
             return 0
         else
-            echo "This service template ${SYSTEMCTL_UNIT_FILE_NAME} differs from the installed service file ${SYSTEMCTL_UNIT_PATH}, so reinstall it."
+            echo "This service template ${SYSTEMNCTL_UNIT_FILE_NAME} differs from the installed service file ${SYSTEMNCTL_UNIT_PATH}, so reinstall it."
         fi
     fi
-    sudo cp ${SYSTEMCTL_UNIT_FILE_NAME} ${SYSTEMCTL_UNIT_PATH}
-    echo "Copied ${SYSTEMCTL_UNIT_FILE_NAME} to ${SYSTEMCTL_UNIT_PATH}"
+    sudo cp ${SYSTEMNCTL_UNIT_FILE_NAME} ${SYSTEMNCTL_UNIT_PATH}
+    echo "Copied ${SYSTEMNCTL_UNIT_FILE_NAME} to ${SYSTEMNCTL_UNIT_PATH}"
 
     sudo systemctl daemon-reload
-    echo "Created '${SYSTEMCTL_UNIT_PATH}'."
+    echo "Created '${SYSTEMNCTL_UNIT_PATH}'."
 }
 
-function enable_systemctl_daemon() 
+function start_systemctl_daemon()
 {
-    setup_systemctl_daemon
-    sudo systemctl enable ${SYSTEMCTL_SERVICE_NAME}
+    sudo systemctl start ${SYSTEMNCTL_SERVICE_NAME}
+}
+
+function enable_systemctl_deamon() 
+{
+    setup_systemctl_deamon
+    sudo systemctl enable ${SYSTEMNCTL_SERVICE_NAME}
     echo "Watchdog daemon will now automatically start after a powerup or reboot of this system"
 }
 
-function disable_systemctl_daemon() 
+function disable_systemctl_deamon() 
 {
-    sudo systemctl disable ${SYSTEMCTL_SERVICE_NAME}
+    sudo systemctl stop    ${SYSTEMNCTL_SERVICE_NAME}
+    sudo systemctl disable ${SYSTEMNCTL_SERVICE_NAME}
 }
 
-function get_systemctl_daemon_status()
+function get_systemctl_deamon_status()
 {
-    setup_systemctl_daemon
-    sudo systemctl status ${SYSTEMCTL_UNIT_FILE_NAME}
+    setup_systemctl_deamon
+    sudo systemctl status ${SYSTEMNCTL_UNIT_FILE_NAME}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        echo "${SYSTEMCTL_UNIT_FILE_NAME} is enabled"
+        echo "${SYSTEMNCTL_UNIT_FILE_NAME} is enabled"
     else
-        echo "${SYSTEMCTL_UNIT_FILE_NAME} is disabled"
+        echo "${SYSTEMNCTL_UNIT_FILE_NAME} is disabled"
     fi
 }
 
@@ -112,16 +119,19 @@ function startup_daemon_control()
 
     case ${action} in
         h)
-            echo "startup_daemon_control actions are:  a=install and enable, z=disable, s=status"
+            echo "usage: -d [a|i|z|s]     setup to be run at startup of this server using the systemctl service (a=start, i=install and enable, z=disable and stop, s=show status"
             ;;
         a)
-            enable_systemctl_daemon
+            start_systemctl_daemon
+            ;;
+        i)
+            enable_systemctl_deamon
             ;;
         z)
-            disable_systemctl_daemon
+            disable_systemctl_deamon
             ;;
         s)
-            get_systemctl_daemon_status
+            get_systemctl_deamon_status
             ;;
         *)
             echo "ERROR: action ${action} is invalid"
@@ -157,14 +167,26 @@ function kiwi_watchdog_daemon()
     fi
 
     while true; do
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): Checking that all Kiwis are running" >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE} 
+        [[ ${VERBOSITY} -ge 2 ]] && echo "$(date): Checking that all Kiwis are running" >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE} 
+
+        ### Make sure the IP interface to the Kiwis is active by successfully pinging the router
+        local router_ip=${KIWI_BASE_IP}.1
+        while ! ping -c 1 ${router_ip} > /dev/null ; do
+            echo "$(date): failed to ping router at ${router_ip}, so assume that ethernet interface on this server is down and can't reach the Kiwis even if they are online.  Sleeping 60 seconds and retrying"
+            sleep 60;
+        done
+        
         local kiwi_id
         for kiwi_id in ${KIWI_ID_LIST[@]}; do
             local kiwi_ip="${KIWI_BASE_IP}.${kiwi_id}"
-            if ping -c 1 ${kiwi_ip} > /dev/null; then
-                [[ ${verbosity} -ge 2 ]] && echo "$(date): 'ping -c 1 ${kiwi_ip}' => $?, so Kiwi ${kiwi_id} is OK" >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE} 
+            ##ping -c 1 ${kiwi_ip} > /dev/null
+            curl --silent ${kiwi_ip}:8073/status > curl_output.txt
+            local ret_code=$?
+            if [[ ${ret_code} -eq 0 ]]; then
+                [[ ${VERBOSITY} -ge 2 ]] && echo "$(date): 'curl --silent ${kiwi_ip}/status => ${ret_code}, so Kiwi ${kiwi_id} is OK" >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE} 
             else
-                echo "$(date): ERROR: 'ping -c 1 ${kiwi_ip}' => $?, so power cycling Kiwi${kiwi_id} for 10 seconds"  >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE}
+                echo "$(date): ERROR: 'curl --silent ${kiwi_ip}/status' => ${ret_code}, so power cycling Kiwi${kiwi_id} for 10 seconds"  >> ${KIWI_POWER_WATCH_DAEMON_LOG_FILE}
+                exit 1
                 sain_control ${kiwi_id} off
                 sleep 10
                 sain_control ${kiwi_id} on  
@@ -177,6 +199,12 @@ function kiwi_watchdog_daemon()
 
 function check_kiwi_status()
 {
+    local router_ip=${KIWI_BASE_IP}.1
+    if ! ping -c 1 ${router_ip} > /dev/null ; then
+        echo "$(date): failed to ping router at ${router_ip}, so assume that ethernet interface on this server is down and can't reach the Kiwis even if they are online.  Sleeping 60 seconds and retrying"
+        return 1
+    fi
+
     local kiwi_id
     for kiwi_id in ${KIWI_ID_LIST[@]}; do
         local kiwi_ip="${KIWI_BASE_IP}.${kiwi_id}"
@@ -214,23 +242,14 @@ function kill_kiwi_watchdog_daemon()
     if [[ -f ${KIWI_POWER_WATCH_DAEMON_PID_FILE} ]]; then
         local daemon_pid=$( < ${KIWI_POWER_WATCH_DAEMON_PID_FILE}) 
         if ps ${daemon_pid} > /dev/null ; then
-            wd_kill ${daemon_pid}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: ' wd_kill ${daemon_pid}' => ${rc}"
-            else
-               wd_logger 1 "Killed running kiwi_watchdog_daemon which had pid = ${daemon_pid}"
-            fi
+            kill ${daemon_pid}
+            echo "Killed running kiwi_watchdog_daemon which had pid = ${daemon_pid}"
         else
-            wd_logger 1 "Found kiwi_watchdog_daemon pid ${daemon_pid} in ${KIWI_POWER_WATCH_DAEMON_PID_FILE} is not active."
+            echo "Found kiwi_watchdog_daemon pid ${daemon_pid} in ${KIWI_POWER_WATCH_DAEMON_PID_FILE} is not active."
         fi
-        wd_rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'wd_rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}' => ${rc}"
-        fi
+        rm ${KIWI_POWER_WATCH_DAEMON_PID_FILE}
     else
-        wd_logger 1 "There is no file ${KIWI_POWER_WATCH_DAEMON_PID_FILE}, so kiwi_watchdog_daemon was not running"
+        echo "There is no file ${KIWI_POWER_WATCH_DAEMON_PID_FILE}, so kiwi_watchdog_daemon was not running"
     fi
 }
 
@@ -252,13 +271,13 @@ function status_of_kiwi_watchdog_daemon()
 
 function usage()
 {
-    echo "$0: 
+    echo "$0 Version ${VERSION}: 
     -c KIWI STATE    KIWI=72...78  STATE=on|off
-    -a               start daemon which pings Kiwis and power cycles them if they don't respond
+    -a               start daemon which pings kiwis and power cycles them if they don't respond
     -A               start daemon with a delay of ${KIWI_STARTUP_DELAY_SECONDS}
     -z               kill the daemon
     -s               show the daemon status
-    -d [a|z|s]       setup to be run at startup of this server using the systemctl service (a=enable, z=disable, s=show status"
+    -d [a|i|z|s]     setup to be run at startup of this server using the systemctl service (a=start, i=install and enable, z=disable and stop, s=show status"
 }
 
 case ${1--h} in
@@ -279,7 +298,7 @@ case ${1--h} in
         status_of_kiwi_watchdog_daemon
         ;;
     -d)
-        startup_daemon_control $2
+        startup_daemon_control ${2-h}
         ;;
     -h)
         usage
@@ -289,3 +308,4 @@ case ${1--h} in
         ;;
 esac
 
+exit 0
