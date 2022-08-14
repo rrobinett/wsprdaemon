@@ -329,6 +329,38 @@ declare WAV_FILE_MIN_HHMMSSUU=$(( ${MIN_VALID_RAW_WAV_SECONDS}  * 100  ))       
 declare WAV_FILE_MAX_HHMMSSUU=$(( 10000 + ( ${WAV_SECOND_RANGE} * 100) ))       ### by default this = 65 seconds == 10500
 
 ### If the wav recording daemon is running, we can calculate how many seconds until it starts to fill the raw file (if 0 length first file) or fills the 2nd raw file.  Sleep until then
+function flush_wav_files_older_than()
+{
+    local reference_file=$1
+
+    if [[ ! -f ${reference_file} ]]; then
+        wd_logger 1 "ERROR: can't find expected reference file '${reference_file}"
+        return 1
+    fi
+    wd_logger 1 "Delete any files older than ${reference_file}"
+
+    local olders=0
+    local newers=0
+    local wav_file
+    for wav_file in $(find -name '*wav'); do
+        if [[ ${wav_file} -ot ${reference_file} ]]; then
+            (( ++olders ))
+            wd_logger 1 "Deleting older wav file '${wav_file}'"
+            wd_rm ${wav_file}
+        elif [[ ${wav_file} -nt ${reference_file} ]]; then
+            (( ++newers ))
+            wd_logger 1 "ERROR: found  wav wav file '${wav_file}' is newer than ${reference_file}"
+        else
+            ### 'find' prepends './' to the filenames it returns, so we can't compare flenames.  But if two wav file timestamps in the same directory match each other, then they must be the same wav file
+            wd_logger 1 "Found expected reference file ${reference_file}"
+        fi
+    done
+    if [[ ${olders} -gt 0 || ${newers} -gt 0 ]]; then
+        wd_logger 1 "Deleted ${olders} older wav files and/or found ${newers} new wav files"
+    fi
+    return 0
+}
+
 function sleep_until_raw_file_is_full() {
     local filename=$1
     if [[ ! -f ${filename} ]]; then
@@ -350,11 +382,13 @@ function sleep_until_raw_file_is_full() {
         wd_logger 1 "ERROR: file ${filename} disappeared after ${loop_seconds} seconds"
         return 1
     fi
+    wd_logger 1 "'${filename}' stopped growing after ${loop_seconds} seconds"
 
     local file_start_minute=${filename:11:2}
     local file_start_second=${filename:13:2}
     if [[ ${file_start_second} != "00" ]]; then
         wd_logger 1 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup"
+        flush_wav_files_older_than ${filename}
         wd_rm ${filename}
         return 2
     fi
@@ -366,6 +400,7 @@ function sleep_until_raw_file_is_full() {
 
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
         wd_logger 1 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        flush_wav_files_older_than ${filename}
         wd_rm ${filename}
         return 2
     fi
@@ -389,7 +424,9 @@ function sleep_until_raw_file_is_full() {
             fi
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
         fi
-        return 1
+        flush_wav_files_older_than ${filename}
+        wd_rm ${filename}
+        return 3
     fi
     wd_logger 1 "File ${filename} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
     return 0
