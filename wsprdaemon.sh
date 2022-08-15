@@ -62,7 +62,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.3.1            ### Use /dev/shm/wsprdaemon for TMP files
 #declare -r VERSION=3.0.3.2            ### Record FST4W spectral_spreading to the 'metric' field of the extended_spot lines
                                        ### Add support for archiving of wav files to WD3
-declare -r VERSION=3.0.3.3            ### Get OV count from kiwi's /status page, not by counting 'ADC OV's' from the log file
+#declare -r VERSION=3.0.3.3            ### Get OV count from kiwi's /status page, not by counting 'ADC OV's' from the log file
+declare -r VERSION=3.0.3.4            ### To fix 100% CPU bug, add cleanups to wav file monitoring
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VHF/UHF support using Soapy API
 
