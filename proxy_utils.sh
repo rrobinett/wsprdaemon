@@ -44,7 +44,7 @@ function proxy_connection_manager() {
     if [[ -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
         conf_file=${WSPRDAEMON_CONFIG_FILE}
     elif [[ -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
-        wd_logger 1 "wdpraemon.conf has not yet been configured. Edit it and run this again"
+        wd_logger 1 "wsprdaemon.conf has not yet been configured. Edit it and run this again"
         cp -p ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE}
         exit 1
     else
