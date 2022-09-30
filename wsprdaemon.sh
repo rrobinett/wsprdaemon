@@ -58,12 +58,15 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
 #declare -r VERSION=3.0.2.5            ### Raise priority of kiwirecorder.py to max in an attempt to ensure that wav file recordings are not interrupted by Linux
 #declare -r VERSION=3.0.2.6            ### Cleanup schedule change handling
-#declare -r VERSION=3.0.3            ### Finished beta testing.  Decodes FST4W except type 3 packets which require use of shared memory interface to jt9
+#declare -r VERSION=3.0.3              ### Finished beta testing.  Decodes FST4W except type 3 packets which require use of shared memory interface to jt9
 #declare -r VERSION=3.0.3.1            ### Use /dev/shm/wsprdaemon for TMP files
 #declare -r VERSION=3.0.3.2            ### Record FST4W spectral_spreading to the 'metric' field of the extended_spot lines
                                        ### Add support for archiving of wav files to WD3
 #declare -r VERSION=3.0.3.3            ### Get OV count from kiwi's /status page, not by counting 'ADC OV's' from the log file
-declare -r VERSION=3.0.3.4            ### To fix 100% CPU bug, add cleanups to wav file monitoring
+#declare -r VERSION=3.0.3.4            ### 
+declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
+                                     ### Protect against corrupt .pid files
+                                    ### TODO: To fix 100% CPU bug, add cleanups to wav file monitoring
                                     ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VHF/UHF support using Soapy API
 

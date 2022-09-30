@@ -51,6 +51,7 @@ function proxy_connection_manager() {
         wd_logger 1 "ERROR: can't find either ${WSPRDAEMON_CONFIG_FILE} or ${WSPRDAEMON_CONFIG_TEMPLATE_FILE}"
         exit 1
     fi
+    REMOTE_ACCESS_CHANNEL=                         ### Forces the definition of REMOTE_ACCESS_CHANNEL to come from the current value (if any) in the conf file.
     source ${WSPRDAEMON_CONFIG_FILE} > /dev/null
     local rc=$?
     if [[ ${rc} -ne 0 ]]; then

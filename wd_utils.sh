@@ -612,6 +612,14 @@ function get_status_of_daemon() {
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
+        if [[ -z "${daemon_pid}" ]]; then
+            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
+            return 3
+        fi
+        if ! is_uint "${daemon_pid}"; then
+            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
+            return 4
+        fi
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 

@@ -17,6 +17,7 @@ function watchdog_daemon()
         if [[ ${WATCHDOG_PRINT_ALL_LOGS} == "yes" ]]; then
             wd_logger_check_all_logs
         fi
+        proxy_connection_manager                                 ### Reads the conf file and opens or closes the remote access connection
         local current_minute=$(( 10#$(printf "%(%M)T") % 2 ))    ### '10#...' strips leading zeros resulting in: 0 st=> we are in an even minute, 1 => we are in an odd minute
         if [[ ${last_minute} -lt 0 || ( ${last_minute} == 0  && ${current_minute} == 1 ) ]]; then
             wd_logger 1 "Starting odd minute, do all watching functions"
