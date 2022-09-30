@@ -54,10 +54,13 @@ function wd_kill_all()
     if [[ ${#pid_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no pid files"
     else 
+        wd_logger 1 "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'"
         local pid_val_list=( $( cat ${pid_file_list[@]} ) )
         if [[ ${#pid_val_list[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: Found no pid values which are expected to be in the *.pid files"
+            wd_logger 1 "ERROR: Found no pid values in any of the ${#pid_file_list[@]} pid files, so delete all those files"
+            wd_rm ${pid_file_list[*]}
         else
+            ### Some or all of the pid files contain pid values.  So kill all those pids and delete all the pid files
             kill ${pid_val_list[@]} >& /dev/null
             local rc=$?
             wd_rm  ${pid_file_list[@]}
