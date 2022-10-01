@@ -1,4 +1,5 @@
 #!/bin/bash
+### The previous line signals to the vim editor that it should use its 'bash' editing mode when editing this file
 
 ###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
 
@@ -47,16 +48,6 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
-#declare -r VERSION=2.10i            ### Client mode:  On Ubuntu 20.04 LTS, Fix installation of python-numpy 
-#declare -r VERSION=2.10j            ### Load WSJT-x V2.3.0 wsprd and jt9 commands and the libraries they need
-#declare -r VERSION=3.0a             ### Move python code and other 'here' files to their own files instead of creating them inline 
-#declare -r VERSION=3.0.1             ### Fix selections of best SNR in MERGEd receivers.  Change VERSION to 3.0.N
-#declare -r VERSION=3.0.2             ### Enhance the Remote Acccess service to accept configuration of "no" 
-#declare -r VERSION=3.0.2.1             ### Move remote access startup to startup.  Add support for 64 Pi OS
-#declare -r VERSION=3.0.2.2            ### Fix installaion of python 'astral' package on both buster and bullseye
-#declare -r VERSION=3.0.2.3            ### Fix FST4W-300 decoding
-#declare -r VERSION=3.0.2.4            ### From WA2TP-2 i5, multimode decoding appears to work
-#declare -r VERSION=3.0.2.5            ### Raise priority of kiwirecorder.py to max in an attempt to ensure that wav file recordings are not interrupted by Linux
 #declare -r VERSION=3.0.2.6            ### Cleanup schedule change handling
 #declare -r VERSION=3.0.3              ### Finished beta testing.  Decodes FST4W except type 3 packets which require use of shared memory interface to jt9
 #declare -r VERSION=3.0.3.1            ### Use /dev/shm/wsprdaemon for TMP files
@@ -66,8 +57,12 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.3.4            ### 
 declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
                                      ### Protect against corrupt .pid files
+                                     ### Add support for POST_ALL_SPOTS  config variable
+                                     ### TODO: enhance frequency resolution of FST4W decoding to .1 Hz
+                                     ### TODO: install libresample library for use by keirecorder so audio frequency offset of about .1 is removed
+                                     ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports
+                                     ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
                                     ### TODO: To fix 100% CPU bug, add cleanups to wav file monitoring
-                                    ### TODO: Proxy upload of spots from wsprdaemon.org to wsprnet.org
                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then

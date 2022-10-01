@@ -108,7 +108,7 @@ function posting_daemon()
         ### There are enough spot files that we *may* be able to merge and post.
         local filename_list=( ${spot_file_list[@]##*/} )
         local filetimes_list=(${filename_list[@]%_spots.txt})
-        local unique_times_list=( $( echo "${filetimes_list[@]}" | tr ' ' '\n' | sort -n | uniq) )
+        local unique_times_list=( $( IFS=$'\n'; echo "${filetimes_list[*]}" | sort -nu ) )
         wd_logger 1 "Found ${#spot_file_list[@]} spot files. filename_list='${filename_list[*]}', filetimes_list='${filetimes_list[*]}', unique_times_list='${unique_times_list[*]}'"
 
         local spot_file_time 
@@ -212,29 +212,35 @@ function post_files()
         return 0
     fi
     ### There are spots to uploaded
-    ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
-    ### If configured for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
-    > spots.BEST       ### Create and/or truncate spots.BEST
-    local calls_list=( $( awk '{print $7}' spots.ALL | sort -u ) )
-    wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
-    local call
-    for call in ${calls_list[@]}; do
-        local best_line=$( awk -v call=${call} '$7 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 5,5n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
-        local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
-        local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
-        local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
+    if [[ "${POST_ALL_SPOTS-no}" == "yes" ]]; then
+        ### Post all spots, not just those with the best SNR
+        cp -p spots.ALL spots.BEST
+    else
+        ### For each CALL, get the spot with the best SNR, add that spot to spots.BEST which will contain only one spot for each file.
+        ### If configured for "proxy" uploads, at the same time mark the spot line in the source file for proxy upload
+        > spots.BEST       ### Create and/or truncate spots.BEST
+        local calls_list=( $( awk '{print $7}' spots.ALL | sort -u ) )
+        wd_logger 1 "Found $(wc -l < spots.ALL) total spots in the ${#spot_file_list[@]} files. Together they report spots from ${#calls_list[@]} calls"
+        local call
+        for call in ${calls_list[@]}; do
+            local best_line=$( awk -v call=${call} '$7 == call {printf "%s: %s\n", FILENAME, $0}' ${spot_file_list[@]} | sort -k 5,5n | tail -n 1)   ### get the "FILENAME SPOT_LINE" with the best SNR
+            local best_file=${best_line%% *}                      ### awk has inserted the filename with the best spot in the first field of ${best_line}
+            local best_spot=${best_line#* }                       ### The following fields are the spot line from that file with the spaces preserved
+            local best_spot_marked=${best_spot::-1}1              ### Replaces the last (0 or 1) character of that spot which marks whether it could be uploaded by the upload_server with a 1
 
-        wd_logger 1 "$( printf "For call %-12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )"
+            wd_logger 1 "$( printf "For call %-12s found the best spot '${best_spot}' in '${best_file}'" "${call}" )"
 
-        echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
-        if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
-            ### Mark the line in the source file for proxy upload
-            wd_logger 1 "Proxy upload the best spot, but this code has not been debugged"
-            grep -v -F "${best_spot}" ${best_file} > best.TMP       ### Remove any exisitng lines for this call
-            echo "${best_spot_marked}" >> best.TMP                  ### Add this newly found best spot for this call
-            sort -k 6,6n best.TMP > ${best_file}                    ### And sort the best 
-        fi
-    done
+            echo "${best_spot_marked}" >> spots.BEST      ### Add the best spot for this call to the file which will be uploaded to wsprnet.org
+            if [[ ${SIGNAL_LEVEL_UPLOAD} == "proxy" ]]; then
+                ### Mark the line in the source file for proxy upload
+                wd_logger 1 "Proxy upload the best spot, but this code has not been debugged"
+                grep -v -F "${best_spot}" ${best_file} > best.TMP       ### Remove any exisitng lines for this call
+                echo "${best_spot_marked}" >> best.TMP                  ### Add this newly found best spot for this call
+                sort -k 6,6n best.TMP > ${best_file}                    ### And sort the best 
+            fi
+        done
+    fi
+
     ### Sort the spot lines in spots.BEST by ascending frequency
     sort -k 6,6n spots.BEST > best.TMP
     mv best.TMP spots.BEST
