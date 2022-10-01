@@ -87,17 +87,21 @@ function proxy_connection_manager() {
         fi
         return
     fi
-    ### Get the last SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
-    local signal_level_upload_id=$(source ${WSPRDAEMON_CONFIG_FILE}; echo ${SIGNAL_LEVEL_UPLOAD_ID})
-    if [[ -z "${signal_level_upload_id}" ]]; then
-        wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID is not defined"
+    ### Get the last REMOTE_ACCESS_ID or SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
+    local remote_access_id=""
+    remote_access_id=$(source ${WSPRDAEMON_CONFIG_FILE}; echo ${REMOTE_ACCESS_ID-})
+    if [[ -z "${remote_access_id}" ]]; then
+        remote_access_id=$(source ${WSPRDAEMON_CONFIG_FILE}; echo ${SIGNAL_LEVEL_UPLOAD_ID-})
+    fi
+    if [[ -z "${remote_access_id}" ]]; then
+        wd_logger 1 "ERROR: wsprdaemon.conf defines REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but neither REMOTE_ACCESS_ID nor SIGNAL_LEVEL_UPLOAD_ID is defined"
         exit 2
     fi
-    if [[ "${signal_level_upload_id}" == "AI6VN" ]]; then
-        wd_logger 1 "ERROR: wsprdaemon.conf REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but SIGNAL_LEVEL_UPLOAD_ID='AI6VN', so change it to your own ID"
+    if [[ "${remote_access_id}" == "AI6VN" ]]; then
+        wd_logger 1 "ERROR: wsprdaemon.conf defines REMOTE_ACCESS_CHANNEL=${remote_access_channel}, but REMOTE_ACCESS_ID is not defined and SIGNAL_LEVEL_UPLOAD_ID equals its default value 'AI6VN', so define REMOTE_ACCESS_ID to your own ID"
         exit 3
     fi
-    wd_logger 2 "Proxy connection REMOTE_ACCESS_CHANNEL=${remote_access_channel}, SIGNAL_LEVEL_UPLOAD_ID='${signal_level_upload_id}' is enabled"
+    wd_logger 2 "Proxy connection REMOTE_ACCESS_CHANNEL=${remote_access_channel}, REMOTE_ACCESS_ID='${remote_access_id}' is enabled"
 
     mkdir -p ${WD_BIN_DIR}
     if [[ ! -x ${FRPC_CMD} ]]; then
@@ -198,13 +202,13 @@ admin_port = 7500
 server_addr = ${WD_FRPS_URL}
 server_port = ${WD_FRPS_PORT}
 
-[${signal_level_upload_id}]
+[${remote_access_id}]
 type = tcp
 local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
 EOF
-        wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's signal_level_upload_id=${signal_level_upload_id} and ssh port on port ${frpc_remote_port} of that server"
+        wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
     fi
 
     wd_logger 0 "Spawning the frpc daemon connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's ssh port on port ${frpc_remote_port} of that server"
@@ -220,11 +224,11 @@ EOF
         exit 1
     fi
     echo ${frpc_daemon_pid} > ${WSPRDAEMON_PROXY_PID_FILE}
-    wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and signal_level_upload_id=${signal_level_upload_id} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
+    wd_logger 0 "Spawned frpc daemon with pid ${frpc_daemon_pid} and remote_access_id=${remote_access_id} and recorded its pid ${frpc_daemon_pid} to ${WSPRDAEMON_PROXY_PID_FILE}"
 
     local timeout=0
     while [[ ${timeout} -lt ${FRPC_STARTUP_TIMEOUT} ]]; do
-        local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status |& awk -v id=${signal_level_upload_id} '$1 == id{print $2}')
+        local frpc_status=$(${FRPC_CMD} -c ${FRPC_INI_FILE} status |& awk -v id=${remote_access_id} '$1 == id{print $2}')
         if [[ "${frpc_status}" == "running" ]]; then
             wd_logger 1 "The remote access service is running"
             return 0
