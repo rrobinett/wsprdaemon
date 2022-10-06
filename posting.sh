@@ -88,20 +88,13 @@ function posting_daemon()
         supplier_dirs_list+=(${this_rx_local_link_name})
     done
 
-    local zombie_spot_file_list
-    if zombie_spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' ) ) \
-            && [[ ${#zombie_spot_file_list[@]} -gt 0 ]]; then
-        wd_logger 1 "Cleaning out ${#zombie_spot_file_list[@]} zombie spot files at startup"
-        rm ${zombie_spot_file_list[@]}
-    fi
-
     wd_logger 1 "Searching in subdirs: '${supplier_dirs_list[*]}' for '*_spots.txt' files"
     while true; do
         wd_logger 1 "Searching for at least one spot file"
         local spot_file_list=()
         while spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
             && [[ ${#spot_file_list[@]} -eq 0 ]]; do
-            wd_logger 1 "Waiting for at least one spot file to appear"
+            wd_logger 2 "Waiting for at least one spot file to appear"
             ### Make sure there is a decode daemon running for each rx + band 
             local real_receiver
             for real_receiver  in ${real_receiver_list[@]} ; do
