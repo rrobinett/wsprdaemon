@@ -55,9 +55,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                        ### Add support for archiving of wav files to WD3
 #declare -r VERSION=3.0.3.3            ### Get OV count from kiwi's /status page, not by counting 'ADC OV's' from the log file
 #declare -r VERSION=3.0.3.4            ### 
-declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
+#declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
                                      ### Protect against corrupt .pid files
                                      ### Add support for POST_ALL_SPOTS  config variable
+declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
                                      ### TODO: enhance frequency resolution of FST4W decoding to .1 Hz
                                      ### TODO: install libresample library for use by keirecorder so audio frequency offset of about .1 is removed
                                      ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports

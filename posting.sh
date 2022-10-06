@@ -87,12 +87,20 @@ function posting_daemon()
         supplier_dirs_list+=(${this_rx_local_link_name})
     done
 
+    local zombie_spot_file_list
+    if zombie_spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' ) ) \
+            && [[ ${#zombie_spot_file_list[@]} -gt 0 ]]; then
+        wd_logger 1 "Cleaning out ${#zombie_spot_file_list[@]} zombie spot files at startup"
+        rm ${zombie_spot_file_list[@]}
+    fi
+
     wd_logger 1 "Searching in subdirs: '${supplier_dirs_list[*]}' for '*_spots.txt' files"
     while true; do
-        wd_logger 1 "Searching for at least ${#supplier_dirs_list[@]} spot files"
+        wd_logger 1 "Searching for at least one spot file"
         local spot_file_list=()
         while spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
-            && [[ ${#spot_file_list[@]} -lt ${#supplier_dirs_list[@]} ]] ; do
+            && [[ ${#spot_file_list[@]} -eq 0 ]]; do
+            wd_logger 1 "There are no spot files"
             ### Make sure there is a decode daemon running for each rx + band 
             local real_receiver
             for real_receiver  in ${real_receiver_list[@]} ; do
@@ -102,37 +110,51 @@ function posting_daemon()
                     wd_logger 1 "ERROR: failed to 'spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes}' => ${ret_code}"
                 fi
             done
-            wd_logger 2 "Found ${#spot_file_list[@]} *_spots.txt' files. Waiting for at least ${#supplier_dirs_list[@]} files"
-            wd_sleep 1
+            wd_sleep 5
         done
-        ### There are enough spot files that we *may* be able to merge and post.
+        ### There are one or more spot files
         local filename_list=( ${spot_file_list[@]##*/} )
         local filetimes_list=(${filename_list[@]%_spots.txt})
-        local unique_times_list=( $( IFS=$'\n'; echo "${filetimes_list[*]}" | sort -nu ) )
-        wd_logger 1 "Found ${#spot_file_list[@]} spot files. filename_list='${filename_list[*]}', filetimes_list='${filetimes_list[*]}', unique_times_list='${unique_times_list[*]}'"
+        local unique_times_list=( $( IFS=$'\n'; echo "${filetimes_list[*]}" | sort -u ) )
 
-        local spot_file_time 
-        for spot_file_time in ${unique_times_list[@]} ; do
-            ### Examine the spot files for each WSPR cycle time and if all are there for a cycle merge into one file to be uploaded to wsprnet.org
-            local spot_file_name=${spot_file_time}_spots.txt
-            local spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
+        ### The last element in the array will be the time of spots from the the most recent cycle
+        local newest_wspr_cycle_time=${unique_times_list[-1]}
 
-            if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
-                if [[ ${spot_file_time} == ${unique_times_list[-1]} ]]; then
-                    wd_logger 1 "There are only ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for the most recent time ${spot_file_time}, so wait for the rest of the files"
+        local spot_file_name=""
+        local spot_file_time=""
+        local spot_file_time_list=()
+        if [[ ${#unique_times_list[@]} -gt 1 ]]; then
+            wd_logger 1 "Found spots from ${#unique_times_list[@]} WSPR cycles.  Posting spots from the older cycles even if some spot files are missing from those cycles"
+
+            unset 'unique_times_list[-1]'
+            wd_logger 1 "Posting spots from the ${#unique_times_list[@]} earlier WSPR cyclei(s)"
+            for spot_file_time in ${unique_times_list[@]} ; do
+                spot_file_name=${spot_file_time}_spots.txt
+                spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
+                if [[ ${#spot_file_list} -eq 0 ]]; then
+                    wd_logger 1 "ERROR: can't find expected older spot files"
                 else
-                    wd_logger 1 "Found ${#spot_file_time_list[@]} of the expected  ${#supplier_dirs_list[@]} spot files for older WSPR cycle time ${spot_file_time}, so go ahead and post what we have"
+                    wd_logger 1 "Posting the ${#spot_file_time_list[@]} spot files from an old WSPR cycle: ${spot_file_time_list[*]}"
                     post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
                 fi
+            done
+        fi
+
+        ### There are one or more spot files from the most recent cycle
+        spot_file_name=${newest_wspr_cycle_time}_spots.txt
+        spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
+        if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
+            if [[ ${#spot_file_time_list[@]} -eq 0 ]]; then
+                wd_logger 1 "ERROR: expected to find at least one spot file from the newest WSPR cycle"
             else
-                if [[ ${#spot_file_time_list[@]} -gt ${#supplier_dirs_list[@]} ]]; then
-                    wd_logger 1 "ERROR: found ${#spot_file_time_list[@]} spot files when only ${#supplier_dirs_list[@]} files were expected, but process all of them anyways"
-                fi
-                 wd_logger 1 "Posting ${#spot_file_time_list[@]} WSPR cycle time ${spot_file_time} spot files: '${spot_file_time_list[*]}'"
-                post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
+                wd_logger 1 "Found only ${#spot_file_time_list[@]} spot files for the newest WSPR cycle.  Sleep and check again"
             fi
-        done
-    done
+            wd_sleep 5
+        else
+            wd_logger 1 "Posting ${#spot_file_list[@]} spot files, which are equal or greater than the number of receivers"
+            post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
+        fi
+   done
 }
 
 ### The wsprnet server processes spot lines with this block of PHP code.
