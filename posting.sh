@@ -37,6 +37,7 @@ function get_posting_pid_file_path()
 
 ### This daemon creates links from the posting dirs of all the $4 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
+declare POSTING_DAEMON_POLLING_RATE=${POSTING_DAEMON_POLLING_RATE-5}    ### By default poll every 5 seconds for new spot files to appear
 function posting_daemon() 
 {
     local posting_receiver_name=${1}
@@ -100,7 +101,7 @@ function posting_daemon()
         local spot_file_list=()
         while spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
             && [[ ${#spot_file_list[@]} -eq 0 ]]; do
-            wd_logger 1 "There are no spot files"
+            wd_logger 1 "Waiting for at least one spot file to appear"
             ### Make sure there is a decode daemon running for each rx + band 
             local real_receiver
             for real_receiver  in ${real_receiver_list[@]} ; do
@@ -110,7 +111,7 @@ function posting_daemon()
                     wd_logger 1 "ERROR: failed to 'spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes}' => ${ret_code}"
                 fi
             done
-            wd_sleep 5
+            wd_sleep ${POSTING_DAEMON_POLLING_RATE}
         done
         ### There are one or more spot files
         local filename_list=( ${spot_file_list[@]##*/} )
@@ -141,7 +142,8 @@ function posting_daemon()
         fi
 
         ### There are one or more spot files from the most recent cycle
-        spot_file_name=${newest_wspr_cycle_time}_spots.txt
+        spot_file_time=${newest_wspr_cycle_time}
+        spot_file_name=${spot_file_time}_spots.txt
         spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
         if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
             if [[ ${#spot_file_time_list[@]} -eq 0 ]]; then
@@ -149,9 +151,9 @@ function posting_daemon()
             else
                 wd_logger 1 "Found only ${#spot_file_time_list[@]} spot files for the newest WSPR cycle.  Sleep and check again"
             fi
-            wd_sleep 5
+            wd_sleep ${POSTING_DAEMON_POLLING_RATE}
         else
-            wd_logger 1 "Posting ${#spot_file_list[@]} spot files, which are equal or greater than the number of receivers"
+            wd_logger 1 "Posting ${#spot_file_time_list[@]} spot files, which are equal or greater than the number of receivers"
             post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
         fi
    done
