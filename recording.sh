@@ -429,6 +429,8 @@ function get_kiwirecorder_ov_count()
     return 0
 }
 
+declare KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR=${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR-10}    ### Wait 10 seconds after detecting an error before trying to spawn a new KWR
+
 function kiwirecorder_manager_daemon()
 {
     local receiver_ip=$1
@@ -497,8 +499,8 @@ function kiwirecorder_manager_daemon()
                 --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep and retry"
-                sleep 1
+                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
+                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                 continue
             fi
             kiwi_recorder_pid=$!
@@ -507,13 +509,32 @@ function kiwirecorder_manager_daemon()
 
             ### To try to ensure that wav files are not corrupted (i.e. too short, too long, or missing) because of CPU starvation:
             #### Raise the priority of the kiwirecorder.py job to (by default) -15 so that wsprd, jt9 or other programs are less likely to preempt it
-            local before_nice_level=$(ps --no-headers -o ni ${kiwi_recorder_pid} )
+            ps --no-headers -o ni ${kiwi_recorder_pid} > before_nice_level.txt
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: While checking nice level before renicing 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
+                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                continue
+            fi
+            local before_nice_level=$(< before_nice_level.txt)
+
+            ### Raise the priority of the KWR process
             sudo renice --priority ${KIWI_RECORDER_PRIORITY--15} ${kiwi_recorder_pid}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'renice --priority -15 ${kiwi_recorder_pid}' => ${rc}"
+                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                continue
             fi
-            local after_nice_level=$(ps --no-headers -o ni ${kiwi_recorder_pid} )
+
+            ps --no-headers -o ni ${kiwi_recorder_pid} > after_nice_level.txt
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: While checking for after_nice_level with 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
+                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                continue
+            fi
+            local after_nice_level=$(< after_nice_level.txt)
             wd_logger 1 "renice(d) kiwirecorder from ${before_nice_level} to ${after_nice_level}"
         fi
 
