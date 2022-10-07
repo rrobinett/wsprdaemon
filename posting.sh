@@ -34,6 +34,22 @@ function get_posting_pid_file_path()
     return 0
 }
 
+###############
+function run_recording_daemons()
+{
+    local posting_receiver_band="$1"
+    local posting_receiver_modes="$2"
+    local real_receiver_list=( ${@:3} )
+
+    local real_receiver
+    for real_receiver  in ${real_receiver_list[@]} ; do
+        (spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes})  ### the '()' suppresses the effects of the 'cd' executed by spawn_decoding_daemon()
+        local ret_code=$?
+        if [[ ${ret_code} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to 'spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes}' => ${ret_code}"
+        fi
+    done
+}
 
 ### This daemon creates links from the posting dirs of all the $4 receivers to a local subdir, then waits for YYMMDD_HHMM_wspr_spots.txt files to appear in all of those dirs, then merges them
 ### and 
@@ -92,18 +108,10 @@ function posting_daemon()
     while true; do
         wd_logger 1 "Searching for at least one spot file"
         local spot_file_list=()
-        while spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
-            && [[ ${#spot_file_list[@]} -eq 0 ]]; do
+        while    run_recording_daemons ${posting_receiver_band} ${posting_receiver_modes} ${real_receiver_list[@]} \
+              && spot_file_list=( $( find -L ${supplier_dirs_list[@]} -type f -name '*_spots.txt' -printf "%f\n") ) \
+              && [[ ${#spot_file_list[@]} -eq 0 ]]; do
             wd_logger 2 "Waiting for at least one spot file to appear"
-            ### Make sure there is a decode daemon running for each rx + band 
-            local real_receiver
-            for real_receiver  in ${real_receiver_list[@]} ; do
-                (spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes})  ### the '()' suppresses the effects of the 'cd' executed by spawn_decoding_daemon()
-                local ret_code=$?
-                if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: failed to 'spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes}' => ${ret_code}"
-                fi
-            done
             wd_sleep ${POSTING_DAEMON_POLLING_RATE}
         done
         ### There are one or more spot files
@@ -121,14 +129,14 @@ function posting_daemon()
             wd_logger 1 "Found spots from ${#unique_times_list[@]} WSPR cycles.  Posting spots from the older cycles even if some spot files are missing from those cycles"
 
             unset 'unique_times_list[-1]'
-            wd_logger 1 "Posting spots from the ${#unique_times_list[@]} earlier WSPR cyclei(s)"
+            wd_logger 1 "Posting spots from the ${#unique_times_list[@]} earlier WSPR cycle(s)"
             for spot_file_time in ${unique_times_list[@]} ; do
                 spot_file_name=${spot_file_time}_spots.txt
                 spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
                 if [[ ${#spot_file_list} -eq 0 ]]; then
                     wd_logger 1 "ERROR: can't find expected older spot files"
                 else
-                    wd_logger 1 "Posting the ${#spot_file_time_list[@]} spot files from an old WSPR cycle: ${spot_file_time_list[*]}"
+                    wd_logger 1 "Posting the ${#spot_file_time_list[@]} spot files from an old WSPR cycle ${spot_file_name}: '${spot_file_time_list[*]}'"
                     post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
                 fi
             done
@@ -140,13 +148,14 @@ function posting_daemon()
         spot_file_time_list=( $(find -L ${POSTING_SUPPLIERS_SUBDIR} -type f -name ${spot_file_name}) )
         if [[ ${#spot_file_time_list[@]} -lt ${#supplier_dirs_list[@]} ]]; then
             if [[ ${#spot_file_time_list[@]} -eq 0 ]]; then
-                wd_logger 1 "ERROR: expected to find at least one spot file from the newest WSPR cycle"
+                wd_logger 1 "ERROR: expected to find at least one spot file from the newest WSPR cycle ${spot_file_time}"
             else
-                wd_logger 1 "Found only ${#spot_file_time_list[@]} spot files for the newest WSPR cycle.  Sleep and check again"
+                wd_logger 1 "Found only ${#spot_file_time_list[@]} spot files for the newest WSPR cycle ${spot_file_time}: '${spot_file_time_list[*]}'"
             fi
+            wd_logger 1 "Sleep for ${POSTING_DAEMON_POLLING_RATE} seconds and then check again"
             wd_sleep ${POSTING_DAEMON_POLLING_RATE}
         else
-            wd_logger 1 "Posting ${#spot_file_time_list[@]} spot files, which are equal or greater than the number of receivers"
+            wd_logger 1 "Posting ${#spot_file_time_list[@]} spot files  which are equal or greater than the number of receivers for the newest WSPR cycle ${spot_file_time}: '${spot_file_time_list[*]}'"
             post_files ${posting_receiver_band} ${wsprnet_upload_dir} ${spot_file_time} ${spot_file_time_list[@]}
         fi
    done
@@ -533,7 +542,7 @@ function get_posting_status() {
 
     local posting_pid=$(< ${pid_file})
     if ! ps ${posting_pid} > /dev/null ; then
-        [[ $verbosity -ge 0 ]] && echo "Got pid '${posting_pid}' from file, but it is not running"
+        [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid '${posting_pid}' from file, but it is not running"
         return 3
     fi
     echo "Pid = ${posting_pid}"

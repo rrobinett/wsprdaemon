@@ -763,7 +763,7 @@ function get_recording_status() {
     fi
     local rx_pid=$( < ${pid_file})
     if ! ps ${rx_pid} > /dev/null ; then
-        [[ $verbosity -ge 0 ]] && echo "Got pid ${rx_pid} from file, but it is not running"
+        [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid ${rx_pid} from file, but it is not running"
         return 3
     fi
     echo "Pid = ${rx_pid}"

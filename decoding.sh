@@ -1427,7 +1427,7 @@ function get_decoding_status() {
     fi
     local get_decoding_status_decode_pid=$( < ${get_decoding_status_receiver_decoding_pid_file})
     if ! ps ${get_decoding_status_decode_pid} > /dev/null ; then
-        [[ $verbosity -ge 0 ]] && echo "Got pid '${get_decoding_status_decode_pid}' from file, but it is not running"
+        [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid '${get_decoding_status_decode_pid}' from file, but it is not running"
         return 3
     fi
     echo "Pid = ${get_decoding_status_decode_pid}"
