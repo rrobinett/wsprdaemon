@@ -59,6 +59,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                      ### Protect against corrupt .pid files
                                      ### Add support for POST_ALL_SPOTS  config variable
 declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
+                                     ### Fix standard GPS-aided Kiwi spot frequencies by adding the value IN MEGAHERTZ of SPOT_FREQ_ADJ_MHZ to the spots reported to wsprnet and wsprdaemon.org
                                      ### TODO: enhance frequency resolution of FST4W decoding to .1 Hz
                                      ### TODO: install libresample library for use by keirecorder so audio frequency offset of about .1 is removed
                                      ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports

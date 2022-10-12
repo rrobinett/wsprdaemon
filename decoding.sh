@@ -1326,6 +1326,19 @@ function decoding_daemon() {
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
             queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
+            ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
+            ### Kiwi by 12001.1/12000 that is 1.00009167. This is a frequency increase of 0.128 Hz at 1400 Hz and 0.147 Hz at 1600 Hz.
+            ### So if  SPOT_FREQ_ADJ_MHZ is not blank, then modify the frequency of each spot by that floating point megahertz value.  SPOT_FREQ_ADJ_MHZ defaults to .0000001 = .1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
+            if [[ -n "${SPOT_FREQ_ADJ_MHZ-.0000001}" ]]; then
+                local freq_adj=${SPOT_FREQ_ADJ_MHZ-.0000001}
+                wd_logger 1 "Fixing spot frequecies by ${freq_adj} Hz"
+                cp decodes_cache.txt decodes_cache.txt.unfixed
+                awk -v freq_adj=${freq_adj} \
+                    '{fixed_freq = $5 + freq_adj; printf( "%6s %4s %3d %5.2f %11.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
+                    decodes_cache.txt > decodes_cache.txt.fixed
+                cp -p decodes_cache.txt.fixed decodes_cache.txt
+            fi
+
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
             create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_kiwi_ov_count}" ${receiver_call} ${receiver_grid}
