@@ -500,7 +500,7 @@ function kiwirecorder_manager_daemon()
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
                 wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                 continue
             fi
             kiwi_recorder_pid=$!
@@ -513,7 +513,7 @@ function kiwirecorder_manager_daemon()
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: While checking nice level before renicing 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                 continue
             fi
             local before_nice_level=$(< before_nice_level.txt)
@@ -523,7 +523,7 @@ function kiwirecorder_manager_daemon()
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'renice --priority -15 ${kiwi_recorder_pid}' => ${rc}"
-                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                 continue
             fi
 
@@ -531,7 +531,7 @@ function kiwirecorder_manager_daemon()
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: While checking for after_nice_level with 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                 continue
             fi
             local after_nice_level=$(< after_nice_level.txt)
@@ -550,7 +550,7 @@ function kiwirecorder_manager_daemon()
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: ' wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
             fi
-            sleep 1
+            wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
             continue
         fi
 
@@ -559,16 +559,38 @@ function kiwirecorder_manager_daemon()
             printf "%(%s)T 0" -1  > ${OVERLOADS_LOG_FILE}
         fi
 
-        if [[ ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
-            wd_logger 2 "${KIWI_RECORDER_LOG_FILE} is empty, so no overloads have been reported and thus there are no OV counts to be checked"
+        if [[ -n "${kiwirecorder_ov_flag}" && ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
+            wd_logger 2 "The Kiwi is running old code which doesn't report overloads in its status page, so we are using the old technique of counting OVs in the Kiwi's stdout saved in ${KIWI_RECORDER_LOG_FILE}\nBut that file  is empty, so no overloads have been reported and thus there are no OV counts to be checked"
         else
             local current_time=$(printf "%(%s)T" -1 )
-            if [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
-                ### there may be new OV events.  
-                local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
-                local old_ov_count=${old_ov_info[1]}
+            local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
+            local old_ov_count=${old_ov_info[1]}
+            local new_ov_count=0
 
-                local new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
+            if [[ -z "${kiwirecorder_ov_flag}" ]]; then
+                ### We can poll the status page to learn if there are any new ov events
+                local rc
+                wd_logger 2 "Getting overload counts from the Kiwi's status page"
+                get_kiwirecorder_ov_count_from_ip_port  ov_count_var  ${receiver_ip}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: failed to get expected status from kiwi"
+                else
+                    local new_ov_count=${ov_count_var}
+                    if [[ ${new_ov_count} -eq ${old_ov_count} ]]; then
+                        wd_logger 2 "The ov count ${new_ov_count} reported by the Kiwi status page hasn't changed"
+                    else
+                        if [[ ${new_ov_count} -gt ${old_ov_count} ]]; then
+                            wd_logger 2 "The ov count reported by the Kiwi has increased from ${old_ov_count} to ${new_ov_count}"
+                        else
+                            wd_logger 1 "The ov count ${new_ov_count} reported by the Kiwi status page is less than the previously reported count of ${old_ov_count}, so the Kiwi seems to have restarted"
+                        fi
+                        printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
+                    fi
+                fi
+            elif [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
+                ### Since kwirecorder has recently written one or more "OV" lines to its output, so count the number of new lines
+                new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
                 if [[ -z "${new_ov_count}" ]]; then
                     wd_logger 1 "Found no lines with 'OV' in ${KIWI_RECORDER_LOG_FILE}"
                     new_ov_count=0
@@ -586,6 +608,7 @@ function kiwirecorder_manager_daemon()
                     wd_logger 1 "Found ${new_ov_count} new - ${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
                 fi
             fi
+
             ### If there have been OV events, then every 10 minutes printout the count and mark the most recent line in ${OVERLOADS_LOG_FILE} as PRINTED
             local latest_ov_log_line=( $(tail -1 ${OVERLOADS_LOG_FILE}) )   
             local latest_ov_count=${latest_ov_log_line[1]}
@@ -617,7 +640,7 @@ function kiwirecorder_manager_daemon()
                 fi
             fi
         fi
-        sleep 1
+        wd_sleep ${KIWI_POLLING_SLEEP-30}    ### By default sleep 30 seconds between each check of the Kiwi status
     done
 }
 
