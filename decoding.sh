@@ -1335,7 +1335,7 @@ function decoding_daemon() {
             ### So if  SPOT_FREQ_ADJ_HZ is not blank, then modify the frequency of each spot by that floating point HZ value.  SPOT_FREQ_ADJ_HZ defaults to +.1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
             if [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
                 local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
-                wd_logger 1 "Fixing spot frequecies by ${freq_adj} Hz"
+                wd_logger 1 "Fixing spot frequecies by ${freq_adj_hz} Hz"
                 cp decodes_cache.txt decodes_cache.txt.unfixed
                 awk -v freq_adj_hz=${freq_adj_hz} \
                     'BEGIN{freq_adj_mhz = freq_adj_hz / 1000000} {fixed_freq_mhz = $5 + freq_adj_mhz; printf( "%6s %4s %3d %5.2f %11.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq_mhz, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
