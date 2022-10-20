@@ -555,7 +555,7 @@ function validate_configuration_file()
         if [[ "${absolute_value_freq_adj:0:1}" == "." ]]; then
             ### The regex in the test below needs that there be a digit before a '.' in the number
             absolute_value_freq_adj="0${absolute_value_freq_adj}"
-            wd_logger 1 "Prepend a missing '0' to the SPOT_FREQ_ADJ_HZ value ${SPOT_FREQ_ADJ_HZ} to create the test value ${absolute_value_freq_adj}"
+            wd_logger 2 "Prepend a missing '0' to the SPOT_FREQ_ADJ_HZ value ${SPOT_FREQ_ADJ_HZ} to create the test value ${absolute_value_freq_adj}"
         fi
 
         if ! [[ ${absolute_value_freq_adj} =~ ^[+-]?[0-9]+([.][0-9]+)?$  ]] ; then
