@@ -549,6 +549,25 @@ function validate_configuration_file()
     fi
     source ${WSPRDAEMON_CONFIG_FILE}
 
+    if [[ -n "${SPOT_FREQ_ADJ_HZ-}" ]]; then
+        local absolute_value_freq_adj=${SPOT_FREQ_ADJ_HZ#-}       ### Strip off a leading '-'
+        if [[ "${absolute_value_freq_adj:0:1}" == "." ]]; then
+            ### The regex in the test below needs that there be a digit before a '.' in the number
+            absolute_value_freq_adj="0${absolute_value_freq_adj}"
+            wd_logger 1 "Prepend a missing '0' to the SPOT_FREQ_ADJ_HZ value ${SPOT_FREQ_ADJ_HZ} to create the test value ${absolute_value_freq_adj}"
+        fi
+
+        if ! [[ ${absolute_value_freq_adj} =~ ^[+-]?[0-9]+([.][0-9]+)?$  ]] ; then
+            wd_logger 1 "ERROR: the value '${SPOT_FREQ_ADJ_HZ}' of SPOT_FREQ_ADJ_HZ which has been defined in the conf file is not a valid integer or float"
+            exit 1
+        fi
+        local spot_freq_adj_max_hz=${SPOT_FREQ_ADJ_MAX_HZ-20}    ### By default, limit spot frequency adjustments to +/- 20 Hz
+        if [[ ${absolute_value_freq_adj%.*} -gt ${spot_freq_adj_max_hz} ]]; then
+            wd_logger 1 "ERROR: the value '${SPOT_FREQ_ADJ_HZ}' of SPOT_FREQ_ADJ_HZ defined in the conf file is greater than the max supported value of +/-${spot_freq_adj_max_hz}"
+            exit 1
+        fi
+    fi
+
     if [[ -z "${RECEIVER_LIST[@]-}" ]]; then
         echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' does not contain a definition of the RECEIVER_LIST[*] array or that array is empty"
         exit 1

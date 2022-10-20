@@ -619,7 +619,7 @@ function kiwirecorder_manager_daemon()
             local ov_print_interval=${OV_PRINT_INTERVAL_SECS-600}        ## By default, print OV count every 10 minutes
             local ovs_since_last_print=$((${latest_ov_count} - ${last_ov_print_count}))
             if [[ ${secs_since_last_ov_print} -ge ${ov_print_interval} ]] && [[ "${ovs_since_last_print}" -gt 0 ]]; then
-                wd_logger 1 "${ovs_since_last_print} overload events (OV) were reported in the last ${ov_print_interval} seconds"
+                wd_logger 1 "$(printf "%5d overload events (OV) were reported in the last ${ov_print_interval} seconds" ${ovs_since_last_print})" 
                 printf " PRINTED" >> ${OVERLOADS_LOG_FILE}
             fi
             truncate_file ${OVERLOADS_LOG_FILE} ${MAX_OV_FILE_SIZE-100000}
