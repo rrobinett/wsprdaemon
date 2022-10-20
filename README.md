@@ -89,7 +89,7 @@ After installation and configuration is completed, run:
 
 | Command | Description |
 | ------- | ----------- |
-| `~/wsprdaemon/wsprdaemon.sh -a` | Starts WD running as a background linux service which will automatically start after any reboot or power cycle of your server |
+| `~/wsprdaemon/wsprdaemon.sh -A` | Starts WD running as a background linux service which will automatically start after any reboot or power cycle of your server |
 | `~/wsprdaemon/wsprdaemon.sh -z` | Stop any running WD, but it will start again after a reboot/power cycle |
 | `~/wsprdaemon/wsprdaemon.sh -s` | Display the status of the WD service |
 | `~/wsprdaemon/wsprdaemon.sh -h` | Help menu |
