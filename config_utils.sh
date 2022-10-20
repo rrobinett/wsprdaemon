@@ -551,6 +551,7 @@ function validate_configuration_file()
 
     if [[ -n "${SPOT_FREQ_ADJ_HZ-}" ]]; then
         local absolute_value_freq_adj=${SPOT_FREQ_ADJ_HZ#-}       ### Strip off a leading '-'
+        absolute_value_freq_adj=${absolute_value_freq_adj#+}      ### Strip off a leading '+"
         if [[ "${absolute_value_freq_adj:0:1}" == "." ]]; then
             ### The regex in the test below needs that there be a digit before a '.' in the number
             absolute_value_freq_adj="0${absolute_value_freq_adj}"
