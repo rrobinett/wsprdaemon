@@ -1176,7 +1176,9 @@ function decoding_daemon() {
 
                 processed_wav_files="yes"
             fi
+
             if [[ " ${receiver_modes_list[*]} " =~ " F${returned_minutes} " ]]; then
+                ### Check for FST4W spots in the wav file
 
                 local decode_dir="F_${returned_seconds}"
                 local decode_dir_path=$(realpath ${decode_dir})
@@ -1186,7 +1188,15 @@ function decoding_daemon() {
 
                 ### Don't linger in that F_xxx subdir, since wd_logger ... will get logged there
                 cd ${decode_dir_path}
-                touch plotspec
+                touch plotspec decdata        ### Instructs jt9 to output spectral width information to jt9_output.txt and append extended resolution spot lines to fst4_decodes.dat 
+                local old_fst4_decodes_dat_last_spot
+                if [[ ! -s fst4_decodes.dat ]] ; then
+                    wd_logger 1 "Thre is no file 'fst4_decodes.dat', so there have been no previous sucessful FST4W decodes"
+                    old_fst4_decodes_dat_last_spot=""
+                else
+                    old_fst4_decodes_dat_last_spot=$(tail -n 1 fst4_decodes.dat)
+                    wd_logger 1 "Found last spot previously decoded which is found in file 'fst4_decodes.dat':\n${old_fst4_decodes_dat_last_spot}"
+                fi
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename}
                 local start_time=${SECONDS}
                 ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
@@ -1198,9 +1208,11 @@ function decoding_daemon() {
                 if [[ ${ret_code} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
                 else
+                    ### jt9 succeeded 
                     if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
                         wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     else
+                        ### jt9 found spots
                         local spot_date="${decoder_input_wav_filename:0:6}"
                         local spot_time="${decoder_input_wav_filename:7:4}"
                         local pkt_mode=$(( ${returned_minutes} + 1 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 3 => FST4W-120,  6 => FST4W-300, ...
@@ -1213,16 +1225,62 @@ function decoding_daemon() {
                             sox_rms_noise_level="-999.0"
                             fft_noise_level="-999.0"
                         fi
+                        ### Get new spot lines in fst4_decodes.dat, a log file like ALL_WSPR.TXT where jt9 appends spot lines
+                        if [[ ! -s ${decode_dir_path}/fst4_decodes.dat ]]; then
+                            wd_logger  1 "ERROR: jt9 found the spots written to file '${decode_dir_path}/decoded.txt', but can't find the file or spot lines in the file '${decode_dir_path}/fst4_decodes.dat'"
+                        else
+                            wd_logger  1 "Extracting new spots expected to be in '${decode_dir_path}/fst4_decodes.dat'"
+                            if [[ -z "${old_fst4_decodes_dat_last_spot}" ]]; then
+                                wd_logger 1 "There were no old spots, so all spots in ${decode_dir_path}/fst4_decodes.dat are ithe new spotsi:\n$(<${decode_dir_path}/fst4_decodes.dat)"
+                                cp -p ${decode_dir_path}/fst4_decodes.dat ${decode_dir_path}/new_fst4_decodes.dat 
+                            else
+                                grep -A 100000 "${old_fst4_decodes_dat_last_spot}" ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/last_and_new_fst4_decodes.dat
+                                local rc=$?
+                                if [[ ${rc} -ne 0 ]]; then
+                                    wd_logger 1 "ERROR: 'grep -A 100000 \"${old_fst4_decodes_dat_last_spot}\" ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/last_and_new_fst4_decodes.dat' => ${rc}"
+                                else
+                                    grep -v "${old_fst4_decodes_dat_last_spot}" ${decode_dir_path}/last_and_new_fst4_decodes.dat > ${decode_dir_path}/new_fst4_decodes.dat
+                                    rc=$?
+                                    if [[ ${rc} -ne 0 ]]; then
+                                        wd_logger 1 "ERROR: can't find expected new decoded spot lines in ${decode_dir_path}/last_and_new_fst4_decodes.dat"
+                                    else
+                                        wd_logger 1 "Found newly decoded FST4W high res spot lines:\n$(< ${decode_dir_path}/new_fst4_decodes.dat)"
+                                    fi
+                                fi
+                            fi
+                            ### Flush useless '<...>' spots with those unrefereenced hashed tx calls from the  low resolution spots found in ${decode_dir_path}/decoded.txt
+                            if  grep -q -F "<...>" ${decode_dir_path}/new_fst4_decodes.dat ; then
+                                wd_logger  1 "Found one or more  '<...>' FST4W spots in the high resolution spots file.  Filtering them out"
+                                grep -v  -F "<...>" ${decode_dir_path}/new_fst4_decodes.dat > ${decode_dir_path}/decoded.tmp
+                                mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/new_fst4_decodes.dat
+                            fi
+                            if [[ -s ${decode_dir_path}/new_fst4_decodes.dat ]]; then
+                                wd_logger 1 "Found new FST4W high res spots:\n$(< ${decode_dir_path}/new_fst4_decodes.dat)"
+                            fi
+                       fi
 
-                        wd_logger  1 "FST4W spots in decoded.txt:    $(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
-                        wd_logger  1 "FST4W spots in jt9_output.txt: $(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/jt9_output.txt)"
+                        ### Flush useless '<...>' spots with those unrefereenced hashed tx calls from the  low resolution spots found in ${decode_dir_path}/decoded.txt
                         if  grep -q -F "<...>" ${decode_dir_path}/decoded.txt ; then
-                             wd_logger  1 "Found one or more  '<...>' FST4W spots.  Filtering them out"
+                             wd_logger  1 "Found one or more  '<...>' FST4W spots in the low resolution spots file.  Filtering them out"
                              grep -v  -F "<...>" ${decode_dir_path}/decoded.txt > ${decode_dir_path}/decoded.tmp
                              mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/decoded.txt
                              grep -v  -F "<...>" ${decode_dir_path}/jt9_output.txt > ${decode_dir_path}/decoded.tmp
                              mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/jt9_output.txt
                         fi
+                        if [[ -s ${decode_dir_path}/decoded.txt ]]; then
+                            wd_logger  1 "FST4W spots in decoded.txt:          \n$(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
+                        fi
+
+                        if grep -v DecodeFinished ${decode_dir_path}/jt9_output.txt ; then
+                            wd_logger  1 "FST4W spots in jt9_output.txt:       \n$(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/jt9_output.txt)"
+                        fi
+                        if [[ -s ${decode_dir_path}//new_fst4_decodes.dat ]] ; then
+                            wd_logger  1 "FST4W spots in new_fst4_decodes.dat: \n$(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/new_fst4_decodes.dat)"
+                        fi
+                        truncate_file ${decode_dir_path}/fst4_decodes.dat  100000        ### Limit the fiel which caches old decodes to 100 KBytes
+                        ### Done with attempts to decode FST4W packets
+
+                        ### Format the FST4W spot lines (if any) for upload to wsprnet and wsprdaemon
                         > ${decode_dir_path}/fst4w_spots.txt
                         if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
                             wd_logger  1 "Found no FST4W spots after filtering out '<...>' FST4W spots"
