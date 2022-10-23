@@ -1384,8 +1384,8 @@ function decoding_daemon() {
                         if [[ ! -s ${decode_dir_path}/low_res_fst4w_spots.txt ]]; then
                             wd_logger 1 "After filtering and reformating, found no valid FST4W spots"
                         else
-                            wd_logger 1 "FST4W found some mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds which were formatted into uploadable spot lines:\n$( < ${decode_dir_path}/low_res_fst4w_spots.txt )"
-                            cat ${decode_dir_path}/low_res_fst4w_spots.txt >> decodes_cache.txt
+                            wd_logger 1 "FST4W found some mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds which were formatted into uploadable spot lines:\n$( < ${decode_dir_path}/high_res_fst4w_spots.txt )"
+                            cat ${decode_dir_path}/high_res_fst4w_spots.txt >> decodes_cache.txt
                         fi
                     fi
                 fi
