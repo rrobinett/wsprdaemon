@@ -58,11 +58,10 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
                                      ### Protect against corrupt .pid files
                                      ### Add support for POST_ALL_SPOTS  config variable
-declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
-                                     ### Fix standard GPS-aided Kiwi spot frequencies by adding the value of SPOT_FREQ_ADJ_HZ *IN HERTZ* to the spots reported to wsprnet and wsprdaemon.org
+#declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
                                      ### Fix OV logging from Kiwis running SW which reports the overload count on the Kiwi's /status page
-                                     ### TODO: enhance frequency resolution of FST4W decoding to .1 Hz
-                                     ### TODO: upload earlier by watching for when all wspr and jtx processes are don
+declare -r VERSION=3.0.5            ### Enhance frequency resolution of FST4W decoding to .1 Hz
+                                     ### Upload earlier by watching for when all wspr and jtx processes are done
                                      ### TODO: install libresample library for use by keirecorder so audio frequency offset of about .1 is removed
                                      ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map

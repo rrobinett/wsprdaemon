@@ -1308,7 +1308,7 @@ function decoding_daemon() {
                             ###  fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
                             ###                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
-                                    'NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d 0 0 0 0 %2d 0 %5d %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, ($19 * 1000), pkt_mode}' \
+                                    'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d 0 0 0 0 %2d 0 %5d %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, ($19 * 1000), pkt_mode}' \
                                     ${decode_dir_path}/new_fst4w_decodes.dat > ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt
                             if [[ -s ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt ]]; then
                                 wd_logger  1 "Reformatted high resolution FST4W type 1 and/or type 3 spots to:\n$(<${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt)"
@@ -1381,10 +1381,10 @@ function decoding_daemon() {
                         fi
 
                         ### Add any FST4W spots found and formatted above to the file 'decodes_cache.txt' which will be queued to posting daemon
-                        if [[ ! -s ${decode_dir_path}/low_res_fst4w_spots.txt ]]; then
+                        if [[ ! -s ${decode_dir_path}/high_res_fst4w_spots.txt ]]; then
                             wd_logger 1 "After filtering and reformating, found no valid FST4W spots"
                         else
-                            wd_logger 1 "FST4W found some mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds which were formatted into uploadable spot lines:\n$( < ${decode_dir_path}/high_res_fst4w_spots.txt )"
+                            wd_logger 1 "Queuing $(wc -l < ${decode_dir_path}/high_res_fst4w_spots.txt) FST4W high res mode ${pkt_mode} spots after $(( SECONDS - start_time )) seconds which were formatted into uploadable spot lines:\n$( < ${decode_dir_path}/high_res_fst4w_spots.txt )"
                             cat ${decode_dir_path}/high_res_fst4w_spots.txt >> decodes_cache.txt
                         fi
                     fi
