@@ -1374,10 +1374,10 @@ function decoding_daemon() {
                             wd_logger  2 "FST4W spots in decoded.txt:          \n$(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
                         fi
                         if [[ -s ${decode_dir_path}/low_res_fst4w_spots.txt ]]; then
-                            wd_logger  1 "The formatted FST4W  low resolution spots found in '${decode_dir_path}/low_res_fst4w_spots.txt':\n$(< {decode_dir_path}/low_res_fst4w_spots.txt)"
+                            wd_logger  1 "The formatted FST4W  low resolution spots found in '${decode_dir_path}/low_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/low_res_fst4w_spots.txt)"
                         fi
                         if [[ -s ${decode_dir_path}/high_res_fst4w_spots.txt ]] ; then
-                            wd_logger  1 "The formatted FST4W high resolution spots found in '${decode_dir_path}/high_res_fst4w_spots.txt':\n$(< {decode_dir_path}/high_res_fst4w_spots.txt)"
+                            wd_logger  1 "The formatted FST4W high resolution spots found in '${decode_dir_path}/high_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/high_res_fst4w_spots.txt)"
                         fi
 
                         ### Add any FST4W spots found and formatted above to the file 'decodes_cache.txt' which will be queued to posting daemon
