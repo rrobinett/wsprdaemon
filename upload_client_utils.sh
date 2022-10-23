@@ -201,7 +201,7 @@ function get_wsprnet_uploading_job_dir_path(){
 declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-40} ### By default wait for the oldest spot file to be 40 seconds old before starting an upload of it and all newer spotfiles
 declare UPLOAD_SLEEP_SECONDS=10
 declare -r WSPR_CYCLE_SECONDS=120
-declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-100}    ### Wait until 100 seconds (default) into a wspr cycle before searching for spots to upload.
+declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-10}    ### Wait until 100 seconds (default) into a wspr cycle before searching for spots to upload.
 function upload_to_wsprnet_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
@@ -220,9 +220,24 @@ function upload_to_wsprnet_daemon() {
         else
             sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
         fi
-        wd_logger 1 "Waiting ${sleep_secs} seconds until cycle offset ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} for all decodes to finish"
+        wd_logger 1 "Waiting ${sleep_secs} seconds until cycle offset ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} when we will start to look for spot files and for all decodes to finish"
         wd_sleep ${sleep_secs}
 
+        ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
+        wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stablize, and for there to be no running 'wsprd' or 'jt9 jobs"
+        local old_spot_file_count=0
+        local spots_files_list=()
+        while    spots_files_list=($(find . -name '*_spots.txt') ) \
+              && [[ ${#spots_files_list[@]} -eq 0 ]] \
+              || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
+              || ps aux | grep -q "wsprd \|jt9" | grep -v grep ; do
+            ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
+            wd_logger 1 "Not ready to start uploads because: 1) the are no spot files  OR 2) there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found, OR there are running 'wsjtx' and/or 'jt9' jobs"
+            old_spot_file_count=${#spots_files_list[@]}
+            sleep ${UPLOAD_SLEEP_SECONDS}
+        done
+        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and the system isn't adding more of them"
+ 
         wd_logger 1 "Checking for CALL/GRID directories"
         local call_grid_dirs_list
         call_grid_dirs_list=( $(find . -mindepth 1 -maxdepth 1 -type d) )
@@ -233,13 +248,14 @@ function upload_to_wsprnet_daemon() {
             sleep ${UPLOAD_SLEEP_SECONDS}
             continue
         fi
-        wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
+
+       wd_logger 2 "Found ${#call_grid_dirs_list[@]} CALL/GRID directories:  '${call_grid_dirs_list[*]}'"
 
        ### All spots in an upload to wspr.org must come from a single CALL/GRID
        for call_grid_dir in ${call_grid_dirs_list[@]} ; do
            wd_logger 2 "Checking ${call_grid_dir}"
 
-           local spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
+           spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
 
            if [[ ${#spots_files_list[@]} -eq 0 ]]; then
                wd_logger 2 "Found no '*_spots.txt' files for ${call_grid_dir}"
