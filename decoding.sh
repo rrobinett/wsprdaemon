@@ -832,7 +832,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         ### The third row are values taken from WD's  rms_noise, fft_noise, WD.conf call sign and grid, etc.
         # printf "%6s        %4s            %3.2f               %3d     %5.2f         %12.7f         %-14s        %-6s          %2d           %2d         %4d             %4d              %4d             %4d             %2d              %3d             %3d             %2d               %6.1f                   %6.1f            %4d            %6s                %12s                  %5d     %6.1f      %6.1f     %6.1f      %6.1f   %6.1f     %6.1f     %6.1f    %6.1f               %4d                             %4d\n" \
         # field#:  1           2               10                 3         4              5             6           7            8             9          11              12               13              14              15               16             17               18                  19                      20             21            22                   23                   24        25         26        27         28      29        30       31      32                  33                              34    \
-        printf "%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\n" \
+        printf "%6s %4s %3.2f %5.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\n" \
              ${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_decodetype} ${spot_ipass} ${spot_nhardmin} ${spot_pkt_mode} ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${band} ${real_receiver_grid} ${real_receiver_call_sign} ${km} ${rx_az}  ${rx_lat}  ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot} >> ${cached_spots_file_name}
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -1432,7 +1432,7 @@ function decoding_daemon() {
                 wd_logger 1 "Fixing spot frequecies by ${freq_adj_hz} Hz"
                 cp decodes_cache.txt decodes_cache.txt.unfixed
                 awk -v freq_adj_hz=${freq_adj_hz} \
-                    'BEGIN{freq_adj_mhz = freq_adj_hz / 1000000} {fixed_freq_mhz = $5 + freq_adj_mhz; printf( "%6s %4s %3d %5.2f %11.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq_mhz, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
+                    'BEGIN{freq_adj_mhz = freq_adj_hz / 1000000} {fixed_freq_mhz = $5 + freq_adj_mhz; printf( "%6s %4s %5.1f %5.2f %12.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq_mhz, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
                     decodes_cache.txt > decodes_cache.txt.fixed
                 cp -p decodes_cache.txt.fixed decodes_cache.txt
             fi
