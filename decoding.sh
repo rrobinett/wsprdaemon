@@ -284,7 +284,7 @@ function decode_wpsr_wav_file() {
     local stdout_file=$4
     local wsprd_cmd_flags="$5"        ### ${WSPRD_CMD_FLAGS}
 
-    wd_logger 1 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}, wsprd_cmd_flags='${wsprd_cmd_flags}'"
+    wd_logger 2 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}, wsprd_cmd_flags='${wsprd_cmd_flags}'"
     local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
     wspr_decode_capture_freq_hzx=${wspr_decode_capture_freq_hz%_*}    ### Remove the _usb.wav
     local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
@@ -1186,32 +1186,33 @@ function decoding_daemon() {
                 rm -f ${decode_dir_path}/decoded.txt
                 wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
 
-                ### Don't linger in that F_xxx subdir, since wd_logger ... will get logged there
-                cd ${decode_dir_path}
-                touch plotspec decdata        ### Instructs jt9 to output spectral width information to jt9_output.txt and append extended resolution spot lines to fst4_decodes.dat 
+                touch ${decode_dir_path}/plotspec ${decode_dir_path}/decdata        ### Instructs jt9 to output spectral width information to jt9_output.txt and append extended resolution spot lines to fst4_decodes.dat 
                 local old_fst4_decodes_dat_last_spot
-                if [[ ! -s fst4_decodes.dat ]] ; then
-                    wd_logger 1 "Thre is no file 'fst4_decodes.dat', so there have been no previous sucessful FST4W decodes"
+                if [[ ! -s ${decode_dir_path}/fst4_decodes.dat ]] ; then
+                    wd_logger 2 "There is no file '${decode_dir_path}/fst4_decodes.dat', so there have been no previous successful FST4W decodes"
                     old_fst4_decodes_dat_last_spot=""
                 else
-                    old_fst4_decodes_dat_last_spot=$(tail -n 1 fst4_decodes.dat)
-                    wd_logger 1 "Found last spot previously decoded which is found in file 'fst4_decodes.dat':\n${old_fst4_decodes_dat_last_spot}"
+                    old_fst4_decodes_dat_last_spot=$(tail -n 1 ${decode_dir_path}/fst4_decodes.dat)
+                    wd_logger 2 "Found last spot previously decoded which is found in file '${decode_dir_path}/fst4_decodes.dat':\n${old_fst4_decodes_dat_last_spot}"
                 fi
 
                 local rc
-                ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename}
+                local start_time=${SECONDS}
+                ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}
                 rc=$?
                 if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: 'ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename}' => ${rc}"   ### This will be logged in the './F_xxx' sub directory
+                    wd_logger 1 "ERROR: 'ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc}"   ### This will be logged in the './F_xxx' sub directory
+                else
+                    ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
+                    cd ${decode_dir_path}
+                    ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    rc=$?
+                    cd - >& /dev/null
+                    ### Out of the subdir
                 fi
-                local start_time=${SECONDS}
-                ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
-                local ret_code=$?
-                rm ${decoder_input_wav_filename}
-                cd - >& /dev/null
-                ### Out of the subdir
+                wd_rm ${decode_dir_path}/${decoder_input_wav_filename}
 
-                if [[ ${ret_code} -ne 0 ]]; then
+                if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
                 else
                     ### jt9 succeeded 
@@ -1241,7 +1242,8 @@ function decoding_daemon() {
                             wd_logger  2 "Extracting new FST4W spots expected to be in '${decode_dir_path}/fst4_decodes.dat'"
                             if [[ -z "${old_fst4_decodes_dat_last_spot}" ]]; then
                                 wd_logger 1 "There were no old FST4W spots, so all spots in ${decode_dir_path}/fst4_decodes.dat are new spots:\n$(<${decode_dir_path}/fst4_decodes.dat)"
-                                cp -p ${decode_dir_path}/fst4_decodes.dat ${decode_dir_path}/new_fst4w_decodes.dat 
+                                ### This sed expression fixes lines output by jt9 where the $16 = 'sync' value overflows the width of the  wh
+                                sed 's/./& /56;s/\*\*\*\*\*\*\*\*\*/999999.99/' ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/new_fst4w_decodes.dat 
                             else
                                 grep -A 100000 "${old_fst4_decodes_dat_last_spot}" ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/last_and_new_fst4w_decodes.dat
                                 local rc=$?
@@ -1253,7 +1255,9 @@ function decoding_daemon() {
                                     if [[ ${rc} -ne 0 ]]; then
                                         wd_logger 1 "ERROR: can't find expected new FST4W high res spot lines in ${decode_dir_path}/last_and_new_fst4w_decodes.dat"
                                     else
-                                        wd_logger 1 "Found these newly decoded FST4W high res spot lines:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
+                                        wd_logger 2 "Found these newly decoded FST4W high res spot lines:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
+                                        ### This sed expression fixes lines output by jt9 where the $16 = 'sync' value overflows the width of the field and as a result mereges with field $14.
+                                        sed -i 's/./& /56;s/\*\*\*\*\*\*\*\*\*/999999.99/' ${decode_dir_path}/new_fst4w_decodes.dat 
                                     fi
                                 fi
                             fi
@@ -1311,7 +1315,7 @@ function decoding_daemon() {
                                     'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d 0 0 0 0 %2d 0 %5d %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, ($19 * 1000), pkt_mode}' \
                                     ${decode_dir_path}/new_fst4w_decodes.dat > ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt
                             if [[ -s ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt ]]; then
-                                wd_logger  1 "Reformatted high resolution FST4W type 1 and/or type 3 spots to:\n$(<${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt)"
+                                wd_logger  2 "Reformatted high resolution FST4W type 1 and/or type 3 spots to:\n$(<${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt)"
                             else
                                 wd_logger  1 "ERROR: Failed to reformat these high resolution FST4W spots:\n$(<${decode_dir_path}/new_fst4w_decodes.dat)"
                             fi
@@ -1326,13 +1330,13 @@ function decoding_daemon() {
                         else
                             ### Flush useless '<...>' spots with those unrefereenced hashed tx calls from the  low resolution spots found in ${decode_dir_path}/decoded.txt
                             if  grep -v -F "<...>" ${decode_dir_path}/jt9_output.txt > ${decode_dir_path}/decoded.tmp; then
-                                wd_logger  1 "Found some low res FST4W spot lines in '${decode_dir_path}/jt9_output.txt':\n$(< ${decode_dir_path}/jt9_output.txt)"
+                                wd_logger  2 "Found some low res FST4W spot lines in '${decode_dir_path}/jt9_output.txt':\n$(< ${decode_dir_path}/jt9_output.txt)"
                                 mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/jt9_output.txt
                             fi
                             if [[ ! -s ${decode_dir_path}/jt9_output.txt ]]; then
                                 wd_logger  1 "After filtering out '<...>' spot lines, found no low res FST4W spot lines in '${decode_dir_path}/jt9_output.txt'"
                             else
-                                wd_logger  1 "Formatting $(wc -l < ${decode_dir_path}/jt9_output.txt) spots found in '${decode_dir_path}/jt9_output.txt'"
+                                wd_logger  2 "Formatting $(wc -l < ${decode_dir_path}/jt9_output.txt) spots found in '${decode_dir_path}/jt9_output.txt'"
                                  # In WSJT-x v 2.2+, the wsprd decoder was enhanced.  That new wsprd can be detected because it outputs 17 fields to each line of ALL_WSPR.TXT
                                  #    fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
                                  #                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
@@ -1360,10 +1364,10 @@ function decoding_daemon() {
                                      'NF != 8  && NF != 9 && NF != 4 {printf "%6s %4s %3d %s %11.6f %s 0 0 0 0 0 0 0 0 %5d %s\n", spot_date, spot_time, $3, $4, (wav_file_freq_hz + $5) / 1000000, substr($0, 23, 32), ($NF * 1000), pkt_mode}' \
                                          ${decode_dir_path}/jt9_output.txt > ${decode_dir_path}/fst4w_bad_spots.txt
                                 if [[ -s ${decode_dir_path}/fst4w_bad_spots.txt ]]; then
-                                    wd_logger  1 "ERROR: Dumping bad FST4W spots (i.e. NF != 9 or 10):\n$(<${decode_dir_path}/fst4w_bad_spots.txt)"
+                                    wd_logger  2 "ERROR: Dumping bad FST4W spots (i.e. NF != 9 or 10):\n$(<${decode_dir_path}/fst4w_bad_spots.txt)"
                                 fi
                                 cat ${decode_dir_path}/fst4w_type1_and_type3_spots.txt ${decode_dir_path}/fst4w_type2_spots.txt > ${decode_dir_path}/low_res_fst4w_spots.txt
-                                wd_logger  1 "Found low res FST4W spots:\n$(< ${decode_dir_path}/low_res_fst4w_spots.txt)"
+                                wd_logger  2 "Found low res FST4W spots:\n$(< ${decode_dir_path}/low_res_fst4w_spots.txt)"
                           fi
                         fi
                         ### Done formatting low res FST4W spots
@@ -1374,10 +1378,10 @@ function decoding_daemon() {
                             wd_logger  2 "FST4W spots in decoded.txt:          \n$(awk '{printf "%d FIELDS: %s\n", NF, $0}' ${decode_dir_path}/decoded.txt)"
                         fi
                         if [[ -s ${decode_dir_path}/low_res_fst4w_spots.txt ]]; then
-                            wd_logger  1 "The formatted FST4W  low resolution spots found in '${decode_dir_path}/low_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/low_res_fst4w_spots.txt)"
+                            wd_logger  2 "The formatted FST4W  low resolution spots found in '${decode_dir_path}/low_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/low_res_fst4w_spots.txt)"
                         fi
                         if [[ -s ${decode_dir_path}/high_res_fst4w_spots.txt ]] ; then
-                            wd_logger  1 "The formatted FST4W high resolution spots found in '${decode_dir_path}/high_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/high_res_fst4w_spots.txt)"
+                            wd_logger  2 "The formatted FST4W high resolution spots found in '${decode_dir_path}/high_res_fst4w_spots.txt':\n$(< ${decode_dir_path}/high_res_fst4w_spots.txt)"
                         fi
 
                         ### Add any FST4W spots found and formatted above to the file 'decodes_cache.txt' which will be queued to posting daemon
