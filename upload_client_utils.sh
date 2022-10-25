@@ -230,9 +230,9 @@ function upload_to_wsprnet_daemon() {
         while    spots_files_list=($(find . -name '*_spots.txt') ) \
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
-              || ps aux | grep -q "wsprd \|jt9" | grep -v grep ; do
+              || ps aux | grep "wsprd \|jt9\|derived" | grep -qv grep ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
-            wd_logger 1 "Not ready to start uploads because: 1) the are no spot files  OR 2) there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found, OR there are running 'wsjtx' and/or 'jt9' jobs"
+            wd_logger 1 "Not ready to start uploads because: 1) there are no spot files  OR 2) there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found, OR 3) there are running 'wsjtx' and/or 'jt9' jobs"
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
         done
