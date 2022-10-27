@@ -130,6 +130,7 @@ declare WAV_SAMPLES_LIST=(
     "${SIGNAL_LEVEL_POST_TX_SEC} ${SIGNAL_LEVEL_POST_TX_LEN}"
 )
 
+### Record an error line to the log file if the wav file contains audio samples which exceed these levels
 declare WAV_MIN_LEVEL=${WAV_MIN_LEVEL--0.90}
 declare WAV_MAX_LEVEL=${WAV_MAX_LEVEL=0.90}
 
@@ -151,7 +152,11 @@ function get_wav_levels()
         local full_wav_bit_depth=$(echo "${full_wav_stats}" | awk '/Bit-depth/{print $2}')
         local full_wav_len_secs=$(echo "${full_wav_stats}" | awk '/Length/{print $3}')
 
-        wd_logger 1 "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+        if [[ $( echo "${full_wav_min_level} <  ${WAV_MIN_LEVEL}" | bc ) == "1"  || $( echo "${full_wav_max_level} >  ${WAV_MAX_LEVEL}" | bc ) == "1"  ]] ; then
+            wd_logger 1 "ERROR: wav file overflow detected  in file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+        else
+            wd_logger 2  "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+        fi
     fi
 
     local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
