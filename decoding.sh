@@ -131,8 +131,8 @@ declare WAV_SAMPLES_LIST=(
 )
 
 ### Record an error line to the log file if the wav file contains audio samples which exceed these levels
-declare WAV_MIN_LEVEL=${WAV_MIN_LEVEL--0.90}
-declare WAV_MAX_LEVEL=${WAV_MAX_LEVEL=0.90}
+declare WAV_MIN_LEVEL=${WAV_MIN_LEVEL--1.0}
+declare WAV_MAX_LEVEL=${WAV_MAX_LEVEL-1.0}
 
 function get_wav_levels() 
 {
@@ -146,16 +146,42 @@ function get_wav_levels()
         ### This function is called three times for each wav file.  We only need to check the whole wav file once to determine the min/max values
         ### So execute this check only the first time
         ### To see if the AGC might need to change from its default 60, check to see if any samples in the whole wav  file closely approach the MAX or MIN sample values
-        local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)
-        local full_wav_min_level=$(echo "${full_wav_stats}" | awk '/Min level/{print $3}')
-        local full_wav_max_level=$(echo "${full_wav_stats}" | awk '/Max level/{print $3}')
-        local full_wav_bit_depth=$(echo "${full_wav_stats}" | awk '/Bit-depth/{print $2}')
-        local full_wav_len_secs=$(echo "${full_wav_stats}" | awk '/Length/{print $3}')
+        ### 'sox -n stats' output this information on seperate line:
+        ###           DC offset 	Min level 	Max level 	Pk lev dB 	RMS lev dB 	RMS Pk dB 	RMS Tr dB 	Crest factor 	Flat factor 	Pk count 	Bit-depth 	Num samples 	Length s 	Scale max 	Window s
+        ### Field #:  0                 1               2               3               4               5               6               7               8               9               10              11              12              13              14  
+        ### Run 'man sox' and search for 'stats' to find a description of those statistic fields
 
-        if [[ $( echo "${full_wav_min_level} <  ${WAV_MIN_LEVEL}" | bc ) == "1"  || $( echo "${full_wav_max_level} >  ${WAV_MAX_LEVEL}" | bc ) == "1"  ]] ; then
-            wd_logger 1 "ERROR: wav file overflow detected  in file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+        local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)                                     ### sox -n stats prints those to stderr
+        local full_wav_stats_list=( $(echo "${full_wav_stats}" | awk '{printf "%s\t", $NF }')  )      ### store them in an array
+
+        if [[ ${#full_wav_stats_list[@]} -ne ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} ]]; then
+            wd_logger 1 "ERROR:  Got ${#full_wav_stats_list[@]} stats from 'sox -n stats', not the expected ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} fields"
         else
-            wd_logger 2  "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+            local full_wav_min_level=${full_wav_stats_list[1]}
+            local full_wav_max_level=${full_wav_stats_list[2]}
+            local full_wav_peak_level_count=${full_wav_stats_list[9]}
+            local full_wav_bit_depth=${full_wav_stats_list[10]}
+            local full_wav_len_secs=${full_wav_stats_list[12]}
+
+            ### Min and Max level are floating point numbers and their absolute values are  less than or equal to 1.0000
+            if [[ $( echo "${full_wav_min_level} <=  ${WAV_MIN_LEVEL}" | bc ) == "1"  || $( echo "${full_wav_max_level} >=  ${WAV_MAX_LEVEL}" | bc ) == "1"  ]] ; then
+                wd_logger 1 "ERROR: ${full_wav_peak_level_count} full level (+/-1.0) samples detected in file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+            else
+                wd_logger 2  "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
+            fi
+            ### Create a status file associated with this indsividual wav file from which the decoding daemon will extract wav overload information for the spots decoded from this wav file
+            echo "WAV_stats: ${full_wav_min_level} ${full_wav_max_level} ${full_wav_peak_level_count}" > {$wav_filename}.stats
+
+            ### Append these stats to a log file which can be searched by a yet-to-be-implemented 'wd-...' command
+            local wav_status_file="${WAV_STATUS_LOG_FILE-wav_status.log}"
+            touch ${wav_status_file}          ### In case it doesn't yet exist
+            if grep -q "${wav_filename}" ${wav_status_file} ; then
+                wd_logger 1 "ERROR: unexpectly found log line for wav file ${wav_filename} in ${wav_status_file}"
+            else
+                wd_logger 1 "Appending '${wav_filename}: ${full_wav_min_level} ${full_wav_max_level} ${full_wav_peak_level_count}' to the log file '${wav_status_file}'"
+                echo "${wav_filename}:  ${full_wav_min_level}  ${full_wav_max_level}  ${full_wav_peak_level_count}" >> ${wav_status_file}
+                truncate_file ${wav_status_file} 100000      ### Limit the size of this log file to 100 Kb
+            fi
         fi
     fi
 
@@ -354,7 +380,7 @@ function flush_wav_files_older_than()
             wd_rm ${wav_file}
         elif [[ ${wav_file} -nt ${reference_file} ]]; then
             (( ++newers ))
-            wd_logger 1 "ERROR: found  wav wav file '${wav_file}' is newer than ${reference_file}"
+            wd_logger 1 "ERROR: found wav file '${wav_file}' is newer than ${reference_file}"
         else
             ### 'find' prepends './' to the filenames it returns, so we can't compare flenames.  But if two wav file timestamps in the same directory match each other, then they must be the same wav file
             wd_logger 1 "Found expected reference file ${reference_file}"
@@ -1406,7 +1432,8 @@ function decoding_daemon() {
             get_config_file_variable config_archive_wav_files "ARCHIVE_WAV_FILES"
 
             if [[ "${config_archive_wav_files}" != "yes" ]]; then
-                rm ${decoder_input_wav_filepath}
+                wd_rm ${decoder_input_wav_filepath}
+                wd_rm ${decoder_input_wav_filepath}.stats
             else
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
