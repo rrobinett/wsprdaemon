@@ -259,18 +259,54 @@ function pinge()
 alias wd-wav='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 alias wd-ovs='grep "[^0] overload events in this 2 minute cycle" `find /dev/shm/wsprdaemon/ -name decoding_daemon.log` | sort -k 11,11n '
 
-function wd-ovt()
+function wd-overloads()
 {
-    local log_file
-    for log_file in `find /dev/shm/wsprdaemon/ -name decoding_daemon.log`; do
-        local ov_lines
-        ov_lines=$(grep "[^0] overload events in this 2 minute cycle" ${log_file})
-        if [[ -n "${ov_lines}" ]]; then
-            local ov_lines_count=$(echo "${ov_lines}" | wc -l)
-            echo "${log_file} has ${ov_lines_count} OV lines, the most recent 4 are:"
-            echo "${ov_lines}" | tail -n 4
-            echo
-        fi
-    done
-}
+    local log_file_list=( $(find /dev/shm/wsprdaemon/ -name wav_status.log) )
+    printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECIEVER/BAND/log_file"
 
+    if [[ ${#log_file_list[@]} -eq 0 ]]; then
+        echo "Can't find any 'wav_status.log' files, so this must be an older version of WD"
+    else
+        awk '$2 == -1.0 || $3 == 1.0 { printf( "%-40s %s\n", substr(FILENAME,33) ":", $0) } ' ${log_file_list[@]}
+    fi
+}
+alias wd-ov='wd-overloads'
+alias wdov='wd-ov'
+
+function wd-query()
+{
+    if [[ $# -lt 1 ]]; then
+        echo "usage:  wd-query reporter [tx_call [minutes_to_search]]"
+        return 0
+    fi
+    local reporter=$1
+    local tx_call=${2-%}
+    local query_hours=${3-1}
+
+    PGPASSWORD=JTWSPR2008 psql -U wdread -h wsprdaemon.org -p 5432 -d tutorial -c \
+        "select time,tx_call,tx_grid,rx_id,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,freq,metric as \"S width (mHz)\" from wsprdaemon_spots_s where rx_id='WA2TP' and mode >2 and time > now() - interval '60 minutes' order by (time,freq,rx_id) desc;"
+}
+alias wd-q='wd-query'
+alias wdq='wd-query'
+
+###  Reloads these functions and aliases into the users running bash (must be an alias)
+alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
+alias wdrc='wd-rc'
+
+function wd-help()
+{
+    echo "Programs which print information about Wsprdaemon (WD) system:
+Command       Can also be executed by   Description
+wd-help       wd-h wd-                   Prints this help message
+wd-start      wd-a wda                   Start or keep running WD
+wd-stop       wd-z wdz                   Stop WD if it is running
+wd-status     wd-s wds                   Show the status of a running WD 
+wd-upload-wn  wd-un wdln                 Watch the 'upload to wsprnet' log
+wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
+wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
+wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files 
+wd-query      wd-q wdq                   Query the wsprdaemon database for spots
+"
+}
+alias wd-='wd-help'
+alias wd-h='wd-help'
