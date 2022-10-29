@@ -170,7 +170,7 @@ function get_wav_levels()
                 wd_logger 2  "In file ${wav_filename} of length=${full_wav_len_secs} seconds and with Bit-depth=${full_wav_bit_depth}: the min/max levels are: min=${full_wav_min_level}, max=${full_wav_max_level}"
             fi
             ### Create a status file associated with this indsividual wav file from which the decoding daemon will extract wav overload information for the spots decoded from this wav file
-            echo "WAV_stats: ${full_wav_min_level} ${full_wav_max_level} ${full_wav_peak_level_count}" > {$wav_filename}.stats
+            echo "WAV_stats: ${full_wav_min_level} ${full_wav_max_level} ${full_wav_peak_level_count}" > ${wav_filename}.stats
 
             ### Append these stats to a log file which can be searched by a yet-to-be-implemented 'wd-...' command
             local wav_status_file="${WAV_STATUS_LOG_FILE-wav_status.log}"
@@ -1433,7 +1433,6 @@ function decoding_daemon() {
 
             if [[ "${config_archive_wav_files}" != "yes" ]]; then
                 wd_rm ${decoder_input_wav_filepath}
-                wd_rm ${decoder_input_wav_filepath}.stats
             else
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
@@ -1448,6 +1447,11 @@ function decoding_daemon() {
             else
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"
             fi
+
+            ### Obtain wav and ADC overlaod information so they can be appended to the spot lines
+            wd_logger 1 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
+            wd_rm ${decoder_input_wav_filepath}.stats
+
             ### Record the 12 signal levels + rms_noise + fft_noise + new_overloads to the ../signal_levels/...csv log files
             local wspr_decode_capture_date=${wav_file_list[0]/T*}
                   wspr_decode_capture_date=${wspr_decode_capture_date:2:8}      ## chop off the '20' from the front
