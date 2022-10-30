@@ -276,15 +276,25 @@ alias wdov='wd-ov'
 function wd-query()
 {
     if [[ $# -lt 1 ]]; then
-        echo "usage:  wd-query reporter [tx_call [minutes_to_search]]"
+        echo "usage:  wd-query {-r | -t} ID [HOURS_TO_SEARCH]       -r => search for ID of reporter     -t => search for ID of transmit beacon"
         return 0
     fi
-    local reporter=$1
-    local tx_call=${2-%}
-    local query_hours=${3-1}
+    local query_target_field="rx_id"
+    case $1 in
+        -r) query_target_field="rx_id";shift ;;
+        -t) query_target_field="tx_call";shift ;;
+    esac
+    if [[ $# -lt 1 ]]; then
+        echo "ERROR: missing ID"
+        echo "usage:  wd-query {-r | -t} ID [HOURS_TO_SEARCH]       -r => search for ID of reporter     -t => search for ID of transmit beacon"
+        return 1
+    fi
+    local target_val=$1
+    local query_hours=${2-1}
+    local query_minutes=$((query_hours * 60))
 
     PGPASSWORD=JTWSPR2008 psql -U wdread -h wsprdaemon.org -p 5432 -d tutorial -c \
-        "select time,tx_call,tx_grid,rx_id,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,freq,metric as \"S width (mHz)\" from wsprdaemon_spots_s where rx_id='WA2TP' and mode >2 and time > now() - interval '60 minutes' order by (time,freq,rx_id) desc;"
+        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,freq,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >2 and time > now() - interval '${query_minutes} minutes' order by (time,freq,rx_id) desc;"
 }
 alias wd-q='wd-query'
 alias wdq='wd-query'
