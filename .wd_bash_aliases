@@ -294,7 +294,7 @@ function wd-query()
     local query_minutes=$((query_hours * 60))
 
     PGPASSWORD=JTWSPR2008 psql -U wdread -h wsprdaemon.org -p 5432 -d tutorial -c \
-        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,freq,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >2 and time > now() - interval '${query_minutes} minutes' order by (time,freq,rx_id) desc;"
+        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >2 and time > now() - interval '${query_minutes} minutes' order by (time,rx_id,receiver) desc;"
 }
 alias wd-q='wd-query'
 alias wdq='wd-query'
