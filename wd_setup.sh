@@ -494,8 +494,37 @@ function load_wsjtx_commands()
     fi
 }
 
+### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
+###           To get around that bug, have WD spawn a ssh session to itself
+function setup_wd_auto_ssh()
+{
+    if [[ ! -d ~/.ssh ]]; then
+        wd_logger 1 "ERROR: there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
+        exit 1
+    fi
+    if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+        wd_logger 1 "ERROR: there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
+        exit 1
+    fi
+    local my_ssh_pub_key=$(< ~/.ssh/id_rsa.pub)
+    if [[ ! -f ~/.ssh/authorized_keys ]] || ! grep -q "${my_ssh_pub_key}" ~/.ssh/authorized_keys; then
+        wd_logger 1 "Adding my ssh public key to my ~/.ssh/authorized_keys file"
+        echo "${my_ssh_pub_key}" >> ~/.ssh/authorized_keys
+    fi
+    local wd_auto_ssh_pid=$(ps aux | grep "ssh \-fN" | awk '{print $2}')
+    if [[ -n "${wd_auto_ssh_pid}" ]]; then
+        wd_logger 2 "Auto ssh session is running with PID ${wd_auto_ssh_pid}"
+    else
+        wd_logger 1 "Spawning auto ssh session"
+        ssh -fN localhost
+    fi
+}
+
+### This is called once at startup
 function check_for_needed_utilities()
 {
+    setup_wd_auto_ssh
+
     local package_needed
     for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
         wd_logger 2 "Checking for package ${package_needed}"
