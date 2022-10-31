@@ -1009,7 +1009,7 @@ function decoding_daemon() {
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
     cd ${recording_dir}
-    local old_kiwi_ov_lines=0
+    local old_kiwi_ov_count=0
 
     local my_daemon_pid=$(< ${DECODING_DAEMON_PID_FILE})
     local proc_file=/proc/${my_daemon_pid}/status
@@ -1108,6 +1108,7 @@ function decoding_daemon() {
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
             wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
+
            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" || " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
@@ -1180,25 +1181,29 @@ function decoding_daemon() {
                         new_kiwi_ov_count=0
                         wd_logger 1 "Not a KiwiSDR, so there is no overload information"
                     else
+                        local current_kiwi_ov_count
                         local rc
-                        get_kiwirecorder_ov_count  current_kiwi_ov_lines ${receiver_name}           ### here I'm reusing current_kiwi_ov_lines since it also equals the number of OV events since the kiwi started
+                        get_kiwirecorder_ov_count  current_kiwi_ov_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
                         rc=$?
                         if [[ ${rc} -eq 0 ]]; then
-                            wd_logger 1 "'get_current_ov_count  current_kiwi_ov_lines ${receiver_name}' -> current_kiwi_ov_lines=${current_kiwi_ov_lines}"
-                            new_kiwi_ov_count=$(( ${current_kiwi_ov_lines} - ${old_kiwi_ov_lines} ))
-                            old_kiwi_ov_lines=${current_kiwi_ov_lines}
+                            wd_logger 1 "'get_current_ov_count  current_kiwi_ov_count ${receiver_name}' -> current_kiwi_ov_count=${current_kiwi_ov_count}"
                         else
                             wd_logger 1 "ERROR: 'get_current_ov_count  current_ov_count ${receiver_name}' => ${rc}, so trying old OV count method"
-                            local current_kiwi_ov_lines=0
-                            current_kiwi_ov_lines=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
-                            if [[ ${current_kiwi_ov_lines} -lt ${old_kiwi_ov_lines} ]]; then
+                            local current_kiwi_ov_count=0
+                            current_kiwi_ov_count=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
+                            if [[ ${current_kiwi_ov_count} -lt ${old_kiwi_ov_count} ]]; then
                                 ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
-                                old_kiwi_ov_lines=0
+                                old_kiwi_ov_count=0
                             fi
                         fi
-                        new_kiwi_ov_count=$(( ${current_kiwi_ov_lines} - ${old_kiwi_ov_lines} ))
-                        old_kiwi_ov_lines=${current_kiwi_ov_lines}
-                        wd_logger 1 "The KiwiSDR reported ${new_kiwi_ov_count} overload events in this 2 minute cycle"
+                        new_kiwi_ov_count=$(( ${current_kiwi_ov_count} - ${old_kiwi_ov_count} ))
+                        if [[ ${new_kiwi_ov_count} -lt 0 ]]; then
+                            wd_logger 1 "The KiwiSDR reported ${new_kiwi_ov_count} ov events which is less than the old ${old_kiwi_ov_count}, so the Kiwi must have restarted"
+                            new_kiwi_ov_count=${current_kiwi_ov_count}
+                        fi
+                        old_kiwi_ov_count=${current_kiwi_ov_count}
+                        echo "${decoder_input_wav_filename}: ${current_kiwi_ov_count} ${new_kiwi_ov_count}" >> kiwi_ovs.log
+                        wd_logger 1 "The KiwiSDR reported ${new_kiwi_ov_count} new overload events in this 2 minute cycle"
                     fi
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_kiwi_ov_count}"
 
