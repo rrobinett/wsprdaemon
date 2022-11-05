@@ -8,10 +8,12 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
-alias rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
+### Reload this file
+alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
+alias wdrc='wd-rc'
 
 ### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
-function rci() 
+function wd-rci() 
 {
     if [[ ! -f ~/.bash_aliases ]] || ! grep wd_bash_aliases ~/.bash_aliases > /dev/null ; then
         echo "
@@ -24,9 +26,11 @@ fi
          echo ".wd_bash_aliases has already been installed in ~/.bash_aliases"
     fi
 }
+alias wdrci='wd-rci'
 
 ### Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
-alias rcc='source ~/.bash_aliases'
+alias wd-rcc='source ~/.bash_aliases'
+alias wd-rcc='wd-rcc'
 
 ### Common usasges of linux commands
 alias l='ls -CF'
@@ -47,6 +51,7 @@ alias cdw='cd ~/wsprdaemon/'
 alias cdt='cd ${WD_TMP_ROOT}/'
 alias cdu='cd ${WD_TMP_ROOT}/uploads.d/'
 
+### Start 'vi' using WD's .vimrc
 function vi() 
 {
     local vim_rc_file=~/.vimrc
@@ -64,18 +69,6 @@ alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
 
-alias wd='~/wsprdaemon/wsprdaemon.sh'
-alias wdl='wd -l'
-alias wdle='wd -l e'
-alias wdln='wd -l n'
-alias wdld='wd -l d'
-alias wda='wd -a'
-alias wdz='wd -z'
-alias wds='wd -s'
-alias wdv='wd -V'
-alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
-alias wddd='wd -D'       ### Decrement
-
 alias tf='tail -F -n 40'
 alias tfd='tf decoding_daemon.log'
 alias tfr='tf wav_recording_daemon.log'
@@ -85,7 +78,36 @@ alias g='git'
 alias gd='git diff'
 alias gs='git status'
 
+### Get pub file for a copy/past to remote server's .ssh/authorized_keys file
 alias catss='cat ~/.ssh/*pub'
+
+### Helps cleanup WD source files
+function find_unused_vars() {
+    local sh_file=$1
+
+    local var
+    local vars=$(cat ${sh_file} | sed -n '/^declare /s///p' | sed 's/=.*//')
+    for var in ${vars}; do
+        local lines=$(grep -v '^declare' ${sh_file} | grep ${var})
+        if [[ -z "${lines}" ]]; then
+            echo "Found no usage of variable ${var}"
+        fi
+    done
+}
+
+### Prepends the date to each response from 'ping'
+function pinge() 
+{
+   if [[ -z "$1" ]]; then
+       echo "usage:  pinge DEST"
+       return 1
+   fi
+   local dest=$1
+   local pong
+
+   ping ${dest} | while read pong; do echo "$(date): ${pong}"; done
+}
+
 
 function setup-ubuntu() {
     local remote_ip=$1
@@ -188,76 +210,32 @@ function kiwi-stats(){
     printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total  $users_total $wsprdaemon_total
 }
 
-function show-ovs(){
-    local log_file
+### Aliases which call WD
+alias wd='~/wsprdaemon/wsprdaemon.sh'
+alias wdl='wd -l'
+alias wdle='wd -l e'
+alias wdln='wd -l n'
+alias wdld='wd -l d'
+alias wda='wd -a'
+alias wdz='wd -z'
+alias wds='wd -s'
+alias wdv='wd -V'
+alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
+alias wddd='wd -D'       ### Decrement
 
-    for log_file in $(find ${WD_TMP_ROOT}/recording.d -name wav_recording_daemon.log) ; do
-         local log_line=$(grep OV ${log_file} | sort -k15,15n | tail -n 1)
-         if [[ -n "${log_line}" ]]; then
-             local log_path_list=(${log_file//\// })
-             local rx_name=${log_path_list[3]}
-             local rx_band=${log_path_list[4]}
-             printf "%12s %4s: %s\n" "${rx_name}" "${rx_band}" "${log_line}"
-         fi
-     done
-}
-
-function show-wav(){
-    awk -f ~/wsprdaemon/.show-wav.awk `find ${WD_TMP_ROOT}/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
-}
-alias sw=show-wav
-
-function show-merged() {
+function wd-merged() {
     ls -lrt `find ${WD_TMP_ROOT}/ -name merged.log`
 }
 
-function show-zkd() {
-    curl -s http://jimlill.com:8088/today_int.html | html2text | grep 'KH6KR\|KFS\|WA2TP\|W6SB\|K6PZB\|KPH\|KK6PR\|AI6VN/KH6\|KJ6MKI\|N6GN\|WA2ZKD\|KD2OM\|OE9GHV\|OE9HLH\|IW2NKE\|KA7OEI\|KP4MD'
+
+### 11/2/22 - This doesn't work anymore, but it could be modifed 
+function wd-wav(){
+    awk -f ~/wsprdaemon/.show-wav.awk `find ${WD_TMP_ROOT}/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
 }
+alias wdwav='wd-wav'
 
-function show-kh6() {
-    curl -s http://jimlill.com:8088/today_int.html | html2text | grep R$'\b'Ra'\|AI6VN/KH6\|KH6KR'
-}
-
-function show-mki() {
-    local day
-    local date_str
-
-    for day in $(seq -7 -1 ); do
-        date_str=$(date -v ${day}d  +%Y-%m-%d)
-        curl -s http://jimlill.com:8088/previous/${date_str} | html2text | awk "/KJ6MKI/{ printf \"${date_str}: %s\\n\", \$0}"
-     done
-     date_str=$(date +%Y-%m-%d)
-     curl -s http://jimlill.com:8088/today.html | html2text | awk "/KJ6MKI/{ printf \"${date_str}: %s\\n\", \$0}"
-
-}
-function find_unused_vars() {
-    local sh_file=$1
-
-    local var
-    local vars=$(cat ${sh_file} | sed -n '/^declare /s///p' | sed 's/=.*//')
-    for var in ${vars}; do
-        local lines=$(grep -v '^declare' ${sh_file} | grep ${var})
-        if [[ -z "${lines}" ]]; then
-            echo "Found no usage of variable ${var}"
-        fi
-    done
-}
-
-function pinge() 
-{
-   if [[ -z "$1" ]]; then
-       echo "usage:  pinge DEST"
-       return 1
-   fi
-   local dest=$1
-   local pong
-
-   ping ${dest} | while read pong; do echo "$(date): ${pong}"; done
-}
-
-alias wd-wav='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
-alias wd-ovs='grep "[^0] overload events in this 2 minute cycle" `find /dev/shm/wsprdaemon/ -name decoding_daemon.log` | sort -k 11,11n '
+### At sites which are archiving wav files, this gets some info
+alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 
 function wd-overloads()
 {
@@ -275,7 +253,7 @@ function wd-overloads()
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'kiwi_ovs.log' files, so this must be an older version of WD"
     else
-        awk '$3 > 0 && $3 != $2 { printf( "%-40s %15s %10d %10d\n", substr(FILENAME,33) ":", $1, $2, $3) } ' ${log_file_list[@]}
+        awk '$3 > 0 && $3 != $2 { printf( "%-70s %15s %10d %10d\n", FILENAME ":", $1, $2, $3) } ' ${log_file_list[@]}
     fi
 }
 alias wd-ov='wd-overloads'
