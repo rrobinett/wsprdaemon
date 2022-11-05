@@ -498,13 +498,17 @@ function load_wsjtx_commands()
 ###           To get around that bug, have WD spawn a ssh session to itself
 function setup_wd_auto_ssh()
 {
+    if [[ ${WD_NEEDS_SSH-no} =~ [Nn][Oo] ]]; then           ### Matches 'no', 'No', 'NO', and 'nO'
+        wd_logger 2 "WD_NEEDS_SSH=\"${WD_NEEDS_SSH-no}\", so not configured to start the Linux bug patch which runs an auto-ssh session"
+        return 0
+    fi
     if [[ ! -d ~/.ssh ]]; then
-        wd_logger 1 "ERROR: there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
-        exit 1
+        wd_logger 1 "ERROR: 'WD_NEED_SSH=\"${WD_NEED_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
+        return 1
     fi
     if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-        wd_logger 1 "ERROR: there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
-        exit 1
+        wd_logger 1 "ERROR: 'WD_NEED_SSH=\"${WD_NEED_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
+        return 2
     fi
     local my_ssh_pub_key=$(< ~/.ssh/id_rsa.pub)
     if [[ ! -f ~/.ssh/authorized_keys ]] || ! grep -q "${my_ssh_pub_key}" ~/.ssh/authorized_keys; then
@@ -515,9 +519,10 @@ function setup_wd_auto_ssh()
     if [[ -n "${wd_auto_ssh_pid}" ]]; then
         wd_logger 2 "Auto ssh session is running with PID ${wd_auto_ssh_pid}"
     else
-        wd_logger 1 "Spawning auto ssh session"
+        wd_logger 1 "Spawning a new auto ssh session by running 'ssh -fN localhost'"
         ssh -fN localhost
     fi
+    return 0
 }
 
 ### This is called once at startup
