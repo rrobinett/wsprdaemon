@@ -815,6 +815,39 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                       ### then the posting daemon will modify this last field to '1' to signal to the upload_server to forward this spot to wsprnet.org
     local cached_spots_file_name="${spot_file_date}_${spot_file_time}_spots.txt"
 
+    if grep -q "<...>" ${real_receiver_wspr_spots_file} ; then
+        grep -v "<...>" ${real_receiver_wspr_spots_file} > no_unknown_type3_spots.txt
+        wd_logger 1 "Posting 'no_unknown_type3_spots.txt' since found '<...>' calls in ${real_receiver_wspr_spots_file}"
+        real_receiver_wspr_spots_file=no_unknown_type3_spots.txt
+    fi
+
+    if [[ ${REMOVE_WD_DUP_SPOTS-yes} =~ [Yy][Ee][Ss] ]]; then
+        local spot_count=$(wc -l < ${real_receiver_wspr_spots_file} )
+        local tx_calls=$( awk '{print $6}' ${real_receiver_wspr_spots_file} | sort -u )
+        local tx_calls_list=( ${tx_calls} )
+        if [[ ${#tx_calls_list[@]} -eq ${spot_count} ]]; then
+            wd_logger 1 "Found no dup spots among the ${#tx_calls_list[@]} spots in ${real_receiver_wspr_spots_file}, so record all the spots"
+        else
+            local no_dups_spot_file=${real_receiver_wspr_spots_file}.nodups
+            > ${no_dups_spot_file}
+            wd_logger 1 "Found some dup spots in ${real_receiver_wspr_spots_file} since the spot_count=${spot_count} is greater than the number of calls #tx_calls_list[@]=${#tx_calls_list[@]} "
+            local tx_call
+            for tx_call in ${tx_calls_list[@]} ; do
+                grep "${tx_call}" ${real_receiver_wspr_spots_file} > spot_lines.txt
+                if [[ $(wc -l < spot_lines.txt) -eq 1 ]]; then
+                    cat spot_lines.txt >> ${no_dups_spot_file}
+                else
+                    sort -k 3,3n spot_lines.txt | tail -n 1 > add_spot_line.txt 
+                    wd_logger 1 "Found duplicate spot lines for tx_call=${tx_call}:\n$(< spot_lines.txt)\nSo adding only this spot line with the best SNR:\n$( < add_spot_line.txt)"
+                    cat add_spot_line.txt >> ${no_dups_spot_file}
+                fi
+            done
+            sort -k 5,5n ${no_dups_spot_file} > no_dup_spots.txt
+            wd_logger 1 "Posting the newly created 'no_dup_spots.txt' which differs from ${real_receiver_wspr_spots_file}:\n$(diff ${real_receiver_wspr_spots_file} no_dup_spots.txt)"
+            real_receiver_wspr_spots_file=no_dup_spots.txt
+        fi
+    fi
+
     wd_logger 2 "Enhance the spot lines from ALL_WSPR_TXT in ${real_receiver_wspr_spots_file} into ${cached_spots_file_name}"
     > ${cached_spots_file_name}         ### truncates or creates a zero length file
     local spot_line
@@ -1477,7 +1510,7 @@ function decoding_daemon() {
                 wd_logger 1 "Skipping frequency adjustment for GPS controlled Kiwi '${receiver_name}'"
             elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
                 local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
-                wd_logger 1 "Fixing spot frequecies by ${freq_adj_hz} Hz"
+                wd_logger 1 "Fixing spot frequencies by ${freq_adj_hz} Hz"
                 cp decodes_cache.txt decodes_cache.txt.unfixed
                 awk -v freq_adj_hz=${freq_adj_hz} \
                     'BEGIN{freq_adj_mhz = freq_adj_hz / 1000000} {fixed_freq_mhz = $5 + freq_adj_mhz; printf( "%6s %4s %5.1f %5.2f %12.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq_mhz, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
