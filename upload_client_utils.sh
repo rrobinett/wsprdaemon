@@ -225,18 +225,26 @@ function upload_to_wsprnet_daemon() {
 
         ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
         wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stablize, and for there to be no running 'wsprd' or 'jt9 jobs"
+        local ps_stdout=""
         local old_spot_file_count=0
         local spots_files_list=()
         while    spots_files_list=($(find . -name '*_spots.txt') ) \
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
-              || ps aux | grep "wsprd \|jt9\|derived" | grep -qv grep ; do
+              && ps_stdout=$( ps aux ) \
+              || echo "${ps_stdout}" | grep "wsprd \|jt9\|derived_calc.py" | grep -qv grep ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
-            wd_logger 1 "Not ready to start uploads because: 1) there are no spot files  OR 2) there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found, OR 3) there are running 'wsjtx' and/or 'jt9' jobs"
+            if [[ ${#spots_files_list[@]} -eq 0 ]]; then
+                wd_logger 1 "Not ready to start uploads because there are no spot files"
+            elif [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]]; then
+                 wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
+            else
+                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs"
+            fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
         done
-        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and the system isn't adding more of them"
+        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and 'ps' didn't find any jobs which might create more.  Here are the top 10 jobs currently running on the system:\n$(top -b -n 1 | sed -n '7,17p') "
  
         wd_logger 1 "Checking for CALL/GRID directories"
         local call_grid_dirs_list
