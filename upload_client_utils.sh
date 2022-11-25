@@ -232,14 +232,15 @@ function upload_to_wsprnet_daemon() {
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
               && ps_stdout=$( ps aux ) \
-              || echo "${ps_stdout}" | grep "wsprd \|jt9\|derived_calc.py" | grep -qv grep ; do
+              || echo "${ps_stdout}" | grep -q "bin/wsprd \|jt9\|derived_calc.py" ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
             if [[ ${#spots_files_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Not ready to start uploads because there are no spot files"
             elif [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]]; then
                  wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
             else
-                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs"
+                local runnung_jobs=$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )
+                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs;\n${runnung_jobs}"
             fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
