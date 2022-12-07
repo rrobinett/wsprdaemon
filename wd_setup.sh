@@ -503,11 +503,11 @@ function setup_wd_auto_ssh()
         return 0
     fi
     if [[ ! -d ~/.ssh ]]; then
-        wd_logger 1 "ERROR: 'WD_NEED_SSH=\"${WD_NEED_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
+        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
         return 1
     fi
     if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-        wd_logger 1 "ERROR: 'WD_NEED_SSH=\"${WD_NEED_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
+        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
         return 2
     fi
     local my_ssh_pub_key=$(< ~/.ssh/id_rsa.pub)
