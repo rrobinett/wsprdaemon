@@ -673,3 +673,19 @@ function daemons_list_action()
         fi
     done
 }
+
+### Get the current value of a variable stored in a file without perturbing any currently defined variables in the calling function
+### To minimize the possiblity of 'sourcing' an already declare r/o global variable, extract the line with the variable we are searching for
+### into a tmp file, and then source only that tmp file
+function get_file_variable()
+{
+    local __return_varaiable=$1
+    local _variable_name=$2
+    local source_file=$3
+
+    local get_file_variable_tmp_file=${WSPRDAEMON_TMP_DIR}/get_file_variable.txt
+    grep "${_variable_name}=" ${source_file} > ${get_file_variable_tmp_file}
+    local value_in_file=$( shopt -u -o nounset; source ${get_file_variable_tmp_file}; eval echo \${${_variable_name}} )
+
+    eval ${__return_varaiable}=\${value_in_file}
+}

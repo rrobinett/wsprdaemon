@@ -60,13 +60,14 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                      ### Add support for POST_ALL_SPOTS  config variable
 #declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
                                      ### Fix OV logging from Kiwis running SW which reports the overload count on the Kiwi's /status page
-declare -r VERSION=3.0.5            ### Enhance frequency resolution of FST4W decoding to .1 Hz
+#declare -r VERSION=3.0.5            ### Enhance frequency resolution of FST4W decoding to .1 Hz
                                      ### Upload earlier by watching for when all wspr and jtx processes are done
-                                     ### TODO: install libresample library for use by keirecorder so audio frequency offset of about .1 is removed
+declare -r VERSION=3.0.6            ### Port to run on Ubuntu 22.04.1 LTS and Raspberry Pi 'bullseye'
+                                    ### Use fixed jt9's FST4W freqeuncy reports to narrow search range for FST4W spots to 1390-1420 Hz
                                      ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
-                                    ### TODO: To fix 100% CPU bug, add cleanups to wav file monitoring
-                                    ### TODO: Add VHF/UHF support using Soapy API
+                                     ### TODO: To fix 100% CPU bug, add cleanups to wav file monitoring
+                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"

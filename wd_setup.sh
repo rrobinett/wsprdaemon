@@ -43,7 +43,15 @@ case ${CPU_ARCH} in
         declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:arm64 libqt5core5a:arm64 )
         ;;
     x86_64)
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64)
+        declare os_release    ### We are not in a function, so it can't be local
+        get_file_variable os_release "VERSION_ID" /etc/os-release
+        wd_logger 2 "Installing on Ubuntu ${os_release}"
+        if [[ "${os_release}" =~ 22.04 ]]; then
+            ### Ubuntu 22.04 doesn't use qt5-default
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 )
+        else
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64)
+        fi
         ;;
     *)
         wd_logger 1 "ERROR: wsrpdaemon doesn't know what libraries are needed when running on CPU_ARCH=${CPU_ARCH}"
@@ -252,7 +260,19 @@ mkdir -p ${WSPRD_BIN_DIR}
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
+
+### Only WSJT-x version 2.6.x runs on Ubuntu 22.04 LTS.  On Ubuntu 22.04 LTS only WSJT-x 2.5.4 runs
+declare os_release    ### We are not in a function, so it can't be local
+get_file_variable os_release "VERSION_ID" /etc/os-release
+wd_logger 2 "Installing on Ubuntu ${os_release}"
+if [[ "${os_release}" =~ 22.04 ]]; then
+    ### Running wsprd and jt9 on Ubuntu 22.04 requires WSJT-x 2.6.0
+    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.0}"
+else
+    ### The Debian ID is 10 or 11 on a Raspberry Pi and 20.05 or 18.04 on older Ubuntus.  All those are supported by WSJT-x 2.5.4 
+    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
+fi
+wd_logger 2 "Running WSJT-x ${WSJTX_REQUIRED_VERSION} on Ubuntu ${os_release}"
 
 ### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
@@ -270,7 +290,9 @@ function install_debian_package(){
         wd_logger 2 "Package ${package_name} has already been installed"
         return 0
     fi
+    wd_logger 1 "Package ${package_name} needs to be installed"
     if [[ ${APT_GET_UPDATE_HAS_RUN} == "no" ]]; then
+        wd_logger 1 "'apt-get update' needs to be run"
         sudo apt-get update --allow-releaseinfo-change
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
