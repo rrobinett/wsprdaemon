@@ -1274,7 +1274,7 @@ function decoding_daemon() {
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
-                    ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
