@@ -1193,8 +1193,10 @@ function decoding_daemon() {
                         wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
-                    local c2_fft_nl=$(python3 ${C2_FFT_CMD} ${c2_filename})
+                    nice python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out
                     local ret_code=$?
+                    local c2_fft_nl
+                    c2_fft_nl=$(< ${c2_filename}.out)
                     if [[ ${ret_code} -ne 0 ]]; then
                         wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}"
                         c2_fft_nl=0
