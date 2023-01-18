@@ -267,10 +267,10 @@ get_file_variable os_release "VERSION_ID" /etc/os-release
 wd_logger 2 "Installing on Ubuntu ${os_release}"
 if [[ "${os_release}" =~ 22.04 ]]; then
     ### Running wsprd and jt9 on Ubuntu 22.04 requires WSJT-x 2.6.0
-    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.0}"
+    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.1}"
 else
     ### The Debian ID is 10 or 11 on a Raspberry Pi and 20.05 or 18.04 on older Ubuntus.  All those are supported by WSJT-x 2.5.4 
-    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
+    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.1}"
 fi
 wd_logger 2 "Running WSJT-x ${WSJTX_REQUIRED_VERSION} on Ubuntu ${os_release}"
 
