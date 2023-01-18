@@ -751,6 +751,15 @@ function get_wav_file_list() {
          return_list+=( ${this_seconds_comma_separated_file} )
          wd_logger 2 "Added file list for ${seconds_in_wspr_pkt} second long wav file to return list from index [${index_of_first_unreported_raw_file}:${index_of_last_raw_file_for_this_wav_file}] => ${this_seconds_comma_separated_file}"
 
+         if [[ -z "${index_of_first_unreported_raw_file-}" ]]; then
+             wd_logger 1 "ERROR: variable 'index_of_first_unreported_raw_file' has not been set"
+             #continue
+         fi
+         if [[ ${raw_file_list[${index_of_first_unreported_raw_file}]-} ]]; then
+             wd_logger 1 "ERROR: array element ${raw_file_list}[${index_of_first_unreported_raw_file}] "
+             #continue
+         fi
+
          local wav_list_returned_file=${raw_file_list[${index_of_first_unreported_raw_file}]}.${seconds_in_wspr_pkt}-secs
          shopt -s nullglob
          local flush_list=( *.${seconds_in_wspr_pkt}-secs )
