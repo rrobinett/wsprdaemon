@@ -48,9 +48,9 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 22.04 ]]; then
             ### Ubuntu 22.04 doesn't use qt5-default
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 )
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 libqt5core5a:amd64 )
         else
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64)
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64 )
         fi
         ;;
     *)
@@ -459,7 +459,6 @@ function load_wsjtx_commands()
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
                 ;;
             armv7l)
-                # https://physics.princeton.edu/pulsar/K1JT/wsjtx_2.2.1_armhf.deb
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
                 ;;
             aarch64)
@@ -472,9 +471,11 @@ function load_wsjtx_commands()
         esac
         ### Download WSJT-x and extract its files and copy wsprd to /usr/bin/
         local wsjtx_dpkg_file=${WSPRDAEMON_TMP_DIR}/${wsjtx_pkg}
-        wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg} -O ${wsjtx_dpkg_file}
-        if [[ ! -f ${wsjtx_dpkg_file} ]] ; then
-            wd_logger 1 "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${wsjtx_pkg}"
+        WSJTX_SERVER_URL="${WSJTX_SERVER_URL-https://sourceforge.net/projects/wsjt/files}"
+        wget ${WSJTX_SERVER_URL}/${wsjtx_pkg} -O ${wsjtx_dpkg_file}
+        local rc=$?
+        if [[ ${rc} -ne 0 || ! -f ${wsjtx_dpkg_file} ]] ; then
+            wd_logger 1 "ERROR: failed to download ${WSJTX_SERVER_URL}/${wsjtx_pkg}"
             exit 1
         fi
         local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt

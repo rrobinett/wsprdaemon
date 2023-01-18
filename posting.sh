@@ -348,7 +348,7 @@ function add_derived() {
         wd_logger 0 "Can't find '${AZI_PYTHON_CMD}'"
         exit 1
     fi
-    python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    nice python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
 }
 
 ### For a group of MERGEd receivers: For each call output to the file 'merged.log' one SNR reported for it to wsprnet.org and a list of SNRs (if any) reported for it by each real reciever 

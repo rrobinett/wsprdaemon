@@ -1202,8 +1202,10 @@ function decoding_daemon() {
                         wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
-                    local c2_fft_nl=$(python3 ${C2_FFT_CMD} ${c2_filename})
+                    nice python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out
                     local ret_code=$?
+                    local c2_fft_nl
+                    c2_fft_nl=$(< ${c2_filename}.out)
                     if [[ ${ret_code} -ne 0 ]]; then
                         wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}"
                         c2_fft_nl=0
@@ -1283,7 +1285,7 @@ function decoding_daemon() {
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
-                    ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
