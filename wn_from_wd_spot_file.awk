@@ -20,12 +20,12 @@ NF == 34 {
     else if (  wd_pkt_mode == 6 )     ### added by WD to the lines produced by 'jt9'   
         wn_pkt_mode = 5               ### FST4W-300
     else if (  wd_pkt_mode == 16 )    ### added by WD to the lines produced by 'jt9'
-        wn_pkt_mode = 16              ### FST4W-900
+        wn_pkt_mode = 15              ### FST4W-900
     else if (  wd_pkt_mode == 31 )    ### added by WD to the lines produced by 'jt9'
         wn_pkt_mode = 30              ### FST4W-1800
     else {
         wn_pkt_mod= 2
         printf ("ERROR: WD spot line has pkt_mode = '%s', not one of the expected 2/3/5/15/16/30 values: ", wd_pkt_mode)
     }
-    printf ( "%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, wn_pkt_mode)
+    printf ( "%6s %4s %5.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, wn_pkt_mode)
 }
