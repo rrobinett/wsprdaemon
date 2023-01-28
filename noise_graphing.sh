@@ -21,7 +21,8 @@ declare -r NOISE_GRAPHS_INDEX_LINES="
 </body>
 </html>"
  
-declare    NOISE_GRAPHS_UPLOAD_FTP_PASSWORD="${NOISE_GRAPHS_UPLOAD_FTP_PASSWORD-xahFie6g}"  ## Hopefully this never needs to change 
+declare NOISE_GRAPHS_UPLOAD_FTP_PASSWORD="${NOISE_GRAPHS_UPLOAD_FTP_PASSWORD-xahFie6g}"  ## Hopefully this never needs to change 
+declare EXPECTED_BUSTER_PYTHON_MATPLOTLIB="${EXPECTED_BUSTER_PYTHON_MATPLOTLIB-3.0.2}"   ### Rasperry Pi Buster has newer version in repo which doesn't work for us
 
 function setup_noise_graphs() 
 {
@@ -38,9 +39,32 @@ function setup_noise_graphs()
         return 0
     fi
 
+    local matplotlib_spec="matplotlib"
+    local os_name=""
+    os_name=$(awk -F = '/^VERSION_CODENAME=/{print $2}' /etc/os-release | sed 's/"//g')
+    if [[ "${os_name}" == "buster" ]]; then
+        local matplotlib_version=$(pip3 freeze | awk -F == '/matplotlib/{print $2}')
+        if [[ "${matplotlib_version}" == "${EXPECTED_BUSTER_PYTHON_MATPLOTLIB}" ]]; then
+            wd_logger 2 "On Pi 'buster' found expected Python matplotlib version ${matplotlib_version} is installed, so no need to try to install it again"
+            matplotlib_spec=""
+        elif [[ -z "${matplotlib_version}" ]]; then
+            matplotlib_spec="matplotlib==3.0.2"
+            wd_logger 1 "On Pi 'buster' found there is no Python matplotlib installed, so specify ''${matplotlib_version}"
+        else
+            wd_logger 1 "On Pi 'buster' found the wrong Python matplotlib version ${matplotlib_version} is installed.  So delete that version and install version ${EXPECTED_BUSTER_PYTHON_MATPLOTLIB}"
+            sudo pip3 uninstall ${matplotlib_spec}
+            local rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger "ERROR:  'pip3 uninstall ${matplotlib_version}' => ${rc}"
+                exit
+            fi
+            matplotlib_spec="matplotlib==3.0.2"
+        fi
+    fi
+
     ### Get the Python packages needed to create the graphs.png
     local package
-    for package in psycopg2 matplotlib scipy ; do
+    for package in psycopg2 ${matplotlib_spec} scipy ; do
         wd_logger 2 "Install Python package ${package}"
         install_python_package ${package}
         local ret_code=$?
