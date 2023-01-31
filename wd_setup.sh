@@ -261,13 +261,17 @@ declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 
-### Only WSJT-x version 2.6.x runs on Ubuntu 22.04 LTS.  On Ubuntu 22.04 LTS only WSJT-x 2.5.4 runs
+### Only WSJT-x version 2.6.x runs on Pi Bullseye and Ubuntu 22.04 LTS.  On Pi Buster and Ubuntu 20.04 LTS only WSJT-x 2.5.4 runs
 declare os_release    ### We are not in a function, so it can't be local
 get_file_variable os_release "VERSION_ID" /etc/os-release
-wd_logger 2 "Installing on Ubuntu ${os_release}"
-if [[ "${os_release}" =~ 22.04 ]]; then
-    ### Running wsprd and jt9 on Ubuntu 22.04 requires WSJT-x 2.6.0
-    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.1}"
+declare os_codename
+get_file_variable os_codename "VERSION_CODENAME" /etc/os-release
+wd_logger 2 "Installing on Linux '${os_codename}',  OS version = '${os_release}'"
+
+if [[ "${os_codename}" == "buster" && "${os_release}" == "10"  ]]; then
+    ### Running wsprd and jt9 on Pi "buster" requires WSJT-x 2.5.4
+    wd_logger 2 "Installing on a Raspberry Pi running '${os_codename}', so install WSJT-x version 2.5.4"
+    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
 else
     ### The Debian ID is 10 or 11 on a Raspberry Pi and 20.05 or 18.04 on older Ubuntus.  All those are supported by WSJT-x 2.5.4 
     declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.1}"
