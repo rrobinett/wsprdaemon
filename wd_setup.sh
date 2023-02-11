@@ -446,7 +446,7 @@ function load_wsjtx_commands()
                 exit 1
             fi
             wsjtx_version=$( /usr/bin/wsjtx_app_version -v | awk '{print $2}' )
-            if [[ "${wsjtx_version}" != "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.3.0}" ]]; then
+            if [[ "${wsjtx_version}" != "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.6.1}" ]]; then
                 wd_logger 1 "ERROR: wrong wsjtx version '${wsjtx_version}' on 64 bit Pi bulleye"
                 exit
             fi
