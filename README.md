@@ -53,9 +53,28 @@ cd wsprdaemon
 
 This first run of WD will prompt the user to edit the prototype configuration file '~/wsprdaemon/wsprdaemon.conf' which includes extensive comments about the many configuration options. A basic installation will require that the IP address of at least one Kiwi receiver be defined in the RECEIVER_LIST section, and one listening schedule line be defined in the WSPR_SCHEDULE_simple section.
 
-Once those edits are made, run '~/wsprdaemon/wsprdaemon.sh -a'  which will install many, many utilities and libraries, and for some you will be prompted to agree to the installation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus am never prompted for a password, but your experience may vary.
+Once those edits are made, run '~/wsprdaemon/wsprdaemon.sh -a'  which will install many, many utilities and libraries, and for some of them you will be prompted to agree to the installation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus am never prompted for a password, but your experience may vary.
 
-At the end of a successful installation, WD creates a prototype configuration file at `~/wsprdaemon/wsprdaemon.conf`.  You will need to edit that file to reflect your desired configuration running ./wsprdaemon.sh -V until WD just prints out its's version number.  Once configured, run './wsprdaemon.sh -a' to start the daemon.  It will automatically start after a reboot or power cycle.  Run ./wsprdaemon.sh -A (CAPITAL A) to have WD instsall itself as a Linux service which will automatically start running each time the Pi/Ubuntu server is powered up or rebooted.
+There are a number of commands to more easily control and monitor WD can be permanently installed by executing:
+
+``` bash
+pi@KPH-Pi4b-85:~ $ source ~/wsprdaemon/.wd_bash_aliases
+pi@KPH-Pi4b-85:~ $ wd-rci
+A reference to '~/wsprdaemon/.wd_bash_aliases' has been added to ' ~/.bash_aliases'
+pi@KPH-Pi4b-85:~ $
+```
+Once installed you can:
+
+wda => start WD
+
+wdz => stop  WD
+
+wds => print the status of WD
+
+wdln => watch the log of WD uploading spots to wsprnet.org
+
+wd-help => list all the added commands
+
 
 
 ## Installation on a system running wsprdaemon that was not installed using 'git clone'
