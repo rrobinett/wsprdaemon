@@ -2,7 +2,7 @@
 
 New WD users should skip down to the "Greenfield" section below for installation instructions.
 
-For exisiting WD users, WD 3.0.6 is now running on almost all top spotting sites.  Since WD 2.x generates spots with corrupt fields and earlier versions of WD 3.0 are not entirely compatibnle with recent mode fileds changes in WSJT-x 2.6.x, I encourage all WD users to upgrade WDS using the procedure desribed below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
+For exisiting WD users, WD 3.0.6 is now running on almost all top spotting sites.  Since WD 2.x generates spots with corrupt fields and earlier versions of WD 3.0 are not entirely compatible with recent mode fields changes in WSJT-x 2.6.x, I encourage all WD users to upgrade WD using the procedure described below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
 
 For existing WD 2.10 users:
 
@@ -16,7 +16,7 @@ git pull
 
 ./wsprdaemon.sh -a
 
-Wspredaemon is a large bash script which utilizes [kiwirecorder.py](https://github.com/jks-prv/kiwiclient) and other library and utility commands to record WSPR spots from one or more [Kiwis](http://kiwisdr.com), audio adapters and (for VHF/UHF) [RTL-SDRs](https://www.rtl-sdr.com/about-rtl-sdr/) and *reliably* post them to [wsprnet.org](http://wsprnet.org).
+Wsprdaemon is a large bash script which utilizes [kiwirecorder.py](https://github.com/jks-prv/kiwiclient) and other library and utility commands to record WSPR spots from one or more [Kiwis](http://kiwisdr.com), audio adapters and (for VHF/UHF) [RTL-SDRs](https://www.rtl-sdr.com/about-rtl-sdr/) and *reliably* post them to [wsprnet.org](http://wsprnet.org).
 
 Schedules can be configured to switch between bands at different hours of the day, or at sunrise/sunset-relative times.
 
@@ -24,11 +24,11 @@ Signals obtained from multiple receivers on the same band ( e.g a 40M vertical a
 
 In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
 
-WD can run on almost any Debian Linux system and is tested on the buster OS for Raspberry Pi 3 and 4, and Ubuntu 22.04 LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decode 30+ bands.
+WD can run on almost any Debian Linux system and is tested on the Buster OS for Raspberry Pi 3 and 4, and Ubuntu 22.04 LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decode 30+ bands.
 
 ## Greenfield Installation
 
-On a Raspberry Pi running buster, install as the default user 'pi'.
+On a Raspberry Pi running Buster, install as the default user 'pi'.
 
 On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page. 
 
@@ -53,9 +53,9 @@ cd wsprdaemon
 
 This first run of WD will prompt the user to edit the prototype configuration file '~/wsprdaemon/wsprdaemon.conf' which includes extensive comments about the many configuration options. A basic installation will require that the IP address of at least one Kiwi receiver be defined in the RECEIVER_LIST section, and one listening schedule line be defined in the WSPR_SCHEDULE_simple section.
 
-Once those edits are made, run '~/wsprdaemon/wsprdaemon.sh -a'  which will install many, many utilities and libraries, and for some of them you will be prompted to agree to the installation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus am never prompted for a password, but your experience may vary.
+Once those edits are made, run '~/wsprdaemon/wsprdaemon.sh -a'  which will install many, many utilities and libraries, for some of which you will be prompted to agree to the installation. Some/all of them will require `sudo` permission.  I configure `wsprdaemon` as a member of the `sudoers` group and thus am never prompted for a password, but your experience may vary.
 
-There are a number of commands to more easily control and monitor WD can be permanently installed by executing:
+There are a number of commands to more easily control and monitor WD that can be permanently installed by executing:
 
 ``` bash
 pi@KPH-Pi4b-85:~ $ source ~/wsprdaemon/.wd_bash_aliases
