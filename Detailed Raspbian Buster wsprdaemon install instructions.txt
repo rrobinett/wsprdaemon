@@ -1,0 +1,73 @@
+Detailed instructions for a greenfield install for the Raspberry Pi 4
+(because I always forget)
+Optional steps included : xrdp and cockpit
+
+https://www.raspberrypi.com/software/operating-systems/
+
+Raspberry Pi OS (Legacy)
+A stable legacy version of Raspberry Pi OS Buster.
+
+Compatible with:
+
+All Raspberry Pi models
+Raspberry Pi OS (Legacy) with desktop
+Release date: September 22nd 2022
+System: 32-bit
+Kernel version: 5.10
+Debian version: 10 (buster)
+Size: 757MB
+
+Raspberry Pi Imager : choose file from disk
+
+Put file with name ssh in root folder of SD card
+
+eject card reader / disk system
+
+Connect ethernet via cable, insert SD card, sudo power on Raspberry Pi
+
+PuTTy ip-address (on Windows when needed <<cmd>> arp -a)
+
+sudo raspi-config
+1 S5 B4
+3 P2 P3
+5 L4 FR
+reboot
+
+ssh OK
+vnc via VNC Viewer can not show desktop
+RDP NOK
+
+sudo apt update
+sudo apt upgrade
+sudo apt install cockpit
+in browser <ip-address:9090>
+Enable stored metrics install cockpit-pcp
+sudo apt install xrdp
+RDP OK
+
+https://github.com/rrobinett/wsprdaemon/blob/master/README.md
+
+cd ~
+git clone https://github.com/rrobinett/wsprdaemon.git
+cd wsprdaemon
+./wsprdaemon.sh -V
+
+I copied a previous wsprdaemon.conf; else follow the instructions in the README
+I use WinSCP for this kind of filetransfers
+I use Notepad++ for editing as it can be switched from the Windows CR/LF to Linux
+
+./wsprdaemon.sh -V (should be -a but this works as well)
+Requesting permission after about 1 1/2 minute of working
+after 4 minutes the numpy install takes the most time (7 minutes)
+Version = 3.0.6
+
+source ~/wsprdaemon/.wd_bash_aliases
+wd-rci
+wd-help
+
+An we are on after :
+wda
+wds
+
+My first spot : 230217 1008 80.00  -7  0.14   14.0970103 G3ZIL          IO90   33  0    3
+Amazing
