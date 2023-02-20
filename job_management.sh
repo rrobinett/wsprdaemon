@@ -608,7 +608,7 @@ function setup_expected_jobs_file () {
     local    index_max_hhmm_sched=$(( ${#HHMM_SCHED[*]} - 1))
     local    index_time=""
 
-    ### Find the current schedule
+    ### Search the entires in the hhmm.sched file for the element which applies to the current time
     local index_now=0
     local index_now_time=0
     for index in $(seq 0 ${index_max_hhmm_sched}) ; do
@@ -633,28 +633,11 @@ function setup_expected_jobs_file () {
     done
     if [[ -z "${hhmm_expected_jobs[*]}" ]]; then
         wd_logger 1 "ERROR: couldn't find a schedule"
-        return 
+        return 1
     fi
-    if [[ ${JOB_DEBUG} == "no" ]]; then
-        wd_logger 1 "JOB_DEBUG == no, hhmm_expected_jobs[-1]=${hhmm_expected_jobs[-1]}"
-    else
-        source ${EXPECTED_JOBS_FILE}
-        wd_logger 1 "JOB_DEBUG == yes, hhmm_expected_jobs[-1]=${hhmm_expected_jobs[-1]}"
-        hhmm_expected_jobs=( ${EXPECTED_JOBS[@]} )
-        local update_expected_jobs_file="no"
-        if [[ ${hhmm_expected_jobs[-1]} == "maui75,10,DEFAULT" ]]; then
-            hhmm_expected_jobs[-1]="maui75,12,DEFAULT"
-            wd_logger 1 "Job diags switched to ${hhmm_expected_jobs[-1]}"
-            update_expected_jobs_file="yes"
-        elif [[ ${hhmm_expected_jobs[-1]} == "maui75,12,DEFAULT" ]]; then
-            hhmm_expected_jobs[-1]="maui75,10,DEFAULT"
-            wd_logger 1 "Job diags switched to ${hhmm_expected_jobs[-1]}"
-            update_expected_jobs_file="yes"
-        else
-            wd_logger 1 "Job diags no switch because last job '${hhmm_expected_jobs[-1]}' is not for band 12M or 10M"
-        fi
-    fi
+    wd_logger 1 "Found hhmm_expected_jobs[${index_now}] for the current TOD: ${index_now_time}: ${hhmm_expected_jobs[*]}"
 
+    ### See if the EXPECTED_JOBS match the hhmm_expected_jobs we found above
     if [[ ! -f ${EXPECTED_JOBS_FILE} ]]; then
         echo "EXPECTED_JOBS=()" > ${EXPECTED_JOBS_FILE}
         wd_logger 1 "Creating new ${EXPECTED_JOBS_FILE}"
@@ -662,7 +645,7 @@ function setup_expected_jobs_file () {
     source ${EXPECTED_JOBS_FILE}
 
     if [[ "${EXPECTED_JOBS[*]-}" == "${hhmm_expected_jobs[*]}" ]]; then
-        wd_logger 1 "No need to update EXPECTED_JOBS_FILE at time${current_time} since:\n     EXPECTED_JOBS=${EXPECTED_JOBS[*]-}\nhhmm_expected_jobs=${hhmm_expected_jobs[*]}"
+        wd_logger 1 "No need to update EXPECTED_JOBS_FILE at time ${current_time} since:\n     EXPECTED_JOBS=${EXPECTED_JOBS[*]-}\nhhmm_expected_jobs=${hhmm_expected_jobs[*]}"
         wd_logger 1 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
     else
         wd_logger 1 "Writing  new schedule for time ${current_time} to ${EXPECTED_JOBS_FILE}: '${hhmm_expected_jobs[*]}'"

@@ -8,6 +8,17 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
+function wd-gc()
+{
+    if [[ -z "$1" ]]; then
+        echo "usage:  wd-gc \"commit message\""
+        return
+    fi
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob"
+    git commit -m "$1" -a
+}
+
 ### Reload this file
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
 alias wdrc='wd-rc'
