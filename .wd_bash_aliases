@@ -8,6 +8,7 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
+### 'git commit'
 function wd-gc()
 {
     if [[ -z "$1" ]]; then
@@ -18,6 +19,12 @@ function wd-gc()
     git config --global user.name "Rob"
     git commit -m "$1" -a
 }
+
+### 'git push'
+alias wd-gp='git push'
+
+### Change a WD site which was cloned with https to ssh
+alias wd-gci='git remote set-url origin git@github.com:rrobinett/wsprdaemon.git'
 
 ### Reload this file
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
