@@ -308,7 +308,7 @@ function get_rms_levels()
     return 0
 }
 
-function decode_wpsr_wav_file() {
+function decode_wspr_wav_file() {
     local wav_file_name=$1
     local wspr_decode_capture_freq_hz=$2
     local rx_khz_offset=$3
@@ -1177,7 +1177,7 @@ function decoding_daemon() {
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
                 local start_time=${SECONDS}
-                decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}"
+                decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}"
                 local ret_code=$?
 
                 rm  ${decoder_input_wav_filename}
@@ -1185,7 +1185,7 @@ function decoding_daemon() {
                 ### Back to recording directory
 
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wpsr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
                 else
                     if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
                         wd_logger 1 "wsprd found no spots"
