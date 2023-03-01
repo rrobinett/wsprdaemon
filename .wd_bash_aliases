@@ -16,7 +16,7 @@ function wd-find-kiwis()
     [[ ${verbosity} -gt 0 ]] && echo "Searching the ${#local_lan_list[@]} LANs for Kiwis:  ${local_lan_list[@]}"
     for lan in ${local_lan_list[@]} ; do
         echo "Searching LAN ${lan} for Kiwis"
-        local kiwi_ip_list=( $( nmap --open -p 8073 10.14.70.0/24 | awk '/Nmap scan report for/{print $5}' ) )
+        local kiwi_ip_list=( $( nmap --open -p 8073 ${lan} | awk '/Nmap scan report for/{print $5}' ) )
         if [[ ${#kiwi_ip_list[@]} -eq 0 ]]; then
             echo "Found no Kiwis"
         else
