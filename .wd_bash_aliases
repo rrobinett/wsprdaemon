@@ -8,6 +8,94 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
+### Gets status for the Kiwis listed in WD.conf
+function wd-find-kiwis()
+{
+    local local_lan_list=( $(ip addr | grep -w inet | grep -v 'inet 127' | awk '{print $2}' | sed 's;\.[0-9]*/;.0/;g') )
+
+    [[ ${verbosity} -gt 0 ]] && echo "Searching the ${#local_lan_list[@]} LANs for Kiwis:  ${local_lan_list[@]}"
+    for lan in ${local_lan_list[@]} ; do
+        echo "Searching LAN ${lan} for Kiwis"
+        local kiwi_ip_list=( $( nmap --open -p 8073 10.14.70.0/24 | awk '/Nmap scan report for/{print $5}' ) )
+        if [[ ${#kiwi_ip_list[@]} -eq 0 ]]; then
+            echo "Found no Kiwis"
+        else
+            echo "Found ${#kiwi_ip_list[@]} Kiwis: ${kiwi_ip_list[*]/%/  }"
+        fi
+    done
+}
+
+function wd-kiwi-status()
+{
+    local wsprconf_file=~/wsprdaemon/wsprdaemon.conf;
+    if [[ ! -f ${wsprconf_file} ]]; then
+        echo "ERROR: can't find config file ${wsprconf_file}";
+        return;
+    fi;
+    source ${wsprconf_file};
+    local kiwi_list=();
+    for rx_line in "${RECEIVER_LIST[@]}";
+    do
+        local rx_fields=(${rx_line});
+        local rx_name=${rx_fields[0]};
+        local rx_ip_port=${rx_fields[1]};
+        if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]]; then
+            [[ ${verbosity} -ge 1 ]] && echo "skipping rx ${rx_name}";
+        else
+            local rx_ip=${rx_ip_port/:*/};
+            if ! ping -c 1 -W 1 ${rx_ip} > /dev/null; then
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't repond to pings";
+            else
+                kiwi_list+=(${rx_name},${rx_ip_port});
+                [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}";
+            fi;
+        fi;
+    done;
+    [[ ${verbosity} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}";
+    [[ ${verbosity} -ge 1 ]] && echo;
+    local users;
+    local users_max;
+    local gps_good;
+    local users_total=0;
+    local wsprdaemon_total=0;
+    local channels_total=0;
+    for kiwi_info in "${kiwi_list[@]}";
+    do
+        local kiwi_name=${kiwi_info%,*};
+        local kiwi_ip=${kiwi_info#*,};
+        local kiwi_status="$(curl -s http://${kiwi_ip}/status)";
+        users=$(sed -n '/users=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        channels_total=$((channels_total + users_max));
+        gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        [[ ${verbosity} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}";
+        curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log;
+        while read user_line; do
+            [[ ${verbosity} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+            if grep --color=auto -q wsprdaemon <<< "${user_line}"; then
+                [[ ${verbosity} -ge 1 ]] && echo "skipping WD user";
+                wsprdaemon_total=$((wsprdaemon_total + 1));
+            else
+                [[ ${verbosity} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+                if [[ -n "${user_line:1}" ]]; then
+                    eval declare $(echo "${user_line:1}" | sed '/"\([^"]*\)":/s//\1=/g');
+                    [[ $? -ne 0 ]] && continue
+                    local listener_channel="${user_line:0:1}";
+                    local listener_name="$(echo "$n" | sed 's/%20/ /g')";
+                    local listener_location="$(echo "$g" | sed 's/%20//g')";
+                    local listener_freq="$f";
+                    local listener_mode="$m";
+                    local listener_ip="$a";
+                    local listener_time="$t";
+                    printf "%12s:%s %20s %8s %3s %s %20s %s\n" "${kiwi_name}" "${listener_channel}" "'${listener_name}'" "${listener_freq}" "${listener_mode}" "${listener_time}" "${listener_ip}" "${listener_location}";
+                    users_total=$((users_total + 1));
+                fi;
+            fi;
+        done < /tmp/curl.log;
+    done;
+    printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total $users_total $wsprdaemon_total
+}
+
 ### 'git commit'
 function wd-gc()
 {
