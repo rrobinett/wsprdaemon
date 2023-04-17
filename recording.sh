@@ -360,15 +360,25 @@ function get_kiwirecorder_status()
     local __return_status_var=$1
     local kiwi_ip_port=$2
 
+    wd_logger 1 "Get status with 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}'"
+
+    local get_kiwi_status_lines
     local rc
-    curl --silent ${kiwi_ip_port}/status > curl.log 
+    get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'curl ${kiwi_ip_port}/status' => ${rc}"
-        return ${rc}
+        wd_logger 1 "ERROR: 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
+        return 1
     fi
-    local status_lines=$(<curl.log)
-    eval ${__return_status_var}="\${status_lines}"
+
+    if [[ -z "${get_kiwi_status_lines}" ]]; then
+        wd_logger 1 "ERROR: 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}' => 0, but get_kiwi_status_lines is empty"
+        return 1
+    fi
+
+    wd_logger 1 "Got $(  echo "${get_kiwi_status_lines}" | wc -l  ) status lines from '${kiwi_ip_port}'"
+
+    eval ${__return_status_var}="\${get_kiwi_status_lines}"
     return 0
 }
 
