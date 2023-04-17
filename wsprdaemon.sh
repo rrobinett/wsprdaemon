@@ -62,11 +62,11 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                      ### Fix OV logging from Kiwis running SW which reports the overload count on the Kiwi's /status page
 #declare -r VERSION=3.0.5            ### Enhance frequency resolution of FST4W decoding to .1 Hz
                                      ### Upload earlier by watching for when all wspr and jtx processes are done
-declare -r VERSION=3.0.6            ### Port to run on Ubuntu 22.04.1 LTS and Raspberry Pi 'bullseye'
-                                    ### Use fixed jt9's FST4W freqeuncy reports to narrow search range for FST4W spots to 1390-1420 Hz
-                                     ### TODO: Add Kiwi SW version number to status file uploaded to WD.net along with the extended spot reports
+#declare -r VERSION=3.0.6            ### Port to run on Ubuntu 22.04.1 LTS and Raspberry Pi 'bullseye'
+declare VERSION=3.0.7                ### Optimze Kiwi status reporting by cacheing one copy of /status
+                                     ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
+                                     ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
-                                     ### TODO: To fix 100% CPU bug, add cleanups to wav file monitoring
                                      ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
@@ -86,12 +86,12 @@ check_for_needed_utilities
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
+source ${WSPRDAEMON_ROOT_DIR}/kiwi_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
 source ${WSPRDAEMON_ROOT_DIR}/upload_client_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/upload_server_utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/kiwi_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
