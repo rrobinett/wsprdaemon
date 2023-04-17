@@ -637,7 +637,8 @@ function get_wav_file_list() {
             sleep_until_raw_file_is_full ${raw_file_list[-1]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while waiting for the last of ${#raw_file_list[@]} wav files to fill, 'sleep_until_raw_file_is_full ${raw_file_list[-1]}' => ${ret_code} "
+                wd_logger 1 "ERROR: while waiting for the last of ${#raw_file_list[@]} wav files to fill, 'sleep_until_raw_file_is_full ${raw_file_list[-1]}' => ${ret_code}. Sleep 5 before resuming search"
+                wd_sleep 5
                 return 4
             fi
             ;;
