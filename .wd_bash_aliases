@@ -345,22 +345,39 @@ alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/ws
 
 function wd-overloads()
 {
+: <<"comment_out"
     local log_file_list=( $(find /dev/shm/wsprdaemon/ -name wav_status.log | sort ) )
-    printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECIEVER/BAND/log_file"
+    #printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECIEVER/BAND/log_file"
 
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'wav_status.log' files, so this must be an older version of WD"
     else
-        awk '$2 == -1.0 || $3 == 1.0 { printf( "%-40s %s\n", substr(FILENAME,33) ":", $0) } ' ${log_file_list[@]}
+       true  #awk '$2 == -1.0 || $3 == 1.0 { printf( "%-40s %s\n", substr(FILENAME,33) ":", $0) } ' ${log_file_list[@]}
     fi
+comment_out
 
     log_file_list=( $(find /dev/shm/wsprdaemon/ -name kiwi_ovs.log | sort ) )
-    printf "Searching ${#log_file_list[@]} 'kiwi_ovs.log' files for ADC overload events\n%-40s YYMMDD_HHMM        OV_TOTAL     OV_NEW\n" "RECIEVER/BAND/log_file"
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'kiwi_ovs.log' files, so this must be an older version of WD"
-    else
-        awk '$3 > 0 && $3 != $2 { printf( "%-70s %15s %10d %10d\n", FILENAME ":", $1, $2, $3) } ' ${log_file_list[@]}
+        return
     fi
+    local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
+    local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
+    local ov_report_count=$( wc -l < ${newest_log_file})
+    local ov_non_zero_count=$(awk '$3 != 0' ${newest_log_file} | wc -l)
+
+    local most_ovs_line_list=( ${most_ovs_line} )
+    if [[ ${most_ovs_line_list[2]-0} -eq 0 ]]; then
+        echo "No overload events have been reported"
+        return
+    fi
+
+    printf "Found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
+    printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
+    printf "This line which reports the most OVs:\n${most_ovs_line}\n" 
+
+    read -p "Press <RETURN> to execute 'less ${newest_log_file}', then search for ${most_ovs_line_list[0]} => "
+    less ${newest_log_file}
 }
 alias wd-ov='wd-overloads'
 alias wdov='wd-ov'
