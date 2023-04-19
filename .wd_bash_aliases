@@ -358,26 +358,66 @@ comment_out
 
     log_file_list=( $(find /dev/shm/wsprdaemon/ -name kiwi_ovs.log | sort ) )
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
-        echo "Can't find any 'kiwi_ovs.log' files, so this must be an older version of WD"
-        return
-    fi
-    local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
-    local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
-    local ov_report_count=$( wc -l < ${newest_log_file})
-    local ov_non_zero_count=$(awk '$3 != 0' ${newest_log_file} | wc -l)
-
-    local most_ovs_line_list=( ${most_ovs_line} )
-    if [[ ${most_ovs_line_list[2]-0} -eq 0 ]]; then
-        echo "No overload events have been reported"
+        echo "Can't find any 'kiwi_ovs.log' files"
         return
     fi
 
-    printf "Found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
-    printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
-    printf "This line which reports the most OVs:\n${most_ovs_line}\n" 
+    if [[ $# -ne 0 && "$1" == "-f" ]]; then
+        read -p "Press <ENTER> to flush all of the ${#log_file_list[@]} kiwi_ovs.log files => "
+        rm ${log_file_list[@]}
+        return
+    fi
 
-    read -p "Press <RETURN> to execute 'less ${newest_log_file}', then search for ${most_ovs_line_list[0]} => "
-    less ${newest_log_file}
+    ### Get a list of the Kiwis
+    local kiwi_list=()
+    local kiwi_root_path_list=()
+    local file_path
+    for file_path in ${log_file_list[@]} ; do
+        local file_path_list=( ${file_path//\// } )         ### put each directory name in an element of an array
+        local kiwi_name=${file_path_list[-3]-}              ### two directories up from the log file is the directory with the name of the kiwi
+        set +x
+        if [[ ! " ${kiwi_list[*]} " =~ " ${kiwi_name} " ]]; then
+            kiwi_list+=("${kiwi_name}")
+           local temp_path_list
+           temp_path_list=(${file_path//\// })
+           local kiwi_root_path=${temp_path_list[@]:0:$(( ${#temp_path_list[@]} - 2 ))}    ### chop off BAND/kiwi_ovs.log
+           kiwi_root_path="/${kiwi_root_path// /\/}"
+           #echo "kiwi_root_path = ${kiwi_root_path}"
+           kiwi_root_path_list+=(${kiwi_root_path})
+           set +x
+           #read -p "Next Kiwi path => "
+        fi
+        set +x
+    done
+    printf "Found there are ${#kiwi_list[@]} Wsprdaemon Kiwis: ${kiwi_list[*]}\n\n"
+    #echo "Found there are ${#kiwi_root_path_list[@]} Kiwi root paths: ${kiwi_root_path_list[*]}"
+
+    for kiwi_root_path in ${kiwi_root_path_list[@]} ; do
+        #echo "Searching under ${kiwi_root_path}"
+        local kiwi_name=${kiwi_root_path##*/}
+        log_file_list=( $(find ${kiwi_root_path}  -name kiwi_ovs.log | sort ) )
+
+        local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
+        local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
+        local ov_report_count=$( wc -l < ${newest_log_file})
+        local ov_non_zero_count=$(awk '$3 != 0' ${newest_log_file} | wc -l)
+
+        local most_ovs_line_list=( ${most_ovs_line} )
+        if [[ ${most_ovs_line_list[2]-0} -eq 0 ]]; then
+            printf "Kiwi ${kiwi_name} reports no overload events\n\n"
+            continue
+        fi
+
+        printf "For Kiwi '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
+        printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
+        printf "This line which reports the most OVs:\n${most_ovs_line}\n" 
+
+        read -p "Press 'l + <RETURN>' to execute 'less ${newest_log_file}', then search for ${most_ovs_line_list[0]} => " user_input
+        if [[ -n "${user_input}" ]]; then
+            less ${newest_log_file}
+        fi
+        printf "\n"
+    done
 }
 alias wd-ov='wd-overloads'
 alias wdov='wd-ov'

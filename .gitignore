@@ -16,3 +16,9 @@ wsprdaemon.pid
 wsprdaemon.conf
 wsprdaemon.status
 proxy.pid
+noise_plot.log
+watchdog_daemon.log
+watchdog_daemon.pid
+wav-archive.d
+suntimes.txt
+
