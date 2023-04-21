@@ -35,8 +35,8 @@ On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD
 To configure user 'wsprdaemon' to sudo:
 ```bash
 su -
-adduser wsprdaemon sudo
-usermod -aG sudo wsprdaemon
+sudo adduser wsprdaemon
+sudo usermod -aG wsprdaemon
 exit
 ```
 
