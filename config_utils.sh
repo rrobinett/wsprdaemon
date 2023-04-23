@@ -316,7 +316,12 @@ function get_astral_sun_times()
 function get_sunrise_sunset() 
 {
     local _return_sunrise_hm=$1
-    local maiden=$2
+    local maiden
+    if [[ -n "${FORCE_MAIDENHEAD-}" ]]; then
+        maiden="${FORCE_MAIDENHEAD}"
+    else
+        maiden=$2
+    fi
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
 
     wd_logger 1 "Get sunrise/sunset for Maidenhead ${maiden} at long/lat  ${long_lat[*]}"
