@@ -272,19 +272,19 @@ function upload_to_wsprnet_daemon() {
            fi
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
-           local upload_spots_files_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#upload_spots_files_list[@]} files"
+           local upload_spots_file_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
+           wd_logger 1 "Uploading spots from ${#upload_spots_file_list[@]} files"
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
-            sed 's/none/    /' ${upload_spots_files_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            sed 's/none/    /' ${upload_spots_file_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
-                wd_logger 1 "Found ${#upload_spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
+                wd_logger 1 "Found ${#upload_spots_file_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
                 wd_rm ${upload_spots_file_list[@]}
                 continue
             fi
             if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
-                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots. Flushing ${#upload_spots_files_list[@]} spot files"
+                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots. Flushing ${#upload_spots_file_list[@]} spot files"
                 wd_rm ${upload_spots_file_list[@]}
                 continue
             fi
@@ -295,10 +295,12 @@ function upload_to_wsprnet_daemon() {
 
             wd_logger 1 "Uploading ${call} at ${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
 
+            local start_epoch=${EPOCHSECONDS}
             curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
+            local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
             if [[ $ret_code -ne 0 ]]; then
-                wd_logger 1 "curl returned error code => ${ret_code} and logged:\n$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
+                wd_logger 1 "After ${curl_exec_seconds} seconds, curl returned error code => ${ret_code} and logged:\n$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
                 continue
             fi
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
@@ -307,7 +309,7 @@ function upload_to_wsprnet_daemon() {
             else
                 local spots_xfered=${spot_xfer_counts[0]}
                 local spots_offered=${spot_xfer_counts[1]}
-                wd_logger 1 "wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
+                wd_logger 1 "After ${curl_exec_seconds} seconds, wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
                 if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
                     wd_logger 1 "ERROR: Spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
                 fi
@@ -323,7 +325,8 @@ function upload_to_wsprnet_daemon() {
                     fi
                     wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
-                wd_logger 1 "Flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that they have been uploaded:\n${upload_spots_file_list[*]}"
+                wd_logger 1 "Flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that the spots they contain have been uploaded"
+                wd_logger 2 "\n${upload_spots_file_list[*]}"
                 wd_rm ${upload_spots_file_list[@]}
             fi
         done
@@ -444,13 +447,15 @@ function upload_to_wsprdaemon_daemon() {
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
+            local start_epoch=${EPOCHSECONDS}
             curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}
             local ret_code=$?
+            local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
             if [[ ${ret_code} -eq  0 ]]; then
-                wd_logger 1 "curl FTP upload was successful. Deleting the ${#source_file_list[@]} \${source_file_list[@]} files which were in the uploaded tar file"
+                wd_logger 1 "After ${curl_exec_seconds} seconds, curl FTP upload was successful. Deleting the ${#source_file_list[@]} \${source_file_list[@]} files which were in the uploaded tar file"fter
                 wd_rm ${source_file_list[@]}
             else
-                wd_logger 1 "ERROR: 'curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}' faiiled => ${ret_code}, so leave spot and noise files and try again"
+                wd_logger 1 "ERROR: After ${curl_exec_seconds} seconds, 'curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}' faiiled => ${ret_code}, so leave spot and noise files and try again"
             fi
             wd_rm ${tar_file_path} 
         fi
