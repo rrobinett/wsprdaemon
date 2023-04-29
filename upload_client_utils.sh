@@ -232,7 +232,7 @@ function upload_to_wsprnet_daemon() {
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
               && ps_stdout=$( ps aux ) \
-              || echo "${ps_stdout}" | grep -q "bin/wsprd \|jt9\|derived_calc.py" ; do
+              || echo "${ps_stdout}" | grep -q "wsprdaemon/bin/wsprd \|wsprdaemon/bin/jt9 \|derived_calc.py" ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
             if [[ ${#spots_files_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Not ready to start uploads because there are no spot files"
@@ -272,20 +272,20 @@ function upload_to_wsprnet_daemon() {
            fi
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
-           local spots_files=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#spots_files[@]} files"
+           local upload_spots_files_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
+           wd_logger 1 "Uploading spots from ${#upload_spots_files_list[@]} files"
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
-            sed 's/none/    /' ${spots_files[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+            sed 's/none/    /' ${upload_spots_files_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
-                wd_logger 1 "Found ${#spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "Found ${#upload_spots_files_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
+                wd_rm ${upload_spots_file_list[@]}
                 continue
             fi
             if [[ ${SIGNAL_LEVEL_UPLOAD-no} == "proxy" ]]; then
-                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots. Flushing ${#spots_files_list[@]} spot files"
-                rm ${all_spots_file_list[@]}
+                wd_logger 1 "WD is configured for proxy uploads, so leave it to wsprdaemon.org to upload those spots. Flushing ${#upload_spots_files_list[@]} spot files"
+                wd_rm ${upload_spots_file_list[@]}
                 continue
             fi
             ### Upload all the spots for one CALL_GRID in one curl transaction 
@@ -323,8 +323,8 @@ function upload_to_wsprnet_daemon() {
                     fi
                     wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                 fi
-                wd_logger 1 "Flushing the ${#all_spots_file_list[*]} spot files containing ${spots_offered} spots now that they have been uploaded:\n${all_spots_file_list[*]}"
-                wd_rm ${all_spots_file_list[@]}
+                wd_logger 1 "Flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that they have been uploaded:\n${upload_spots_file_list[*]}"
+                wd_rm ${upload_spots_file_list[@]}
             fi
         done
    done
