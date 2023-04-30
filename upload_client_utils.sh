@@ -117,45 +117,46 @@ declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_f
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_wsprnet_create_spot_file_list_file()
 {
-    local spots_files=$( tr ' ' '\n' <<< "$@")         ### Insert newlines so we can grep below for the files
-    local spots_files_list=( ${spots_files} )
+    ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
+    local spots_files_list=( ${@} )
+    local cycle_list=( ${spots_files_list[@]%_spots.txt} )     ### Extract the YYMMDD_HHMM from each filename and then get the uniq set
+    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
 
-    wd_logger 2 "Got $( wc -l <<< "${spots_files}") files and saved them in spots_files_list[]"
+    cycle_list=( ${cycle_list[@]##*/} ) 
+    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
 
-   ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
-    local cycles_list=( ${spots_files_list[@]%_*_spots.txt} )     ### Extract the YYMMDD_HHMM_FREQ from each element and get the uniq set
-          cycles_list=( $(echo "${cycles_list[@]##*/}" | tr ' ' '\n' |  sort -u )  )
+    IFS=$'\n' cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
+    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
 
-    wd_logger 1 "Creating a list of spot files for CALL_GRID from the ${#spots_files_list[@]} spot files from ${#cycles_list[@]} WSPR cycles"
+    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them"
 
-    local spots_file_list=""
-    local spots_file_list_count=0
-    local file_spots=""
-    local file_spots_count=0 
+    local upload_file_list=()
+    local upload_spots_count=0
     local cycle
-    for cycle in ${cycles_list[@]} ; do
-        local cycle_files=$( grep ${cycle} <<< "${spots_files}" )
-        wd_logger 1 "Checking for number of spots in '${cycle}' in the list of ${#spots_files_list[@]} files passed to us"
+    for cycle in ${cycle_list[@]} ; do
+        local cycle_files_list=()
+        IFS=$'\n' cycle_files_list=( $( IFS=$'\n' echo "${spots_files_list[*]}" | grep ${cycle} ) ) ; unset IFS
 
-        local cycle_spots_count=$(cat ${cycle_files} | wc -l)
-        if [[ ${cycle_spots_count} -eq 0 ]]; then
-            wd_logger 1 "Found the complete set of files in cycle ${cycle} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} below and leave it to the calling function to delete them"
-        fi
-        wd_logger 2 "Found ${cycle_spots_count} spots in cycle ${cycle}"
-
-        local new_count=$(( ${spots_file_list_count} + ${cycle_spots_count} ))
-        if [[ ${new_count} -le ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
-            wd_logger 1 "Adding the ${cycle_spots_count} spots in cycle ${cycle} will increase upload to ${new_count} spot which is less than the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload"
+        if [[ ${#cycle_files_list[@]} -eq 0 ]]; then
+            wd_logger 1 "Found the spot files from cycle ${cycle} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} below and leave it to the calling function to delete them"
         else
-            wd_logger 1 "Adding the ${cycle_spots_count} spots in cycle ${cycle} to the exisiting ${cycle_spots_count} spots will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
-            echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
-            return
+            wd_logger 2 "Found ${#cycle_files_list[@]} spot files in cycle ${cycle}"
         fi
-        spots_file_list=$(echo -e "${spots_file_list}\n${cycle_files}")
-        spots_file_list_count=$(( ${spots_file_list_count} + ${cycle_spots_count}))
+
+        local cycle_spots_count=$( cat ${cycle_files_list[@]} |  wc -l )
+        local new_count=$(( ${upload_spots_count} + ${cycle_spots_count} ))
+        if [[ ${new_count} -le ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+            wd_logger 2 "Adding the ${cycle_spots_count} spots in cycle ${cycle} will increase upload to ${new_count} spot which is less than the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload"
+            upload_file_list+=( ${cycle_files_list[@]})
+            upload_spots_count=${new_count}
+        else
+            wd_logger 2 "Adding the ${cycle_spots_count} spots in cycle ${cycle} to the existing ${upload_spots_count} spots will exceed the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload, so upload list is complete"
+            break
+        fi
    done
-   wd_logger 1 "Found that all of the ${spots_file_list_count} spots in the current spot files can be uploaded"
-   echo "${spots_file_list}" > ${UPLOAD_SPOT_FILE_LIST_FILE}
+
+   ( IFS=$'\n'; echo "${upload_file_list[*]}" > ${UPLOAD_SPOT_FILE_LIST_FILE} )       ### IFS=$'\n' causes each element to be output on a seperate line
+   wd_logger 1 "Found ${upload_spots_count} spots in ${#upload_file_list[@]} spot files and saved those spots in ${UPLOAD_SPOT_FILE_LIST_FILE}"
 }
 
 function get_call_grid_from_receiver_name() {
@@ -240,7 +241,7 @@ function upload_to_wsprnet_daemon() {
                  wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
             else
                 local runnung_jobs=$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )
-                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs;\n${runnung_jobs}"
+                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs:\n${runnung_jobs}"
             fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
@@ -262,14 +263,15 @@ function upload_to_wsprnet_daemon() {
 
        ### All spots in an upload to wspr.org must come from a single CALL/GRID
        for call_grid_dir in ${call_grid_dirs_list[@]} ; do
-           wd_logger 2 "Checking ${call_grid_dir}"
 
            spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
 
            if [[ ${#spots_files_list[@]} -eq 0 ]]; then
-               wd_logger 2 "Found no '*_spots.txt' files for ${call_grid_dir}"
+               wd_logger 1 "Found no '*_spots.txt' files under  ${call_grid_dir}"
                continue
            fi
+           wd_logger 1 "Found ${#spots_files_list[@]}  '*_spots.txt' files under  ${call_grid_dir}"
+
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
            local upload_spots_file_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
