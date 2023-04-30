@@ -120,13 +120,8 @@ function upload_wsprnet_create_spot_file_list_file()
     ### All the spots in one upload to wsprnet.org must come from one reporter (CALL_GRID), so for this upload pick the CALL_GRID of the first file in the list
     local spots_files_list=( ${@} )
     local cycle_list=( ${spots_files_list[@]%_spots.txt} )     ### Extract the YYMMDD_HHMM from each filename and then get the uniq set
-    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
-
     cycle_list=( ${cycle_list[@]##*/} ) 
-    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
-
-    IFS=$'\n' cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
-    wd_logger 2 "Got ${#cycle_list[@]} entries in cycle_list[], cycle_list[10]= '${cycle_list[10]}"
+    IFS=$'\n'; cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
 
     wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them"
 
@@ -135,7 +130,7 @@ function upload_wsprnet_create_spot_file_list_file()
     local cycle
     for cycle in ${cycle_list[@]} ; do
         local cycle_files_list=()
-        IFS=$'\n' cycle_files_list=( $( IFS=$'\n' echo "${spots_files_list[*]}" | grep ${cycle} ) ) ; unset IFS
+        IFS=$'\n'; cycle_files_list=( $( IFS=$'\n'; echo "${spots_files_list[*]}" | grep ${cycle} ) ) ; unset IFS
 
         if [[ ${#cycle_files_list[@]} -eq 0 ]]; then
             wd_logger 1 "Found the spot files from cycle ${cycle} contain no spots, but add these file to ${UPLOAD_SPOT_FILE_LIST_FILE} below and leave it to the calling function to delete them"
