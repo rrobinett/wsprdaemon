@@ -11,6 +11,7 @@ fi
 ### Watch the upload log file
 function wd-watch-wsprnet-upload-log()
 {
+    echo "To view the full log file execute the command: 'less ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log'"
     tail -F ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
 }
 alias wd-un=wd-watch-wsprnet-upload-log
