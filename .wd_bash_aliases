@@ -8,6 +8,14 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
+### Watch the upload log file
+function wd-watch-wsprnet-upload-log()
+{
+    tail -F ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
+}
+alias wd-un=wd-watch-wsprnet-upload-log
+alias wdln=wd-watch-wsprnet-upload-log
+
 ### Gets status for the Kiwis listed in WD.conf
 function wd-find-kiwis()
 {
@@ -320,7 +328,6 @@ function kiwi-stats(){
 alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
-alias wdln='wd -l n'
 alias wdld='wd -l d'
 alias wda='wd -a'
 alias wdz='wd -z'
