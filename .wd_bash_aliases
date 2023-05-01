@@ -1,5 +1,4 @@
 #!/bin/bash 
-
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
 if [[ -d /dev/shm/wsprdaemon ]]; then
@@ -7,6 +6,14 @@ if [[ -d /dev/shm/wsprdaemon ]]; then
 else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
+
+### To speed debugging of the WD upload daemons, kill just the watchdog and upload daemons.  You can then 'wda' and watch the upload log as the WD uploader starts to work immediately
+function wd-kill-uploader()
+{
+    kill $( cat ~/wsprdaemon/watchdog_daemon.pid  ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.pid )
+}
+alias wd-k=wd-kill-uploader
+alias wdk=wd-kill-uploader
 
 ### Watch the upload log file
 function wd-watch-wsprnet-upload-log()
