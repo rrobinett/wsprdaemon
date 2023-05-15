@@ -334,7 +334,8 @@ function upload_to_wsprnet_daemon() {
 if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]]; then
 
     declare TS_HOSTNAME=${TS_HOSTNAME-logs.wsprdaemon.org}
-    declare HOST_RETURN_LINE_LIST=( $(host ${TS_HOSTNAME}) )
+    declare HOST_RETURN_LINE_LIST=()
+    HOST_RETURN_LINE_LIST=( $(host ${TS_HOSTNAME}) )
     if [[ $? -ne 0 ]]; then
         wd_logger 1 "ERROR: config file variable SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD} is not 'no', but can't find the IP address of TS_HOSTNAME=${TS_HOSTNAME}"
         exit 1

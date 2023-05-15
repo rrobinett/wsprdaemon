@@ -36,11 +36,11 @@ case ${CPU_ARCH} in
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
             QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
         fi
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:armhf ${QT5_PACKAGE})
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:armhf ${QT5_PACKAGE})
         ;;
     aarch64)
         ### This is a 64 bit bullseye Pi4
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:arm64 libqt5core5a:arm64 )
+        declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:arm64 libqt5core5a:arm64 )
         ;;
     x86_64)
         declare os_release    ### We are not in a function, so it can't be local
@@ -48,9 +48,9 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 22.04 ]]; then
             ### Ubuntu 22.04 doesn't use qt5-default
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 libqt5core5a:amd64 )
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:amd64 libqt5core5a:amd64 )
         else
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64 )
+            declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64 )
         fi
         ;;
     *)
@@ -446,16 +446,15 @@ function load_wsjtx_commands()
                 exit 1
             fi
             wsjtx_version=$( /usr/bin/wsjtx_app_version -v | awk '{print $2}' )
-            if [[ "${wsjtx_version}" != "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.6.1}" ]]; then
-                wd_logger 1 "ERROR: wrong wsjtx version '${wsjtx_version}' on 64 bit Pi bulleye"
-                exit
+            if [[ "${wsjtx_version}" == "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.6.1}" ]]; then
+                mkdir -p ${WSPRD_BIN_DIR}
+                cp /usr/bin/{wsprd,jt9} ${WSPRD_BIN_DIR}
+                echo "echo ${wsjtx_version}" > ${WSPRD_VERSION_CMD}
+                chmod +x ${WSPRD_VERSION_CMD}
+                wd_logger 1 "Installed WSJT-x version ${wsjtx_version} on this 64 bit Pi bullseye"
+                return 0
             fi
-            mkdir -p ${WSPRD_BIN_DIR}
-            cp /usr/bin/{wsprd,jt9} ${WSPRD_BIN_DIR}
-            echo "echo ${wsjtx_version}" > ${WSPRD_VERSION_CMD}
-            chmod +x ${WSPRD_VERSION_CMD}
-            wd_logger 1 "Installed WSJT-x version ${wsjtx_version} on this 64 bit Pi bullseye"
-            return 0
+            wd_logger 1 "ERROR: wrong wsjtx version '${wsjtx_version}' on 64 bit Pi bulleye.  So installing from WSJT-x repo"
         fi
         local wsjtx_pkg=""
         case ${CPU_ARCH} in
@@ -509,7 +508,7 @@ function load_wsjtx_commands()
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
         wd_logger 1 "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
-    local wsjtx_dpkg_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name wsjtx_*.deb ) )
+    local wsjtx_dpkg_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name 'wsjtx_*.deb' ) )
     if [[ ${#wsjtx_dpkg_file_list[@]} -gt 0 ]]; then
         wd_logger 1 "Flushing files: '${wsjtx_dpkg_file_list[*]}'"
         wd_rm ${wsjtx_dpkg_file_list[@]}
