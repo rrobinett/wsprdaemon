@@ -123,7 +123,7 @@ function upload_wsprnet_create_spot_file_list_file()
     cycle_list=( ${cycle_list[@]##*/} ) 
     IFS=$'\n'; cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
 
-    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them"
+    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them: '${cycle_list[*]}'"
 
     local upload_file_list=()
     local upload_spots_count=0
@@ -270,7 +270,7 @@ function upload_to_wsprnet_daemon() {
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
            local upload_spots_file_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#upload_spots_file_list[@]} files"
+           wd_logger 2 "Uploading spots from ${#upload_spots_file_list[@]} files"
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
             sed 's/none/    /' ${upload_spots_file_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
