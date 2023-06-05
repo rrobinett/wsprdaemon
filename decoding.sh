@@ -380,7 +380,7 @@ function flush_wav_files_older_than()
             wd_rm ${wav_file}
         elif [[ ${wav_file} -nt ${reference_file} ]]; then
             (( ++newers ))
-            wd_logger 1 "ERROR: found wav file '${wav_file}' is newer than ${reference_file}"
+            wd_logger 2 "Found wav file '${wav_file}' is newer than ${reference_file}"
         else
             ### 'find' prepends './' to the filenames it returns, so we can't compare flenames.  But if two wav file timestamps in the same directory match each other, then they must be the same wav file
             wd_logger 1 "Found expected reference file ${reference_file}"
@@ -756,8 +756,8 @@ function get_wav_file_list() {
              wd_logger 1 "ERROR: variable 'index_of_first_unreported_raw_file' has not been set"
              #continue
          fi
-         if [[ ${raw_file_list[${index_of_first_unreported_raw_file}]-} ]]; then
-             wd_logger 1 "ERROR: array element ${raw_file_list}[${index_of_first_unreported_raw_file}] "
+         if [[ -z "${raw_file_list[${index_of_first_unreported_raw_file}]-}" ]]; then
+             wd_logger 1 "ERROR: index_of_first_unreported_raw_file=${index_of_first_unreported_raw_file} was found, but ${raw_file_list}\[${index_of_first_unreported_raw_file}\] is empty"
              #continue
          fi
 
