@@ -220,14 +220,14 @@ function upload_to_wsprnet_daemon() {
         wd_sleep ${sleep_secs}
 
         ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
-        wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stablize, and for there to be no running 'wsprd' or 'jt9 jobs"
+        wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stabilize, and for there to be no running 'wsprd' or 'jt9 jobs"
         local ps_stdout=""
         local old_spot_file_count=0
         local spots_files_list=()
         while    spots_files_list=($(find . -name '*_spots.txt') ) \
+              && ps_stdout="$( ps aux )" \
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
-              && ps_stdout=$( ps aux ) \
               || echo "${ps_stdout}" | grep -q "wsprdaemon/bin/wsprd \|wsprdaemon/bin/jt9 \|derived_calc.py" ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
             if [[ ${#spots_files_list[@]} -eq 0 ]]; then
@@ -235,8 +235,9 @@ function upload_to_wsprnet_daemon() {
             elif [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]]; then
                  wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
             else
-                local runnung_jobs=$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )
-                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs:\n${runnung_jobs}"
+                local running_jobs
+                running_jobs="$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )"
+                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs:\n${running_jobs}"
             fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
