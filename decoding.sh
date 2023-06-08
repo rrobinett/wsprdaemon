@@ -377,7 +377,12 @@ function flush_wav_files_older_than()
         if [[ ${wav_file} -ot ${reference_file} ]]; then
             (( ++olders ))
             wd_logger 1 "Deleting older wav file '${wav_file}'"
+            local rc
             wd_rm ${wav_file}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: Deleting older wav file '${wav_file}', 'wd_rm ${wav_file}' => ${rc}"
+            fi
         elif [[ ${wav_file} -nt ${reference_file} ]]; then
             (( ++newers ))
             wd_logger 2 "Found wav file '${wav_file}' is newer than ${reference_file}"
@@ -418,9 +423,20 @@ function sleep_until_raw_file_is_full() {
     local file_start_minute=${filename:11:2}
     local file_start_second=${filename:13:2}
     if [[ ${file_start_second} != "00" ]]; then
-        wd_logger 1 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup"
+        wd_logger 1 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup AND any older wav files"
+        local rc
+
         flush_wav_files_older_than ${filename}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
+        fi
+
         wd_rm ${filename}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'wd_rm ${filename}' => ${rc}"
+        fi
         return 2
     fi
 
@@ -431,9 +447,20 @@ function sleep_until_raw_file_is_full() {
 
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
         wd_logger 1 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        local rc
+
         flush_wav_files_older_than ${filename}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: While flushing too short wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
+        fi
+
         wd_rm ${filename}
-        return 2
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: While flushing too shortwav file'${filename}', 'wd_rm ${filename}' => ${rc}"
+        fi
+       return 2
     fi
     if [[ 10#${wav_file_duration_integer} -gt ${WAV_FILE_MAX_HHMMSSUU} ]]; then
 	### If the wav file has grown to longer than one minute, then it is likely there are two kiwirecorder jobs running 
@@ -455,8 +482,19 @@ function sleep_until_raw_file_is_full() {
             fi
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
         fi
+        local rc
+
         flush_wav_files_older_than ${filename}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
+        fi
+
         wd_rm ${filename}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'wd_rm ${filename}' => ${rc}"
+        fi
         return 3
     fi
     wd_logger 1 "File ${filename} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
@@ -498,6 +536,8 @@ function get_file_start_time_info()
     return 0
 }
 
+### Given a list of filenames, start from the newest file, the one at the end of the list (i.e. [-1]), and work towards the front of the list
+### Make sure that each earlier filename is 1 minute earlier.  If not, then flush all the older files from the list
 function cleanup_wav_file_list()
 {
     local __return_clean_files_string_name=$1
@@ -515,23 +555,39 @@ function cleanup_wav_file_list()
     local test_file_name
     local return_clean_files_string=""
 
-    local raw_file_index=$(( ${#check_file_list[@]} - 1 ))
+    ### Walk back from the end of the file list verifying that each preceeding file starts one minute earlier and is full sized.
+    ### If a invalid file is found, flush it and all earlier files
+    local raw_file_index=()
+    raw_file_index=$(( ${#check_file_list[@]} - 1 ))
+
     while [[ ${raw_file_index} -ge 0 ]]; do
-        local test_file_name=${check_file_list[${raw_file_index}]}
+        local test_file_name
+        test_file_name=${check_file_list[${raw_file_index}]}
         wd_logger 2 "Testing file ${test_file_name}"
         if [[ ${flush_files} == "yes" ]]; then
-            wd_logger 1 "ERROR: flushing file ${test_file_name}"
+            wd_logger 1 "flush_files == 'yes', so flushing file ${test_file_name}"
             wd_rm ${test_file_name}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: for flush_files == 'yes' ${test_file_name}',  'wd_rm ${test_file_name}' => ${rc}"
+            fi
         else
+            local ret_code
             is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECONDS} ${MAX_VALID_RAW_WAV_SECONDS}
-            local ret_code=$?
+            ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: found wav file '${test_file_name}' has invalid size.  Flush it"
-                rm ${test_file_name}
+                ### Found a wav file with invalid size
+                wd_logger 1 "ERROR: found wav file '${test_file_name}' has invalid size.  Flush it and all earlier wav files"
+                wd_rm ${test_file_name}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: Failed to flush the first invalid file we found, ${test_file_name}',  'wd_rm ${test_file_name}' => ${rc}"
+                fi
                 flush_files="yes"
             else
                 ### Size is valid, see if it is one minute earlier than the previous file
-                local test_file_minute=${test_file_name:11:2}
+                local test_file_minute
+                test_file_minute=${test_file_name:11:2}
                 wd_logger 2 "Checking time fields in valid wav file '${test_file_name}' => test_file_minute=${test_file_minute}, last_file_minute=${last_file_minute}"
                 if [[ ${last_file_minute} == "-1" ]]; then
                     wd_logger 2 "First clean file is at minute ${test_file_minute}"
@@ -540,16 +596,22 @@ function cleanup_wav_file_list()
                 else
                     if [[ 10#${last_file_minute} -eq 0 ]]; then
                          last_file_minute=60
-                         wd_logger 1 "Testing for a minute 59 file '${test_file_name}', so changed last_file_minute to ${last_file_minute}"
+                         wd_logger 1 "Testing for a minute 59 file '${test_file_name}', so changed last_file_minute '00' to ${last_file_minute}"
                     fi
                     local minute_difference=$(( 10#${last_file_minute} - 10#${test_file_minute} ))
                     if [[ ${minute_difference} -eq 1 ]]; then
+                        ### This file has good start time, size and has a name which is one minute earlier than the previous file.
                         wd_logger 2 "'${test_file_name}' size is OK and it is one minute earlier than the next file in the list"
                         return_clean_files_string="${test_file_name} ${return_clean_files_string}"
                         last_file_minute=${test_file_minute}
                     else
-                        wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next file in the list ${check_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
+                        wd_logger 1 "ERROR: there is a gap of more than 1 minute between this file '${test_file_name}' and the next newer file in the list ${check_file_list[ $(( ++${raw_file_index} )) ]}, so flush this file and all earlier files"
+                        local rc
                         wd_rm ${test_file_name}
+                        rc=$?
+                        if [[ ${rc} -ne 0 ]]; then
+                            wd_logger 1 "ERROR: Failed to flushs ${test_file_name}' which is not one minute earlier than the next wav file in the list: 'wd_rm ${test_file_name}' => ${rc}"
+                        fi
                         flush_files="yes"
                     fi
                 fi
@@ -558,18 +620,20 @@ function cleanup_wav_file_list()
         wd_logger 2 "Done checking '${test_file_name}' from index ${raw_file_index}"
         (( --raw_file_index ))
     done
-    local clean_files_list=( ${return_clean_files_string} )
+    local clean_files_list=()
+    clean_files_list=( ${return_clean_files_string} )
 
-    wd_logger 1 "Given check_file_list[${#check_file_list[@]}]='${check_file_list[*]}'\nReturning clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
+    wd_logger 2 "Given check_file_list[${#check_file_list[@]}]     ='${check_file_list[*]}'"
+    wd_logger 2 "Returning clean_file_list[${#clean_files_list[*]}] ='${clean_files_list[*]}'"
     if [[ ${#check_file_list[@]} -ne ${#clean_files_list[*]} ]]; then
-        wd_logger 1 "ERROR: cleaned list check_file_list[${#check_file_list[@]}]='${check_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
+        wd_logger 1 "ERROR: Found errors in wav file list, so cleaned list check_file_list[${#check_file_list[@]}]='${check_file_list[*]}' => clean_file_list[${#clean_files_list[*]}]='${clean_files_list[*]}'"
     fi
     eval ${__return_clean_files_string_name}=\"${return_clean_files_string}\"
     return 0
 } 
 
-
-### Waits for wav files needed to decode one or more of the MODEs have been fully recorded
+### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
+### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
@@ -613,27 +677,28 @@ function get_wav_file_list() {
             if [[ ${#raw_file_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Timeout after ${timeout} seconds while waiting for the first wav file to appear"
             else
-                wd_logger 2 "First file appeared after waiting ${timeout} seconds"
+                wd_logger 1 "First file appeared after waiting ${timeout} seconds"
             fi
             return 1         ### Signal to  calling function to try again
             ;;
         1 )
-            wd_logger 2 "There is only 1 raw file ${raw_file_list[0]} and all modes need at least 2 minutes. So wait for this file to be filled"
+            wd_logger 1 "There is only 1 raw file ${raw_file_list[0]} and all modes need at least 2 minutes. So wait for this file to be filled"
+            local ret_code
             sleep_until_raw_file_is_full ${raw_file_list[0]}
-            local ret_code=$?
+            ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "Error while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
+                wd_logger 1 "ERROR:  while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
+            else
+                if [[ -f ${raw_file_list[0]} ]]; then
+                    wd_logger 1 "First file '${raw_file_list[0]}' is filled and good, but since there is only one good file return error 2"
+                else
+                    wd_logger 1 "First file '${raw_file_list[0]}' was filled, but it was flushed"
+                fi
             fi
             return 2
             ;;
        * )
-            wd_logger 2 "Found ${#raw_file_list[@]} files, so we *may* have enough 1 minute wav files to make up a WSPR pkt. Wait until the last file is full, then proceed to process the list."
-            local second_from_file_name=${raw_file_list[0]:13:2}
-            if [[ 10#${second_from_file_name} -ne 0 ]]; then
-                wd_logger 2 "Raw file '${raw_file_list[0]}' name says the first file recording starts at second ${second_from_file_name}, not at second 0, so flushing it"
-                wd_rm ${raw_file_list[0]}
-                return 3
-            fi
+            wd_logger 1 "Found ${#raw_file_list[@]} files, so we *may* have enough 1 minute wav files to make up a WSPR pkt. Wait until the last file is full, then proceed to process the list."
             sleep_until_raw_file_is_full ${raw_file_list[-1]}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
@@ -643,160 +708,145 @@ function get_wav_file_list() {
             fi
             ;;
     esac
-
-    wd_logger 2 "Found ${#raw_file_list[@]} full raw files. Fill return list with lists of those raw files which are part of each WSPR mode"
+    wd_logger 1 "Found ${#raw_file_list[@]} full raw files, enough that we *may* have a set which can create a new pkt wav file. First clean the list of raw files"
 
     local clean_files_string
     cleanup_wav_file_list  clean_files_string "${raw_file_list[*]}"
-    local clean_file_list=( ${clean_files_string} )
-    if [[ ${#clean_file_list[@]} -ne ${#raw_file_list[@]} ]]; then
-        if [[ ${#clean_file_list[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: clean_file_list[] has no files"
-            return 1
-        fi
+
+    local clean_file_list=()
+    clean_file_list=( ${clean_files_string} )
+    if [[ ${#clean_file_list[@]} -lt 2 ]]; then
+        wd_logger 1 "ERROR: (not really) after cleanup of raw_file_list[], clean_file_list[] has only ${#clean_file_list[@]} files, not enough to create even a 2 minute wav file"
+        return 5
+    fi
+
+    if [[ ${#clean_file_list[@]} -eq ${#raw_file_list[@]} ]]; then
+        wd_logger 2 "raw_file_list[@] is clean"
+    else
         if [[ ${#clean_file_list[@]} -lt 2 ]]; then
-            wd_logger 1 "ERROR: clean_file_list[]='${clean_file_list[*]}' has less than the minimum 2 packets needed for the smallest WSPR packet.  So return error and try again to find a good list"
-            return 1
+            wd_logger 1 "ERROR: (not really) After cleaning, clean_file_list[]='${clean_file_list[*]}' has less than the minimum 2 packets needed for the smallest WSPR packet.  So return error and try again to find a good list"
+            return 6
         fi
         raw_file_list=( ${clean_file_list[@]} )
-        wd_logger 1 "ERROR: After cleanup, raw_file_list[]='${raw_file_list[*]}' which is enough for a minimm sized WSPR packet"
+        wd_logger 1 "ERROR: (not really) Cleanup trimmed $(( ${#raw_file_list[@]} - ${#clean_file_list[@]})) files from raw_file_list[], but there are still enough for a minimm sized WSPR packet"
+        wd_logger 1 "ERROR: raw_file_list[]=  '${raw_file_list[*]}'"
+        wd_logger 1 "ERROR: clean_file_list[]='${clean_file_list[*]}'"
     fi
-    ### We now have a list of two or more full size raw files
-    get_file_start_time_info epoch_of_first_raw_file minute_of_first_raw_file ${raw_file_list[0]}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_file_start_time_info epoch_of_first_raw_file minute_of_first_raw_file ${raw_file_list[0]}' => ${ret_code}"
-        return 4
-    fi
+    ### We now have a clean list of two or more full size raw files
 
-    wd_logger 1 "The first raw file ${raw_file_list[0]} write time is at minute ${minute_of_first_raw_file}"
-    local index_of_first_file_which_needs_to_be_saved=${#raw_file_list[@]}                         ### Presume we will need to keep none of the raw files
 
-    local return_list=()
+    ## Search for newly completed pkt wav files lists 
+
+    local return_list=()      ### contaains zero or more WAV_SECONDS:WAV_FILE_0,WAV_FILE_1[,WAV_FILE_2...] entries
+    local index_of_last_file_which_should_be_flushed=$(( ${#raw_file_list[@]} - 1 ))  ### After all searches we will flush the raw_file_list[@] files with indexes up to this, since those wav files are not candidates for future pkt wav files
+
+    ### For each 2/5/15/30 minute wav file we have been asked to return, serach for earliest run of one minute wav files which satisfy the needed run of needed minute wav files
     local seconds_in_wspr_pkt
     for seconds_in_wspr_pkt in  ${target_seconds_list[@]} ; do
-        local raw_files_in_wav_file_count=$((seconds_in_wspr_pkt / 60))
-        wd_logger 1 "Check to see if we can create a new ${seconds_in_wspr_pkt} seconds long wav file from ${raw_files_in_wav_file_count} raw files"
+        local minutes_in_wspr_pkt=$(( ${seconds_in_wspr_pkt} / 60 ))
+        wd_logger 1 "Checking for ${seconds_in_wspr_pkt} second == ${minutes_in_wspr_pkt} minute wspr packet"
 
-        ### Check to see if we have previously returned some of these files in a previous call to this function
+        ### Find where to start searching for a start file in the raw_file[]. Check to see if we have returned some of these files in a previous call to this function
+        ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
         shopt -s nullglob
         local wav_raw_pkt_list=( *.wav.${seconds_in_wspr_pkt}-secs )
         shopt -u nullglob
 
-        local index_of_first_unreported_raw_file
-        local index_of_last_unreported_file
+        ### Find out which index to start searching from
+        local minute_of_first_unreported_wav_file
+        local index_of_first_unreported_raw_file=-1         ### After all searches, if an unreported start file is found we will keep the raw_file_list[@] files with indexes great than or equal to this index
         if [[ ${#wav_raw_pkt_list[@]} -eq 0 ]]; then
-            wd_logger 2 "Found no wav_secs files for wspr pkts of this length, so there were no previously reported packets of this length. So find index of first raw file that would start a wav file of this many seconds"
-            local minute_of_first_raw_sample=$(( 10#${minute_of_first_raw_file}))
-            if [[ ${receiver_name} =~ "SDR" ]]; then
-                $(( --minute_of_first_raw_sample ))
-                if [[ ${minute_of_first_raw_sample} -lt 0 ]]; then
-                    minute_of_first_raw_sample=59
-                fi
-                wd_logger 1 "Adjusted minute_of_first_raw_sample by 1 minute to ${minute_of_first_raw_sample} which compensates for the fact that sdrTest writes the last bytes of a wav file in the following minute of the first bytes"
-            fi
-
-            local first_minute_raw_wspr_pkt_index=$(( minute_of_first_raw_sample % raw_files_in_wav_file_count ))
-            index_of_first_unreported_raw_file=$(( (raw_files_in_wav_file_count - first_minute_raw_wspr_pkt_index) % raw_files_in_wav_file_count ))
-            wd_logger 2 "Raw_file ${raw_file_list[0]} of minute ${minute_of_first_raw_sample} is raw pkt #${first_minute_raw_wspr_pkt_index} of a ${seconds_in_wspr_pkt} second long wspr packet. So start of next wav_raw will be found at raw_file index ${index_of_first_unreported_raw_file}"
-        else
-            wd_logger 2 "Found that we previously returned ${#wav_raw_pkt_list[@]} wav files of this length"
-            
-            if [[ ${#wav_raw_pkt_list[@]} -eq 1 ]]; then
-                wd_logger 2 "There is only one wav_raw pkt ${wav_raw_pkt_list[@]}, so leave it alone"
+            wd_logger 1 "Found no previously reported ${minutes_in_wspr_pkt} minute wav_secs files. So search all of the wav_raw_pkt_list[] to find index of first raw file that would start a wav file of this many seconds"
+            index_of_first_unreported_raw_file=0
+            local minute_of_first_raw_file=$(( 10#${raw_file_list[0]:11:2} ))
+            local modulo_of_first_raw_file=$(( ${minute_of_first_raw_file} % ${minutes_in_wspr_pkt} ))
+            if [[ ${modulo_of_first_raw_file} -eq 0 ]]; then
+                wd_logger 1 "No previous wspr pkt, and the first raw wav file at minute ${minute_of_first_raw_file} is the first packet of a ${minutes_in_wspr_pkt} minute WSPR pkt"
+                minute_of_first_unreported_wav_file=${minute_of_first_raw_file}
             else
-                local flush_count=$(( ${#wav_raw_pkt_list[@]} - 1 ))
-                local inner_flush_list=( ${wav_raw_pkt_list[@]:0:${flush_count}} )
-                if [[ ${#inner_flush_list[*]} -gt 0 ]]; then
-                    wd_logger 2 "Flushing ${#inner_flush_list[@]} files '${inner_flush_list[*]}' leaving only ${wav_raw_pkt_list[-1]}"
-                    rm ${inner_flush_list[*]}
-                else
-                    wd_logger 1 "ERROR: wav_raw_pkt_list[] has ${#wav_raw_pkt_list[@]} files, but inner_flush_list[] is empty"
+                minute_of_first_unreported_wav_file=$(( ${minute_of_first_raw_file} + ${minutes_in_wspr_pkt} - ${modulo_of_first_raw_file} ))
+                wd_logger 1 "No previous wspr pkt and the first raw wav file at minute ${minute_of_first_raw_file} is not the start of a ${minutes_in_wspr_pkt} minute WSPR pkt. That wspr wav will start at minute ${minute_of_first_unreported_wav_file}"
+            fi
+        else
+            local newest_reported_wav_file=${wav_raw_pkt_list[-1]}
+            local minute_of_newest_reported_wav_file=$(( 10#${newest_reported_wav_file:11:2} ))
+            minute_of_first_unreported_wav_file=$(( ${minute_of_newest_reported_wav_file} + ${minutes_in_wspr_pkt} ))
+            if [[ ${minute_of_first_unreported_wav_file} -ge 60 ]] ;then
+                minute_of_first_unreported_wav_file=$(( ${minute_of_first_unreported_wav_file} - 60 ))
+            fi
+            wd_logger 1 "Found ${#wav_raw_pkt_list[@]}  previously reported ${minutes_in_wspr_pkt} minute wspr wav files: ${wav_raw_pkt_list[*]}.  Search for the index in raw_file_list[] for a wav file which could start am unreported wspr wav file"
+            wd_logger 1 "    newest_reported_wav_file=${newest_reported_wav_file}=> minute_of_newest_reported_wav_file=${minute_of_newest_reported_wav_file}, So searching for minute_of_first_unreported_wav_file=${minute_of_first_unreported_wav_file}"
+        fi
+
+        ### Search for a start wav file for a wspr file of this length
+        for (( index=${index_of_first_unreported_raw_file} ; index < ${#raw_file_list[@]} ; ++index )) ; do
+            local minute_of_raw_file=$(( 10#${raw_file_list[${index}]:11:2} ))
+            if [[ ${minute_of_raw_file} -eq ${minute_of_first_unreported_wav_file} ]]; then
+                ### We have found the first packet of a wspr wav file that has not yet been reported to the decoding_daemon()
+                index_of_first_unreported_raw_file=${index}
+                if [[ ${index_of_first_unreported_raw_file} -ge 0 ]]; then
+                    local new_last_flushable_index=$(( ${index_of_first_unreported_raw_file} - 1 ))
+                    if [[ ${new_last_flushable_index}  -lt ${index_of_last_file_which_should_be_flushed} ]]; then
+                        wd_logger 1 "For ${seconds_in_wspr_pkt} wspr wav file, change 'index_of_last_file_which_should_be_flushed' from ${index_of_last_file_which_should_be_flushed} down to ${new_last_flushable_index}"
+                        index_of_last_file_which_should_be_flushed=${new_last_flushable_index}
+                    fi
+                fi
+                wd_logger 1 "Found first unreported file ${raw_file_list[${index}]} at raw_file_list[${index}], so start search for a complete pkt file from that index"
+                break
+            fi
+        done
+        if [[ ${index_of_first_unreported_raw_file} -lt 0 ]]; then
+            wd_logger 1 "For ${minutes_in_wspr_pkt} minute packet file, Can't find first unreported wav file after ${newest_reported_wav_file} in raw_file_list[].  So there can be no complete pkt and thus skip to search for next pkt length file"
+            continue
+        fi
+        wd_logger 1 "Found first unreported ${minutes_in_wspr_pkt} minute packet file is present at index ${index_of_first_unreported_raw_file}, so see if all the wav files needed for a complete wspr wav file are present in the raw wav file list"
+            
+        ### See if the full wspr pkt of this length can be found in raw_filelist[]
+        local index_of_last_unreported_wav=$(( ${index_of_first_unreported_raw_file} + ${minutes_in_wspr_pkt} - 1 ))
+        if [[ ${index_of_last_unreported_wav} -ge ${#raw_file_list[@]} ]]; then
+            wd_logger 1 "Can't find the end raw wav file index ${index_of_last_unreported_wav} in raw_file_list[@] which has ${#raw_file_list[@]} elements.  So there is no full list of wav pkt for this pkt length. Continue to check next wspr pkt length"
+            continue
+        else
+            local comma_seperated_file_list=$( IFS=, ; echo -n "${raw_file_list[*]:${index_of_first_unreported_raw_file}:${minutes_in_wspr_pkt}}" )
+            local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list}"
+            return_list+=( ${add_to_return_list} )
+            wd_logger 1 "Found the end raw wav file index ${index_of_last_unreported_wav} is in raw_file_list[@] which has ${#raw_file_list[@]} elements.  So add '${add_to_return_list}' to the return list and record that it has been returned"
+
+            shopt -s nullglob
+            local wav_raw_pkt_list=( *.wav.${seconds_in_wspr_pkt}-secs )
+            shopt -u nullglob
+            if [[ ${#wav_raw_pkt_list[@]} -gt 0 ]]; then
+                wd_logger 1 "Flushing the older -secs files: '${wav_raw_pkt_list[*]}'"
+                local rc
+                wd_rm ${wav_raw_pkt_list[@]}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: in flushing wav_raw_pkt_list[] = '${wav_raw_pkt_list[*]}'"
                 fi
             fi
-
-            local filename_of_latest_wav_raw=${wav_raw_pkt_list[-1]}
-            local epoch_of_latest_wav_raw_file
-            local minute_of_latest_wav_raw_file
-            get_file_start_time_info  epoch_of_latest_wav_raw_file minute_of_latest_wav_raw_file ${filename_of_latest_wav_raw}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'get_file_start_time_info  epoch_of_latest_wav_raw_file minute_of_latest_wav_raw_file ${filename_of_latest_wav_raw}' => ${ret_code}"
-                return 5
-            fi
-            local index_of_first_reported_raw_file=$(( ( epoch_of_latest_wav_raw_file - epoch_of_first_raw_file ) / 60 ))
-            index_of_first_unreported_raw_file=$(( index_of_first_reported_raw_file + raw_files_in_wav_file_count ))
-
-            wd_logger 2 "Latest wav_raw ${filename_of_latest_wav_raw} has epoch ${epoch_of_latest_wav_raw_file}. epoch_of_first_raw_file == ${epoch_of_first_raw_file}.  So index_of_first_unreported_raw_file = ${index_of_first_unreported_raw_file}"
+            local wav_list_returned_file=${raw_file_list[${index_of_first_unreported_raw_file}]}.${seconds_in_wspr_pkt}-secs
+            touch -r ${raw_file_list[${index_of_first_unreported_raw_file}]} ${wav_list_returned_file}
+            wd_logger 1 "Recorded wav_list_returned_file=${wav_list_returned_file}"
         fi
-        if [[ ${index_of_first_unreported_raw_file} -ge ${#raw_file_list[@]} ]]; then
-            wd_logger 2 "The first first raw file of a wav_raw file is not yet in the list of minute_raw[] files.  So continue to search for the next WSPR pkt length"
-            continue
-        fi
+    done       ### with search for all the different wspr wav file lengths
 
-        ### The first file is present, now see if the last file is also present
-        index_of_last_raw_file_for_this_wav_file=$(( index_of_first_unreported_raw_file + raw_files_in_wav_file_count - 1))
-
-        if [[ ${index_of_last_raw_file_for_this_wav_file} -ge ${#raw_file_list[@]} ]]; then
-            ### The last file isn't present
-            if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
-                wd_logger 1 "For ${seconds_in_wspr_pkt} second packet, the first unreported file '${raw_file_list[${index_of_first_unreported_raw_file}]}' is at index ${index_of_first_unreported_raw_file}, so adjust the current index_of_first_file_which_needs_to_be_saved from ${index_of_first_file_which_needs_to_be_saved} down to that index"
-                index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
-            fi
-            wd_logger 2 "The first unreported ${seconds_in_wspr_pkt} seconds raw file is at index ${index_of_first_unreported_raw_file}, but the last raw file is not yet present, so we can't yet create a wav file. So continue to search for the next WSPR pkt length"
-            continue
-         fi
-         ### There is a run of files which together form a wav file of this seconds in length
-         local this_seconds_files="${seconds_in_wspr_pkt}:${raw_file_list[*]:${index_of_first_unreported_raw_file}:${raw_files_in_wav_file_count} }"
-         local this_seconds_comma_separated_file=${this_seconds_files// /,}
-         return_list+=( ${this_seconds_comma_separated_file} )
-         wd_logger 2 "Added file list for ${seconds_in_wspr_pkt} second long wav file to return list from index [${index_of_first_unreported_raw_file}:${index_of_last_raw_file_for_this_wav_file}] => ${this_seconds_comma_separated_file}"
-
-         if [[ -z "${index_of_first_unreported_raw_file-}" ]]; then
-             wd_logger 1 "ERROR: variable 'index_of_first_unreported_raw_file' has not been set"
-             #continue
-         fi
-         if [[ -z "${raw_file_list[${index_of_first_unreported_raw_file}]-}" ]]; then
-             wd_logger 1 "ERROR: index_of_first_unreported_raw_file=${index_of_first_unreported_raw_file} was found, but ${raw_file_list}\[${index_of_first_unreported_raw_file}\] is empty"
-             #continue
-         fi
-
-         local wav_list_returned_file=${raw_file_list[${index_of_first_unreported_raw_file}]}.${seconds_in_wspr_pkt}-secs
-         shopt -s nullglob
-         local flush_list=( *.${seconds_in_wspr_pkt}-secs )
-         shopt -u nullglob
-         if [[ ${#flush_list[@]} -gt 0 ]]; then
-             wd_logger 1 "For ${seconds_in_wspr_pkt} second packet, flushing ${#flush_list[@]} old wav_raw file(s): ${flush_list[*]}"
-             rm -f ${flush_list[@]}    ### We only need to remember this new wav_raw file, so flush all older ones.
-         fi
-         if [[ ${seconds_in_wspr_pkt} == "120" ]]; then
-             local minute_of_first_unreported_raw_file=${wav_list_returned_file:11:2}
-             local decimal_minute=$(( 10#${minute_of_first_unreported_raw_file} % 2))
-             if [[ ${decimal_minute} -eq 0 ]]; then
-                 wd_logger 1 "For 120 second wav file, returning an even minute start wav file '${wav_list_returned_file}'"
-             else
-                 wd_logger 1 "ERROR: for 120 second wav file, returning an odd minute start wav file '${wav_list_returned_file}'"
-             fi
-         fi
-
-         touch -r ${raw_file_list[${index_of_first_unreported_raw_file}]} ${wav_list_returned_file}
-
-         if [[ ${index_of_first_unreported_raw_file} -lt ${index_of_first_file_which_needs_to_be_saved} ]]; then
-             wd_logger 1 "Added a new report list to be returned and remembering to save the files in it by changing the current index_of_first_file_which_needs_to_be_saved=${index_of_first_file_which_needs_to_be_saved} to index_of_first_unreported_raw_file=${index_of_first_unreported_raw_file}"
-             index_of_first_file_which_needs_to_be_saved=${index_of_first_unreported_raw_file}
-         fi
-         wd_logger 2 "For ${seconds_in_wspr_pkt} packet, remembered that a list for this wav file has been returned to the decoder by creating the zero length file ${wav_list_returned_file}"
-    done
-    
-    if [[ ${index_of_first_file_which_needs_to_be_saved} -lt ${#raw_file_list[@]} ]] ; then
-        local count_of_raw_files_to_flush=$(( index_of_first_file_which_needs_to_be_saved ))
-        wd_logger 1 "After searching for all requested wav file lengths, found file [${index_of_first_file_which_needs_to_be_saved}] '${raw_file_list[${index_of_first_file_which_needs_to_be_saved}]}' is the oldest file which needs to be saved" 
-        if [[ ${count_of_raw_files_to_flush} -gt 0 ]]; then
-            wd_logger 1 "So purging files '${raw_file_list[*]:0:${count_of_raw_files_to_flush}}'"
-            rm ${raw_file_list[@]:0:${count_of_raw_files_to_flush}}
+    if [[ ${index_of_last_file_which_should_be_flushed} -ge 0 ]] ; then
+        local files_to_flush_count=$(( ${index_of_last_file_which_should_be_flushed} + 1 ))
+        wd_logger 1 "Flushing ${files_to_flush_count} raw_wav_file[] entries: '${raw_wav_files[@]:0:${files_to_flush_count}}'"
+        local rc
+        wd_rm ${raw_wav_files[@]:0:${files_to_flush_count}}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Failed flushing old raw_wav_files[]: 'wd_rum ${raw_wav_files[@]:0:${files_to_flush_count}}' => ${rc}"
         fi
     fi
-    wd_logger 2 "Returning ${#return_list[@]} wav file lists: '${return_list[*]}'"
+    
+    if [[ ${#return_list[@]} -ne 0 ]]; then
+        wd_logger 1 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'"
+    else
+        wd_logger 1 "Returning no wav file lists"
+    fi
+
     eval ${return_variable_name}=\"${return_list[*]}\"
     return 0
 }
@@ -1080,10 +1130,12 @@ function decoding_daemon() {
             wd_logger 1 "Logged VmRSS_val=${VmRSS_val}"
             last_rss_epoch=${EPOCHSECONDS}
         fi
+
         wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
-        local ret_code=$?
+        ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
             sleep 1
@@ -1123,7 +1175,7 @@ function decoding_daemon() {
 
             local wd_string="${wav_time_list[*]}"
             wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
-            ### Enf of diagnostic code
+            ### End of diagnostic code
 
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
@@ -1143,7 +1195,12 @@ function decoding_daemon() {
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
+                    local rc1
                     wd_rm ${decoder_input_wav_filepath}
+                    rc1=$?
+                    if [[ ${rc1} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: after sox returned error ${rc}, then 'wd_rm ${decoder_input_wav_filepath} returned error ${rc1}"
+                    fi
                 fi
                 sleep 1
                 continue
@@ -1291,7 +1348,12 @@ function decoding_daemon() {
                     cd - >& /dev/null
                     ### Out of the subdir
                 fi
+                local rc1
                 wd_rm ${decode_dir_path}/${decoder_input_wav_filename}
+                rc1=$?
+                if [[ ${rc1} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'wd_rm ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc1}"
+                fi
 
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
@@ -1482,7 +1544,12 @@ function decoding_daemon() {
             get_config_file_variable config_archive_wav_files "ARCHIVE_WAV_FILES"
 
             if [[ "${config_archive_wav_files}" != "yes" ]]; then
+                local rc
                 wd_rm ${decoder_input_wav_filepath}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'wd_rm ${decoder_input_wav_filepath}' => ${rc}"
+                fi
             else
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
@@ -1500,7 +1567,14 @@ function decoding_daemon() {
 
             ### Obtain wav and ADC overlaod information so they can be appended to the spot lines
             wd_logger 1 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
-            wd_rm ${decoder_input_wav_filepath}.stats
+            if [[ -f ${decoder_input_wav_filepath}.stats ]]; then
+                local rc
+                wd_rm ${decoder_input_wav_filepath}.stats
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'wd_rm ${decoder_input_wav_filepath}.stats' => ${rc}"
+                fi
+            fi
 
             ### Record the 12 signal levels + rms_noise + fft_noise + new_overloads to the ../signal_levels/...csv log files
             local wspr_decode_capture_date=${wav_file_list[0]/T*}
