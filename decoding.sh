@@ -832,12 +832,12 @@ function get_wav_file_list() {
 
     if [[ ${index_of_last_file_which_should_be_flushed} -ge 0 ]] ; then
         local files_to_flush_count=$(( ${index_of_last_file_which_should_be_flushed} + 1 ))
-        wd_logger 1 "Flushing ${files_to_flush_count} raw_wav_file[] entries: '${raw_wav_files[@]:0:${files_to_flush_count}}'"
+        wd_logger 1 "Flushing ${files_to_flush_count} raw_wav_file[] entries: '${raw_file_list[@]:0:${files_to_flush_count}}'"
         local rc
-        wd_rm ${raw_wav_files[@]:0:${files_to_flush_count}}
+        wd_rm ${raw_file_list[@]:0:${files_to_flush_count}}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Failed flushing old raw_wav_files[]: 'wd_rum ${raw_wav_files[@]:0:${files_to_flush_count}}' => ${rc}"
+            wd_logger 1 "ERROR: Failed flushing old raw_file_list[]: 'wd_rum ${raw_file_list[@]:0:${files_to_flush_count}}' => ${rc}"
         fi
     fi
     
