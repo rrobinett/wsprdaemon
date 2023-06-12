@@ -423,7 +423,7 @@ function sleep_until_raw_file_is_full() {
     local file_start_minute=${filename:11:2}
     local file_start_second=${filename:13:2}
     if [[ ${file_start_second} != "00" ]]; then
-        wd_logger 1 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup AND any older wav files"
+        wd_logger 2 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup AND any older wav files"
         local rc
 
         flush_wav_files_older_than ${filename}
@@ -446,7 +446,7 @@ function sleep_until_raw_file_is_full() {
     local wav_file_duration_integer=$(sed 's/[\.:]//g' <<< "${wav_file_duration_hh_mm_sec_msec}")
 
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
-        wd_logger 1 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
+        wd_logger 2 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
         local rc
 
         flush_wav_files_older_than ${filename}
@@ -497,7 +497,7 @@ function sleep_until_raw_file_is_full() {
         fi
         return 3
     fi
-    wd_logger 1 "File ${filename} for minute ${filename:11:2} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
+    wd_logger 2 "File ${filename} for minute ${filename:11:2} stabilized at size ${new_file_size} after ${loop_seconds} seconds"
     return 0
 }
 
