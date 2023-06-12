@@ -64,7 +64,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                      ### Upload earlier by watching for when all wspr and jtx processes are done
 #declare -r VERSION=3.0.6            ### Port to run on Ubuntu 22.04.1 LTS and Raspberry Pi 'bullseye'
 #declare VERSION=3.0.7                ### Optimze Kiwi status reporting by cacheing one copy of /status
-declare VERSION=3.0.8                ### Fix bug in wsprnet uploader when there are more than 1000 cached spots
+#declare VERSION=3.0.8                ### Fix bug in wsprnet uploader when there are more than 1000 cached spots
+declare VERSION=3.0.9                ### Refine search for WSPR packet wav files
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map

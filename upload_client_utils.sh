@@ -123,7 +123,7 @@ function upload_wsprnet_create_spot_file_list_file()
     cycle_list=( ${cycle_list[@]##*/} ) 
     IFS=$'\n'; cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
 
-    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them"
+    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them: '${cycle_list[*]}'"
 
     local upload_file_list=()
     local upload_spots_count=0
@@ -220,14 +220,14 @@ function upload_to_wsprnet_daemon() {
         wd_sleep ${sleep_secs}
 
         ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
-        wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stablize, and for there to be no running 'wsprd' or 'jt9 jobs"
+        wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stabilize, and for there to be no running 'wsprd' or 'jt9 jobs"
         local ps_stdout=""
         local old_spot_file_count=0
         local spots_files_list=()
         while    spots_files_list=($(find . -name '*_spots.txt') ) \
+              && ps_stdout="$( ps aux )" \
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
               || [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]] \
-              && ps_stdout=$( ps aux ) \
               || echo "${ps_stdout}" | grep -q "wsprdaemon/bin/wsprd \|wsprdaemon/bin/jt9 \|derived_calc.py" ; do
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
             if [[ ${#spots_files_list[@]} -eq 0 ]]; then
@@ -235,8 +235,9 @@ function upload_to_wsprnet_daemon() {
             elif [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]]; then
                  wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
             else
-                local runnung_jobs=$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )
-                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs:\n${runnung_jobs}"
+                local running_jobs
+                running_jobs="$(echo "${ps_stdout}" | grep 'wsprd \|jt9\|derived_calc.py' )"
+                wd_logger 1 "Not ready to start uploads because there are running 'wsjtx', 'jt9' and/or 'derived_calc.py' jobs:\n${running_jobs}"
             fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
@@ -270,7 +271,7 @@ function upload_to_wsprnet_daemon() {
            local all_spots_file_list=( ${spots_files_list[@]#*,} )
            upload_wsprnet_create_spot_file_list_file ${all_spots_file_list[@]}
            local upload_spots_file_list=( $( < ${UPLOAD_SPOT_FILE_LIST_FILE} )  )
-           wd_logger 1 "Uploading spots from ${#upload_spots_file_list[@]} files"
+           wd_logger 2 "Uploading spots from ${#upload_spots_file_list[@]} files"
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
             sed 's/none/    /' ${upload_spots_file_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}

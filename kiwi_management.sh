@@ -201,6 +201,15 @@ function get_kiwi_status()
         wd_sleep ${sleep_secs}
     done
     if [[ ${timeout} -ge ${KIWI_CACHE_LOCK_TIMEOUT-3} ]]; then
+        ### flush the lock dir if it is more than 30 seconds old
+        local kiwi_lock_dir_epoch
+        kiwi_lock_dir_epoch=$( stat -c %Y ${kiwi_cache_lock_dir} )
+        local kiwi_lock_dir_age=$(( ${EPOCHSECONDS} - ${kiwi_lock_dir_epoch} ))
+        if [[ ${kiwi_lock_dir_age} -gt ${KIWI_LOCK_MAX_AGE-30} ]]; then
+            wd_logger 1 "ERROR: lock dir ${kiwi_cache_lock_dir} is ${kiwi_lock_dir_age} seconds old.  Flush it to free status polling"
+            rm -rf ${kiwi_cache_lock_dir}
+            return 1
+        fi
         local sleep_secs
         sleep_secs=$(( ( ${RANDOM} % ${KIWI_CACHE_LOCK_TIMEOUT-3} ) + 1 ))      ### randomize the sleep time or all the lister sessions will hang while wating for the lock to free
         wd_logger 1 "ERROR: timeout after ${KIWI_CACHE_LOCK_TIMEOUT-3} seconds (${timeout} tries) while waiting to lock access to ${kiwi_status_dir}, sleeping..."
@@ -223,14 +232,14 @@ function get_kiwi_status()
         wd_logger 1 "Cache file exists and is ${kiwi_status_cache_file_age} seconds old"
     fi
 
-    if [[ ${kiwi_status_cache_file_age} -lt ${KIWI_STATUS_CACHE_FILE_MAX_AGE-60} ]]; then
+    if [[ ${kiwi_status_cache_file_age} -lt ${KIWI_STATUS_CACHE_FILE_MAX_AGE-10} ]]; then
         wd_logger 1 "Cache file is only ${kiwi_status_cache_file_age} seconds old, so no need to refresh it"
     else
         wd_logger 1 "Cache file ${kiwi_status_cache_file} is ${kiwi_status_cache_file_age} seconds old, so archive the current status and update it from teh Kiwi"
         if [[ -f ${kiwi_status_cache_file} ]]; then
             mv ${kiwi_status_cache_file} ${kiwi_status_cache_file}.old
         fi
-        curl --connect-timeout ${KIWI_GET_STATUS_TIMEOUT-2} ${kiwi_ip_port}/status 2> ${kiwi_status_cache_file}.stderr.txt > ${kiwi_status_cache_file}
+        curl --connect-timeout ${KIWI_GET_STATUS_TIMEOUT-4} ${kiwi_ip_port}/status 2> ${kiwi_status_cache_file}.stderr.txt > ${kiwi_status_cache_file}
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
             ### Free the lock before returning the error
@@ -244,8 +253,11 @@ function get_kiwi_status()
     rmdir ${kiwi_cache_lock_dir}    ### Unloacks access to the cache file
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: freeing lock with 'rmdir ${kiwi_cache_lock_dir}' => ${rc}"
+        wd_logger 1 "ERROR: when freeing lock with 'rmdir ${kiwi_cache_lock_dir}' => ${rc}"
         exit
+    fi
+    if [[ -z "${cached_status_lines}" ]]; then
+         wd_logger 1 "ERROR: curl was successful, but status message was empty"
     fi
 
     wd_logger 1 "Returning the current cached status in '${__return_status_var}'" #:\n${cached_status_lines}"

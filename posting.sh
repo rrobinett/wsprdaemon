@@ -336,8 +336,8 @@ function post_files()
 ### add tx and rx lat, lon, azimuths, distance and path vertex using python script. 
 ### In the main program, call this function with a file path/name for the input file, the tx_locator, the rx_locator and the frequency
 ### The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
-declare DERIVED_ADDED_FILE=derived_azi.csv
-declare AZI_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/derived_calc.py
+declare DERIVED_ADDED_FILE="derived_azi.csv"
+declare AZI_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/derived_calc.py"
 
 function add_derived() {
     local spot_grid=$1
@@ -348,10 +348,16 @@ function add_derived() {
         wd_logger 0 "Can't find '${AZI_PYTHON_CMD}'"
         exit 1
     fi
-    nice python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    local rc
+    tmeout ${DERIVED_NAX_RUN_SECS-20} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: timeout or error in running "${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq}" => ${rc}"
+        return 1
+    fi
+    return 0
 }
 
-### For a group of MERGEd receivers: For each call output to the file 'merged.log' one SNR reported for it to wsprnet.org and a list of SNRs (if any) reported for it by each real reciever 
 function log_merged_snrs() 
 {
     local best_snrs_file=$1
