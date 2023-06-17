@@ -349,7 +349,7 @@ function add_derived() {
         exit 1
     fi
     local rc
-    tmeout ${DERIVED_NAX_RUN_SECS-20} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    timeout ${DERIVED_NAX_RUN_SECS-20} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: timeout or error in running "${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq}" => ${rc}"
