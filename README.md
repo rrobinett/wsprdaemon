@@ -1,8 +1,8 @@
-# wsprdaemon (WD) 3.0.6
+# wsprdaemon (WD) 3.0.8
 
 New WD users should skip down to the "Greenfield" section below for installation instructions.
 
-For exisiting WD users, WD 3.0.6 is now running on almost all top spotting sites.  Since WD 2.x generates spots with corrupt fields and earlier versions of WD 3.0 are not entirely compatible with recent mode fields changes in WSJT-x 2.6.x, I encourage all WD users to upgrade WD using the procedure described below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
+For exisiting WD users, WD 3.0.8 is now running on almost all top spotting sites.  Since WD 2.x generates spots with corrupt fields and earlier versions of WD 3.0 are not entirely compatible with recent mode fields changes in WSJT-x 2.6.x, I encourage all WD users to upgrade WD using the procedure described below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
 
 For existing WD 2.10 users:
 
@@ -36,7 +36,7 @@ To configure user 'wsprdaemon' to sudo:
 ```bash
 su -
 sudo adduser wsprdaemon
-sudo usermod -aG wsprdaemon
+sudo usermod -aG sudo wsprdaemon
 exit
 ```
 
