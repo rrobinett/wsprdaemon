@@ -1,4 +1,4 @@
-# wsprdaemon (WD) 3.0.8
+# wsprdaemon (WD) 3.0.9
 
 New WD users should skip down to the "Greenfield" section below for installation instructions.
 
