@@ -243,7 +243,12 @@ function get_kiwi_status()
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
             ### Free the lock before returning the error
+            local rc1
             rmdir ${kiwi_cache_lock_dir}
+            rc1=$?
+            if [[ ${rc1} -ne 0 ]] ; then
+                wd_logger 1 "ERROR: failed 'rmdir ${kiwi_cache_lock_dir}' => ${rc1} after 'curl --connect-timeout ${KIWI_GET_STATUS_TIMEOUT-4} ${kiwi_ip_port}/status 2> ${kiwi_status_cache_file}.stderr.txt > ${kiwi_status_cache_file}' => ${rc}"
+            fi
             wd_logger 1 "ERROR: error or timeout updating status cache file from ${kiwi_ip_port}/status"
             return ${rc}
         fi
