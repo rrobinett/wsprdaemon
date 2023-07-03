@@ -1300,7 +1300,7 @@ function decoding_daemon() {
                         new_kiwi_ov_count=0
                         wd_logger 1 "Not a KiwiSDR, so there is no overload information"
                     else
-                        local current_kiwi_ov_count
+                        local current_kiwi_ov_count=${old_kiwi_ov_count}
                         local rc
                         get_kiwirecorder_ov_count  current_kiwi_ov_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
                         rc=$?
@@ -1308,7 +1308,7 @@ function decoding_daemon() {
                             wd_logger 1 "'get_current_ov_count  current_kiwi_ov_count ${receiver_name}' -> current_kiwi_ov_count=${current_kiwi_ov_count}"
                         else
                             wd_logger 1 "ERROR: 'get_current_ov_count  current_ov_count ${receiver_name}' => ${rc}, so trying old OV count method"
-                            local current_kiwi_ov_count=0
+                            current_kiwi_ov_count=0
                             current_kiwi_ov_count=$(${GREP_CMD} "^ ADC OV" kiwi_recorder.log | wc -l)
                             if [[ ${current_kiwi_ov_count} -lt ${old_kiwi_ov_count} ]]; then
                                 ### kiwi_recorder.log probably grew too large and the kiwirecorder.py was restarted 
