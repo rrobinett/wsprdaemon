@@ -48,24 +48,8 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
-#declare -r VERSION=3.0.2.6            ### Cleanup schedule change handling
-#declare -r VERSION=3.0.3              ### Finished beta testing.  Decodes FST4W except type 3 packets which require use of shared memory interface to jt9
-#declare -r VERSION=3.0.3.1            ### Use /dev/shm/wsprdaemon for TMP files
-#declare -r VERSION=3.0.3.2            ### Record FST4W spectral_spreading to the 'metric' field of the extended_spot lines
-                                       ### Add support for archiving of wav files to WD3
-#declare -r VERSION=3.0.3.3            ### Get OV count from kiwi's /status page, not by counting 'ADC OV's' from the log file
-#declare -r VERSION=3.0.3.4            ### 
-#declare -r VERSION=3.0.3.5           ### Watchdog checks the status of REMOTE_ACCESS_CHANNEL in the conf file every 10 seconds and opens or closes the RAC from its current value
-                                     ### Protect against corrupt .pid files
-                                     ### Add support for POST_ALL_SPOTS  config variable
-#declare -r VERSION=3.0.4            ### Rewrite posting_daemon to resist loss of spots from one or more members of a MERGed receiver
-                                     ### Fix OV logging from Kiwis running SW which reports the overload count on the Kiwi's /status page
-#declare -r VERSION=3.0.5            ### Enhance frequency resolution of FST4W decoding to .1 Hz
-                                     ### Upload earlier by watching for when all wspr and jtx processes are done
-#declare -r VERSION=3.0.6            ### Port to run on Ubuntu 22.04.1 LTS and Raspberry Pi 'bullseye'
-#declare VERSION=3.0.7                ### Optimze Kiwi status reporting by cacheing one copy of /status
-#declare VERSION=3.0.8                ### Fix bug in wsprnet uploader when there are more than 1000 cached spots
-declare VERSION=3.0.9                ### Refine search for WSPR packet wav files
+#declare VERSION=3.0.9                ### Refine search for WSPR packet wav files
+declare VERSION=3.1.0               ### Add support for KA9Q-radio and RX888
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
