@@ -6,9 +6,9 @@
 // Modified "wspr-decoded" to "wd-record" to record 1 minute .wav files, synchronized to the UTC
 // second by Clint Turner, KA7OEI for use with the "WSPRDaemon" code by Rob Robinett, AI6VN.
 //
+// July 14, 2023 Rob Robinett, AI6VN.  Modified Clint's code to fully support creating the 1 minute long .wav files needed by WD
+//
 // TO DO:
-//  - Resolve very slight gap between files
-//  - Modify file name/paths to suit the needs of WSPRDaemon
 //  - Cleanup from previous "wspr-decoded" version (e.g. remove unneeded variables/code)
 //
 #define _GNU_SOURCE 1
@@ -113,6 +113,7 @@ void input_loop(void);
 void cleanup(void);
 struct session *create_session( struct rtp_header *,  const int wav_start_epoch, const int tuning_freq_hz );
 void close_session(struct session **p);
+void flush_session(struct session **p);
 uint32_t Ssrc=0; // Requested SSRC
 
 int main(int argc,char *argv[]){
@@ -132,7 +133,9 @@ int main(int argc,char *argv[]){
       break;
     case 'v':
       ++verbosity;
-      fprintf(stderr,"verbosity = %d\n", verbosity);
+      if ( verbosity > 1 ) {
+          fprintf(stderr,"verbosity = %d\n", verbosity);
+      }
       break;
     case 'k':
       Keep_wav = 1;
@@ -200,23 +203,18 @@ int main(int argc,char *argv[]){
 }
 
 void closedown(int a){
-  if(verbosity)
-    fprintf(stderr,"iqrecord: caught signal %d: %s\n",a,strsignal(a));
-
+  if ( verbosity > 1 ) {
+    fprintf(stderr,"wd-record->closedown(): caught signal %d: %s\n", a, strsignal(a) );
+  }
   exit(1);  // Will call cleanup()
 }
 
 // Read from RTP network socket, assemble blocks of samples
 void input_loop(){
-    int64_t loop_count = INT64_MAX;
+    int64_t loop_count = INT64_MAX - 1;
     int last_sec = -1;
 
-    if(verbosity > 0){
-         loop_count=10;
-         fprintf(stderr, "input_loop(): execute only %ld times\n", loop_count);
-    }
-    
-    while ( loop_count > 0 ) {
+   while ( loop_count > 0 ) {
         --loop_count;
 
         // Wait for data or timeout after one second
@@ -235,7 +233,7 @@ void input_loop(){
 
         int const current_epoch = utc_time_sec();
         int const current_sec   = current_epoch % 60; // UTC second within 0-60 period
-        if ( verbosity > 0 && last_sec == -1 ) {
+        if ( verbosity > 1 && last_sec == -1 ) {
             fprintf(stderr, "input_loop(): Starting at second% 2d\n", current_sec);
         }
         // Close wav file when second goes from 59 to 00
@@ -244,13 +242,22 @@ void input_loop(){
             // This is the first time through the loop, so just remember the time 
             // OR we have just from second 59 to second 0
             // So close any open wav files.  A new one will be created far down
-            if ( verbosity > 0 ) {
+            if ( verbosity > 1 ) {
                  fprintf(stderr, "input_loop(): wall clock has changed from %2d to %2d, so close any open wav files\n", last_sec, current_sec);
             }
             for(struct session *sp = Sessions; sp != NULL;){
                 struct session * const next = sp->next;
                 close_session(&sp);
                 sp = next;
+            }
+        } else {
+            // Flush the samples to the wav files once each second
+            if ( (last_sec >= 0 ) && ( current_sec != last_sec ) ) {
+                for(struct session *sp = Sessions; sp != NULL;){
+                    struct session * const next = sp->next;
+                    flush_session(&sp);
+                    sp = next;
+                }
             }
         }
         last_sec = current_sec;
@@ -269,15 +276,15 @@ void input_loop(){
             if(size <= 0){ 
                 perror("recvfrom");
                 usleep(50000);
-                if(verbosity > 1) {
-                    fprintf(stderr, "input_loop(): recvfrom() => %d\n", size);
+                if(verbosity > 0) {
+                    fprintf(stderr, "wd-record->input_loop(): ERROR: recvfrom() => %d\n", size);
                 }
                 continue;
             }
 
             if(size < RTP_MIN_SIZE) {
-                if(verbosity > 1) {
-                    fprintf(stderr, "input_loop(): recvfrom() => %d which is < RTP_MIN_SIZE %d\n", size, RTP_MIN_SIZE);
+                if(verbosity > 0) {
+                    fprintf(stderr, "wd-record->input_loop(): ERROR: recvfrom() => %d which is < RTP_MIN_SIZE %d\n", size, RTP_MIN_SIZE);
                 }
                 continue; 
             }
@@ -303,8 +310,8 @@ void input_loop(){
             }
 
             if(size <= 0) {
-                if(verbosity > 1) {
-                    fprintf(stderr, "input_loop(): rtp buffer size is invalid value %d which is <= 0\n", size);
+                if(verbosity > 0) {
+                    fprintf(stderr, "wd-record->input_loop(): ERROR: rtp buffer size is invalid value %d which is <= 0\n", size);
                 }
                 continue; // Bogus RTP header
             }
@@ -332,11 +339,11 @@ void input_loop(){
                 sp = create_session(&rtp, current_epoch, rtp.ssrc );	
                 if ( sp == NULL ) {
                     if ( verbosity > 0 ) {
-                        fprintf(stderr, "input_loop(): failed to open new wav file\n");
+                        fprintf(stderr, "wd-record->input_loop(): ERROR: failed to open new wav file\n");
                     }
                     continue;
                 }   
-                 if ( verbosity > 0 ) { 
+                 if ( verbosity > 1 ) { 
                     fprintf(stderr, "input_loop(): opened  new wav file\n");
                 }
             }
@@ -389,7 +396,7 @@ struct session *create_session(
         const int wav_start_epoch,    // The WD wav file name is derived from the epoch of the first samples of the wav fle 
         const int tuning_freq_hz )
 {
-    if( verbosity > 0 ) {
+    if( verbosity > 2 ) {
         fprintf( stderr,"create_session(): wav_start_epoch=%d, tuning_freq_hz,%d\n", wav_start_epoch, tuning_freq_hz );
     }
     struct session *sp = calloc(1,sizeof(*sp));
@@ -419,14 +426,16 @@ struct session *create_session(
 
     int fd = open(sp->filename,O_RDWR|O_CREAT,0777);
     if(fd == -1){
-        fprintf(stderr,"icreate_session(): ERRORcan't create/write file %s: %s\n",sp->filename,strerror(errno));
+        if ( verbosity > 0 ) {
+            fprintf(stderr,"wd-record->create_session(): ERROR: can't create/write file %s: %s\n",sp->filename,strerror(errno));
+        }
         FREE(sp);
         return NULL;
     }
     // Use fdopen on a file descriptor instead of fopen(,"w+") to avoid the implicit truncation
     // This allows testing where we're killed and rapidly restarted in the same cycle
     sp->fp = fdopen(fd,"w+");
-    if( verbosity > 0) {
+    if( verbosity > 1) {
         fprintf(stderr,"create_session(): creating %s\n",sp->filename);
     }
 
@@ -478,6 +487,25 @@ struct session *create_session(
     return sp;
 }
 
+void flush_session(struct session **p){
+  if(p == NULL)
+    return;
+  struct session *sp = *p;
+  if(sp == NULL)
+    return;
+
+  if(verbosity > 1)
+    printf("Flushing %s %'.1f/%'.1f sec\n",sp->filename,
+	   (float)sp->SamplesWritten / sp->samprate,
+	   (float)sp->TotalFileSamples / sp->samprate);
+  
+  if(sp->fp != NULL){
+    // Get final file size, write .wav header with sizes
+    fflush(sp->fp);
+  }
+  return;
+}
+ 
 void close_session(struct session **p){
   if(p == NULL)
     return;
@@ -485,7 +513,7 @@ void close_session(struct session **p){
   if(sp == NULL)
     return;
 
-  if(verbosity)
+  if(verbosity > 1)
     printf("closing %s %'.1f/%'.1f sec\n",sp->filename,
 	   (float)sp->SamplesWritten / sp->samprate,
 	   (float)sp->TotalFileSamples / sp->samprate);
