@@ -397,6 +397,7 @@ function flush_wav_files_older_than()
     return 0
 }
 
+declare WAV_FILE_SIZE_POLL_SECS=${WAV_FILE_SIZE_POLL_SECS-2}       ## Check that the wav file is growing every NN seconds, 2 seconds by default
 function sleep_until_raw_file_is_full() {
     local filename=$1
     if [[ ! -f ${filename} ]]; then
@@ -407,11 +408,11 @@ function sleep_until_raw_file_is_full() {
     local new_file_size
     local start_seconds=${SECONDS}
 
-    sleep 2
+    sleep ${WAV_FILE_SIZE_POLL_SECS}
     while [[ -f ${filename} ]] && new_file_size=$( ${GET_FILE_SIZE_CMD} ${filename}) && [[ ${new_file_size} -gt ${old_file_size} ]]; do
         wd_logger 3 "Waiting for file ${filename} to stop growing in size. old_file_size=${old_file_size}, new_file_size=${new_file_size}"
         old_file_size=${new_file_size}
-        sleep 2
+        sleep ${WAV_FILE_SIZE_POLL_SECS}
     done
     local loop_seconds=$(( SECONDS - start_seconds ))
     if [[ ! -f ${filename} ]]; then
@@ -445,6 +446,8 @@ function sleep_until_raw_file_is_full() {
     local wav_file_duration_hh_mm_sec_msec=$(soxi ${filename} | awk '/Duration/{print $3}')
     local wav_file_duration_integer=$(sed 's/[\.:]//g' <<< "${wav_file_duration_hh_mm_sec_msec}")
 
+    wd_logger 1 "Got wav file ${filename} header which reports durantion = ${wav_file_duration_hh_mm_sec_msec} => wav_file_duration_integer = ${wav_file_duration_integer}. WAV_FILE_MIN_HHMMSSUU=${WAV_FILE_MIN_HHMMSSUU}, WAV_FILE_MAX_HHMMSSUU=${WAV_FILE_MAX_HHMMSSUU}"
+
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
         wd_logger 2 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
         local rc
@@ -460,25 +463,25 @@ function sleep_until_raw_file_is_full() {
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: While flushing too shortwav file'${filename}', 'wd_rm ${filename}' => ${rc}"
         fi
-       return 2
+        return 2
     fi
     if [[ 10#${wav_file_duration_integer} -gt ${WAV_FILE_MAX_HHMMSSUU} ]]; then
-	### If the wav file has grown to longer than one minute, then it is likely there are two kiwirecorder jobs running 
-	### We really need to know the IP address of the Kiwi recording this band, since this freq may be recorded by other other Kiwis in a Merged group
-	local this_dir_path_list=( ${PWD//\// } )
+        ### If the wav file has grown to longer than one minute, then it is likely there are two kiwirecorder jobs running 
+        ### We really need to know the IP address of the Kiwi recording this band, since this freq may be recorded by other other Kiwis in a Merged group
+        local this_dir_path_list=( ${PWD//\// } )
         local kiwi_name=${this_dir_path_list[-2]}
-	local kiwi_ip_addr=$(get_receiver_ip_from_name ${kiwi_name})
+        local kiwi_ip_addr=$(get_receiver_ip_from_name ${kiwi_name})
         local kiwi_freq=${filename#*_}
               kiwi_freq=${kiwi_freq::3}
         local ps_output=$(ps aux | grep "${KIWI_RECORD_COMMAND}.*${kiwi_freq}.*${kiwi_ip_addr/:*}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it"
+            wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it;\n$(soxi ${filename})"
         else
             wd_kill ${kiwirecorder_pids[@]}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                 wd_logger 1 "ERROR: 'wd_kill ${kiwirecorder_pids[*]}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_kill ${kiwirecorder_pids[*]}' => ${rc}"
             fi
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
         fi
