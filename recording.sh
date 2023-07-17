@@ -684,6 +684,41 @@ function print_new_ov_lines() {
     done
 }
 
+declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
+declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
+
+function ka9q_recording_daemon()
+{
+    local receiver_ip=$1
+    local receiver_rx_freq_khz=$2
+    local my_receiver_password=$3
+    local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
+    local receiver_rx_freq_hz=$( echo "(${receiver_rx_freq_khz} * 1000)/1" | bc )
+
+    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
+
+    wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
+
+    if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+        wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
+        sleep 10
+    fi
+
+    local rc
+    ${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} wspr-pcm.local &
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "${KA9Q_RADIO_WD_RECORD_CMD} -v ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
+    else
+        wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} -v ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
+    fi
+    local wd_record_pid=$!
+    trap "kill ${wd_record_pid}" SIGTERM
+    wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
+    wait
+    wd_logger 1 "wd-record job terminated."
+}
+ 
 declare WAV_RECORDING_DAEMON_PID_FILE="wav_recording_daemon.pid"
 declare WAV_RECORDING_DAEMON_LOG_FILE="wav_recording_daemon.log"
 
@@ -694,7 +729,7 @@ function spawn_wav_recording_daemon() {
     local receiver_rx_band=$2
     local receiver_list_index=$(get_receiver_list_index_from_name ${receiver_name})
     if [[ -z "${receiver_list_index}" ]]; then
-       wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
+        wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
     fi
     local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
@@ -734,8 +769,11 @@ function spawn_wav_recording_daemon() {
     fi
 
     ### No recording daemon is running
-    if [[ ${receiver_name} =~ ^AUDIO_ ]]; then
-        [[ $verbosity -ge 1 ]] && echo "$(date): spawn_recording_daemon() record ${receiver_name}"
+    if [[ ${receiver_name} =~ ^KA9Q ]]; then
+        wd_logger 1 "Starting ${receiver_name}"
+        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
+    elif [[ ${receiver_name} =~ ^AUDIO_ ]]; then
+        wd_logger 1 "Starting ${receiver_name}"
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  audio_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
@@ -746,15 +784,15 @@ function spawn_wav_recording_daemon() {
         local device_id=${receiver_ip#*:}
         if ! rtl_test -d ${device_id} -t  2> rtl_test.log; then
             echo "$(date): ERROR: spawn_recording_daemon() cannot access RTL_SDR #${device_id}.  
-                If the error reported is 'usb_claim_interface error -6', then the DVB USB driver may need to be blacklisted. To do that:
-                Create the file '/etc/modprobe.d/blacklist-rtl.conf' which contains the lines:
-                blacklist dvb_usb_rtl28xxu
-                blacklist rtl2832
-                blacklist rtl2830
-                Then reboot your Pi.
-                The error reported by 'rtl_test -t ' was:"
-                cat rtl_test.log
-                exit 1
+            If the error reported is 'usb_claim_interface error -6', then the DVB USB driver may need to be blacklisted. To do that:
+            Create the file '/etc/modprobe.d/blacklist-rtl.conf' which contains the lines:
+            blacklist dvb_usb_rtl28xxu
+            blacklist rtl2832
+            blacklist rtl2830
+            Then reboot your Pi.
+            The error reported by 'rtl_test -t ' was:"
+            cat rtl_test.log
+            exit 1
         fi
         rm -f rtl_test.log
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE} rtl_daemon ${device_id} ${receiver_rx_freq_mhz} &
@@ -766,7 +804,7 @@ function spawn_wav_recording_daemon() {
     else
         local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
         local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
-	wd_logger 1 "Spawning wav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
+        wd_logger 1 "Spawning wav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} &
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
