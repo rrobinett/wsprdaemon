@@ -61,7 +61,7 @@ function wd_kill_all()
             wd_rm ${pid_file_list[*]}
         else
             ### Some or all of the pid files contain pid values.  So kill all those pids and delete all the pid files
-            kill ${pid_val_list[@]} >& /dev/null
+            kill ${pid_val_list[@]} # >& /dev/null
             local rc=$?
             wd_rm  ${pid_file_list[@]}
             local rc2=$?

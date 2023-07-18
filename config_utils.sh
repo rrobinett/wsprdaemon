@@ -612,9 +612,14 @@ function validate_configuration_file()
             echo "ERROR: the receiver '${rx_name}' defined in wsprdaemon.conf contains the invalid character ','"
             exit 1
         fi
-        rx_name_list=(${rx_name_list[@]} ${rx_name})
+        rx_name_list+=( ${rx_name} )
         ### More testing of validity of the fields on this line could be done
     done
+
+    if [[ "${rx_name_list[@]}" =~ KA9Q ]]; then
+        wd_logger 1 "One or more RECIEVER lines specify a KA9Q* receive channel. So check that KA9Q-radio is installed an running"
+        #exit
+    fi
 
     if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
         echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' exists, but does not contain a definition of the WSPR_SCHEDULE[*] array, or that array is empty"
