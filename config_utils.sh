@@ -647,8 +647,14 @@ declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"
 
 function ka9q_setup()
 {
-
     local rc
+
+    if ! lsusb | grep -q "Cypress Semiconductor Corp. FX3 micro-controller" ; then
+        wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
+        exit
+    fi
+    wd_logger 2 "Found a RX888 MkII attached to a USB port"
+
     sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}"
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
@@ -689,31 +695,39 @@ function ka9q_setup()
     fi
     mkdir -p /var/lib/ka9q-radio
     sudo chown ${USER}:${USER} /var/lib/ka9q-radio
-    true ##time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof500000...'"
-        return 3
-    fi
+
     local new_wisdomf="nwisdom"
-    if [[ ! -f ${new_wisdomf} ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: can't find expected '${PWD}/${new_wisdomf}'"
-        return 3
+    if [[ -f  ${new_wisdomf} ]]; then
+        wd_logger 1 "Found ${new_wisdomf}"
+    else
+        time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof500000...'"
+            return 3
+        fi
+        if [[ ! -f ${new_wisdomf} ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: can't find expected '${PWD}/${new_wisdomf}'"
+            return 3
+        fi
     fi
-    if [[ -f ${FFTW_WISDOMF} ]]; then
+
+    if [[ -f ${FFTW_WISDOMF} && ${new_wisdomf} -nt ${FFTW_WISDOMF} ]]; then
         wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save"
         sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
     fi
-    sudo cp -p ${new_wisdomf} ${FFTW_WISDOMF}
-    cd - > /dev/null
-    local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
-    sudo chown ${dir_user_group} ${FFTW_WISDOMF}
-    wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
+    if [[ ! -f ${FFTW_WISDOMF} || ${new_wisdomf} -nt ${FFTW_WISDOMF} ]]; then
+        wd_logger 1 "Copying ${new_wisdomf} to ${FFTW_WISDOMF}"
+        sudo cp -p ${new_wisdomf} ${FFTW_WISDOMF}
+        local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
+        sudo chown ${dir_user_group} ${FFTW_WISDOMF}
+        wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
+    fi
 
     cd - > /dev/null
-    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file, but it is not installed and active"
+    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file and should be is installed and active"
     return 1
 }
 
