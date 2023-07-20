@@ -618,7 +618,11 @@ function validate_configuration_file()
 
     if [[ "${rx_name_list[@]}" =~ KA9Q ]]; then
         wd_logger 1 "One or more RECIEVER lines specify a KA9Q* receive channel. So check that KA9Q-radio is installed an running"
-        #exit
+        if ! ka9q_setup ; then
+            wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf RECEIVER_LIST"
+            exit 1
+        fi
+        wd_logger 1 "The KA9Q-radio service required by an entry in the WD.conf RECEIVER_LIST is running"
     fi
 
     if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
@@ -632,3 +636,84 @@ function validate_configuration_file()
     fi
     validate_configured_schedule   
 }
+
+declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'
+declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
+declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
+declare KA9Q_PACKAGE_DEPENDANCIES="build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
+             libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev"
+declare FFTW_DIR="/etc/fftw"
+declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"
+
+function ka9q_setup()
+{
+
+    local rc
+    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}"
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 1 "A KA9Q receiver service is active"
+        return 0
+    fi
+    if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
+        cd ${WSPRDAEMON_ROOT_DIR}
+       git clone "${KA9Q_GIT_URL}"
+       rc=$?
+       cd - > /dev/null
+       if [[ ${rc} -ne 0 ]]; then
+           wd_logger 1 "ERROR: failed to 'git clone ${KA9Q_GIT_URL}"
+           return 1
+       fi
+    fi
+    sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
+    cd ${KA9Q_RADIO_ROOT_DIR}
+    if [[ ! -f Makefile ]]; then
+        ln -s Makefile.linux Makefile
+        cd - > /dev/null
+        wd_logger 1 "Found no Makefile, so 'ln -s Makefile.linux Makefile'"
+    fi
+    cd ${KA9Q_RADIO_ROOT_DIR}
+    make
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: failed to 'make'"
+        return 2
+    fi
+    sudo make install
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: failed to 'sudo make install'"
+        return 2
+    fi
+    mkdir -p /var/lib/ka9q-radio
+    sudo chown ${USER}:${USER} /var/lib/ka9q-radio
+    true ##time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof500000...'"
+        return 3
+    fi
+    local new_wisdomf="nwisdom"
+    if [[ ! -f ${new_wisdomf} ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: can't find expected '${PWD}/${new_wisdomf}'"
+        return 3
+    fi
+    if [[ -f ${FFTW_WISDOMF} ]]; then
+        wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save"
+        sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
+    fi
+    sudo cp -p ${new_wisdomf} ${FFTW_WISDOMF}
+    cd - > /dev/null
+    local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
+    sudo chown ${dir_user_group} ${FFTW_WISDOMF}
+    wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
+
+    cd - > /dev/null
+    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file, but it is not installed and active"
+    return 1
+}
+
