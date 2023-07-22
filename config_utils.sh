@@ -638,96 +638,131 @@ function validate_configuration_file()
 }
 
 declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'
+declare WD_CONF_BASE_NAME="rx888-wsprdaemon"
+declare WD_CONF_TEMPLATE_NAME="rx888-wsprdaemon-template"
+
+declare KA9Q_WSPRDAEMON_CONF_FILE="radiod@${WD_CONF_BASE_NAME}.conf"
+declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"
+
+declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
+
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_PACKAGE_DEPENDANCIES="build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev"
 declare FFTW_DIR="/etc/fftw"
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"
 
+
 function ka9q_setup()
 {
     local rc
-
-    if ! lsusb | grep -q "Cypress Semiconductor Corp. FX3 micro-controller" ; then
+set +x
+    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit
     fi
-    wd_logger 2 "Found a RX888 MkII attached to a USB port"
+    wd_logger 1 "Found a RX888 MkII attached to a USB port"
 
-    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}"
+    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
         wd_logger 1 "A KA9Q receiver service is active"
         return 0
     fi
-    if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
-        cd ${WSPRDAEMON_ROOT_DIR}
-       git clone "${KA9Q_GIT_URL}"
-       rc=$?
-       cd - > /dev/null
-       if [[ ${rc} -ne 0 ]]; then
-           wd_logger 1 "ERROR: failed to 'git clone ${KA9Q_GIT_URL}"
-           return 1
-       fi
-    fi
-    sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
-    cd ${KA9Q_RADIO_ROOT_DIR}
-    if [[ ! -f Makefile ]]; then
-        ln -s Makefile.linux Makefile
-        cd - > /dev/null
-        wd_logger 1 "Found no Makefile, so 'ln -s Makefile.linux Makefile'"
-    fi
-    cd ${KA9Q_RADIO_ROOT_DIR}
-    make
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: failed to 'make'"
-        return 2
-    fi
-    sudo make install
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: failed to 'sudo make install'"
-        return 2
-    fi
-    mkdir -p /var/lib/ka9q-radio
-    sudo chown ${USER}:${USER} /var/lib/ka9q-radio
+    wd_logger 1 "KA9Q receiver service is not active"
 
-    local new_wisdomf="nwisdom"
-    if [[ -f  ${new_wisdomf} ]]; then
-        wd_logger 1 "Found ${new_wisdomf}"
-    else
-        time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
+    if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
+        ### Download, compile and install the KA9Q_radio  service
+        cd ${WSPRDAEMON_ROOT_DIR}
+        git clone "${KA9Q_GIT_URL}"
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to 'git clone ${KA9Q_GIT_URL}"
+            return 1
+        fi
+        sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
+        cd ${KA9Q_RADIO_ROOT_DIR}
+        if [[ ! -f Makefile ]]; then
+            ln -s Makefile.linux Makefile
+            wd_logger 1 "Found no Makefile, so 'ln -s Makefile.linux Makefile'"
+        fi
+        make
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             cd - > /dev/null
+            wd_logger 1 "ERROR: failed to 'make'"
+            return 2
+        fi
+        sudo make install
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed to 'sudo make install'"
+            return 2
+        fi
+        mkdir -p /var/lib/ka9q-radio
+        sudo chown ${USER}:${USER} /var/lib/ka9q-radio
+    fi
+    wd_logger 1 "KA9Q SW is installed"
+
+    local KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"
+    if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
+        wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM}, so no need to create it"
+    else
+        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM}, so need to create it.  This may take minutes or even hours..."
+        cd ${KA9Q_RADIO_ROOT_DIR}
+        time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
+        rc=$?
+        cd - > /dev/null
+        if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof500000...'"
             return 3
         fi
-        if [[ ! -f ${new_wisdomf} ]]; then
-            cd - > /dev/null
-            wd_logger 1 "ERROR: can't find expected '${PWD}/${new_wisdomf}'"
+        if [[ ! -f ${KA9Q_RADIO_NWSIDOM} ]]; then
+            wd_logger 1 "ERROR: can't find expected '${KA9Q_RADIO_NWSIDOM}'"
             return 3
         fi
     fi
+    wd_logger 1 "${KA9Q_RADIO_NWSIDOM} exists"
 
-    if [[ -f ${FFTW_WISDOMF} && ${new_wisdomf} -nt ${FFTW_WISDOMF} ]]; then
-        wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save"
-        sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
-    fi
-    if [[ ! -f ${FFTW_WISDOMF} || ${new_wisdomf} -nt ${FFTW_WISDOMF} ]]; then
-        wd_logger 1 "Copying ${new_wisdomf} to ${FFTW_WISDOMF}"
-        sudo cp -p ${new_wisdomf} ${FFTW_WISDOMF}
+    if [[ ! -f ${FFTW_WISDOMF} || ${KA9Q_RADIO_NWSIDOM} -nt ${FFTW_WISDOMF} ]]; then
+        if [[ -f ${FFTW_WISDOMF} ]]; then
+            wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save before installing a new ${KA9Q_RADIO_NWSIDOM}"
+            sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
+        fi
+        wd_logger 1 "Copying ${KA9Q_RADIO_NWSIDOM} to ${FFTW_WISDOMF}"
+        sudo cp -p ${KA9Q_RADIO_NWSIDOM} ${FFTW_WISDOMF}
         local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
         sudo chown ${dir_user_group} ${FFTW_WISDOMF}
         wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
     fi
+     wd_logger 1 "${FFTW_WISDOMF} is current"
 
-    cd - > /dev/null
-    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file and should be is installed and active"
-    return 1
+    if [[ ! -f ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
+        wd_logger 1 "${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is missing, so create it from  the template file ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"
+        cp -p ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE} ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}
+    fi
+    wd_logger 1 "Found WD's local radio conf file: ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"
+
+    if [[ -f ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} || ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} -nt ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
+        if [[ -f ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
+            wd_logger 1 "${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is missing, so copy ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"
+        else
+            wd_logger 1 "${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is newer than ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}, so copy it"
+        fi
+        sudo cp -p ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}
+    fi
+    wd_logger 1 "The conf file WD will be give radiod is '${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}'" 
+
+    wd_logger 1 "Starting KA9Q 'radiod' service by executing: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}'"
+    sudo systemctl start radiod@${WD_CONF_BASE_NAME}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}' => ${rc}"
+        return ${rc}
+    fi
+    
+    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file and now it should be installed and active"
+    return 0
 }
 
