@@ -463,6 +463,22 @@ function wd-query()
 alias wd-q='wd-query'
 alias wdq='wd-query'
 
+function wd-myip()
+{
+    local my_ip
+    local rc
+
+    curl -s ifconfig.me > /tmp/myip.txt
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo "ERROR: 'curl ifconfig.me' => ${rc}"
+        return 1
+    fi
+    my_ip=$(< /tmp/myip.txt)
+    echo "My public IP = ${my_ip}"
+    return 0
+}
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
@@ -480,7 +496,7 @@ wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
 wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
 wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files 
 wd-query      wd-q wdq                   Query the wsprdaemon database for spots
-"
+wd-myip       ***                        Prints the public IP address of this server"
 }
 alias wd-='wd-help'
 alias wd-h='wd-help'
