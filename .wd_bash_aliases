@@ -484,3 +484,7 @@ wd-query      wd-q wdq                   Query the wsprdaemon database for spots
 }
 alias wd-='wd-help'
 alias wd-h='wd-help'
+
+alias ssk9a='sudo systemctl start  radiod@rx888-wsprdaemon.service'
+alias ssk9z='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
+alias ssk9s='sudo systemctl status radiod@rx888-wsprdaemon.service'
