@@ -616,15 +616,6 @@ function validate_configuration_file()
         ### More testing of validity of the fields on this line could be done
     done
 
-    if [[ "${rx_name_list[@]}" =~ KA9Q ]]; then
-        wd_logger 1 "One or more RECIEVER lines specify a KA9Q* receive channel. So check that KA9Q-radio is installed an running"
-        if ! ka9q_setup ; then
-            wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf RECEIVER_LIST"
-            exit 1
-        fi
-        wd_logger 1 "The KA9Q-radio service required by an entry in the WD.conf RECEIVER_LIST is running"
-    fi
-
     if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
         echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' exists, but does not contain a definition of the WSPR_SCHEDULE[*] array, or that array is empty"
         exit 1
@@ -634,43 +625,64 @@ function validate_configuration_file()
         echo "ERROR: configuration file '${WSPRDAEMON_CONFIG_FILE}' declares WSPR_SCHEDULE[@], but it contains no schedule definitions"
         exit 1
     fi
-    validate_configured_schedule   
+    validate_configured_schedule
+
+    if [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q ]]; then
+        wd_logger 2 "One or more WSPR_SCHEDULE jobs specify a KA9Q_* receive channel. So check that KA9Q-radio is installed an running"
+        if ! ka9q_setup ; then
+            wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE"
+            exit 1
+        fi
+        wd_logger 2 "The KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE is running"
+    fi
+    return 0
 }
 
-declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'
+declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
 declare WD_CONF_BASE_NAME="rx888-wsprdaemon"
-declare WD_CONF_TEMPLATE_NAME="rx888-wsprdaemon-template"
 
 declare KA9Q_WSPRDAEMON_CONF_FILE="radiod@${WD_CONF_BASE_NAME}.conf"
 declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"
 
-declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
 
-declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
+declare WD_KA9Q_CONF_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"                      ### Can be cutomized by the user
+declare WD_KA9Q_CONF_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"    ### A template with defautls for KA9Q RX-888 installatons
+
+declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
+declare KA9Q_RADIOD_WD_CONF_FILE=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}                ### radiod looks in /etc/radio/... for conf files
+
+
+### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_PACKAGE_DEPENDANCIES="build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev"
-declare FFTW_DIR="/etc/fftw"
-declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"
+
+declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
+declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is created by running fft_wisdom during the KA9Q installation
+declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
+declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
 
 function ka9q_setup()
 {
     local rc
-set +x
+
+    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "A KA9Q receiver service is active, so nothing more to do to setup KA9Q-radio"
+        return 0
+    fi
+    if [[ "${KA9Q_RUNS_AS_PEER-no}" == "yes" ]]; then
+        wd_logger 1 "ERROR: in wsprdaemon.conf KA9Q_RUNS_AS_PEER=yes is defined in wsprdaemon.conf, but no ${KA9Q_RADIOD_SERVICE_BASE}' is running"
+        exit 1
+    fi
+    wd_logger 1 "KA9Q receiver service is not active"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit
     fi
     wd_logger 1 "Found a RX888 MkII attached to a USB port"
-
-    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 1 "A KA9Q receiver service is active"
-        return 0
-    fi
-    wd_logger 1 "KA9Q receiver service is not active"
-
+ 
     if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
         ### Download, compile and install the KA9Q_radio  service
         cd ${WSPRDAEMON_ROOT_DIR}
@@ -705,7 +717,6 @@ set +x
     fi
     wd_logger 1 "KA9Q SW is installed"
 
-    local KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
         wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM}, so no need to create it"
     else
@@ -738,21 +749,21 @@ set +x
     fi
      wd_logger 1 "${FFTW_WISDOMF} is current"
 
-    if [[ ! -f ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
-        wd_logger 1 "${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is missing, so create it from  the template file ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"
-        cp -p ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE} ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}
+    if [[ ! -f ${WD_KA9Q_CONF_FILE}  ]]; then
+        wd_logger 1 "'${WD_KA9Q_CONF_FILE}' is missing, so create it from the WD KA9Q template file '${WD_KA9Q_CONF_TEMPLATE_FILE}'"
+        cp -p ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
     fi
-    wd_logger 1 "Found WD's local radio conf file: ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"
+    wd_logger 1 "Found WD's local radio conf file: '${WD_KA9Q_CONF_FILE}'"
 
-    if [[ -f ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} || ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} -nt ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
-        if [[ -f ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} ]]; then
-            wd_logger 1 "${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is missing, so copy ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"
+    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} || ${KA9Q_RADIOD_WD_CONF_FILE} -ot ${WD_KA9Q_CONF_FILE} ]]; then
+        if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+            wd_logger 1 "'${KA9Q_RADIOD_WD_CONF_FILE}' is missing, so create it from '${WD_KA9Q_CONF_FILE}'"
         else
-            wd_logger 1 "${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE} is newer than ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}, so copy it"
+            wd_logger 1 "${KA9Q_RADIOD_WD_CONF_FILE}' is older than '${WD_KA9Q_CONF_FILE}', so update it"
         fi
-        sudo cp -p ${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}
+        sudo cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
     fi
-    wd_logger 1 "The conf file WD will be give radiod is '${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}'" 
+    wd_logger 1 "WD will be giving radiod the conf file '${KA9Q_RADIOD_WD_CONF_FILE}'"
 
     wd_logger 1 "Starting KA9Q 'radiod' service by executing: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}'"
     sudo systemctl start radiod@${WD_CONF_BASE_NAME}
