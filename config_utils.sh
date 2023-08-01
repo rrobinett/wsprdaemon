@@ -638,6 +638,7 @@ function validate_configuration_file()
     return 0
 }
 
+declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
 declare WD_CONF_BASE_NAME="rx888-wsprdaemon"
 
