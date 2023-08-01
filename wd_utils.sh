@@ -306,10 +306,10 @@ function seconds_until_next_odd_minute() {
 }
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
-declare -r SYSTEMCTL_UNIT_PATH=/lib/systemd/system/wsprdaemon.service
+declare -r SYSTEMCTL_UNIT_PATH=/etc/systemd/system/wsprdaemon.service
 function setup_systemctl_daemon() {
-    local start_args=${1--a}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
-    local stop_args=${2--z} 
+    local start_args=${1--A}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
+    local stop_args=${2--Z} 
     local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
     if [[ ! -d ${systemctl_dir} ]]; then
         echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
@@ -359,6 +359,42 @@ function disable_systemctl_daemon() {
         return 0
     fi
     sudo systemctl disable wsprdaemon.service
+}
+
+### These are executed from the cmd line
+function stop_systemctl_daemon() {
+    sudo systemctl stop wsprdaemon.service >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "wsprdaemon.servicd has been stopped"
+    else
+        wd_logger 1 "Failed to stop wsprdaemon.servicd is not running, so start the watchdog daemon"
+    fi
+    return 0
+}
+
+function start_systemctl_daemon() {
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+        wd_logger 1 "Creating and enabling ${SYSTEMCTL_UNIT_PATH}"
+        setup_systemctl_daemon
+    fi
+
+    local rc
+    sudo systemctl is-enabled wsprdaemon.service >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "wsprdaemon.servicd is not enabled, so enabled it"
+        sudo systemctl enable wsprdaemon.service
+    fi
+    sudo systemctl start wsprdaemon.service >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "wsprdaemon.servicd is already running, so nothing to do"
+    else
+        wd_logger 1 "wsprdaemon.servicd is not running, so start the watchdog daemon"
+        sudo systemctl enable wsprdaemon.service
+    fi
+    return 0
 }
 
 ##############################################################
