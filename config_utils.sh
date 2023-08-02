@@ -713,8 +713,6 @@ function ka9q_setup()
             wd_logger 1 "ERROR: failed to 'sudo make install'"
             return 2
         fi
-        mkdir -p /var/lib/ka9q-radio
-        sudo chown ${USER}:${USER} /var/lib/ka9q-radio
     fi
     wd_logger 1 "KA9Q SW is installed"
 
