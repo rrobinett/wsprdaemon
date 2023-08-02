@@ -28,19 +28,19 @@ declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
 source ${WSPRDAEMON_PROXY_UTILS_FILE}
 proxy_connection_manager      
 
+declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-daemon libnss-mdns )      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
-        ### Add code to support installation on Pi's bullseye OS
-        declare QT5_PACKAGE=qt5-default:armhf 
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
-            QT5_PACKAGE=libqt5core5a:armhf  ### on Pi's bullseye
+            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf libqt5core5a:armhf )         ### on Pi's i32 bit bullseye
+        else
+            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf qt5-default:armhf )
         fi
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:armhf ${QT5_PACKAGE})
         ;;
     aarch64)
-        ### This is a 64 bit bullseye Pi4
-        declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:arm64 libqt5core5a:arm64 )
+        ### This is a 64 bit bullseye Pi4 and teh OrangePi
+        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 libqt5core5a:arm64 )
         ;;
     x86_64)
         declare os_release    ### We are not in a function, so it can't be local
@@ -48,9 +48,9 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 22.04 ]]; then
             ### Ubuntu 22.04 doesn't use qt5-default
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:amd64 libqt5core5a:amd64 )
+            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 libqt5core5a:amd64 )
         else
-            declare -r PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd libgfortran5:amd64 qt5-default:amd64 )
+            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 qt5-default:amd64 )
         fi
         ;;
     *)
@@ -290,7 +290,8 @@ function install_debian_package(){
     local package_name=$1
     local ret_code
 
-    if [[ " ${INSTALLED_DEBIAN_PACKAGES} " =~  " ${package_name} " ]]; then
+    #if [[ " ${INSTALLED_DEBIAN_PACKAGES} " =~  " ${package_name} " ]]; then
+    if dpkg -l ${package_name} >& /dev/null ; then
         wd_logger 2 "Package ${package_name} has already been installed"
         return 0
     fi
