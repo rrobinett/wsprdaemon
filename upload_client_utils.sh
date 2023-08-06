@@ -150,6 +150,7 @@ function upload_wsprnet_create_spot_file_list_file()
         fi
    done
 
+   mkdir -p ${UPLOAD_SPOT_FILE_LIST_FILE%/*}       ### At OE9GHV and GM0UDL this directory tree disappeared, so be sure there it a directory for the UPLOAD_SPOT_FILE_LIST_FILE
    ( IFS=$'\n'; echo "${upload_file_list[*]}" > ${UPLOAD_SPOT_FILE_LIST_FILE} )       ### IFS=$'\n' causes each element to be output on a seperate line
    wd_logger 1 "Found ${upload_spots_count} spots in ${#upload_file_list[@]} spot files and saved those spots in ${UPLOAD_SPOT_FILE_LIST_FILE}"
 }
