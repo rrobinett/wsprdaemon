@@ -332,7 +332,7 @@ function decode_wspr_wav_file() {
     fi
     local last_line=$(tail -n 1 ALL_WSPR.TXT)
 
-    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
+    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
@@ -344,6 +344,7 @@ function decode_wspr_wav_file() {
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
+declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
