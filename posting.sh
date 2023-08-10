@@ -338,6 +338,7 @@ function post_files()
 ### The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
 declare DERIVED_ADDED_FILE="derived_azi.csv"
 declare AZI_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/derived_calc.py"
+declare AZI_CMD_NICE_LEVEL=${AZI_CMD_NICE_LEVEL-19}
 
 function add_derived() {
     local spot_grid=$1
@@ -349,7 +350,7 @@ function add_derived() {
         exit 1
     fi
     local rc
-    timeout ${DERIVED_NAX_RUN_SECS-20} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    timeout ${DERIVED_NAX_RUN_SECS-20} nice ${AZI_CMD_NICE_LEVEL} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: timeout or error in running "${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq}" => ${rc}"

@@ -3,7 +3,8 @@
 ##########################################################################################################################################################
 ########## Section which creates and uploads the noise level graphs ######################################################################################
 ##########################################################################################################################################################
-declare -r NOISE_PLOT_CMD=${WSPRDAEMON_ROOT_DIR}/noise_plot.py
+declare -r NOISE_PLOT_CMD="${WSPRDAEMON_ROOT_DIR}/noise_plot.py"
+declare    NOISE_PLOT_CMD_NICE_LEVEL=${NOISE_PLOT_CMD_NICE_LEVEL-19}
 declare    NOISE_GRAPHS_UPLOAD_ENABLED="${NOISE_GRAPHS_UPLOAD_ENABLED-no}"
 declare    NOISE_GRAPHS_LOCAL_ENABLED="${NOISE_GRAPHS_LOCAL_ENABLED-no}"
 declare -r NOISE_GRAPH_FILENAME=noise_graph.png
@@ -245,7 +246,7 @@ function plot_noise() {
 
     wd_logger 1 "Creating  ${NOISE_GRAPH_TMP_FILE}"
     local plot_csv_file_list_string=$( echo ${sorted_csv_file_list[@]} | tr '\n' ' ')
-    python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}" \
+    nice ${NOISE_PLOT_CMD_NICE_LEVEL} python3 ${NOISE_PLOT_CMD} ${SIGNAL_LEVEL_UPLOAD_ID-wsprdaemon.sh}  ${my_maidenhead} ${NOISE_GRAPH_TMP_FILE} ${noise_calibration_file} "${plot_csv_file_list_string}" \
                ${NOISE_GRAPHS_Y_MIN--175} ${NOISE_GRAPHS_Y_MAX--105} ${NOISE_GRAPHS_X_PIXEL-40} ${NOISE_GRAPHS_Y_PIXEL-30} >& noise_plot.log
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then

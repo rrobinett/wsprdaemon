@@ -346,6 +346,7 @@ declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
+declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
 declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
@@ -1364,7 +1365,7 @@ function decoding_daemon() {
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
-                    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
