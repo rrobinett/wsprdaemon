@@ -335,7 +335,7 @@ function decode_wspr_wav_file() {
     timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
+        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
         return ${ret_code}
     fi
     grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.new
@@ -1282,7 +1282,7 @@ function decoding_daemon() {
                         wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
-                    nice python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out
+                    nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out
                     local ret_code=$?
                     local c2_fft_nl
                     c2_fft_nl=$(< ${c2_filename}.out)
@@ -1365,7 +1365,7 @@ function decoding_daemon() {
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
-                    timeout ${WSPRD_TIMEOUT_SECS-110} nice ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
