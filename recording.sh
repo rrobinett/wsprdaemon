@@ -688,8 +688,11 @@ declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 
 function ka9q_recording_daemon()
-{
-    local receiver_ip=$1
+{ 
+    local receiver_ip=$1                 ### The multicast IP address from wsprdaemon.conf
+    if [[ "${1}" == "localhost:rx888-wsprdaemon" ]]; then
+        receiver_ip="wspr-pcm.local"     ### Supports compatibility with legacy 3.0.1 config files
+    fi
     local receiver_rx_freq_khz=$2
     local my_receiver_password=$3
     local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
@@ -705,7 +708,7 @@ function ka9q_recording_daemon()
     fi
 
     local rc
-    ${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} wspr-pcm.local &
+    ${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} &
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
         wd_logger 2 "${KA9Q_RADIO_WD_RECORD_CMD} -v ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
