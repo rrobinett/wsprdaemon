@@ -652,7 +652,7 @@ function get_list_of_active_real_receivers()
         local schedule_line_list=(${schedule_line})
         local job
         for job in ${schedule_line_list[@]:1} ; do
-           local rx=${job%,*}
+           local rx=${job%%,*}
            if [[ ! "${rx}" =~ "MERG" ]]; then
                if [[ ! "${rx_list[@]}" =~ ${rx} ]]; then
                    rx_list+=( ${rx} )
