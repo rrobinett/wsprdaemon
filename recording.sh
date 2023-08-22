@@ -702,24 +702,50 @@ function ka9q_recording_daemon()
 
     wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
 
-    if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-        wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
-        sleep 10
-    fi
+    while true; do
+        if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+            wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
+            sleep 10
+            continue
+        fi
 
-    local rc
-    ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} &
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
-    else
-        wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
-    fi
-    local wd_record_pid=$!
-    trap "kill ${wd_record_pid}" SIGTERM
-    wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
-    wait
-    wd_logger 1 "wd-record job terminated."
+        local rc
+        local wd_record_pid=0
+
+        if [[ -f wd-record.pid ]] ; then
+            wd_record_pid=$(< wd-record.pid)
+            wd_logger 2 "Found wd-record.pid file which contains pid ${wd_record_pid}"
+            ps ${wd_record_pid} > /dev/null
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 2 "Found exisiting wd_record_pid = ${wd_record_pid}, so don't spawn a new one"
+                sleep 10
+                contnue
+            else
+                wd_logger 1 "Found dead  wd_record_pid = ${wd_record_pid}, so spawn a new one"
+                wd_rm wd-record.pid
+                wd_record_pid=0
+            fi
+        fi
+
+        if [[ ${wd_record_pid} -eq 0 ]]; then
+            wd_logger 1 "Spawning new ' ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}'"
+            ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} &
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 1 "Spawned ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}"
+            else
+                wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and try again"
+                sleep 1
+                continue
+            fi
+            local wd_record_pid=$!
+            trap "kill ${wd_record_pid}" SIGTERM
+            wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
+            echo ${wd_record_pid} > wd-record.pid
+        fi
+        sleep 1
+    done
 }
  
 declare WAV_RECORDING_DAEMON_PID_FILE="wav_recording_daemon.pid"
@@ -741,6 +767,7 @@ function spawn_wav_recording_daemon() {
     local receiver_rx_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${receiver_rx_freq_khz}/1000.0" ) )
     local my_receiver_password=${receiver_list_element[4]}
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
+    local rc
 
     mkdir -p ${recording_dir}
     cd ${recording_dir}
@@ -749,62 +776,39 @@ function spawn_wav_recording_daemon() {
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
             wd_logger 2 "A recording job with pid ${recording_pid} is already running"
+            cd - > /dev/null
             return 0
         else
             wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
-            rm ${WAV_RECORDING_DAEMON_PID_FILE}
+            wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}
         fi
-
     fi
+
     ### There was no PID file or the pid in that file was dead.  But check with Linux to be sure there is no zombie recording_daemon running
-    local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in kHz are unqiue to each rx band
-    local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
-    if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-        wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
-    else
-        wd_kill ${kiwirecorder_pids[@]}
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz, but 'wd_kill ${kiwirecorder_pids[*]}' => ${rc} when trying to kill those jobs"
-        else
-            wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}' on them.  Now go on to spawn a new job"
-        fi
-    fi
-
     ### No recording daemon is running
     if [[ ${receiver_name} =~ ^KA9Q ]]; then
         wd_logger 1 "Starting ${receiver_name}"
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
-    elif [[ ${receiver_name} =~ ^AUDIO_ ]]; then
-        wd_logger 1 "Starting ${receiver_name}"
-        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  audio_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'audio_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password}' => ${ret_code}"
-            return ${ret_code}
-        fi
-    elif [[ ${receiver_ip} =~ RTL-SDR ]]; then
-        local device_id=${receiver_ip#*:}
-        if ! rtl_test -d ${device_id} -t  2> rtl_test.log; then
-            echo "$(date): ERROR: spawn_recording_daemon() cannot access RTL_SDR #${device_id}.  
-            If the error reported is 'usb_claim_interface error -6', then the DVB USB driver may need to be blacklisted. To do that:
-            Create the file '/etc/modprobe.d/blacklist-rtl.conf' which contains the lines:
-            blacklist dvb_usb_rtl28xxu
-            blacklist rtl2832
-            blacklist rtl2830
-            Then reboot your Pi.
-            The error reported by 'rtl_test -t ' was:"
-            cat rtl_test.log
-            exit 1
-        fi
-        rm -f rtl_test.log
-        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE} rtl_daemon ${device_id} ${receiver_rx_freq_mhz} &
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'rtl_daemon ${device_id} ${receiver_rx_freq_mhz}' => ${ret_code}"
-            return ${ret_code}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password}' => ${rc}"
+            cd - > /dev/null
+            return 1
         fi
     else
+        local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in kHz are unqiue to each rx band
+        local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
+        if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
+            wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
+        else
+            wd_kill ${kiwirecorder_pids[@]}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz, but 'wd_kill ${kiwirecorder_pids[*]}' => ${rc} when trying to kill those jobs"
+            else
+                wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}' on them.  Now go on to spawn a new job"
+            fi
+        fi
         local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
         local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
         wd_logger 1 "Spawning wav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
@@ -812,10 +816,12 @@ function spawn_wav_recording_daemon() {
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'kiwirecorder_manager_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password}' => ${ret_code}"
+            cd - > /dev/null
             return ${ret_code}
         fi
     fi
     echo $! > ${WAV_RECORDING_DAEMON_PID_FILE}
+    cd - > /dev/null
     wd_logger 1 "Spawned new wav recording job '${receiver_name},${receiver_rx_band}' with PID '$!'"
     return 0
 }
