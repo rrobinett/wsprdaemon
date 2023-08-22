@@ -627,8 +627,9 @@ function validate_configuration_file()
     fi
     validate_configured_schedule
 
-    if [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q ]]; then
-        wd_logger 2 "One or more WSPR_SCHEDULE jobs specify a KA9Q_* receive channel. So check that KA9Q-radio is installed an running"
+    local active_receivers
+    get_list_of_active_real_receivers active_receivers
+   if [[ "${active_receivers}" =~ KA9Q ]]; then
         if ! ka9q_setup ; then
             wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE"
             exit 1
@@ -636,6 +637,41 @@ function validate_configuration_file()
         wd_logger 2 "The KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE is running"
     fi
     return 0
+}
+
+### This function returns a string which contains the names af all the the real recievers which are specified in the WSPR_SCHEDULE[] either directly or as a member of a MERG receiver
+### It was implemented so that at startup WD can determine if there will be any KA9Q receivers used,, and if so then WD will setup the KA9Q-radio service
+function get_list_of_active_real_receivers()
+{
+    local __return_real_receivers_in_use_var=$1
+
+    local rx_list=()
+
+    local schedule_line
+    for schedule_line in "${WSPR_SCHEDULE[@]}" ; do
+        local schedule_line_list=(${schedule_line})
+        local job
+        for job in ${schedule_line_list[@]:1} ; do
+           local rx=${job%,*}
+           if [[ ! "${rx}" =~ "MERG" ]]; then
+               if [[ ! "${rx_list[@]}" =~ ${rx} ]]; then
+                   rx_list+=( ${rx} )
+               fi
+           else
+               local merge_line_list=( $(IFS=$'\n'; echo "${RECEIVER_LIST[*]}" | grep -w ${rx}) )
+               local merge_rx=${merge_line_list[1]}
+               local merge_rx_list=( ${merge_rx//,/ } )
+               local merged_rx
+               for merged_rx in ${merge_rx_list[@]} ; do
+                   if [[ ! "${rx_list[@]}" =~ ${merged_rx} ]]; then
+                       rx_list+=( ${merged_rx} )
+                   fi
+               done
+           fi
+       done
+   done
+   local return_string=$(IFS=' '; echo "${rx_list[*]}" ) 
+   eval ${__return_real_receivers_in_use_var}=\"${return_string}\"
 }
 
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
