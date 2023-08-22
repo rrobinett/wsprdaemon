@@ -708,16 +708,16 @@ function ka9q_recording_daemon()
     fi
 
     local rc
-    ${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} &
+    ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} &
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "${KA9Q_RADIO_WD_RECORD_CMD} -v ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
+        wd_logger 2 "${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
     else
-        wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} -v ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
+        wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and run it again"
     fi
     local wd_record_pid=$!
     trap "kill ${wd_record_pid}" SIGTERM
-    wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
+    wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
     wait
     wd_logger 1 "wd-record job terminated."
 }
