@@ -50,7 +50,7 @@ function wd_kill_all()
 {
     wd_logger 1 "Force kill of all WD programs"
 
-    local pid_file_list=($(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid' | grep -v proxy.pid) )
+    local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid') )
     if [[ ${#pid_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no pid files"
     else 
