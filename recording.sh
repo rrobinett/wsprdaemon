@@ -720,7 +720,7 @@ function ka9q_recording_daemon()
             if [[ ${rc} -eq 0 ]]; then
                 wd_logger 2 "Found exisiting wd_record_pid = ${wd_record_pid}, so don't spawn a new one"
                 sleep 10
-                contnue
+                continue
             else
                 wd_logger 1 "Found dead  wd_record_pid = ${wd_record_pid}, so spawn a new one"
                 wd_rm wd-record.pid
