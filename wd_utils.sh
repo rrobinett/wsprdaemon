@@ -365,10 +365,10 @@ function disable_systemctl_daemon() {
 function stop_systemctl_daemon() {
     sudo systemctl stop wsprdaemon.service >& /dev/null
     rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    if [[ ${rc} -eq 0 ]]; then
         wd_logger 1 "wsprdaemon.servicd has been stopped"
     else
-        wd_logger 1 "Failed to stop wsprdaemon.servicd is not running, so start the watchdog daemon"
+        wd_logger 1 "stop wsprdaemon.service => ${rc}"
     fi
     return 0
 }
