@@ -1,4 +1,5 @@
 #!/bin/bash
+
 declare -i verbosity=${verbosity:-1}
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
@@ -23,11 +24,12 @@ fi
 
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
-### If the user has enabled a remote proxy connection in the conf file, then start up that connection now.
-declare -r WSPRDAEMON_PROXY_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/proxy_utils.sh
-source ${WSPRDAEMON_PROXY_UTILS_FILE}
-proxy_connection_manager      
-
+### If the user has enabled ia Romote Access Channel to this machine by defining "REMOTE_ACCESS_CHANNEL=NN' in the wsprdaemon.conf file,
+###     install and enable the remote access service.
+### If REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
+declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.sh
+source ${REMOTE_ACCESS_SERVICES}
+wd_remote_access_service_manager
 
 declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
