@@ -110,7 +110,7 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             stop_systemctl_daemon
             ;;
         s)
-            proxy_connection_status
+            remote_access_connection_status
             jobs_cmd     s
             watchdog_cmd s
             ;;
