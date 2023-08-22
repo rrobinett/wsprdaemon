@@ -1613,9 +1613,9 @@ function decoding_daemon() {
             ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
             ### Kiwi by 12001.1/12000 that is 1.00009167. This is a frequency increase of 0.128 Hz at 1400 Hz and 0.147 Hz at 1600 Hz.
             ### So if  SPOT_FREQ_ADJ_HZ is not blank, then modify the frequency of each spot by that floating point HZ value.  SPOT_FREQ_ADJ_HZ defaults to +.1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
-            if [[ -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] ; then
+            if [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] ; then
                 ### Once could learn if the Kiwi is GPS controlled from the Kiwi's status page
-                wd_logger 1 "Skipping frequency adjustment for GPS controlled Kiwi '${receiver_name}'"
+                wd_logger 1 "Skipping frequency adjustment for KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
             elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
                 local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
                 wd_logger 1 "Fixing spot frequencies by ${freq_adj_hz} Hz"
