@@ -103,7 +103,7 @@ function wd_remote_access_service_manager() {
 
     source ${WSPRDAEMON_CONFIG_FILE} > /dev/null
     local remote_access_channel=${REMOTE_ACCESS_CHANNEL}
-    local remote_access_id=${REMOTE_ACCESS_ID-${SIGNAL_LEVEL_UPLOAD_ID}}}
+    local remote_access_id=${REMOTE_ACCESS_ID-${SIGNAL_LEVEL_UPLOAD_ID}}
 
     wd_logger 1 "Setting up the Remote Access Connection service with REMOTE_ACCESS_CHANNEL=${remote_access_channel}, REMOTE_ACCESS_ID='${remote_access_id}'"
 
