@@ -706,16 +706,29 @@ function ka9q_recording_daemon()
     while true; do
         wd_logger 1 "Start reecording pcm wav files from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
 
-        local running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) )
-        if [[ ${#running_jobs_pid_list[@]} -ne 0 ]]; then
-            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs.  Killing them"
-            kill -9 ${running_jobs_pid_list[@]}
+        local running_jobs_pid_list=()
+        while running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
+              && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
+            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
+            kill ${running_jobs_pid_list[@]}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
+            fi
+            sleep 10
+        done
+
+        local ka9q_verbosity_arg=""
+        if [[ ${verbosity} -eq 1 ]]; then
+            ka9q_verbosity_arg="-v" ##  ${verbosity}"
         fi
+        if [[ ${verbosity} -gt 1 ]]; then
+            ka9q_verbosity_arg="-v -v" ##  ${verbosity}"
+        fi
+        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_arg} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
 
-        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
         local rc
-
-        ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} 
+        ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_arg} -s ${receiver_rx_freq_hz} ${receiver_ip} 
         rc=$?
         if [[ ${rc} -eq 0 ]]; then
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
