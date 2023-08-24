@@ -694,57 +694,35 @@ function ka9q_recording_daemon()
         receiver_ip="wspr-pcm.local"     ### Supports compatibility with legacy 3.0.1 config files
     fi
     local receiver_rx_freq_khz=$2
-    local my_receiver_password=$3
-    local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
     local receiver_rx_freq_hz=$( echo "(${receiver_rx_freq_khz} * 1000)/1" | bc )
+
+    if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+        wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
+        return 1
+    fi
 
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
-    wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
-
     while true; do
-        if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-            wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
-            sleep 10
-            continue
+        wd_logger 1 "Start reecording pcm wav files from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
+
+        local running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) )
+        if [[ ${#running_jobs_pid_list[@]} -ne 0 ]]; then
+            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs.  Killing them"
+            kill -9 ${running_jobs_pid_list[@]}
         fi
 
+        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
         local rc
-        local wd_record_pid=0
 
-        if [[ -f wd-record.pid ]] ; then
-            wd_record_pid=$(< wd-record.pid)
-            wd_logger 2 "Found wd-record.pid file which contains pid ${wd_record_pid}"
-            ps ${wd_record_pid} > /dev/null
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 2 "Found exisiting wd_record_pid = ${wd_record_pid}, so don't spawn a new one"
-                sleep 10
-                continue
-            else
-                wd_logger 1 "Found dead  wd_record_pid = ${wd_record_pid}, so spawn a new one"
-                wd_rm wd-record.pid
-                wd_record_pid=0
-            fi
+        ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} 
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
+        else
+            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' => ${rc}"
         fi
-
-        if [[ ${wd_record_pid} -eq 0 ]]; then
-            wd_logger 1 "Spawning new ' ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}'"
-            ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip} &
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 1 "Spawned ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}"
-            else
-                wd_logger 1 "ERROR: ${KA9Q_RADIO_WD_RECORD_CMD} ${receiver_rx_freq_hz} wspr-pcm.local => ${rc}. Sleep and try again"
-                sleep 1
-                continue
-            fi
-            local wd_record_pid=$!
-            trap "kill ${wd_record_pid}" SIGTERM
-            wd_logger 1 "Spawned '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} wspr-pcm.local => PID = ${wd_record_pid}. Waiting for it to terminate"
-            echo ${wd_record_pid} > wd-record.pid
-        fi
-        sleep 1
+        sleep 5
     done
 }
  
