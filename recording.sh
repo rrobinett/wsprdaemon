@@ -718,17 +718,12 @@ function ka9q_recording_daemon()
             sleep 10
         done
 
-        local ka9q_verbosity_arg=""
-        if [[ ${verbosity} -eq 1 ]]; then
-            ka9q_verbosity_arg="-v" ##  ${verbosity}"
-        fi
-        if [[ ${verbosity} -gt 1 ]]; then
-            ka9q_verbosity_arg="-v -v" ##  ${verbosity}"
-        fi
-        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_arg} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
+        local verbosity_args_list=( -v -v -v -v )
+        local ka9q_verbosity_args="${verbosity_args_list[@]:0:${verbosity}}"
+        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
 
         local rc
-        ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_arg} -s ${receiver_rx_freq_hz} ${receiver_ip} 
+        ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip} 
         rc=$?
         if [[ ${rc} -eq 0 ]]; then
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
