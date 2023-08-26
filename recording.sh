@@ -368,27 +368,27 @@ function spawn_wav_recording_daemon() {
     cd ${recording_dir}
 
     local wav_recording_mutex_name="wav_recorder"
-    wd_logger 1 "Locking muxtex ${wav_recording_mutex_name} in ${recording_dir}"
+    wd_logger 1 "Locking mutex ${wav_recording_mutex_name} in ${recording_dir}"
     wd_mutex_lock ${wav_recording_mutex_name} ${recording_dir}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: failed to lock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
         return 1
     fi
-    wd_logger 1 "Locked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+    wd_logger 2 "Locked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
 
     if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE}  ]] ; then
         local recording_pid=$(< ${WAV_RECORDING_DAEMON_PID_FILE} )
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
-            wd_logger 1 "A recording job with pid ${recording_pid} is already running"
+            wd_logger 2 "A recording job with pid ${recording_pid} is already running"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
                 return 1
             fi
-            wd_logger 1 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+            wd_logger 2 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
             cd - > /dev/null
             return 0
         else
