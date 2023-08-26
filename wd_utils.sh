@@ -725,3 +725,67 @@ function get_file_variable()
 
     eval ${__return_varaiable}=\${value_in_file}
 }
+
+################################################################################################################################################################
+declare MUTEX_TIMEOUT=${MUTEX_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
+declare MUTEX_AGE_MAX=${MUTEX_AGE_MAX-30}  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
+
+function wd_mutex_lock() {
+    local mutex_name=$1
+    local muxtex_dir=$2                                          ### Directory in which to create lock
+
+    if [[ ! -d ${muxtex_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${muxtex_dir}' for muxtex doesn't exist"
+        return 1
+    fi
+
+    local mutex_lock_dir_name="${muxtex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    wd_logger 1 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
+    local timeout=1
+    while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
+        ((++timeout))
+        if [[ ${timeout} -ge ${MUTEX_TIMEOUT} ]]; then
+            ### flush the lock dir if it is more than 30 seconds old
+            local mutex_lock_dir_epoch=$( stat -c %Y ${mutex_lock_dir_name} )
+            local mutex_lock_dir_age=$(( ${EPOCHSECONDS} - ${mutex_lock_dir_epoch} ))
+            if [[ ${mutex_lock_dir_age} -gt ${MUTEX_AGE_MAX} ]]; then
+                wd_logger 1 "ERROR: lock dir ${mutex_lock_dir_name} is ${mutex_lock_dir_age} seconds old.  Flush it to free resource"
+                rm -rf ${mutex_lock_dir_name}
+            fi
+            wd_logger 1 "ERROR: timeout waiting to lock ${mutex_name} after ${timeout} tries"
+            return 1
+        fi
+        local sleep_secs
+        sleep_secs=$(( ( ${RANDOM} % ${MUTEX_TIMEOUT} ) + 1 ))      ### randomize the sleep time or all the sessions will hang while wating for the lock to free
+        wd_logger 1 "Try  #${timeout} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
+        wd_sleep ${sleep_secs}
+    done
+    wd_logger 1 "Locked access to ${mutex_name} after ${timeout} tries"
+    return 0
+}
+
+function wd_mutex_unlock() {
+    local mutex_name=$1
+    local muxtex_dir=$2                                          ### Directory in which to create lock
+
+    wd_logger 1 "Unock mutex '${mutex_name}' in directory '${muxtex_dir}'"
+    if [[ ! -d ${muxtex_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${muxtex_dir}' containing the muxtex '${mutex_name}' doesn't exist"
+        return 1
+    fi
+
+    local mutex_lock_dir_name="${muxtex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    if [[ ! -d ${mutex_lock_dir_name} ]]; then
+        wd_logger 1 "ERROR: the expected mutex directory '${muxtex_dir}' doesn't exist"
+        return 1
+    fi
+    rmdir ${mutex_lock_dir_name}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'rmdir ${mutex_lock_dir_name}' => ${rc}"
+        exit 1
+        return 1
+    fi
+    wd_logger 1 "Unlocked ${mutex_lock_dir_name}"
+    return 0
+}
