@@ -740,7 +740,7 @@ function wd_mutex_lock() {
     fi
 
     local mutex_lock_dir_name="${muxtex_dir}/${mutex_name}_mutex.d"         ### The lock directory
-    wd_logger 1 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
+    wd_logger 2 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
     local timeout=1
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
         ((++timeout))
@@ -760,7 +760,7 @@ function wd_mutex_lock() {
         wd_logger 1 "Try  #${timeout} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
         wd_sleep ${sleep_secs}
     done
-    wd_logger 1 "Locked access to ${mutex_name} after ${timeout} tries"
+    wd_logger 2 "Locked access to ${mutex_name} after ${timeout} tries"
     return 0
 }
 
@@ -768,7 +768,7 @@ function wd_mutex_unlock() {
     local mutex_name=$1
     local muxtex_dir=$2                                          ### Directory in which to create lock
 
-    wd_logger 1 "Unock mutex '${mutex_name}' in directory '${muxtex_dir}'"
+    wd_logger 2 "Unock mutex '${mutex_name}' in directory '${muxtex_dir}'"
     if [[ ! -d ${muxtex_dir} ]]; then
         wd_logger 1 "ERROR: directory '${muxtex_dir}' containing the muxtex '${mutex_name}' doesn't exist"
         return 1
@@ -783,9 +783,8 @@ function wd_mutex_unlock() {
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'rmdir ${mutex_lock_dir_name}' => ${rc}"
-        exit 1
         return 1
     fi
-    wd_logger 1 "Unlocked ${mutex_lock_dir_name}"
+    wd_logger 2 "Unlocked ${mutex_lock_dir_name}"
     return 0
 }
