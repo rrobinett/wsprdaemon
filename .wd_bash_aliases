@@ -463,6 +463,11 @@ function wd-query()
 alias wd-q='wd-query'
 alias wdq='wd-query'
 
+alias wd-syslog='sudo less /var/log/syslog'
+alias wdsl='wd-syslog'
+alias wd-wd-rec='watch "ps aux | grep wd-rec | grep -v grep | sort -k 14,14n -k 15r"'
+alias wdwd='wd-wd-rec'
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
