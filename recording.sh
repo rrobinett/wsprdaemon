@@ -30,43 +30,6 @@ function list_known_receivers()
     done
 }
 
-##############################################################
-function list_kiwis() 
-{
-     local i
-     for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
-        local receiver_info=(${RECEIVER_LIST[i]})
-        local receiver_name=${receiver_info[0]}
-        local receiver_ip_address=${receiver_info[1]}
-
-        if echo "${receiver_ip_address}" | ${GREP_CMD} -q '^[1-9]' ; then
-            echo "${receiver_name}"
-        fi
-    done
-}
-
-function get_kiwi_ip_port()
-{
-    local __return_kiwi_ip_port=$1
-    local target_kiwi_name=$2
-
-     local i
-     for i in $(seq 0 $(( ${#RECEIVER_LIST[*]} - 1 )) ) ; do
-        local receiver_info=(${RECEIVER_LIST[i]})
-        local receiver_name=${receiver_info[0]}
-
-        if [[ ${receiver_name} == ${target_kiwi_name} ]]; then
-          
-            local receiver_ip_address=${receiver_info[1]}
-            wd_logger 1 "Found ${target_kiwi_name} in RECEIVER_LIST[], its IP = ${receiver_ip_address}"
-            eval ${__return_kiwi_ip_port}=\${receiver_ip_address}
-            return 0
-        fi
-    done
-    wd_logger 1 "ERROR: couldn't find  ${target_kiwi_name} in RECEIVER_LIST[]"
-    return 1
-}
-
 ########################
 function list_audio_devices()
 {
@@ -302,358 +265,6 @@ function audio_recording_daemon()
     done
 }
 
-###
-declare KIWIRECORDER_KILL_WAIT_SECS=10       ### Seconds to wait after kiwirecorder is dead so as to ensure the Kiwi detects there is no longer a client and frees that rx2...7 channel
-
-### NOTE: This function assumes it is executing in the KIWI/BAND directory of the job to be killed
-function kiwirecorder_manager_daemon_kill_handler() {
-    if [[ ! -f ${KIWI_RECORDER_PID_FILE} ]]; then
-        wd_logger 2 "ERROR: found no ${KIWI_RECORDER_PID_FILE}" 
-    else
-        local kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE} )
-        wd_rm ${KIWI_RECORDER_PID_FILE}
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
-        fi
-        if [[ -z "${kiwi_recorder_pid}" ]]; then
-            wd_logger 1 "ERROR: ${KIWI_RECORDER_PID_FILE} is empty" 
-        elif !  ps ${kiwi_recorder_pid} > /dev/null ; then
-            wd_logger 1 "ERROR: kiwi_recorder_daemon is already dead"
-        else
-            wd_kill ${kiwi_recorder_pid}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
-            fi
-            local timeout=0
-            while [[ ${timeout} < ${KIWIRECORDER_KILL_WAIT_SECS} ]] &&  ps ${kiwi_recorder_pid} > /dev/null; do
-                wd_logger 1 "Waiting for kiwi_recorder_daemon(0 to die"
-                (( ++timeout ))
-                sleep 1
-            done
-            if ps ${kiwi_recorder_pid} > /dev/null; then
-                wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
-            else
-                wd_logger 1 "kiwi_recorder_daemon() has died after ${timeout} seconds"
-            fi
-        fi
-    fi
-    wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}' => ${rc}"
-    fi
-    exit
-}
-
-### This daemon spawns a kiwirecorder.py session and monitor's its stdout for 'OV' lines
-declare KIWI_RECORDER_PID_FILE="kiwi_recorder.pid"
-declare KIWI_RECORDER_LOG_FILE="kiwi_recorder.log"
-declare OVERLOADS_LOG_FILE="kiwi_recorder_overloads_count.log"   ### kiwirecorder_manager_daemon logs the OV
-if [[ -n "${KIWI_TIMEOUT_PASSWORD-}" ]]; then
-    KIWI_TIMEOUT_DISABLE_COMMAND_ARG="--tlimit-pw=${KIWI_TIMEOUT_PASSWORD}"
-fi
-
-function get_kiwirecorder_status()
-{
-    local __return_status_var=$1
-    local kiwi_ip_port=$2
-
-    wd_logger 1 "Get status with 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}'"
-
-    local get_kiwi_status_lines
-    local rc
-    get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
-        return 1
-    fi
-
-    if [[ -z "${get_kiwi_status_lines}" ]]; then
-        wd_logger 1 "ERROR: 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}' => 0, but get_kiwi_status_lines is empty"
-        return 1
-    fi
-
-    wd_logger 1 "Got $(  echo "${get_kiwi_status_lines}" | wc -l  ) status lines from '${kiwi_ip_port}'"
-
-    eval ${__return_status_var}="\${get_kiwi_status_lines}"
-    return 0
-}
-
-function get_kiwirecorder_ov_count_from_ip_port()
-{
-    local __return_ov_count_var=$1
-    local kiwi_ip_port=$2
- 
-    local rc
-    local kiwi_status_lines
-
-    get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
-        return 2
-    fi
-    local ov_value
-    ov_value=$( echo "${kiwi_status_lines}" | awk -F = '/^adc_ov/{print $2}' )
-    if [[ -z "${ov_value}" ]]; then
-        wd_logger 1 "ERROR: couldn't extract 'adc_ov' from kiwi's status lines"
-        return 3
-    fi
-    wd_logger 1 "Got current adc_ov = ${ov_value}"
-    eval ${__return_ov_count_var}=\${ov_value}
-    return 0
-}
-
-function get_kiwirecorder_ov_count()
-{
-    local __return_ov_count_var=$1
-    local kiwi_name=$2
-
-    local kiwi_ip_port
-    local rc
-    get_kiwi_ip_port  kiwi_ip_port  ${kiwi_name}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_kiwi_ip_port  kiwi_ip_port  ${kiwi_name}' => ${rc}"
-        return 1
-    fi
-
-    local kiwi_status_lines
-    get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_kiwirecorder_status  kiwi_status_lines  ${kiwi_ip_port}' => ${rc}"
-        return 2
-    fi
-    local ov_value
-    ov_value=$( echo "${kiwi_status_lines}" | awk -F = '/^adc_ov/{print $2}' )
-    if [[ -z "${ov_value}" ]]; then
-        wd_logger 1 "ERROR: couldn't extract 'adc_ov' from kiwi's status lines"
-        return 3
-    fi
-    wd_logger "Got current adc_ov = ${ov_value}"
-    eval ${__return_ov_count_var}=\${ov_value}
-    return 0
-}
-
-declare KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR=${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR-10}    ### Wait 10 seconds after detecting an error before trying to spawn a new KWR
-
-function kiwirecorder_manager_daemon()
-{
-    local receiver_ip=$1
-    local receiver_rx_freq_khz=$2
-    local my_receiver_password=$3
-    local recording_client_name=${KIWIRECORDER_CLIENT_NAME:-wsprdaemon_v${VERSION}}
-
-    setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
-
-    wd_logger 1 "Starting in $PWD.  Recording from ${receiver_ip} on ${receiver_rx_freq_khz}"
-
-    ### If the Kiwi returns the OV count in its status page, then don't have the Kiwi output 'ADC OV' lines to its log file
-    ### By polling the /status page, there is no potential of filling the kiwi's log file which requires the kiwirecord job to be killed and restarted
-    ### So Kiwis should no longer need intermittent restarts.
-    local kiwirecorder_ov_flag
-    local rc 
-    local ov_count_var
-    get_kiwirecorder_ov_count_from_ip_port  ov_count_var  ${receiver_ip}
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 1 "The kiwi's /status page reports the current adc_ov count = ${ov_count_var}, so disabling the kiwi's 'ADC OV' logging since that data is available in the kiwi's status page"
-        kiwirecorder_ov_flag=""
-    else
-        wd_logger 1 "ERROR: (not really), but this kiwi at ${receiver_ip} is running an old version of SW which doesn't output OV on its status page, so we have to enabled the output of 'ADC OV' lines to the kiwirecord's log"
-        kiwirecorder_ov_flag="--OV"
-    fi
-
-    while true ; do
-        local kiwi_recorder_pid=""
-        if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
-            ### Check that the pid specified in the pid file is active
-            kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})
-            ps ${kiwi_recorder_pid} > ps.txt
-            local ret_code=$?
-            if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
-            else
-                wd_logger 1 "ERROR: found pid in ${KIWI_RECORDER_PID_FILE}, but  'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
-                kiwi_recorder_pid=""
-                wd_rm ${KIWI_RECORDER_PID_FILE}
-            fi
-        fi
-        if [[ -z "${kiwi_recorder_pid}" ]]; then
-            ### There was no pid file or the pid in that file is dead
-            ### Check for a zombie kwiirecorder and kill if one or more zombies are  found
-            local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:*}" | grep -v grep )
-            if [[ -n "${ps_output}" ]]; then
-                local pid_list=( $(awk '{print $2}' <<< "${ps_output}") )
-                wd_logger 1 "ERROR: killing ${#pid_list[@]} zombie kiwirecorders:\n${ps_output}"
-                wd_kill ${pid_list[@]}
-                local rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                     wd_logger 1 "ERROR: 'wd_kill ${pid_list[*]}' => ${rc}"
-                fi
-            fi
-        fi
-
-        if [[ -z "${kiwi_recorder_pid}" ]]; then
-            ### kiwirecorder.py is not yet running, or it has crashed and we need to restart it
-            wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
-
-            ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-            python3 -u ${KIWI_RECORD_COMMAND} \
-                --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
-                ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
-                --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-                continue
-            fi
-            kiwi_recorder_pid=$!
-            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
-            wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
-
-            ### To try to ensure that wav files are not corrupted (i.e. too short, too long, or missing) because of CPU starvation:
-            #### Raise the priority of the kiwirecorder.py job to (by default) -15 so that wsprd, jt9 or other programs are less likely to preempt it
-            ps --no-headers -o ni ${kiwi_recorder_pid} > before_nice_level.txt
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: While checking nice level before renicing 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-                continue
-            fi
-            local before_nice_level=$(< before_nice_level.txt)
-
-            ### Raise the priority of the KWR process
-            sudo renice --priority ${KIWI_RECORDER_PRIORITY--15} ${kiwi_recorder_pid}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'renice --priority -15 ${kiwi_recorder_pid}' => ${rc}"
-                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-                continue
-            fi
-
-            ps --no-headers -o ni ${kiwi_recorder_pid} > after_nice_level.txt
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: While checking for after_nice_level with 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-                continue
-            fi
-            local after_nice_level=$(< after_nice_level.txt)
-            wd_logger 1 "renice(d) kiwirecorder from ${before_nice_level} to ${after_nice_level}"
-        fi
-
-        if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
-            wd_logger 1 "ERROR: 'ps ${kiwi_recorder_pid}' reports kiwirecorder.py is running, but there is no log file of its output, so 'kill ${kiwi_recorder_pid}' and try to restart it"
-            wd_kill ${kiwi_recorder_pid}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
-            fi
-            wd_rm ${KIWI_RECORDER_PID_FILE}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: ' wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
-            fi
-            wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-            continue
-        fi
-
-        if [[ ! -f ${OVERLOADS_LOG_FILE} ]]; then
-            ## Initialize the file which logs the date in epoch seconds, and the number of OV errors since that time
-            printf "%(%s)T 0" -1  > ${OVERLOADS_LOG_FILE}
-        fi
-
-        if [[ -n "${kiwirecorder_ov_flag}" && ! -s ${KIWI_RECORDER_LOG_FILE} ]]; then
-            wd_logger 2 "The Kiwi is running old code which doesn't report overloads in its status page, so we are using the old technique of counting OVs in the Kiwi's stdout saved in ${KIWI_RECORDER_LOG_FILE}\nBut that file  is empty, so no overloads have been reported and thus there are no OV counts to be checked"
-        else
-            local current_time=$(printf "%(%s)T" -1 )
-            local old_ov_info=( $(tail -1 ${OVERLOADS_LOG_FILE}) )
-            local old_ov_count=${old_ov_info[1]}
-            local new_ov_count=0
-
-            if [[ -z "${kiwirecorder_ov_flag}" ]]; then
-                ### We can poll the status page to learn if there are any new ov events
-                local rc
-                wd_logger 2 "Getting overload counts from the Kiwi's status page"
-                get_kiwirecorder_ov_count_from_ip_port  ov_count_var  ${receiver_ip}
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: failed to get expected status from kiwi"
-                else
-                    local new_ov_count=${ov_count_var}
-                    if [[ ${new_ov_count} -eq ${old_ov_count} ]]; then
-                        wd_logger 2 "The ov count ${new_ov_count} reported by the Kiwi status page hasn't changed"
-                    else
-                        if [[ ${new_ov_count} -gt ${old_ov_count} ]]; then
-                            wd_logger 2 "The ov count reported by the Kiwi has increased from ${old_ov_count} to ${new_ov_count}"
-                        else
-                            wd_logger 1 "The ov count ${new_ov_count} reported by the Kiwi status page is less than the previously reported count of ${old_ov_count}, so the Kiwi seems to have restarted"
-                        fi
-                        printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
-                    fi
-                fi
-            elif [[ ${KIWI_RECORDER_LOG_FILE} -nt ${OVERLOADS_LOG_FILE} ]]; then
-                ### Since kwirecorder has recently written one or more "OV" lines to its output, so count the number of new lines
-                new_ov_count=$( ${GREP_CMD} OV ${KIWI_RECORDER_LOG_FILE} | wc -l )
-                if [[ -z "${new_ov_count}" ]]; then
-                    wd_logger 1 "Found no lines with 'OV' in ${KIWI_RECORDER_LOG_FILE}"
-                    new_ov_count=0
-                fi
-                local new_ov_time=${current_time}
-                if [[ "${new_ov_count}" -lt "${old_ov_count}" ]]; then
-                    wd_logger 1 "Found '${KIWI_RECORDER_LOG_FILE}' has changed, but new OV count '${new_ov_count}' is less than old count '${old_ov_count}', so kiwirecorder job must have restarted"
-                    printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
-                elif [[ "${new_ov_count}" -eq "${old_ov_count}" ]]; then
-                     wd_logger 1 "WARNING: Found '${KIWI_RECORDER_LOG_FILE}' has changed but new OV count '${new_ov_count}' is the same as old count '${old_ov_count}', which is unexpected"
-                    touch ${OVERLOADS_LOG_FILE}
-                else
-                    printf "\n${current_time} ${new_ov_count}" >> ${OVERLOADS_LOG_FILE}
-                    local ov_event_count=$(( "${new_ov_count}" - "${old_ov_count}" ))
-                    wd_logger 1 "Found ${new_ov_count} new - ${old_ov_count} old = ${ov_event_count} new OV events were reported by kiwirecorder.py"
-                fi
-            fi
-
-            ### If there have been OV events, then every 10 minutes printout the count and mark the most recent line in ${OVERLOADS_LOG_FILE} as PRINTED
-            local latest_ov_log_line=( $(tail -1 ${OVERLOADS_LOG_FILE}) )   
-            local latest_ov_count=${latest_ov_log_line[1]}
-            local last_ov_print_line=( $(awk '/PRINTED/{t=$1; c=$2} END {printf "%d %d", t, c}' ${OVERLOADS_LOG_FILE}) )   ### extracts the time and count from the last PRINTED line
-            local last_ov_print_time=${last_ov_print_line[0]-0}   ### defaults to 0
-            local last_ov_print_count=${last_ov_print_line[1]-0}  ### defaults to 0
-            local secs_since_last_ov_print=$(( ${current_time} - ${last_ov_print_time} ))
-            local ov_print_interval=${OV_PRINT_INTERVAL_SECS-600}        ## By default, print OV count every 10 minutes
-            local ovs_since_last_print=$((${latest_ov_count} - ${last_ov_print_count}))
-            if [[ ${secs_since_last_ov_print} -ge ${ov_print_interval} ]] && [[ "${ovs_since_last_print}" -gt 0 ]]; then
-                wd_logger 1 "$(printf "%5d overload events (OV) were reported in the last ${ov_print_interval} seconds" ${ovs_since_last_print})" 
-                printf " PRINTED" >> ${OVERLOADS_LOG_FILE}
-            fi
-            truncate_file ${OVERLOADS_LOG_FILE} ${MAX_OV_FILE_SIZE-100000}
-
-            local kiwi_recorder_log_size=$( ${GET_FILE_SIZE_CMD} ${KIWI_RECORDER_LOG_FILE} )
-            if [[ ${kiwi_recorder_log_size} -gt ${MAX_KIWI_RECORDER_LOG_FILE_SIZE-200000} ]]; then
-                ### Limit the kiwi_recorder.log file to less than 200 KB which is about 25000 2 minute reports
-                wd_logger 1 "${KIWI_RECORDER_LOG_FILE} has grown too large (${kiwi_recorder_log_size} bytes), so killing kiwi_recorder"
-                wd_kill ${kiwi_recorder_pid}
-                local rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: when restarting after log file overflow, 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
-                fi
-                wd_rm ${KIWI_RECORDER_PID_FILE}
-                local rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: when restarting after log file overflow, 'wd_rm ${KIWI_RECORDER_PID_FILE}' => ${rc}"
-                fi
-            fi
-        fi
-        wd_sleep ${KIWI_POLLING_SLEEP-30}    ### By default sleep 30 seconds between each check of the Kiwi status
-    done
-}
-
 ###  Call this function from the watchdog daemon 
 ###  If verbosity > 0 it will print out any new OV report lines in the recording.log files
 ###  Since those lines are printed only once every 10 minutes, this will print out OVs only once every 10 minutes`
@@ -689,6 +300,7 @@ declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 
 function ka9q_recording_daemon()
 { 
+    local rc
     local receiver_ip=$1                 ### The multicast IP address from wsprdaemon.conf
     if [[ "${1}" == "localhost:rx888-wsprdaemon" ]]; then
         receiver_ip="wspr-pcm.local"     ### Supports compatibility with legacy 3.0.1 config files
@@ -703,35 +315,32 @@ function ka9q_recording_daemon()
 
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
-    while true; do
-        wd_logger 1 "Start reecording pcm wav files from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
+    wd_logger 1 "Start reecording pcm wav files from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
+    local running_jobs_pid_list=()
+    while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
+          && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
 
-        local running_jobs_pid_list=()
-        while running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
-              && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
-            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
-            kill ${running_jobs_pid_list[@]}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
-            fi
-            sleep 10
-        done
+         wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
+         kill ${running_jobs_pid_list[@]}
+         rc=$?
+         if [[ ${rc} -eq 0 ]]; then
+             wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
+         fi
+         sleep 10
+     done
 
-        local verbosity_args_list=( -v -v -v -v )
-        local ka9q_verbosity_args="${verbosity_args_list[@]:0:${verbosity}}"
-        wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
+     local verbosity_args_list=( -v -v -v -v )
+     local ka9q_verbosity_args="${verbosity_args_list[@]:0:${verbosity}}"
+     wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip}' job"
 
-        local rc
-        ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip} 
-        rc=$?
-        if [[ ${rc} -eq 0 ]]; then
-            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
-        else
-            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' => ${rc}"
-        fi
-        sleep 5
-    done
+     ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip} 
+     rc=$?
+     if [[ ${rc} -eq 0 ]]; then
+         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
+     else
+         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' => ${rc}"
+     fi
+     return 1
 }
  
 declare WAV_RECORDING_DAEMON_PID_FILE="wav_recording_daemon.pid"
@@ -757,11 +366,29 @@ function spawn_wav_recording_daemon() {
 
     mkdir -p ${recording_dir}
     cd ${recording_dir}
+
+    local wav_recording_mutex_name="wav_recorder"
+    wd_logger 1 "Locking muxtex ${wav_recording_mutex_name} in ${recording_dir}"
+    wd_mutex_lock ${wav_recording_mutex_name} ${recording_dir}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to lock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+        return 1
+    fi
+    wd_logger 1 "Locked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+
     if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE}  ]] ; then
         local recording_pid=$(< ${WAV_RECORDING_DAEMON_PID_FILE} )
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
-            wd_logger 2 "A recording job with pid ${recording_pid} is already running"
+            wd_logger 1 "A recording job with pid ${recording_pid} is already running"
+            wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+                return 1
+            fi
+            wd_logger 1 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
             cd - > /dev/null
             return 0
         else
@@ -770,46 +397,29 @@ function spawn_wav_recording_daemon() {
         fi
     fi
 
-    ### There was no PID file or the pid in that file was dead.  But check with Linux to be sure there is no zombie recording_daemon running
-    ### No recording daemon is running
+    ### No wav_recording daemon is running
+    wd_logger 1 "Starting ${receiver_name}"
     if [[ ${receiver_name} =~ ^KA9Q ]]; then
-        wd_logger 1 "Starting ${receiver_name}"
-        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password}' => ${rc}"
-            cd - > /dev/null
-            return 1
-        fi
+        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} &
     else
-        local ps_output=$(ps au | grep "kiwirecorder.*freq=${receiver_rx_freq_khz::3}" | grep -v grep)         ### The first three digits of the freq in kHz are unqiue to each rx band
-        local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
-        if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
-            wd_logger 1 "Found no valid pid in the pid file and no zombie kiwirecorder recording on ${receiver_rx_freq_khz} kHz, so go ahead and spawn a new job"
-        else
-            wd_kill ${kiwirecorder_pids[@]}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz, but 'wd_kill ${kiwirecorder_pids[*]}' => ${rc} when trying to kill those jobs"
-            else
-                wd_logger 1 "ERROR: Found zombie kiwirecorder jobs recording on ${receiver_rx_freq_khz} Khz:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}' on them.  Now go on to spawn a new job"
-            fi
-        fi
-        local kiwi_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
-        local kiwi_tune_freq=$( bc <<< " ${receiver_rx_freq_khz} - ${kiwi_offset}" )
-        wd_logger 1 "Spawning wav recording daemon for Kiwi '${receiver_name}' with offset '${kiwi_offset}' to ${kiwi_tune_freq}" 
-        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password} &
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'kiwirecorder_manager_daemon ${receiver_ip} ${kiwi_tune_freq} ${my_receiver_password}' => ${ret_code}"
-            cd - > /dev/null
-            return ${ret_code}
-        fi
+        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_name} ${receiver_ip}  ${receiver_rx_freq_khz} ${my_receiver_password} &
     fi
-    echo $! > ${WAV_RECORDING_DAEMON_PID_FILE}
+    local rc1=$?
+    if [[ ${rc1} -eq 0 ]]; then
+        echo $! > ${WAV_RECORDING_DAEMON_PID_FILE}
+        wd_logger 1 "Spawned wav_recorder for receiver '${receiver_name}' which has PID = $!"
+    else
+        wd_logger 1 "ERROR: Failed to spwan wav_recorder for '${receiver_name}' => ${rc1}"
+    fi
+
+    wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+    fi
+
     cd - > /dev/null
-    wd_logger 1 "Spawned new wav recording job '${receiver_name},${receiver_rx_band}' with PID '$!'"
-    return 0
+    return ${rc1}
 }
 
 ##############################################################
