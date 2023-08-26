@@ -197,6 +197,7 @@ alias tfr='tf wav_recording_daemon.log'
 alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
 
 alias g='git'
+alias gc='git commit'
 alias gd='git diff'
 alias gs='git status'
 
