@@ -1230,6 +1230,18 @@ function decoding_daemon() {
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
             wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
+            ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
+            local rc
+            local decoding_root_dir=$(realpath ../..)
+            local max_running_decodes=$(nproc)
+            local max_job_wait_secs=110
+            wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 1 "Got semaphore and so can start decoding"
+            else
+                wd_logger 1 "ERROR: 'wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}' => ${rc}, but start decoding anyway"
+            fi
 
            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" || " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
@@ -1559,6 +1571,14 @@ function decoding_daemon() {
                     fi
                 fi
                 processed_wav_files="yes"
+            fi
+
+            wd_semaphore_put "wd_decoding" ${decoding_root_dir} 
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 1 "Put semaphore now that decoding is done"
+            else
+                wd_logger 1 "ERROR: 'wd_semaphore_out "wd_decoding" ${decoding_root_dir}' => ${rc}, but ignoring since decoding is done"
             fi
 
             ### Check the value of ARCHIVE_WAV_FILES in the conf file each time we are finished decoding
