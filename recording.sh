@@ -368,7 +368,7 @@ function spawn_wav_recording_daemon() {
     cd ${recording_dir}
 
     local wav_recording_mutex_name="wav_recorder"
-    wd_logger 1 "Locking mutex ${wav_recording_mutex_name} in ${recording_dir}"
+    wd_logger 2 "Locking mutex ${wav_recording_mutex_name} in ${recording_dir}"
     wd_mutex_lock ${wav_recording_mutex_name} ${recording_dir}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
