@@ -468,6 +468,14 @@ alias wd-syslog='sudo less /var/log/syslog'
 alias wdsl='wd-syslog'
 alias wd-wd-rec='watch "ps aux | grep wd-rec | grep -v grep | sort -k 14,14n -k 15r"'
 alias wdwd='wd-wd-rec'
+function wd-wd-rec-flush()
+{
+    local wd_record_pids=( $(ps aux | grep wd-rec | grep -v grep | awk '{print $2}') )
+    if [[ ${#wd_record_pids[@]} -gt 0 ]]; then
+        echo "Flushing ${#wd_record_pids[@]} wd-record jobs"
+        kill ${wd_record_pids[@]}
+    fi
+}
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
