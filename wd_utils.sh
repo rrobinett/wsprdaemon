@@ -727,56 +727,57 @@ function get_file_variable()
 }
 
 ################################################################################################################################################################
-declare MUTEX_TIMEOUT=${MUTEX_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
-declare MUTEX_AGE_MAX=${MUTEX_AGE_MAX-30}  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
+declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
+declare MUTEX_MAX_AGE=${MUTEX_MAX_AGE-30}                  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
 
 function wd_mutex_lock() {
     local mutex_name=$1
-    local muxtex_dir=$2                                          ### Directory in which to create lock
+    local mutex_dir=$2                                          ### Directory in which to create lock
+    local mutex_timeout_count=${3-${MUTEX_DEFAULT_TIMEOUT}}     ### How many seconds to wait to get mutex,  Defaults to 5 seconds
 
-    if [[ ! -d ${muxtex_dir} ]]; then
-        wd_logger 1 "ERROR: directory '${muxtex_dir}' for muxtex doesn't exist"
+    if [[ ! -d ${mutex_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${mutex_dir}' for muxtex doesn't exist"
         return 1
     fi
 
-    local mutex_lock_dir_name="${muxtex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
     wd_logger 2 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
-    local timeout=1
+    local mkdir_try_count=1
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
-        ((++timeout))
-        if [[ ${timeout} -ge ${MUTEX_TIMEOUT} ]]; then
+        ((++mkdir_try_count))
+        if [[ ${mkdir_try_count} -ge ${mutex_timeout_count} ]]; then
             ### flush the lock dir if it is more than 30 seconds old
             local mutex_lock_dir_epoch=$( stat -c %Y ${mutex_lock_dir_name} )
             local mutex_lock_dir_age=$(( ${EPOCHSECONDS} - ${mutex_lock_dir_epoch} ))
-            if [[ ${mutex_lock_dir_age} -gt ${MUTEX_AGE_MAX} ]]; then
+            if [[ ${mutex_lock_dir_age} -gt ${MUTEX_MAX_AGE} ]]; then
                 wd_logger 1 "ERROR: lock dir ${mutex_lock_dir_name} is ${mutex_lock_dir_age} seconds old.  Flush it to free resource"
                 rm -rf ${mutex_lock_dir_name}
             fi
-            wd_logger 1 "ERROR: timeout waiting to lock ${mutex_name} after ${timeout} tries"
+            wd_logger 1 "ERROR: timeout waiting to lock ${mutex_name} after ${mkdir_try_count} tries"
             return 1
         fi
         local sleep_secs
-        sleep_secs=$(( ( ${RANDOM} % ${MUTEX_TIMEOUT} ) + 1 ))      ### randomize the sleep time or all the sessions will hang while wating for the lock to free
-        wd_logger 1 "Try  #${timeout} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
+        sleep_secs=$(( ( ${RANDOM} % ${mutex_timeout_count} ) + 1 ))      ### randomize the sleep time or all the sessions will hang while wating for the lock to free
+        wd_logger 1 "Try  #${mkdir_try_count} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
         wd_sleep ${sleep_secs}
     done
-    wd_logger 2 "Locked access to ${mutex_name} after ${timeout} tries"
+    wd_logger 2 "Locked access to ${mutex_name} after ${mkdir_try_count} tries"
     return 0
 }
 
 function wd_mutex_unlock() {
     local mutex_name=$1
-    local muxtex_dir=$2                                          ### Directory in which to create lock
+    local mutex_dir=$2                                          ### Directory in which to create lock
 
-    wd_logger 2 "Unock mutex '${mutex_name}' in directory '${muxtex_dir}'"
-    if [[ ! -d ${muxtex_dir} ]]; then
-        wd_logger 1 "ERROR: directory '${muxtex_dir}' containing the muxtex '${mutex_name}' doesn't exist"
+    wd_logger 2 "Unock mutex '${mutex_name}' in directory '${mutex_dir}'"
+    if [[ ! -d ${mutex_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${mutex_dir}' containing the muxtex '${mutex_name}' doesn't exist"
         return 1
     fi
 
-    local mutex_lock_dir_name="${muxtex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
     if [[ ! -d ${mutex_lock_dir_name} ]]; then
-        wd_logger 1 "ERROR: the expected mutex directory '${muxtex_dir}' doesn't exist"
+        wd_logger 1 "ERROR: the expected mutex directory '${mutex_dir}' doesn't exist"
         return 1
     fi
     rmdir ${mutex_lock_dir_name}
@@ -788,3 +789,106 @@ function wd_mutex_unlock() {
     wd_logger 2 "Unlocked ${mutex_lock_dir_name}"
     return 0
 }
+
+### Returns when the semaphonre count is less than max
+function wd_semaphore_get()
+{
+    local semaphore_name=$1
+    local semaphore_dir=$2
+    local semaphore_max_count=$3
+    local semaphore_timeout=$4        ### How many seconds to wait
+
+    if [[ ! -d ${semaphore_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${semaphore_dir}' for muxtex doesn't exist"
+        return 1
+    fi
+
+    local start_epoch=${EPOCHSECONDS}
+    local end_epoch=$(( ${start_epoch} + ${semaphore_timeout} ))
+
+    local semaphore_count_filename=${semaphore_dir}/active_count
+
+    while [[ ${EPOCHSECONDS} -lt ${end_epoch} ]]; do
+        local rc
+        wd_mutex_lock ${semaphore_name} ${semaphore_dir} 
+        rc=$?
+        if [[ ${rc} -ne 0 ]] ; then
+            wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
+            return 1
+        else
+            wd_logger 1 "Got ${semaphore_name} in dir ${semaphore_dir} mutex"
+            if [[ ! -f ${semaphore_count_filename} ]]; then
+                wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
+                echo "0" > ${semaphore_count_filename}
+            fi
+            local current_semaphore_count=$(< ${semaphore_count_filename})
+            local new_semaphore_count=-1
+            if [[ ${current_semaphore_count} -lt ${semaphore_max_count} ]]; then
+                new_semaphore_count=$(( current_semaphore_count + 1 ))
+                echo ${new_semaphore_count} > ${semaphore_count_filename}
+            fi
+            wd_mutex_unlock ${semaphore_name} ${semaphore_dir}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 2 "Freed ${semaphore_name} in dir ${semaphore_dir} mutex"
+            else
+                wd_logger 1 "ERROR: When freeing ${semaphore_name} in dir ${semaphore_dir} muxtex, got unexpected error from 'wd_mutex_unlock ${semaphore_name} ${semaphore_dir}' => ${rc}"
+            fi
+            if [[ ${new_semaphore_count} -gt 0 ]]; then
+                wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
+                return 0
+            else
+                wd_logger 1 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
+            fi
+        fi
+        wd_logger 1 "Sleeping 1 second"
+        sleep 1
+    done
+    wd_logger 1 "ERROR: timeout after ${semaphore_timeout} seconds while waiting to get semaphore"
+    return 1
+}
+
+### Decrements the semaphore count and returns
+function wd_semaphore_put()
+{
+    local semaphore_name=$1
+    local semaphore_dir=$2
+
+    if [[ ! -d ${semaphore_dir} ]]; then
+        wd_logger 1 "ERROR: directory '${semaphore_dir}' for muxtex doesn't exist"
+        return 1
+    fi
+
+    local semaphore_count_filename=${semaphore_dir}/active_count
+
+    local rc
+    wd_mutex_lock ${semaphore_name} ${semaphore_dir} 
+    rc=$?
+    if [[ ${rc} -ne 0 ]] ; then
+        wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
+        return 1
+    else
+        wd_logger 1 "Got ${semaphore_name} in dir ${semaphore_dir} mutex"
+        if [[ ! -f ${semaphore_count_filename} ]]; then
+            wd_logger 1 "ERROR: expected count file ${semaphore_count_filename} does not exist, so wd_semaphore_pget() never ran" 
+        else
+            local current_semaphore_count=$(< ${semaphore_count_filename})
+            if [[ ${current_semaphore_count} -lt 1 ]]; then
+                wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
+            else
+                (( --current_semaphore_count ))
+                echo ${current_semaphore_count} > ${semaphore_count_filename}
+            fi
+        fi
+        wd_mutex_unlock ${semaphore_name} ${semaphore_dir}
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "Decremented semaphore count to ${current_semaphore_count} and returning"
+        else
+            wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${semaphore_name} ${semaphore_dir}' => ${rc}, but anyway decremented semaphore count to ${current_semaphore_count} and returning"
+        fi
+        return 0
+    fi
+    ### Should neveer get here
+}
+
