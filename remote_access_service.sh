@@ -85,7 +85,7 @@ function remote_access_connection_status() {
         wd_logger 1 "The ${WD_REMOTE_ACCESS_SERVICE_NAME} is configured but returns status ${rc}"
         return 1
     fi
-    wd_logger 1 "The Remote Access Connection (RAC) service is enabled and running"
+    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel #${REMOTE_ACCESS_CHANNEL} is enabled and running"
     return 0
 }
 
