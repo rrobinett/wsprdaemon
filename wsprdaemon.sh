@@ -49,11 +49,12 @@ Goto https://physics.princeton.edu/pulsar/K1JT/wsjtx.html to learn more about WS
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
 #declare VERSION=3.0.9                ### Refine search for WSPR packet wav files
-declare VERSION=3.1.0               ### Add support for KA9Q-radio and RX888
+#declare VERSION=3.1.0               ### Add support for KA9Q-radio and RX888
+declare VERSION=3.1.1               ### Add support for KA9Q-radio and RX888
+                                     ### TODO: Add support for fixed AGC level to KA9Q receivers
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
-                                     ### TODO: Add VHF/UHF support using Soapy API
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
@@ -110,7 +111,6 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             stop_systemctl_daemon
             ;;
         s)
-            remote_access_connection_status
             jobs_cmd     s
             watchdog_cmd s
             ;;
