@@ -1,6 +1,8 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
+
 if [[ -d /dev/shm/wsprdaemon ]]; then
     WD_TMP_ROOT=/dev/shm/wsprdaemon
 else
