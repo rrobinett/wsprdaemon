@@ -268,48 +268,22 @@ function maidenhead_to_long_lat() {
         $((  $(( $(alpha_to_integer ${1:1:1}) * 10 )) + $(digit_to_integer ${1:3:1}) - 90))
 }
 
-declare ASTRAL2_2_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes_astral2-2.py
-function get_astral_sun_times() 
+declare SUNTIMES_PYTHON_PROGRAM=${WSPRDAEMON_ROOT_DIR}/suntimes.py
+function get_suntimes() 
 {
     local _return_times_var=$1
     local lat=$2
     local lon=$3
-    local zone=$4
 
-    if ! python3 -c "import astral" 2> /dev/null ; then
-        if ! sudo pip3 install astral; then
-            wd_logger 1 "ERROR: failed 'sudo pip3 install astral' needed for suntimes calculations"
-            exit 1
-        fi
-    fi
-    python3 -c "from astral import LocationInfo" 2> /dev/null 
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "python3 -c 'from astral import LocationInfo' => ${rc}.  So try to upgrade to astral2.2"
-        pip3 install --upgrade astral > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'pip3 install --upgrade astral' => ${rc}"
-            exit 1
-        fi
-        python3 -c "from astral import LocationInfo" 2> /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: even after pip3 upgrade, 'python3 -c 'from astral import LocationInfo' => ${rc}"
-            exit 1
-        fi
-        wd_logger 1 "Successfully installed and tested 'astral' library"
-    fi
-
-    python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null
+    python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon} > suntimes.txt 2> /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => ${rc}"
+        wd_logger 1 "ERROR: 'python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon}' => ${rc}"
         exit 1
     fi
-    local _astral_sun_times=$(< suntimes.txt)
-    eval ${_return_times_var}=\"\${_astral_sun_times}\"
-    wd_logger 1 "Got suntimes='${_astral_sun_times}' and assigned it to _return_times_var=${_return_times_var}"
+    local _sunrise_sunset_times=$(< suntimes.txt)
+    eval ${_return_times_var}=\"\${_sunrise_sunset_times}\"
+    wd_logger 2 "Ran 'python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon}' and got sunrise_sunset_times='${_sunrise_sunset_times}'.  Then assigned it to _return_times_var=${_return_times_var}"
     return 0
 }
 
@@ -324,24 +298,20 @@ function get_sunrise_sunset()
     fi
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
 
-    wd_logger 1 "Get sunrise/sunset for Maidenhead ${maiden} at long/lat  ${long_lat[*]}"
+    wd_logger 2 "Get sunrise/sunset for Maidenhead ${maiden} which is at long/lat  ${long_lat[*]}"
 
     local long=${long_lat[0]}
     local lat=${long_lat[1]}
-    local zone=$(timedatectl | awk '/Time/{print $3}')
-    if [[ "${zone}" == "n/a" ]]; then
-        wd_logger 1 "Couldn't determine the time zone from 'timedatectl', so do sunrise/sunet calculations assuming this server is configured for zone 'UTC'"
-        zone="UTC"
-    fi
-    local astral_times=""
-    get_astral_sun_times astral_times  ${lat} ${long} ${zone}
-    local rc=$?
+    local sunrise_sunset_times=""
+    local rc
+    get_suntimes sunrise_sunset_times  ${lat} ${long} 
+    rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => ${rc}"
+        wd_logger 1 "ERROR: 'get_suntimes sunrise_sunset_times  ${lat} ${long}' => ${rc}"
         exit 1
     fi
-    eval ${_return_sunrise_hm}=\"\${astral_times}\"
-    wd_logger 1 "'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => 0.  astral_times=${astral_times}"
+    eval ${_return_sunrise_hm}=\"\${sunrise_sunset_times}\"
+    wd_logger 2 "'get_suntimes sunrise_sunset_times  ${lat} ${long}' => 0.  sunrise_sunset_times=${sunrise_sunset_times}"
     return 0
 }
 
@@ -352,13 +322,15 @@ function update_suntimes_file()
         && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
         && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
         ## Only update once a day
-        wd_logger 2 "Skipping update"
+        wd_logger 1 "Skipping update"
         return 0
     fi
+    wd_logger 2 "Updating suntimes file ${SUNTIMES_FILE}"
     rm -f ${SUNTIMES_FILE}
     source ${WSPRDAEMON_CONFIG_FILE}
     local maidenhead_list=$( ( IFS=$'\n' ; echo "${RECEIVER_LIST[*]}") | awk '{print $4}' | sort | uniq)
     for grid in ${maidenhead_list} ; do
+        wd_logger 2 "Updating suntimes file ${SUNTIMES_FILE} for grid ${grid}"
         local suntimes=""
         get_sunrise_sunset  suntimes ${grid}
         local rc=$?
@@ -367,7 +339,7 @@ function update_suntimes_file()
             return ${rc}
         fi
         echo "${grid} ${suntimes}" >> ${SUNTIMES_FILE}
-        wd_logger 1 "Added line '${grid} ${suntimes}' to '${SUNTIMES_FILE}'"
+        wd_logger 2 "Added line '${grid} ${suntimes}' to '${SUNTIMES_FILE}'"
     done
     wd_logger 1 "Refreshed '${SUNTIMES_FILE}'"
     return 0
