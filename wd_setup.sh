@@ -34,18 +34,34 @@ wd_remote_access_service_manager
 declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
+
+if true; then
+    ### Installation of the Qt5 library appears to be no longer necessary since we no longer try to install the full WSJT-x package
+    declare LIB_QT5_CORE_ARMHF=""
+    declare LIB_QT5_CORE_AMD64=""
+    declare LIB_QT5_DEFAULT_ARMHF=""
+    declare LIB_QT5_DEFAULT_AMD64=""
+    declare LIB_QT5_DEFAULT_ARM64=""
+else
+    declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
+    declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
+    declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
+    declare LIB_QT5_DEFAULT_AMD64="qt5-default:amd64"
+    declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
+fi
+
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
-            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf libqt5core5a:armhf )         ### on Pi's i32 bit bullseye
+            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )         ### on Pi's i32 bit bullseye
         else
-            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf qt5-default:armhf )
+            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_DEFAULT_ARMHF} )
         fi
         ;;
     aarch64)
         ### This is a 64 bit bullseye Pi4 and teh OrangePi
-        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 libqt5core5a:arm64 )
+        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
         ;;
     x86_64)
         declare os_release    ### We are not in a function, so it can't be local
@@ -53,9 +69,9 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 22.04 ]]; then
             ### Ubuntu 22.04 doesn't use qt5-default
-            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 libqt5core5a:amd64 )
+            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         else
-            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 qt5-default:amd64 )
+            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi
         ;;
     *)
