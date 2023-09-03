@@ -175,6 +175,7 @@ alias hg='history | grep'
 alias j=jobs
 
 alias cdw='cd ~/wsprdaemon/'
+alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdt='cd ${WD_TMP_ROOT}/'
 alias cdu='cd ${WD_TMP_ROOT}/uploads.d/'
 
