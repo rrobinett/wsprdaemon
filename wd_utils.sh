@@ -746,13 +746,6 @@ function wd_mutex_lock() {
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
         ((++mkdir_try_count))
         if [[ ${mkdir_try_count} -ge ${mutex_timeout_count} ]]; then
-            ### flush the lock dir if it is more than 30 seconds old
-            local mutex_lock_dir_epoch=$( stat -c %Y ${mutex_lock_dir_name} )
-            local mutex_lock_dir_age=$(( ${EPOCHSECONDS} - ${mutex_lock_dir_epoch} ))
-            if [[ ${mutex_lock_dir_age} -gt ${MUTEX_MAX_AGE} ]]; then
-                wd_logger 1 "ERROR: lock dir ${mutex_lock_dir_name} is ${mutex_lock_dir_age} seconds old.  Flush it to free resource"
-                rm -rf ${mutex_lock_dir_name}
-            fi
             wd_logger 1 "ERROR: timeout waiting to lock ${mutex_name} after ${mkdir_try_count} tries"
             return 1
         fi
