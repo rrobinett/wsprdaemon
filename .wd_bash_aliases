@@ -130,6 +130,9 @@ alias wd-gp='git push'
 ### Change a WD site which was cloned with https to ssh
 alias wd-gci='git remote set-url origin git@github.com:rrobinett/wsprdaemon.git'
 
+#### Get the most recent commit
+alias wd-gl='git log | head -n 12'
+
 ### Reload this file
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
 alias wdrc='wd-rc'
@@ -346,7 +349,13 @@ alias wdd='wd -d'       ### Increment the verbosity level of all running daemons
 alias wddd='wd -D'       ### Decrement
 
 function wd-merged() {
-    ls -lrt `find ${WD_TMP_ROOT}/ -name merged.log`
+local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log) )
+    if [[ ${#merged_file_list[@]} -eq 0 ]]; then
+        echo "There are no 'merged.log' files"
+    else
+        echo "Found ${#merged_file_list[@]} 'merged.log' files:"
+        ls -lrt `find ${WD_TMP_ROOT}/ -name merged.log`
+    fi
 }
 
 
