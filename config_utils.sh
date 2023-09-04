@@ -268,48 +268,22 @@ function maidenhead_to_long_lat() {
         $((  $(( $(alpha_to_integer ${1:1:1}) * 10 )) + $(digit_to_integer ${1:3:1}) - 90))
 }
 
-declare ASTRAL2_2_SUN_TIMES_SCRIPT=${WSPRDAEMON_ROOT_DIR}/suntimes_astral2-2.py
-function get_astral_sun_times() 
+declare SUNTIMES_PYTHON_PROGRAM=${WSPRDAEMON_ROOT_DIR}/suntimes.py
+function get_suntimes() 
 {
     local _return_times_var=$1
     local lat=$2
     local lon=$3
-    local zone=$4
 
-    if ! python3 -c "import astral" 2> /dev/null ; then
-        if ! sudo pip3 install astral; then
-            wd_logger 1 "ERROR: failed 'sudo pip3 install astral' needed for suntimes calculations"
-            exit 1
-        fi
-    fi
-    python3 -c "from astral import LocationInfo" 2> /dev/null 
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "python3 -c 'from astral import LocationInfo' => ${rc}.  So try to upgrade to astral2.2"
-        pip3 install --upgrade astral > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'pip3 install --upgrade astral' => ${rc}"
-            exit 1
-        fi
-        python3 -c "from astral import LocationInfo" 2> /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: even after pip3 upgrade, 'python3 -c 'from astral import LocationInfo' => ${rc}"
-            exit 1
-        fi
-        wd_logger 1 "Successfully installed and tested 'astral' library"
-    fi
-
-    python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone} > suntimes.txt 2> /dev/null
+    python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon} > suntimes.txt 2> /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'python3 ${ASTRAL2_2_SUN_TIMES_SCRIPT} ${lat} ${lon} ${zone}' => ${rc}"
+        wd_logger 1 "ERROR: 'python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon}' => ${rc}"
         exit 1
     fi
-    local _astral_sun_times=$(< suntimes.txt)
-    eval ${_return_times_var}=\"\${_astral_sun_times}\"
-    wd_logger 1 "Got suntimes='${_astral_sun_times}' and assigned it to _return_times_var=${_return_times_var}"
+    local _sunrise_sunset_times=$(< suntimes.txt)
+    eval ${_return_times_var}=\"\${_sunrise_sunset_times}\"
+    wd_logger 2 "Ran 'python3 ${SUNTIMES_PYTHON_PROGRAM} ${lat} ${lon}' and got sunrise_sunset_times='${_sunrise_sunset_times}'.  Then assigned it to _return_times_var=${_return_times_var}"
     return 0
 }
 
@@ -324,24 +298,20 @@ function get_sunrise_sunset()
     fi
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
 
-    wd_logger 1 "Get sunrise/sunset for Maidenhead ${maiden} at long/lat  ${long_lat[*]}"
+    wd_logger 2 "Get sunrise/sunset for Maidenhead ${maiden} which is at long/lat  ${long_lat[*]}"
 
     local long=${long_lat[0]}
     local lat=${long_lat[1]}
-    local zone=$(timedatectl | awk '/Time/{print $3}')
-    if [[ "${zone}" == "n/a" ]]; then
-        wd_logger 1 "Couldn't determine the time zone from 'timedatectl', so do sunrise/sunet calculations assuming this server is configured for zone 'UTC'"
-        zone="UTC"
-    fi
-    local astral_times=""
-    get_astral_sun_times astral_times  ${lat} ${long} ${zone}
-    local rc=$?
+    local sunrise_sunset_times=""
+    local rc
+    get_suntimes sunrise_sunset_times  ${lat} ${long} 
+    rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => ${rc}"
+        wd_logger 1 "ERROR: 'get_suntimes sunrise_sunset_times  ${lat} ${long}' => ${rc}"
         exit 1
     fi
-    eval ${_return_sunrise_hm}=\"\${astral_times}\"
-    wd_logger 1 "'get_astral_sun_times astral_times  ${lat} ${long} ${zone}' => 0.  astral_times=${astral_times}"
+    eval ${_return_sunrise_hm}=\"\${sunrise_sunset_times}\"
+    wd_logger 2 "'get_suntimes sunrise_sunset_times  ${lat} ${long}' => 0.  sunrise_sunset_times=${sunrise_sunset_times}"
     return 0
 }
 
@@ -352,13 +322,15 @@ function update_suntimes_file()
         && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
         && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
         ## Only update once a day
-        wd_logger 2 "Skipping update"
+        wd_logger 1 "Skipping update"
         return 0
     fi
+    wd_logger 2 "Updating suntimes file ${SUNTIMES_FILE}"
     rm -f ${SUNTIMES_FILE}
     source ${WSPRDAEMON_CONFIG_FILE}
     local maidenhead_list=$( ( IFS=$'\n' ; echo "${RECEIVER_LIST[*]}") | awk '{print $4}' | sort | uniq)
     for grid in ${maidenhead_list} ; do
+        wd_logger 2 "Updating suntimes file ${SUNTIMES_FILE} for grid ${grid}"
         local suntimes=""
         get_sunrise_sunset  suntimes ${grid}
         local rc=$?
@@ -367,7 +339,7 @@ function update_suntimes_file()
             return ${rc}
         fi
         echo "${grid} ${suntimes}" >> ${SUNTIMES_FILE}
-        wd_logger 1 "Added line '${grid} ${suntimes}' to '${SUNTIMES_FILE}'"
+        wd_logger 2 "Added line '${grid} ${suntimes}' to '${SUNTIMES_FILE}'"
     done
     wd_logger 1 "Refreshed '${SUNTIMES_FILE}'"
     return 0
@@ -698,27 +670,150 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
+declare KA9Q_REQUIRED_COMMIT_SHA="abb1cc83310f716acb3028c960aaf56bec8aed6e"
+declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
+
+function get_current_commit_sha() {
+    local __return_commit_sha_variable=$1
+    local git_directory=$2
+    local rc
+
+    cd ${git_directory} >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't 'cd  ${git_directory}'"
+        return 1
+    fi
+    git log >& ${GIT_LOG_OUTPUT_FILE}
+    rc=$?
+    cd - > /dev/null
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: directory ${git_directory} is not a git-created directory:\n$(< ${GIT_LOG_OUTPUT_FILE})"
+        return 2
+    fi
+    local commit_sha=$( awk '/commit/{print $2; exit}' ${GIT_LOG_OUTPUT_FILE} )
+    if [[ -z "${commit_sha}" ]]; then
+        wd_logger 1 "ERROR: 'git log' output does not contain a line with 'commit' in it"
+        return 3
+    fi
+    wd_logger 2 "'git log' is returning the current commit SHA = ${commit_sha}"
+    eval ${__return_commit_sha_variable}=\${commit_sha}
+    return 0
+}
+
+### Ensure that the set of source code in a git-managed directory is what you want
+### Returns:  0 => already that SHA, so no change     1 => successfully checked out that commit SHA, else 2,3,4 ERROR in trying to execute
+function pull_commit(){
+    local git_directory=$1
+    local desired_git_sha=$2
+    local rc
+
+    cd ${git_directory} >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't 'cd  ${git_directory}'"
+        return 2
+    fi
+    local current_commit_sha
+    get_current_commit_sha current_commit_sha $PWD
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${PWD}' => ${rc}"
+        return 3
+    fi
+    if [[ "${current_commit_sha}" == "${desired_git_sha}" ]]; then
+        cd - > /dev/null
+        wd_logger 2 "Current git commit SHA in ${PWD} is the expected ${current_commit_sha}"
+        return 0
+    fi
+    wd_logger 2 "Current git commit SHA in ${PWD} is ${current_commit_sha}, not the desired SHA ${desired_git_sha}, so update the code from git"
+    git checkout main >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: 'git checkout origin/main' => ${rc}"
+        return 4
+    fi
+    git pull >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: 'git pull' => ${rc}"
+        return 5
+    fi
+    git checkout ${desired_git_sha} >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc}"
+        return 6
+    fi
+    cd - > /dev/null
+    wd_logger 1 "Successfully updated the ${git_directory} directory to SHA ${desired_git_sha}"
+    return 1
+}
+
+### Default to getting Phl's 9/2/23 18:00 PDT sources
+declare KA9Q_DESIRED_GIT_COMMIT_SHA=${KA9Q_DESIRED_GIT_COMMIT_SHA-abb1cc83310f716acb3028c960aaf56bec8aed6e}
+declare KA9Q_RADIO_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 
 function ka9q_setup()
 {
     local rc
 
+    pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_DESIRED_GIT_COMMIT_SHA}
+    rc=$?
+    if [[ ${rc} -gt 1 ]]; then
+        wd_logger 1 "ERROR: 'pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_DESIRED_GIT_COMMIT_SHA}' => ${rc}"
+        return 1
+    fi
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "KA9Q software is current, so no need to compile and install a new version"
+    else  ##  ${rc} -eq 1
+        wd_logger 1 "KA9Q software was updated, so compile and install the new code. This may take a minute or more..."
+        make  > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed 'make' of new KA9Q software => ${rc}"
+            return 1
+        fi
+        sudo make install > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
+            return 1
+        fi
+        wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
+        sudo systemctl stop  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "'sudo systemctl stop  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so no radiod was running.  Proceed to start it"
+        fi
+    fi
+    wd_logger  2 "Finished validating the KA9Q installation"
+
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
+        ### We installed ka9q on this machine becasue WD will run the 'wd-record' command from KA9Q
+        wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So the radiod service doesn't need to run on this machine"
+        sudo systemctl stop "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null    ### In case it was running in a previous WD.conf configuration
+        return 0
+    fi
+ 
     sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
         wd_logger 2 "A KA9Q receiver service is active, so nothing more to do to setup KA9Q-radio"
         return 0
     fi
-    if [[ "${KA9Q_RUNS_AS_PEER-no}" == "yes" ]]; then
-        wd_logger 1 "ERROR: in wsprdaemon.conf KA9Q_RUNS_AS_PEER=yes is defined in wsprdaemon.conf, but no ${KA9Q_RADIOD_SERVICE_BASE}' is running"
-        exit 1
-    fi
-    wd_logger 1 "KA9Q receiver service is not active"
+    wd_logger 1 "Expecting radiod to be running, but it is not active, so start it"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit
     fi
-    wd_logger 1 "Found a RX888 MkII attached to a USB port"
+    wd_logger 2 "Found a RX888 MkII attached to a USB port"
  
     if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
         ### Download, compile and install the KA9Q_radio  service

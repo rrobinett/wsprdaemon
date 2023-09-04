@@ -586,11 +586,6 @@ function check_for_needed_utilities()
             exit 1
         fi
     done
-    wd_logger 2 "Checking for Python's astral library"
-    if ! install_python_package astral; then
-        wd_logger 1 "ERROR: failed to install Python package 'astral'"
-        exit 1
-    fi
     wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
     wd_logger 2 "Setting up noise graphing"
