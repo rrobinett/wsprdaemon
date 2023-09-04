@@ -322,7 +322,7 @@ function update_suntimes_file()
         && [[ $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ) -gt $( $GET_FILE_MOD_TIME_CMD ${WSPRDAEMON_CONFIG_FILE} ) ]] \
         && [[ $(( $(date +"%s") - $( $GET_FILE_MOD_TIME_CMD ${SUNTIMES_FILE} ))) -lt ${MAX_SUNTIMES_FILE_AGE_SECS} ]] ; then
         ## Only update once a day
-        wd_logger 1 "Skipping update"
+        wd_logger 2 "Skipping update"
         return 0
     fi
     wd_logger 2 "Updating suntimes file ${SUNTIMES_FILE}"
