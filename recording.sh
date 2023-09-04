@@ -297,6 +297,7 @@ function print_new_ov_lines() {
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
+declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 
 function ka9q_recording_daemon()
 { 
@@ -342,7 +343,41 @@ function ka9q_recording_daemon()
      fi
      return 1
 }
- 
+
+declare KA9Q_RADIO_TUNE_CMD_LOG_FILE="./ka9q_status.log"
+
+function get_ka9q_rx_channel_report(){
+    local __return_ka9q_agc_val=$1
+    local __return_wav_files_ka9q_noise_val=$2
+    local receiver_name=$3
+    local receiver_rx_freq_hz=$4
+    local receiver_ip="hf.local"
+    local rc
+
+    receiver_ip=$(get_receiver_ip_from_name ${receiver_name})
+    if [[ -z "${receiver_ip}" ]]; then
+        qwd_logger 1 "ERROR: can't find the IP for receiver '${receiver_name}'"
+        exit 1
+    fi
+    wd_logger 1 "Get status of receiver '${receiver_name}' channel which is demodulating ip ${receiver_ip} freq ${receiver_rx_freq_hz}"
+
+    set +x
+    receiver_ip="hf.local"
+    ${KA9Q_RADIO_TUNE_CMD}  -s ${receiver_rx_freq_hz} ${receiver_ip} >& ${KA9Q_RADIO_TUNE_CMD_LOG_FILE}
+    rc=$?
+    set +x
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 1 "Got status:\n$(< ${KA9Q_RADIO_TUNE_CMD_LOG_FILE})"
+     else
+        wd_logger 1 "ERROR:  rc=${rc}:\n$(< ${KA9Q_RADIO_TUNE_CMD_LOG_FILE})"
+     fi
+     local ka9q_agc_val=99
+     local ka9q_noise_val=-999
+     eval ${__return_ka9q_agc_val}=\${ka9q_agc_val}
+     eval ${__return_wav_files_ka9q_noise_val}=\${ka9q_noise_val}
+     return 0
+}
+
 declare WAV_RECORDING_DAEMON_PID_FILE="wav_recording_daemon.pid"
 declare WAV_RECORDING_DAEMON_LOG_FILE="wav_recording_daemon.log"
 

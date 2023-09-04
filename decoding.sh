@@ -1068,8 +1068,10 @@ function decoding_daemon() {
         wd_logger 1 "ERROR: can't find receiver grid 'from ${receiver_name}"
         return 1
     fi
+    local receiver_freq_khz=$( get_wspr_band_freq ${receiver_band} )
+    local receiver_freq_hz=$( echo "scale = 0; ${receiver_freq_khz}*1000.0/1" | bc )
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}"
+    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}, receiver_freq_hz=${receiver_freq_hz}"
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
     local receiver_modes
@@ -1165,6 +1167,17 @@ function decoding_daemon() {
         fi
         mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
+
+        local wav_files_ka9q_agc_val=-1 
+        local wav_files_ka9q_noise_val=-1 
+        if [[ "${receiver_name}" =~ KA9Q ]]; then
+            wd_logger 1 "Check current signal level reported by radiod and adjust and report new AGC setting"
+            get_ka9q_rx_channel_report ka9q_agc_val wav_files_ka9q_noise_val ${receiver_name} ${receiver_freq_hz}
+            ret_code=$?
+            if [[ ${ret_code} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'get_ka9q_rx_channel_report ka9q_agc_val wav_files_ka9q_noise_val${receiver_name} ${receiver_band}' => ${receiver_name}"
+            fi
+        fi
 
         local returned_files
         for returned_files in ${mode_wav_file_list[@]}; do
