@@ -806,8 +806,7 @@ function wd_semaphore_get()
         wd_mutex_lock ${semaphore_name} ${semaphore_dir} 
         rc=$?
         if [[ ${rc} -ne 0 ]] ; then
-            wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
-            return 1
+            wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
         else
             wd_logger 1 "Got ${semaphore_name} in dir ${semaphore_dir} mutex"
             if [[ ! -f ${semaphore_count_filename} ]]; then
