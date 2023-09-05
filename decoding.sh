@@ -1246,13 +1246,27 @@ function decoding_daemon() {
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
             local rc
             local decoding_root_dir=$(realpath ../..)
-            local max_running_decodes=$(nproc)
-            local max_job_wait_secs=110
+            local max_running_decodes
+            if [[ ${DECODING_FREE_CPUS-0} -eq 0 ]]; then
+                max_running_decodes=$(nproc)
+            else
+                max_running_decodes=$(( $(nproc) - ${DECODING_FREE_CPUS} ))
+                if [[ ${max_running_decodes} -lt 1 ]] ; then
+                    wd_logger 1 "ERROR: configured value DECODING_FREE_CPUS=${DECODING_FREE_CPUS} would leave none of the $(nproc) cpus free to run WSPR decodes.  So setting max_running_decodes to 1 cpu"
+                    max_running_decodes=1
+                else
+                    wd_logger 1 "The configured value DECODING_FREE_CPUS=${DECODING_FREE_CPUS} on this CPU with $(nproc) cores has resulted in max_running_decodes=${max_running_decodes}"
+                fi
+            fi
+            local max_job_wait_secs=${DECODE_CPU_MAX_WAIT_SECS-60}   ### Proceed with decoding after 60 seconds whether or not there is a free CPU
+            local got_cpu_semaphore
             wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}
             rc=$?
             if [[ ${rc} -eq 0 ]]; then
+                got_cpu_semaphore="yes"
                 wd_logger 1 "Got semaphore and so can start decoding"
             else
+                got_cpu_semaphore="no"
                 wd_logger 1 "ERROR: 'wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}' => ${rc}, but start decoding anyway"
             fi
 
@@ -1586,12 +1600,14 @@ function decoding_daemon() {
                 processed_wav_files="yes"
             fi
 
-            wd_semaphore_put "wd_decoding" ${decoding_root_dir} 
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 1 "Put semaphore now that decoding is done"
-            else
-                wd_logger 1 "ERROR: 'wd_semaphore_out "wd_decoding" ${decoding_root_dir}' => ${rc}, but ignoring since decoding is done"
+            if [[ ${got_cpu_semaphore} == "yes" ]]; then
+                wd_semaphore_put "wd_decoding" ${decoding_root_dir} 
+                rc=$?
+                if [[ ${rc} -eq 0 ]]; then
+                    wd_logger 1 "Put semaphore now that decoding is done"
+                else
+                    wd_logger 1 "ERROR: 'wd_semaphore_out "wd_decoding" ${decoding_root_dir}' => ${rc}, but ignoring since decoding is done"
+                fi
             fi
 
             ### Check the value of ARCHIVE_WAV_FILES in the conf file each time we are finished decoding
