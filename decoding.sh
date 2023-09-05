@@ -1170,7 +1170,7 @@ function decoding_daemon() {
 
         local wav_files_ka9q_agc_val=-1 
         local wav_files_ka9q_noise_val=-1 
-        if [[ "${receiver_name}" =~ KA9Q ]]; then
+        if [[ "${receiver_name}" =~ KA9Q && ${GET_KA9Q_STATUS-no} == "yes" ]]; then
             wd_logger 1 "Check current signal level reported by radiod and adjust and report new AGC setting"
             get_ka9q_rx_channel_report ka9q_agc_val wav_files_ka9q_noise_val ${receiver_name} ${receiver_freq_hz}
             ret_code=$?
