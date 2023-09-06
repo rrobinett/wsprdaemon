@@ -801,6 +801,8 @@ function wd_semaphore_get()
 
     local semaphore_count_filename=${semaphore_dir}/active_count
 
+    wd_logger 1 "Starting an attempt to get one of the ${semaphore_max_count} semaphores in ${semaphore_dir}/${semaphore_name}. Timeout after ${semaphore_timeout} seconds"
+
     while [[ ${EPOCHSECONDS} -lt ${end_epoch} ]]; do
         local rc
         wd_mutex_lock ${semaphore_name} ${semaphore_dir} 
@@ -808,7 +810,7 @@ function wd_semaphore_get()
         if [[ ${rc} -ne 0 ]] ; then
             wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
         else
-            wd_logger 1 "Got ${semaphore_name} in dir ${semaphore_dir} mutex"
+            wd_logger 2 "Got ${semaphore_name} in dir ${semaphore_dir} mutex"
             if [[ ! -f ${semaphore_count_filename} ]]; then
                 wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
                 echo "0" > ${semaphore_count_filename}
@@ -830,10 +832,10 @@ function wd_semaphore_get()
                 wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
                 return 0
             else
-                wd_logger 1 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
+                wd_logger 2 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
             fi
         fi
-        wd_logger 1 "Sleeping 1 second"
+        wd_logger 2 "Sleeping 1 second"
         sleep 1
     done
     wd_logger 1 "ERROR: timeout after ${semaphore_timeout} seconds while waiting to get semaphore"
