@@ -87,8 +87,18 @@ function wd_kill_all()
             wd_logger 1 "ERROR: for zombie pids 'kill ${zombie_pid_list[*]}' => ${rc}"
         fi
     fi
+    kill_all_wd_record_jobs
+
     echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
     return 0
+}
+
+function kill_all_wd_record_jobs(){
+    local wd_record_pids=($(ps aux | grep wd-rec | grep -v grep | awk '{print $2}'));
+    if [[ ${#wd_record_pids[@]} -gt 0 ]]; then
+        echo "Flushing ${#wd_record_pids[@]} wd-record jobs";
+        kill ${wd_record_pids[@]};
+    fi
 }
 
 function check_for_zombies() {
