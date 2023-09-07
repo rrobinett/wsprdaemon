@@ -459,24 +459,41 @@ function kiwirecorder_manager_daemon()
     while true ; do
         local kiwi_recorder_pid=""
         if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
-            ### Check that the pid specified in the pid file is active
-            kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})
-            ps ${kiwi_recorder_pid} > ps.txt
-            local ret_code=$?
-            if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 1 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
-            else
-                wd_logger 1 "ERROR: found pid in ${KIWI_RECORDER_PID_FILE}, but  'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
-                kiwi_recorder_pid=""
-                wd_rm ${KIWI_RECORDER_PID_FILE}
+            ### Check that the pid specified in the pid file is active and kill any zombies
+            local file_kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})                      ### receiver_ip IP:PORT => IP.*PORT
+            local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}" | grep -v grep )    ### receiver_ip IP:PORT => IP.*PORT
+            if [[ -z "${ps_output}" ]]; then
+                 wd_logger 1 "ERROR: found pid ${file_kiwi_recorder_pid} in ${KIWI_RECORDER_PID_FILE}, but 'ps aux | grep '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}' returned no active PIDs"
+                 wd_rm ${KIWI_RECORDER_PID_FILE}
+             else
+                 wd_logger 2 "Found some running PIDs"
+                 pid_list=( $(echo "${ps_output}" | awk '{print $2}') )
+                 if [[ ${#pid_list[@]} -gt 1 ]]; then
+                     wd_logger 1 "ERROR: found one or more zombie '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}' commands running, so flush them"
+                 fi
+                 local ps_kiwi_recorder_pid 
+                 for ps_kiwi_recorder_pid in ${pid_list[@]} ;  do
+                     if [[ ${ps_kiwi_recorder_pid} -eq ${file_kiwi_recorder_pid} ]]; then
+                         wd_logger 2 "ps_kiwi_recorder_pid=${ps_kiwi_recorder_pid} is the expected pid which is saved in ${KIWI_RECORDER_PID_FILE}"
+                         kiwi_recorder_pid="${file_kiwi_recorder_pid}"
+                     else
+                         wd_logger 1 "ps_kiwi_recorder_pid=${ps_kiwi_recorder_pid} is not PID ${file_kiwi_recorder_pid} found in ${KIWI_RECORDER_PID_FILE}), so kill it"
+                         wd_kill ${ps_kiwi_recorder_pid}
+                     fi
+                 done
+                 wd_logger 2 "Finished checking 'ps aux' pid output list"
             fi
         fi
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             ### There was no pid file or the pid in that file is dead
+            if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
+                wd_logger 1 "Flushing ${KIWI_RECORDER_PID_FILE} since there is no active PID"
+                wd_rm ${KIWI_RECORDER_PID_FILE}
+            fi
             ### Check for a zombie kwiirecorder and kill if one or more zombies are  found
             local ps_output=""
-            local pid_list=()
-            while    ps_output==$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}" | grep -v grep ) \
+            local pid_list=()                                                                    ### receiver_ip IP:PORT => IP.*PORT
+            while    ps_output==$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}" | grep -v grep ) \
                   && [[ -n "${ps_output}" ]]; do
                 pid_list=( $(echo "${ps_output}" | awk '{print $2}') )
                 if [[ ${#pid_list[@]} -gt 0 ]]; then
