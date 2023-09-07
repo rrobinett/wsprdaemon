@@ -1248,7 +1248,7 @@ function decoding_daemon() {
             local decoding_root_dir=$(realpath ../..)
             local max_running_decodes
             if [[ ${DECODING_FREE_CPUS-0} -eq 0 ]]; then
-                max_running_decodes=$(nproc)
+                max_running_decodes=99
             else
                 max_running_decodes=$(( $(nproc) - ${DECODING_FREE_CPUS} ))
                 if [[ ${max_running_decodes} -lt 1 ]] ; then
