@@ -464,7 +464,7 @@ function kiwirecorder_manager_daemon()
             ps ${kiwi_recorder_pid} > ps.txt
             local ret_code=$?
             if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 2 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
+                wd_logger 1 "Found there is an active kiwirercorder with pid ${kiwi_recorder_pid}"
             else
                 wd_logger 1 "ERROR: found pid in ${KIWI_RECORDER_PID_FILE}, but  'ps ${kiwi_recorder_pid}' reports error:\n$(< ps.txt)"
                 kiwi_recorder_pid=""
@@ -474,16 +474,27 @@ function kiwirecorder_manager_daemon()
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             ### There was no pid file or the pid in that file is dead
             ### Check for a zombie kwiirecorder and kill if one or more zombies are  found
-            local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:*}" | grep -v grep )
-            if [[ -n "${ps_output}" ]]; then
-                local pid_list=( $(awk '{print $2}' <<< "${ps_output}") )
-                wd_logger 1 "ERROR: killing ${#pid_list[@]} zombie kiwirecorders:\n${ps_output}"
-                wd_kill ${pid_list[@]}
-                local rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                     wd_logger 1 "ERROR: 'wd_kill ${pid_list[*]}' => ${rc}"
+            local ps_output=""
+            local pid_list=()
+            while    ps_output==$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}" | grep -v grep ) \
+                  && [[ -n "${ps_output}" ]]; do
+                pid_list=( $(echo "${ps_output}" | awk '{print $2}') )
+                if [[ ${#pid_list[@]} -gt 0 ]]; then
+                    wd_logger 1 "ERROR: killing ${#pid_list[@]} zombie kiwirecorders:\n${ps_output}"
+                    local rc
+                    wd_kill ${pid_list[@]}
+                    local rc=$?
+                    if [[ ${rc} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: 'wd_kill ${pid_list[*]}' => ${rc}"
+                    fi
+                    ### Sleep for random 1-10 seconds to give Linux the chance to really kill those zombies
+                    local sleep_secs=$(( ( ${RANDOM} % ${KIWI_KILL_TIMEOUT-9} ) + 1 ))
+                    wd_logger 1 "Sleeping ${sleep_secs} to give Linux time to really kill those zombies"
+                    wd_sleep ${sleep_secs}
+                    wd_logger 1 "Awake, so check again for zombies"
                 fi
-            fi
+            done
+            wd_logger 1 "Finished killing zombies"
         fi
 
         if [[ -z "${kiwi_recorder_pid}" ]]; then
