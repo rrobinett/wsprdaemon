@@ -216,7 +216,7 @@ function get_kiwi_status()
     local __return_status_var=$1        ### Return all the Kiwi's status lines in one string
     local kiwi_ip_port=$2
     local rc
-    wd_logger 1 "Get status lines from Kiwi at IP:PORT '${kiwi_ip_port}'"
+    wd_logger 2 "Get status lines from Kiwi at IP:PORT '${kiwi_ip_port}'"
 
     ### Assume this function is called by the decodign daemon which is running in .../KIWI.../BAND, Sso the status for this Kwiw will be cached in ../status.d/kiwi_status.cache
     local kiwi_status_mutex_name="kiwi_status"
@@ -227,7 +227,7 @@ function get_kiwi_status()
         mkdir -p ${kiwi_status_dir}     ### There may be a race with ohter decoding jobs, but at least oneof them will succeed, so no need to test for an error
     fi
 
-    wd_logger 1 "Locking access to status directory '${kiwi_status_dir}' of Kiwi '${kiwi_ip_port}'"
+    wd_logger 2 "Locking access to status directory '${kiwi_status_dir}' of Kiwi '${kiwi_ip_port}'"
 
     wd_mutex_lock ${kiwi_status_mutex_name}  ${kiwi_status_dir} 
     rc=$?
@@ -235,7 +235,7 @@ function get_kiwi_status()
         wd_logger 1 "ERROR: failed to lock access to ${kiwi_status_dir}"
         return 1
     fi
-    wd_logger 1 "Locked access to ${kiwi_status_dir}"
+    wd_logger 2 "Locked access to ${kiwi_status_dir}"
 
     local kiwi_status_cache_file="${kiwi_status_dir}/${kiwi_status_mutex_name}.cache"         ### The file which contains the cached Kiwi status information
     local kiwi_status_cache_file_age
@@ -247,11 +247,11 @@ function get_kiwi_status()
         local kiwi_status_cache_file_epoch=$( stat -c %Y ${kiwi_status_cache_file} )
         local current_epoch=$(printf "%(%s)T" -1 )   ### faster than 'date -s'
         kiwi_status_cache_file_age=$(( ${current_epoch} - ${kiwi_status_cache_file_epoch} ))
-        wd_logger 1 "Cache file exists and is ${kiwi_status_cache_file_age} seconds old"
+        wd_logger 2 "Cache file exists and is ${kiwi_status_cache_file_age} seconds old"
     fi
 
     if [[ ${kiwi_status_cache_file_age} -lt ${KIWI_STATUS_CACHE_FILE_MAX_AGE-10} ]]; then
-        wd_logger 1 "Cache file is only ${kiwi_status_cache_file_age} seconds old, so no need to refresh it"
+        wd_logger 2 "Cache file is only ${kiwi_status_cache_file_age} seconds old, so no need to refresh it"
     else
         wd_logger 1 "Cache file ${kiwi_status_cache_file} is ${kiwi_status_cache_file_age} seconds old, so archive the current status and update it from teh Kiwi"
         if [[ -f ${kiwi_status_cache_file} ]]; then
@@ -278,10 +278,10 @@ function get_kiwi_status()
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: failed to unlock mutex '${kiwi_status_mutex_name}' in ${kiwi_status_dir}"
     else
-        wd_logger 1 "Unlocked mutex '${kiwi_status_mutex_name}' in ${kiwi_status_dir}"
+        wd_logger 2 "Unlocked mutex '${kiwi_status_mutex_name}' in ${kiwi_status_dir}"
     fi
 
-    wd_logger 1 "Returning the current cached status in '${__return_status_var}'" #:\n${cached_status_lines}"
+    wd_logger 2 "Returning the current cached status in '${__return_status_var}'" #:\n${cached_status_lines}"
     eval ${__return_status_var}=\${cached_status_lines}
     return 0
 }
@@ -463,18 +463,18 @@ function kiwirecorder_manager_daemon()
             local file_kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})                      ### receiver_ip IP:PORT => IP.*PORT
             local ps_output=$( ps aux | grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}" | grep -v grep )    ### receiver_ip IP:PORT => IP.*PORT
             if [[ -z "${ps_output}" ]]; then
-                 wd_logger 1 "ERROR: found pid ${file_kiwi_recorder_pid} in ${KIWI_RECORDER_PID_FILE}, but 'ps aux | grep '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}' returned no active PIDs"
+                 wd_logger 1 "ERROR: found pid ${file_kiwi_recorder_pid} in ${KIWI_RECORDER_PID_FILE}, but 'ps aux | grep '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}' returned no active PIDs"
                  wd_rm ${KIWI_RECORDER_PID_FILE}
              else
                  wd_logger 2 "Found some running PIDs"
                  pid_list=( $(echo "${ps_output}" | awk '{print $2}') )
                  if [[ ${#pid_list[@]} -gt 1 ]]; then
-                     wd_logger 1 "ERROR: found one or more zombie '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip}' commands running, so flush them"
+                     wd_logger 1 "ERROR: found one or more zombie '${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}' commands running, so flush them"
                  fi
                  local ps_kiwi_recorder_pid 
                  for ps_kiwi_recorder_pid in ${pid_list[@]} ;  do
                      if [[ ${ps_kiwi_recorder_pid} -eq ${file_kiwi_recorder_pid} ]]; then
-                         wd_logger 2 "ps_kiwi_recorder_pid=${ps_kiwi_recorder_pid} is the expected pid which is saved in ${KIWI_RECORDER_PID_FILE}"
+                         wd_logger 2 "Found the expected file_kiwi_recorder_pid=${file_kiwi_recorder_pid} saved in ${KIWI_RECORDER_PID_FILE} is running"
                          kiwi_recorder_pid="${file_kiwi_recorder_pid}"
                      else
                          wd_logger 1 "ps_kiwi_recorder_pid=${ps_kiwi_recorder_pid} is not PID ${file_kiwi_recorder_pid} found in ${KIWI_RECORDER_PID_FILE}), so kill it"
@@ -482,6 +482,11 @@ function kiwirecorder_manager_daemon()
                      fi
                  done
                  wd_logger 2 "Finished checking 'ps aux' pid output list"
+            fi
+            if  [[ -n "${kiwi_recorder_pid}" ]]; then
+                wd_logger 1 "Found that the expected running PID file_kiwi_recorder_pid=${file_kiwi_recorder_pid} saved in ${KIWI_RECORDER_PID_FILE} is running"
+            else
+                wd_logger 1 "ERROR: Found that the expected running PID file_kiwi_recorder_pid=${file_kiwi_recorder_pid} saved in ${KIWI_RECORDER_PID_FILE} is not running"
             fi
         fi
         if [[ -z "${kiwi_recorder_pid}" ]]; then
@@ -561,7 +566,7 @@ function kiwirecorder_manager_daemon()
                 continue
             fi
             local after_nice_level=$(< after_nice_level.txt)
-            wd_logger 1 "renice(d) kiwirecorder from ${before_nice_level} to ${after_nice_level}"
+            wd_logger 1 "New kiwirecorder job with PID ${kiwi_recorder_pid} is running and was renice(d) from ${before_nice_level} to ${after_nice_level}"
         fi
 
         if [[ ! -f ${KIWI_RECORDER_LOG_FILE} ]]; then
