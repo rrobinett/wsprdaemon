@@ -135,6 +135,13 @@ alias wd-gci='git remote set-url origin git@github.com:rrobinett/wsprdaemon.git'
 #### Get the most recent commit
 alias wd-gl='git log | head -n 12'
 
+### Setup a WD server 'git cloned' with https, so it can checkin to github with ssh
+function wd-gc-ssh() {
+    git remote set-url origin git@github.com:rrobinett/wsprdaemon.git 
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob Robinett"
+}
+
 ### Reload this file
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
 alias wdrc='wd-rc'
