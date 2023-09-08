@@ -24,11 +24,8 @@ declare -i verbosity=${verbosity:-1}              ### default to level 1, but ca
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
-lc_numeric=$(locale | sed -n '/LC_NUMERIC/s/.*="*\([^"]*\)"*/\1/p')        ### There must be a better way, but locale sometimes embeds " in its output and this gets rid of them
-if [[ "${lc_numeric}" != "POSIX" ]] && [[ "${lc_numeric}" != "en_US" ]] && [[ "${lc_numeric}" != "en_US.UTF-8" ]] && [[ "${lc_numeric}" != "en_GB.UTF-8" ]] && [[ "${lc_numeric}" != "C.UTF-8" ]] ; then
-    echo "WARNING:  LC_NUMERIC '${lc_numeric}' on your server is not the expected value 'en_US.UTF-8'."     ### Try to ensure that the numeric frequency comparisons use the format nnnn.nnnn
-    echo "          If the spot frequencies reported by your server are not correct, you may need to change the 'locale' of your server"
-fi
+### This ensures that 'bc's floating point calulations of spot frequencies give those numbers in a known format irrespecrtive of the LOCALE environment of the host computer
+export LC_ALL="C"
 
 ### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
 trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
