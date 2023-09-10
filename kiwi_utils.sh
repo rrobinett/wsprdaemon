@@ -253,7 +253,7 @@ function get_kiwi_status()
     if [[ ${kiwi_status_cache_file_age} -lt ${KIWI_STATUS_CACHE_FILE_MAX_AGE-10} ]]; then
         wd_logger 2 "Cache file is only ${kiwi_status_cache_file_age} seconds old, so no need to refresh it"
     else
-        wd_logger 1 "Cache file ${kiwi_status_cache_file} is ${kiwi_status_cache_file_age} seconds old, so archive the current status and update it from teh Kiwi"
+        wd_logger 2 "Cache file ${kiwi_status_cache_file} is ${kiwi_status_cache_file_age} seconds old, so archive the current status and update it from the Kiwi"
         if [[ -f ${kiwi_status_cache_file} ]]; then
             mv ${kiwi_status_cache_file} ${kiwi_status_cache_file}.old
         fi
@@ -344,7 +344,7 @@ function get_kiwirecorder_status()
     local __return_status_var=$1
     local kiwi_ip_port=$2
 
-    wd_logger 1 "Get status with 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}'"
+    wd_logger 2 "Get status with 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}'"
 
     local get_kiwi_status_lines
     local rc
@@ -360,7 +360,7 @@ function get_kiwirecorder_status()
         return 1
     fi
 
-    wd_logger 1 "Got $(  echo "${get_kiwi_status_lines}" | wc -l  ) status lines from '${kiwi_ip_port}'"
+    wd_logger 2 "Got $(  echo "${get_kiwi_status_lines}" | wc -l  ) status lines from '${kiwi_ip_port}'"
 
     eval ${__return_status_var}="\${get_kiwi_status_lines}"
     return 0
@@ -524,24 +524,29 @@ function kiwirecorder_manager_daemon()
             wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-            python3 -u ${KIWI_RECORD_COMMAND} \
-                --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
-                ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
-                --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
-                wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
-                continue
-            fi
+            local successful_spawn="no"
+            while [[ ${successful_spawn} == "no" ]]; do
+                local rc
+                python3 -u ${KIWI_RECORD_COMMAND} \
+                    --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
+                    ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
+                    --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
+                rc=$?
+                if [[ ${rc} -eq 0 ]]; then
+                    successful_spawn="yes"
+                else
+                    wd_logger 1 "ERROR: rc=${rc}. Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
+                    wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                fi
+            done
             kiwi_recorder_pid=$!
-            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
             wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
+            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
 
             ### To try to ensure that wav files are not corrupted (i.e. too short, too long, or missing) because of CPU starvation:
             #### Raise the priority of the kiwirecorder.py job to (by default) -15 so that wsprd, jt9 or other programs are less likely to preempt it
             ps --no-headers -o ni ${kiwi_recorder_pid} > before_nice_level.txt
-            local rc=$?
+            rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: While checking nice level before renicing 'ps --no-headers -o ni ${kiwi_recorder_pid}' => ${rc}, so sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
                 wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
