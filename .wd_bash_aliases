@@ -207,7 +207,7 @@ alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
 alias tf='tail -F -n 40'
 alias tfd='tf decoding_daemon.log'
 alias tfr='tf wav_recording_daemon.log'
-alias tfw='(cd ~/wsprdaemon; tail -F watchdog.log)'
+alias tfw='tf ~/wsprdaemon/watchdog_daemon.log'
 
 alias g='git'
 alias gc='git commit'
