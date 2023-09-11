@@ -524,24 +524,30 @@ function kiwirecorder_manager_daemon()
             wd_logger 1 "Spawning new ${KIWI_RECORD_COMMAND}"
 
             ### python -u => flush diagnostic output at the end of each line so the log file gets it immediately
-            local successful_spawn="no"
-            while [[ ${successful_spawn} == "no" ]]; do
+            while [[ -z "${kiwi_recorder_pid}"  ]]; do
                 local rc
                 python3 -u ${KIWI_RECORD_COMMAND} \
                     --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                     ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
                     --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
                 rc=$?
-                if [[ ${rc} -eq 0 ]]; then
-                    successful_spawn="yes"
-                else
+                if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: rc=${rc}. Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
                     wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                else
+                    kiwi_recorder_pid=$!
+                    echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
+                    rc = $?
+                    if [[ ${rc} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: 'Successfully spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}, but 'echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}' => ${rc}, soo sleep and spawn again"
+                        kiwi_recorder_pid=""
+                        wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
+                        continue
+                    else
+                        wd_logger 1 "Successfully spawned kiwirecorder.py job with PID ${kiwi_recorder_pid} and recorded it to ${KIWI_RECORDER_PID_FILE}"
+                    fi
                 fi
             done
-            kiwi_recorder_pid=$!
-            wd_logger 1 "Spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}"
-            echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
 
             ### To try to ensure that wav files are not corrupted (i.e. too short, too long, or missing) because of CPU starvation:
             #### Raise the priority of the kiwirecorder.py job to (by default) -15 so that wsprd, jt9 or other programs are less likely to preempt it
