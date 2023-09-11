@@ -544,7 +544,8 @@ function kiwirecorder_manager_daemon()
                         wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                         continue
                     else
-                        wd_logger 1 "Successfully spawned kiwirecorder.py job with PID ${kiwi_recorder_pid} and recorded it to ${KIWI_RECORDER_PID_FILE}"
+                        wd_logger 1 "Successfully spawned kiwirecorder.py job with PID ${kiwi_recorder_pid} and recorded it to ${KIWI_RECORDER_PID_FILE}, sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds"
+                        wd_sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR}
                     fi
                 fi
             done
