@@ -481,6 +481,9 @@ function kiwirecorder_manager_daemon()
         wd_logger 2 "Finished checking 'ps aux' output"
 
         while [[ -z "${kiwi_recorder_pid}"  ]]; do
+            if [[ -f ${KIWI_RECORDER_PID_FILE} ]]; then
+                wd_rm  ${KIWI_RECORDER_PID_FILE} 
+            fi
             local rc
             python3 -u ${KIWI_RECORD_COMMAND} \
                     --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
