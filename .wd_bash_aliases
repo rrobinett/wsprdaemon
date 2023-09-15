@@ -183,8 +183,8 @@ alias j=jobs
 
 alias cdw='cd ~/wsprdaemon/'
 alias cdk='cd ~/wsprdaemon/ka9q-radio'
-alias cdt='cd ${WD_TMP_ROOT}/'
-alias cdu='cd ${WD_TMP_ROOT}/uploads.d/'
+alias cdt='cd /dev/shm/wsprdaemon'
+alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 
 ### Start 'vi' using WD's .vimrc
 function vi() 

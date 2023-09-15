@@ -497,7 +497,7 @@ function kiwirecorder_manager_daemon()
             else
                 kiwi_recorder_pid=$!
                 echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}
-                rc = $?
+                rc=$?
                 if [[ ${rc} -ne 0 ]]; then
                     wd_logger 1 "ERROR: 'Successfully spawned kiwirecorder.py job with PID ${kiwi_recorder_pid}, but 'echo ${kiwi_recorder_pid} > ${KIWI_RECORDER_PID_FILE}' => ${rc}, soo sleep and spawn again"
                     kiwi_recorder_pid=""
