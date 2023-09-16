@@ -129,9 +129,6 @@ function wd-gc()
 ### 'git push'
 alias wd-gp='git push'
 
-### Change a WD site which was cloned with https to ssh
-alias wd-gci='git remote set-url origin git@github.com:rrobinett/wsprdaemon.git'
-
 #### Get the most recent commit
 alias wd-gl='git log | head -n 12'
 
@@ -513,6 +510,10 @@ wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
 wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
 wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files 
 wd-query      wd-q wdq                   Query the wsprdaemon database for spots
+wd-gc                                    Execute git commit
+wd-gp                                    Execute git push
+wq-gl                                    Execute git log
+wd-gc-ssh                                Execute git remote set-ur + git config
 "
 }
 alias wd-='wd-help'

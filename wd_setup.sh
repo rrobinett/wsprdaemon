@@ -35,7 +35,7 @@ declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-d
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
-if true; then
+if false; then
     ### Installation of the Qt5 library appears to be no longer necessary since we no longer try to install the full WSJT-x package
     declare LIB_QT5_CORE_ARMHF=""
     declare LIB_QT5_CORE_AMD64=""
@@ -43,6 +43,7 @@ if true; then
     declare LIB_QT5_DEFAULT_AMD64=""
     declare LIB_QT5_DEFAULT_ARM64=""
 else
+    ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
     declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
     declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
     declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
