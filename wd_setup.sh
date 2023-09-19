@@ -186,7 +186,7 @@ check_tmp_filesystem
 ################## Check that kiwirecorder is installed and running #######################
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
-declare   KIWI_RECORD_TMP_LOG_FILE="./kiwiclient.log"
+declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
@@ -197,7 +197,10 @@ function check_for_kiwirecorder_cmd() {
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
         [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
-        local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
+        local log_file=${KIWI_RECORD_TMP_LOG_FILE}
+        if [[ -f ${log_file} ]]; then
+            sudo rm -f ${log_file}       ## In case this was left behind by another user
+        fi
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             echo "Currently installed version of kiwirecorder.py fails to run:"
             cat ${log_file}
