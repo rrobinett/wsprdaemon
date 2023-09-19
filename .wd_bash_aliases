@@ -493,6 +493,36 @@ function wd-wd-rec-flush()
     fi
 }
 
+function wd-freqs(){
+    local rec_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local rec_rx_root_dir_list=( $( find ${rec_root_dir}/* -type d -prune ) )
+    local rec_bands_list=( $( find ${rec_root_dir} -mindepth 2 -maxdepth 2 -type d ! -name kiwi_status.d -printf "%f\n" | sort -u ) )
+
+    local first_print="yes"
+    for band in ${rec_bands_list[@]}; do
+        if [[ ${first_print} == "no" ]]; then
+            echo
+        fi
+        first_print=no
+        for rx_root_dir in ${rec_rx_root_dir_list[@]} ; do
+            local rx_name=${rx_root_dir##*/}
+            echo -n "${rx_name}: "
+            local rx_band_dir=${rx_root_dir}/${band}
+            if [[ -d ${rx_band_dir} ]]; then
+                grep "^23.*AI6" ${rx_band_dir}/decoding_daemon.log | tail -n 1
+            fi
+        done | sort
+    done
+}
+
+alias sca='sudo systemctl start  radiod@rx888-wsprdaemon.service'
+alias scz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
+alias scs='sudo systemctl status radiod@rx888-wsprdaemon.service'
+
+alias swa='sudo systemctl start  wsprdaemon.service'
+alias swz='sudo systemctl stop   wsprdaemon.service'
+alias sws='sudo systemctl status wsprdaemon.service'
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
@@ -519,6 +549,3 @@ wd-gc-ssh                                Execute git remote set-ur + git config
 alias wd-='wd-help'
 alias wd-h='wd-help'
 
-alias ssk9a='sudo systemctl start  radiod@rx888-wsprdaemon.service'
-alias ssk9z='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
-alias ssk9s='sudo systemctl status radiod@rx888-wsprdaemon.service'
