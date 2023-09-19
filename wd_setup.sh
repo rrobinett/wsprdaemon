@@ -35,7 +35,7 @@ declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-d
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
-if true; then
+if false; then
     ### Installation of the Qt5 library appears to be no longer necessary since we no longer try to install the full WSJT-x package
     declare LIB_QT5_CORE_ARMHF=""
     declare LIB_QT5_CORE_AMD64=""
@@ -43,6 +43,7 @@ if true; then
     declare LIB_QT5_DEFAULT_AMD64=""
     declare LIB_QT5_DEFAULT_ARM64=""
 else
+    ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
     declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
     declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
     declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
@@ -185,7 +186,7 @@ check_tmp_filesystem
 ################## Check that kiwirecorder is installed and running #######################
 declare   KIWI_RECORD_DIR="${WSPRDAEMON_ROOT_DIR}/kiwiclient" 
 declare   KIWI_RECORD_COMMAND="${KIWI_RECORD_DIR}/kiwirecorder.py"
-declare   KIWI_RECORD_TMP_LOG_FILE="./kiwiclient.log"
+declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
@@ -196,7 +197,10 @@ function check_for_kiwirecorder_cmd() {
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
         [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
-        local log_file=/tmp/${KIWI_RECORD_TMP_LOG_FILE}
+        local log_file=${KIWI_RECORD_TMP_LOG_FILE}
+        if [[ -f ${log_file} ]]; then
+            sudo rm -f ${log_file}       ## In case this was left behind by another user
+        fi
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
             echo "Currently installed version of kiwirecorder.py fails to run:"
             cat ${log_file}
