@@ -480,7 +480,8 @@ function wd-query()
 alias wd-q='wd-query'
 alias wdq='wd-query'
 
-alias wd-syslog='sudo less /var/log/syslog'
+alias wd-syslog='sudo tail -F /var/log/syslog'
+alias wd-syslogl='sudo less /var/log/syslog'
 alias wdsl='wd-syslog'
 alias wd-wd-rec='watch "ps aux | grep wd-rec | grep -v grep | sort -k 14,14n -k 15r"'
 alias wdwd='wd-wd-rec'
@@ -518,6 +519,14 @@ function wd-freqs(){
 alias sca='sudo systemctl start  radiod@rx888-wsprdaemon.service'
 alias scz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
 alias scs='sudo systemctl status radiod@rx888-wsprdaemon.service'
+
+alias sca1='sudo systemctl start  radiod@rx888-wsprdaemon1.service'
+alias scz1='sudo systemctl stop   radiod@rx888-wsprdaemon1.service'
+alias scs1='sudo systemctl status radiod@rx888-wsprdaemon1.service'
+
+alias sca2='sudo systemctl start  radiod@rx888-wsprdaemon2.service'
+alias scz2='sudo systemctl stop   radiod@rx888-wsprdaemon2.service'
+alias scs2='sudo systemctl status radiod@rx888-wsprdaemon2.service'
 
 alias swa='sudo systemctl start  wsprdaemon.service'
 alias swz='sudo systemctl stop   wsprdaemon.service'
