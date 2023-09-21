@@ -316,6 +316,11 @@ function setup_systemctl_daemon() {
         [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
         return
     fi
+    if [[ ! $(groups) =~ radio ]]; then
+        sudo adduser --quiet --system --group radio
+        sudo usermod -aG radio ${USER}
+        wd_logger 1 "Added ${USER} to the group radio"
+    fi
     local my_id=$(id -u -n)
     local my_group=$(id -g -n)
     cat > ${SYSTEMCTL_UNIT_PATH##*/} <<EOF
@@ -325,7 +330,7 @@ function setup_systemctl_daemon() {
 
     [Service]
     User=${my_id}
-    Group=${my_group}
+    Group=${my_group} radio
     WorkingDirectory=${WSPRDAEMON_ROOT_DIR}
     ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
     ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}

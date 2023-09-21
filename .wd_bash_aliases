@@ -509,8 +509,9 @@ function wd-freqs(){
             echo -n "${rx_name}: "
             local rx_band_dir=${rx_root_dir}/${band}
             if [[ -d ${rx_band_dir} ]]; then
-                grep "^23.*AI6" ${rx_band_dir}/decoding_daemon.log | tail -n 1
+                printf "%s" "$( grep "^23.*AI6" ${rx_band_dir}/decoding_daemon.log | tail -n 1)"
             fi
+            echo
         done | sort
     done
 }

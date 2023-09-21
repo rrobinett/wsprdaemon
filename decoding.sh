@@ -1103,6 +1103,7 @@ function decoding_daemon() {
         wd_logger 1 "ERROR: can't get noise file queue directory 'get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}' => ${ret_code}"
         return ${ret_code}
     fi
+    mkdir -p ${wsprdaemon_noise_queue_directory}
     wd_logger 1 "Queuing wsprdaemon noise files in ${wsprdaemon_noise_queue_directory}"
 
     ### It is something of a hack to derive it this way, but it avoids adding another function

@@ -762,6 +762,15 @@ function ka9q_setup()
 {
     local rc
 
+    if [[ ! -d ${KA9Q_RADIO_DIR} ]]; then
+        git clone ${KA9Q_GIT_URL}
+        rc=$?
+        if [[ ${rc} -gt 1 ]]; then
+            wd_logger 1 "ERROR: 'git clone ${KA9Q_GIT_URL}' > ${rc}"
+            exit 1
+        fi
+    fi
+
     pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_DESIRED_GIT_COMMIT_SHA}
     rc=$?
     if [[ ${rc} -gt 1 ]]; then
@@ -772,6 +781,17 @@ function ka9q_setup()
         wd_logger 2 "KA9Q software is current, so no need to compile and install a new version"
     else  ##  ${rc} -eq 1
         wd_logger 1 "KA9Q software was updated, so compile and install the new code. This may take a minute or more..."
+        sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed to install some or all of the libraries needed by ka9q-radio"
+            return 1
+        fi
+        cd ${KA9Q_RADIO_DIR}
+        if [[ ! -f Makefile ]]; then
+            cp -p Makefile.linux Makefile
+        fi
         make  > /dev/null
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -781,8 +801,8 @@ function ka9q_setup()
         fi
         sudo make install > /dev/null
         rc=$?
+        cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
-            cd - > /dev/null
             wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
             return 1
         fi
@@ -792,8 +812,28 @@ function ka9q_setup()
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "'sudo systemctl stop  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so no radiod was running.  Proceed to start it"
         fi
+        sudo systemctl start  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'sudo systemctl start  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so failed to start radiod"
+        fi
+        wd_logger 1 "KA9Q SW is installed"
     fi
-    wd_logger  2 "Finished validating the KA9Q installation"
+
+    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
+        wd_logger 1 "Missing '${WD_KA9Q_CONF_FILE}', so creating it from the template"
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
+    fi
+    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "Missing '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from ${WD_KA9Q_CONF_TEMPLATE_FILE}"
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+    if [[ ${WD_KA9Q_CONF_TEMPLATE_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "${WD_KA9Q_CONF_TEMPLATE_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so update ${KA9Q_RADIOD_WD_CONF_FILE}"
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+ 
+    wd_logger  1 "Finished validating and updating the KA9Q installation"
 
     if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
         ### We installed ka9q on this machine becasue WD will run the 'wd-record' command from KA9Q
@@ -815,37 +855,6 @@ function ka9q_setup()
     fi
     wd_logger 2 "Found a RX888 MkII attached to a USB port"
  
-    if [[ ! -d "${KA9Q_RADIO_ROOT_DIR}" ]]; then
-        ### Download, compile and install the KA9Q_radio  service
-        cd ${WSPRDAEMON_ROOT_DIR}
-        git clone "${KA9Q_GIT_URL}"
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to 'git clone ${KA9Q_GIT_URL}"
-            return 1
-        fi
-        sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
-        cd ${KA9Q_RADIO_ROOT_DIR}
-        if [[ ! -f Makefile ]]; then
-            ln -s Makefile.linux Makefile
-            wd_logger 1 "Found no Makefile, so 'ln -s Makefile.linux Makefile'"
-        fi
-        make
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            cd - > /dev/null
-            wd_logger 1 "ERROR: failed to 'make'"
-            return 2
-        fi
-        sudo make install
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            cd - > /dev/null
-            wd_logger 1 "ERROR: failed to 'sudo make install'"
-            return 2
-        fi
-    fi
-    wd_logger 1 "KA9Q SW is installed"
 
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
         wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM}, so no need to create it"
