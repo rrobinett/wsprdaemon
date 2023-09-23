@@ -330,7 +330,8 @@ function setup_systemctl_daemon() {
 
     [Service]
     User=${my_id}
-    Group=${my_group} radio
+    Group=${my_group}
+    SupplementaryGroups=radio
     WorkingDirectory=${WSPRDAEMON_ROOT_DIR}
     ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
     ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}
