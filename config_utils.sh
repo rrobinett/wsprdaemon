@@ -762,6 +762,8 @@ function ka9q_setup()
 {
     local rc
 
+    ### A KA9Q rx has been configured, so we need to install and compile  ka9q-radio so that we can run the 'wd-record' command
+
     if [[ ! -d ${KA9Q_RADIO_DIR} ]]; then
         git clone ${KA9Q_GIT_URL}
         rc=$?
@@ -820,29 +822,28 @@ function ka9q_setup()
         wd_logger 1 "KA9Q SW is installed"
     fi
 
-    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-        wd_logger 1 "Missing '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    fi
-    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "Missing '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from ${WD_KA9Q_CONF_TEMPLATE_FILE}"
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    if [[ ${WD_KA9Q_CONF_TEMPLATE_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "${WD_KA9Q_CONF_TEMPLATE_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so update ${KA9Q_RADIOD_WD_CONF_FILE}"
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
- 
-    wd_logger  1 "Finished validating and updating the KA9Q installation"
-
-    if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
-        ### We installed ka9q on this machine becasue WD will run the 'wd-record' command from KA9Q
-        wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So the radiod service doesn't need to run on this machine"
-        sudo systemctl stop "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null    ### In case it was running in a previous WD.conf configuration
+     if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
+         ### WD is not configured to install and confiugre a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
+        wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So WD doesn't need to configure or start radiod"
         return 0
     fi
  
-    sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
+    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
+        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
+    fi
+    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
+        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+    if [[ ${WD_KA9Q_CONF_TEMPLATE_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "${WD_KA9Q_CONF_TEMPLATE_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so saving and update ${KA9Q_RADIOD_WD_CONF_FILE}"
+        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+    wd_logger  2 "Finished validating and updating the KA9Q installation"
+
+   sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
         wd_logger 2 "A KA9Q receiver service is active, so nothing more to do to setup KA9Q-radio"
@@ -855,7 +856,6 @@ function ka9q_setup()
     fi
     wd_logger 2 "Found a RX888 MkII attached to a USB port"
  
-
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
         wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM}, so no need to create it"
     else
@@ -888,22 +888,6 @@ function ka9q_setup()
     fi
      wd_logger 1 "${FFTW_WISDOMF} is current"
 
-    if [[ ! -f ${WD_KA9Q_CONF_FILE}  ]]; then
-        wd_logger 1 "'${WD_KA9Q_CONF_FILE}' is missing, so create it from the WD KA9Q template file '${WD_KA9Q_CONF_TEMPLATE_FILE}'"
-        cp -p ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    fi
-    wd_logger 1 "Found WD's local radio conf file: '${WD_KA9Q_CONF_FILE}'"
-
-    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} || ${KA9Q_RADIOD_WD_CONF_FILE} -ot ${WD_KA9Q_CONF_FILE} ]]; then
-        if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-            wd_logger 1 "'${KA9Q_RADIOD_WD_CONF_FILE}' is missing, so create it from '${WD_KA9Q_CONF_FILE}'"
-        else
-            wd_logger 1 "${KA9Q_RADIOD_WD_CONF_FILE}' is older than '${WD_KA9Q_CONF_FILE}', so update it"
-        fi
-        sudo cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    wd_logger 1 "WD will be giving radiod the conf file '${KA9Q_RADIOD_WD_CONF_FILE}'"
-
     wd_logger 1 "Starting KA9Q 'radiod' service by executing: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}'"
     sudo systemctl start radiod@${WD_CONF_BASE_NAME}
     rc=$?
@@ -912,7 +896,7 @@ function ka9q_setup()
         return ${rc}
     fi
     
-    wd_logger 1 "A KA9Q receiver is specified in the WD .conf file and now it should be installed and active"
+    wd_logger 1 "A local KA9Q receiver is specified in the WD .conf file and now it should be installed and active"
     return 0
 }
 
