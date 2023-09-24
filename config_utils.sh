@@ -31,7 +31,7 @@
 ### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-separated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
 ###       e.g. "W2" == classic WSPR decode by the wsprd of a 2 minute long wav file
 
-declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 )
+declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 I1 )
 
 declare WSPR_BAND_LIST=(
 "2200     136.0   W2"
@@ -827,6 +827,14 @@ function ka9q_setup()
         wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So WD doesn't need to configure or start radiod"
         return 0
     fi
+
+    ### wsprdaemon user needs to be a member of th 'radio' group
+    local my_groups=$(groups)
+    if [[ ! "${my_groups}" =~ "radio" ]] ; then
+        wd_logger 1 "This user ${USER} is not a member of the the 'radio' group. Logout now and log back in to join that group"
+        sudo usermod -aG radio ${USER}
+        exit 1
+    fi
  
     if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
         wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
@@ -834,12 +842,12 @@ function ka9q_setup()
     fi
     if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
         wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
     fi
-    if [[ ${WD_KA9Q_CONF_TEMPLATE_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "${WD_KA9Q_CONF_TEMPLATE_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so saving and update ${KA9Q_RADIOD_WD_CONF_FILE}"
+    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
         cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
     fi
     wd_logger  2 "Finished validating and updating the KA9Q installation"
 

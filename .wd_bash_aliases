@@ -200,6 +200,8 @@ alias vib='vi ~/wsprdaemon/.wd_bash_aliases'
 alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
+alias vir='vi ~/wsprdaemon/radiod@rx888-wsprdaemon.conf'
+alias virr='vi /etc/radio/radiod@rx888-wsprdaemon.conf'
 
 alias tf='tail -F -n 40'
 alias tfd='tf decoding_daemon.log'
