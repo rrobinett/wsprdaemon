@@ -89,6 +89,8 @@ function wd_kill_all()
     fi
     kill_all_wd_record_jobs
 
+    active_decoding_cpus_init            ### zero the file which keeps the count of active decode jobs
+
     echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
     return 0
 }

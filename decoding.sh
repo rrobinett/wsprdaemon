@@ -1226,8 +1226,9 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
+            local rc
             sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
-            local rc=$?
+            rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
@@ -1245,12 +1246,12 @@ function decoding_daemon() {
             wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
-            local rc
-            local decoding_root_dir=$(realpath ../..)
-            local max_running_decodes
+            local got_cpu_semaphore=""
             if [[ ${DECODING_FREE_CPUS-0} -eq 0 ]]; then
-                max_running_decodes=99
+                wd_logger 2 "We are not configured to limit the number of active decoding CPUs"
             else
+                wd_logger 1 "We are configured to limit the number of active decoding CPUs to ${DECODING_FREE_CPUS}"
+                local max_running_decodes
                 max_running_decodes=$(( $(nproc) - ${DECODING_FREE_CPUS} ))
                 if [[ ${max_running_decodes} -lt 1 ]] ; then
                     wd_logger 1 "ERROR: configured value DECODING_FREE_CPUS=${DECODING_FREE_CPUS} would leave none of the $(nproc) cpus free to run WSPR decodes.  So setting max_running_decodes to 1 cpu"
@@ -1258,20 +1259,19 @@ function decoding_daemon() {
                 else
                     wd_logger 1 "The configured value DECODING_FREE_CPUS=${DECODING_FREE_CPUS} on this CPU with $(nproc) cores has resulted in max_running_decodes=${max_running_decodes}"
                 fi
-            fi
-            local max_job_wait_secs=${DECODE_CPU_MAX_WAIT_SECS-60}   ### Proceed with decoding after 60 seconds whether or not there is a free CPU
-            local got_cpu_semaphore
-            claim_cpu ${max_running_decodes} ${max_job_wait_secs}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                got_cpu_semaphore="yes"
-                wd_logger 1 "Got semaphore and so can start decoding"
-            else
-                got_cpu_semaphore="no"
-                wd_logger 1 "ERROR: 'wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}' => ${rc}, but start decoding anyway"
+                local max_job_wait_secs=${DECODE_CPU_MAX_WAIT_SECS-60}   ### Proceed with decoding after 60 seconds whether or not there is a free CPU
+                claim_cpu ${max_running_decodes} ${max_job_wait_secs}
+                rc=$?
+                if [[ ${rc} -eq 0 ]]; then
+                    got_cpu_semaphore="yes"
+                    wd_logger 1 "Got semaphore and so can start decoding"
+                else
+                    got_cpu_semaphore="no"
+                    wd_logger 1 "ERROR: 'claim_cpu ${max_running_decodes} ${max_job_wait_secs}' => ${rc}, but start decoding anyway"
+                fi
             fi
 
-           > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
+            > decodes_cache.txt                             ### Create or truncate to zero length a file which stores the decodes from all modes
             if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" || " ${receiver_modes_list[*]} " =~ " W${returned_minutes} " ]]; then
                 wd_logger 1 "Starting WSPR decode of ${returned_seconds} second wav file"
 
@@ -1607,7 +1607,7 @@ function decoding_daemon() {
                 if [[ ${rc} -eq 0 ]]; then
                     wd_logger 1 "Put semaphore now that decoding is done"
                 else
-                    wd_logger 1 "ERROR: 'wd_semaphore_out "wd_decoding" ${decoding_root_dir}' => ${rc}, but ignoring since decoding is done"
+                    wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since decoding is done"
                 fi
             fi
 
