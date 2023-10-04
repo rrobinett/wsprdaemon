@@ -1261,7 +1261,7 @@ function decoding_daemon() {
             fi
             local max_job_wait_secs=${DECODE_CPU_MAX_WAIT_SECS-60}   ### Proceed with decoding after 60 seconds whether or not there is a free CPU
             local got_cpu_semaphore
-            wd_semaphore_get "wd_decoding" ${decoding_root_dir} ${max_running_decodes} ${max_job_wait_secs}
+            claim_cpu ${max_running_decodes} ${max_job_wait_secs}
             rc=$?
             if [[ ${rc} -eq 0 ]]; then
                 got_cpu_semaphore="yes"
@@ -1602,7 +1602,7 @@ function decoding_daemon() {
             fi
 
             if [[ ${got_cpu_semaphore} == "yes" ]]; then
-                wd_semaphore_put "wd_decoding" ${decoding_root_dir} 
+                free_cpu
                 rc=$?
                 if [[ ${rc} -eq 0 ]]; then
                     wd_logger 1 "Put semaphore now that decoding is done"
@@ -1782,5 +1782,106 @@ function get_decoding_status() {
     fi
     echo "Pid = ${get_decoding_status_decode_pid}"
     return 0
+}
+
+### Stores the number of CPUs currently running decode jobs
+declare ACTIVE_DECODING_CPU_DIR="${WSPRDAEMON_TMP_DIR}/recording.d"
+mkdir -p ${ACTIVE_DECODING_CPU_DIR}   ### Just to be sure
+
+declare ACTIVE_DECODING_CPU_SEMAPHORE_NAME="active_cpus"
+declare ACTIVE_DECODING_CPU_COUNT_FILE="${ACTIVE_DECODING_CPU_DIR}/active_cpus_count"
+
+function active_decoding_cpus_init()
+{
+    echo "0" > ${ACTIVE_DECODING_CPU_COUNT_FILE}
+}
+
+### 
+### This waits until it gets the semaphore and then tests and increments the value in 'active_count' which is the number of running decodes
+function claim_cpu()
+{
+    local semaphore_max_count=$1
+    local semaphore_timeout=$2        ### How many seconds to wait
+
+    local start_epoch=${EPOCHSECONDS}
+    local end_epoch=$(( ${start_epoch} + ${semaphore_timeout} ))
+
+    local semaphore_count_filename=${ACTIVE_DECODING_CPU_COUNT_FILE}
+
+    wd_logger 1 "Starting an attempt to get one of the ${semaphore_max_count} semaphores in ${ACTIVE_DECODING_CPU_DIR}. Timeout after ${semaphore_timeout} seconds"
+
+    while [[ ${EPOCHSECONDS} -lt ${end_epoch} ]]; do
+        local rc
+        wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
+        rc=$?
+        if [[ ${rc} -ne 0 ]] ; then
+            wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
+        else
+            wd_logger 2 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+            if [[ ! -f ${semaphore_count_filename} ]]; then
+                wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
+                echo "0" > ${semaphore_count_filename}
+            fi
+            local current_semaphore_count=$(< ${semaphore_count_filename})
+            local new_semaphore_count=-1
+            if [[ ${current_semaphore_count} -lt ${semaphore_max_count} ]]; then
+                new_semaphore_count=$(( current_semaphore_count + 1 ))
+                echo ${new_semaphore_count} > ${semaphore_count_filename}
+            fi
+            wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 2 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+            else
+                wd_logger 1 "ERROR: When freeing ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} muxtex, got unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}"
+            fi
+            if [[ ${new_semaphore_count} -gt 0 ]]; then
+                wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
+                return 0
+            else
+                wd_logger 2 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
+            fi
+        fi
+        wd_logger 2 "Sleeping 1 second"
+        sleep 1
+    done
+    wd_logger 1 "ERROR: timeout after ${semaphore_timeout} seconds while waiting to get semaphore"
+    return 1
+}
+
+### Decrements the semaphore count and returns
+function free_cpu()
+{
+    local semaphore_count_filename=${ACTIVE_DECODING_CPU_COUNT_FILE}
+
+    local rc
+    wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR} 
+    rc=$?
+    if [[ ${rc} -ne 0 ]] ; then
+        wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
+        return 1
+    else
+        wd_logger 1 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+        if [[ ! -f ${semaphore_count_filename} ]]; then
+            wd_logger 1 "ERROR: expected count file ${semaphore_count_filename} does not exist, so wd_semaphore_pget() never ran" 
+        else
+            local current_semaphore_count=$(< ${semaphore_count_filename})
+            if [[ ${current_semaphore_count} -lt 1 ]]; then
+                wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
+            else
+                (( --current_semaphore_count ))
+                echo ${current_semaphore_count} > ${semaphore_count_filename}
+            fi
+        fi
+        wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "Decremented semaphore count to ${current_semaphore_count} and returning"
+        else
+            wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}, but anyway decremented semaphore count to ${current_semaphore_count} and returning"
+        fi
+        return 0
+    fi
+    ### Should neveer get here
 }
 

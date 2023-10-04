@@ -308,7 +308,11 @@ function ka9q_recording_daemon()
     fi
     local receiver_rx_freq_khz=$2
     local receiver_rx_freq_hz=$( echo "(${receiver_rx_freq_khz} * 1000)/1" | bc )
-
+    if [[ ${receiver_ip} =~ -iq\. ]]; then
+        (( ++receiver_rx_freq_hz ))
+        wd_logger 1 "Adjusting rx frequency of IQ stream '${receiver_ip}' up by 1 Hz to ${receiver_rx_freq_hz}"
+    fi
+ 
     if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
         wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
         return 1
