@@ -1,9 +1,9 @@
 #!/bin/bash
 
-declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/wav-archive.d     ### Copy/move the wav files here
-declare WAV_FILE_ARCHIVE_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/wav-archive.d        ### Store the compressed archive of them here
-declare MAX_WAV_FILE_SYSTEM_PERCENT=75                                        ### Limit the usage of that fiel system
-declare MIN_WAV_ARCHIVE_FILE_COUNT=10
+declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR-${WSPRDAEMON_TMP_DIR}/wav-archive.d} ### Move the wav files here.  Both source and dest directories need to be on the same file system (i.e /dev/shm/...)
+declare WAV_FILE_ARCHIVE_ROOT_DIR=${WAV_FILE_ARCHIVE_ROOT_DIR-${WSPRDAEMON_ROOT_DIR}/wav-archive.d}        ### Store the compressed archive of them here. This should be an SSD or HD
+declare MAX_WAV_FILE_SYSTEM_PERCENT=${MAX_WAV_FILE_SYSTEM_PERCENT-75}                                      ### Limit the usage of that file system
+declare MIN_WAV_ARCHIVE_FILE_COUNT=${MIN_WAV_ARCHIVE_FILE_COUNT-10} 
 
 function get_wav_archive_queue_directory()
 {
@@ -33,7 +33,7 @@ function get_wav_archive_queue_directory()
 function wd_root_file_system_has_space()
 {
     local _return_percent_used_var=$1
-    local df_line_list=( $(df . | tail -n 1) )
+    local df_line_list=( $(df ${WAV_FILE_ARCHIVE_ROOT_DIR}  | tail -n 1) )
     local file_system_size=${df_line_list[1]}
     local file_system_used=${df_line_list[2]}
     local __file_system_percent_used=$(( (file_system_used * 100 ) / file_system_size ))
@@ -66,10 +66,13 @@ function queue_wav_file()
 
     mkdir -p ${archive_dir}
 
+    ### Since the source and destination directories are on the same file system, we can 'mv' the wav file
+    ### Also, 'mv' performas no CPU intensive file copying, and it is an atomic operation and thus there is no race with the tar archiver
     if ! mv ${source_wav_file_path} ${archive_file_path} ; then
-        wd_logger 1 "ERROR: 'cp -p ${source_wav_file_path} ${archive_file_path}' => $?"
+        wd_logger 1 "ERROR: 'mv ${source_wav_file_path} ${archive_file_path}' => $?"
         return 1
     fi
+
     return 0
 }
 
@@ -110,9 +113,10 @@ function wd_tar_wavs()
 
     local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.wav') )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
     if [[ ${#wav_file_list[@]} -eq 0 ]]; then
-        wd_logger 1 "Found no wav files"
+        wd_logger 1 "Found no wav files to archive"
         return 0
     fi
+    local wav_files_size_kB=$(du -s ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} | awk '{print $1}')
 
     local wav_file_path_list=( ${wav_file_list[0]//\// } )
 
@@ -132,20 +136,38 @@ function wd_tar_wavs()
         mv ${tar_file_name} ${old_file_name}
     fi
 
-    wd_logger 1 "Found ${#wav_file_list[@]} wav files.  Date of newest ${newest_date}. creating ${tar_file_name}"
+    wd_logger 1 "Found ${wav_files_size_kB} KBytes in ${#wav_file_list[@]} wav files.  Date of newest ${newest_date}. creating ${tar_file_name}"
+    local wav_files_size_kB=$(du -s ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} | awk '{print $1}')
 
     cd ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}
+
+    ### have tar compress using zstd
     echo "${wav_file_list[@]#*wav-archive.d/}" | tr " " "\n" > tar_file.list    ### bash expands "${wav_file_list[@]}" into a  single long argument to tar, so use this hack to get around that
-    if ! tar -acf ${tar_file_name} --files-from=tar_file.list ; then
-        local rc=$?
-        cd - > /dev/null
-        wd_logger 1 "ERROR: tar => ${rc}"
+    local zstd_tar_file_size_kB=0
+    if [[ ${ARCHIVE_TO_ZST-no} == "no" ]]; then
+        wd_logger 1 "Configured to not create zst format tar file from wav files"
     else
-        cd - > /dev/null
-        local tar_size=$(stat --printf="%s" ${tar_file_name})
-        wd_logger 1 "Created ${tar_size} byte ${tar_file_name} from ${#wav_file_list[@]} wav files"
-        rm ${wav_file_list[@]}
+        if ! tar -acf ${tar_file_name} --files-from=tar_file.list ; then
+            local rc=$?
+            cd - > /dev/null
+            wd_logger 1 "ERROR: tar => ${rc}"
+        fi
+        zstd_tar_file_size_kB=$( du -s ${tar_file_name}  | awk '{print $1}' )
     fi
+
+    ### Use flac to comoress the indiviual .wav files to .flac files, then tar the .flac files together
+    local tar_file_list=( $(< tar_file.list) )
+    local flac_file_list=( ${tar_file_list[@]/%.wav/.flac} )
+
+    flac --silent --delete-input-file ${tar_file_list[@]}
+
+    local flac_tar_file_name=${tar_file_name%.tar.zst}.flac.tar
+    tar -cf ${flac_tar_file_name} ${flac_file_list[@]}
+    wd_rm ${flac_file_list[@]}
+    local flac_tar_file_size_kB=$( du -s ${flac_tar_file_name}  | awk '{print $1}' )
+
+    cd - > /dev/null
+    wd_logger 1 "${#wav_file_list[@]} wav files of ${wav_files_size_kB} KBytes were compressed to a zst tar file of ${zstd_tar_file_size_kB} KBytes and a flac tar of ${flac_tar_file_size_kB} KBytes"
 
     return 0
 }

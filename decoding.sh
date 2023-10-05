@@ -1213,6 +1213,23 @@ function decoding_daemon() {
             wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
             ### End of diagnostic code
 
+            if [[ ${receiver_modes_list[0]} == "I1" ]]; then
+                wd_logger 1 "We are configured to only record and archive IQ files"
+                ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
+                ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
+                if [[ ${#wav_file_list[@]} -ne 1 ]]; then
+                    wd_logger 1 "ERROR: IQ recording should return only one 1 minute long file at a time"
+                fi
+                queue_wav_file ${wav_file_list[0]} ${wav_archive_dir}
+                rc=$?
+                if [[ ${rc} -eq 0 ]]; then
+                    wd_logger 1 "Archived wav file ${wav_file_list[0]}"
+                else
+                    wd_logger 1 "ERROR: 'queue_wav_file ${wav_file_list[0]}' => $?"
+                fi
+                continue
+            fi
+
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
