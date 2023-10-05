@@ -1220,12 +1220,15 @@ function decoding_daemon() {
                 if [[ ${#wav_file_list[@]} -ne 1 ]]; then
                     wd_logger 1 "ERROR: IQ recording should return only one 1 minute long file at a time"
                 fi
-                queue_wav_file ${wav_file_list[0]} ${wav_archive_dir}
+                ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
+                local iq_file_name=${wav_file_list[0]/_usb.wav/_iq.wav}
+                mv ${wav_file_list[0]} ${iq_file_name}
+                queue_wav_file ${iq_file_name} ${wav_archive_dir}
                 rc=$?
                 if [[ ${rc} -eq 0 ]]; then
-                    wd_logger 1 "Archived wav file ${wav_file_list[0]}"
+                    wd_logger 1 "Archived wav file ${iq_file_name}"
                 else
-                    wd_logger 1 "ERROR: 'queue_wav_file ${wav_file_list[0]}' => $?"
+                    wd_logger 1 "ERROR: 'queue_wav_file ${iq_file_name}' => $?"
                 fi
                 continue
             fi

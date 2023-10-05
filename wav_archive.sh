@@ -3,7 +3,7 @@
 declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR-${WSPRDAEMON_TMP_DIR}/wav-archive.d} ### Move the wav files here.  Both source and dest directories need to be on the same file system (i.e /dev/shm/...)
 declare WAV_FILE_ARCHIVE_ROOT_DIR=${WAV_FILE_ARCHIVE_ROOT_DIR-${WSPRDAEMON_ROOT_DIR}/wav-archive.d}        ### Store the compressed archive of them here. This should be an SSD or HD
 declare MAX_WAV_FILE_SYSTEM_PERCENT=${MAX_WAV_FILE_SYSTEM_PERCENT-75}                                      ### Limit the usage of that file system
-declare MIN_WAV_ARCHIVE_FILE_COUNT=${MIN_WAV_ARCHIVE_FILE_COUNT-10} 
+declare MIN_WAV_ARCHIVE_FILE_COUNT=${MIN_WAV_ARCHIVE_FILE_COUNT-10}
 
 function get_wav_archive_queue_directory()
 {
@@ -171,4 +171,3 @@ function wd_tar_wavs()
 
     return 0
 }
-
