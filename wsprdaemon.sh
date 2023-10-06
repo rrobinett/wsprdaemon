@@ -50,8 +50,9 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 
 #declare VERSION=3.0.9                ### Refine search for WSPR packet wav files
 #declare VERSION=3.1.0               ### Add support for KA9Q-radio and RX888
-declare VERSION=3.1.1               ### Add support for KA9Q-radio and RX888
-                                     ### TODO: Add support for fixed AGC level to KA9Q receivers
+#declare VERSION=3.1.1               ### Add support for KA9Q-radio and RX888
+declare VERSION=3.1.2                 ### Add support for fixed AGC level to KA9Q receivers
+                                      ### Add support for WSPR ansd WWV IQ file recording into compressed files in a series of tar archives
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
