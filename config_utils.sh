@@ -33,6 +33,9 @@
 
 declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 I1 )
 
+### This is a list of the tuning frequencies for each band
+### WSPR bands tune 1500 hertz below the center of the WSPR transmit band
+### Since time stations WWV and CHU are recorded only in IQ mode, they tune to the carrier freqeuency
 declare WSPR_BAND_LIST=(
 "2200     136.0   W2"
 "630      474.2   W2"
@@ -55,16 +58,16 @@ declare WSPR_BAND_LIST=(
 "2     144489.0   W2"
 "1     432300.0   W2"
 "0    1296500.0   W2"
-"WWVB      58.5   W0"
-"WWV_2_5 2498.5   W0"
-"WWV_5   4998.5   W0"
-"WWV_10  9998.5   W0"
-"WWV_15 14998.5   W0"
-"WWV_20 19998.5   W0"
-"WWV_25 24998.5   W0"
-"CHU_3   3328.5   W0"
-"CHU_7   7848.5   W0"
-"CHU_14 14668.5   W0"
+"WWVB      60.0   W0"
+"WWV_2_5 2500.0   W0"
+"WWV_5   5000.0   W0"
+"WWV_10 10000.0   W0"
+"WWV_15 15000.0   W0"
+"WWV_20 20000.0   W0"
+"WWV_25 25000.0   W0"
+"CHU_3   3330.0   W0"
+"CHU_7   7850.0   W0"
+"CHU_14 14670.0   W0"
 )
 
 ### Get the current value of a variable stored in the wsprdaemon.conf file without perturbing any currently defined .conf file variables in the calling function

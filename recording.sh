@@ -308,7 +308,13 @@ function ka9q_recording_daemon()
     fi
     local receiver_rx_freq_khz=$2
     local receiver_rx_freq_hz=$( echo "(${receiver_rx_freq_khz} * 1000)/1" | bc )
-    if [[ ${receiver_ip} =~ -iq\. ]]; then
+    if [[ ${receiver_ip} =~ -iq\. && ${IQ_CENTER_ON_BAND-no} == "no" ]]; then
+        if [[ ${receiver_ip} =~ wspr ]]; then
+            ### When there is a WSPR pcm stream and a WSPR IQ strean on the same band, radiod increments the SSID of the IQ stream by 1 Hz
+            (( ++receiver_rx_freq_hz ))
+            wd_logger 1 "Adjusting rx frequency of IQ stream '${receiver_ip}' up by 1 Hz to ${receiver_rx_freq_hz}"
+        fi
+    else
         (( receiver_rx_freq_hz += 1500 ))
         wd_logger 1 "Adjusting rx frequency of IQ stream '${receiver_ip}' up by 1500 Hz to ${receiver_rx_freq_hz}"
     fi
