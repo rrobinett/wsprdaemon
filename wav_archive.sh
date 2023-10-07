@@ -33,6 +33,7 @@ function get_wav_archive_queue_directory()
 function wd_root_file_system_has_space()
 {
     local _return_percent_used_var=$1
+    mkdir -p ${WAV_FILE_ARCHIVE_ROOT_DIR}         ### At startup it might not exist
     local df_line_list=( $(df ${WAV_FILE_ARCHIVE_ROOT_DIR}  | tail -n 1) )
     local file_system_size=${df_line_list[1]}
     local file_system_used=${df_line_list[2]}
