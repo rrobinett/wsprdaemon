@@ -68,7 +68,7 @@ case ${CPU_ARCH} in
         declare os_release    ### We are not in a function, so it can't be local
         get_file_variable os_release "VERSION_ID" /etc/os-release
         wd_logger 2 "Installing on Ubuntu ${os_release}"
-        if [[ "${os_release}" =~ 22.04 || "${os_release}" == "12" ]]; then
+        if [[ "${os_release}" =~ 22.04 || "${os_release}" == "12" || "${os_release}" =~ 21.2 ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         else
