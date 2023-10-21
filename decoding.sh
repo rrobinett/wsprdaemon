@@ -628,7 +628,7 @@ function cleanup_wav_file_list()
             wd_rm ${test_file_name}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: Failed to flushs ${test_file_name}' which is not one minute earlier than the next wav file in the list: 'wd_rm ${test_file_name}' => ${rc}"
+                wd_logger 1 "ERROR: Failed to flush ${test_file_name}' which is not one minute earlier than the next wav file in the list: 'wd_rm ${test_file_name}' => ${rc}"
             fi
             flush_files="yes"
             wd_logger 1 "test_file_name=${test_file_name} is 1 minute (60 seconds) earlier than the next file in the list"
@@ -659,6 +659,7 @@ function get_wav_file_list() {
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
     local receiver_band=$3           
     local receiver_modes=$4
+    local wav_archive_dir=$5
     local     target_modes_list=( ${receiver_modes//:/ } )     ### Argument has form MODE1[:MODE2...] put it in local array
     local -ia target_minutes_list=( $( IFS=$'\n' ; echo "${target_modes_list[*]/?/}" | sort -nu ) )        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
     if [[ " ${target_minutes_list[*]} " =~ " 0 " ]] ; then
@@ -794,12 +795,12 @@ function get_wav_file_list() {
             if [[ ${wav_raw_pkt_sec_list_count} -gt 1 ]]; then
                 local wav_raw_pkt_sec_list_flush_count=$(( ${wav_raw_pkt_sec_list_count} - 1 ))
                 local wav_raw_pkt_sec_flush_list=( ${wav_raw_pkt_sec_list[@]:0:${wav_raw_pkt_sec_list_flush_count}} )
-                wd_logger 2 "For ${minutes_in_wspr_pkt} minute wspr packet search, found wav_raw_pkt_sec_list_count=${wav_raw_pkt_sec_list_count} files '${wav_raw_pkt_sec_list[*]}', not the one file needed. So flush the first ${wav_raw_pkt_sec_list_flush_count} files: ${wav_raw_pkt_sec_flush_list[*]}"
+                wd_logger 1 "For ${minutes_in_wspr_pkt} minute wspr packet search, found wav_raw_pkt_sec_list_count=${wav_raw_pkt_sec_list_count} files '${wav_raw_pkt_sec_list[*]}', not the one file needed. So flush the first ${wav_raw_pkt_sec_list_flush_count} files: ${wav_raw_pkt_sec_flush_list[*]}"
                 local rc
-                wd_rm ${wav_raw_pkt_sec_flush_list[*]}
+                wd_rm ${wav_raw_pkt_sec_flush_list[@]}
                 rc=$?
                 if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: for ${minutes_in_wspr_pkt} minute wspr packet search, failed to flush extra wav_raw_pkt_sec_list[]: ' wd_rm ${wav_raw_pkt_sec_flush_list[*]}' => ${rc}"
+                    wd_logger 1 "ERROR: for ${minutes_in_wspr_pkt} minute wspr packet search, Failed flushing or archiving  extra wav_raw_pkt_sec_list[]: 'flush_or_archive_raw_wav_files ${wav_archive_dir} ${wav_raw_pkt_sec_flush_list[*]}' => ${rc}"
                 fi
             fi
             local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_raw_pkt_sec_list[-1]} )
@@ -851,27 +852,67 @@ function get_wav_file_list() {
     wd_logger 2 "=========== Finished search for all wspr pkts in raw wav list ============"
 
     if [[ ${index_of_last_file_which_should_be_flushed} -lt 0 ]] ; then
-        wd_logger 2 "No raw files should be flushed"
+        wd_logger 1 "INFO: No raw files should be flushed"
     else
         local files_to_flush_count=$(( ${index_of_last_file_which_should_be_flushed} + 1 ))
-        wd_logger 2 "We can flush up to index ${index_of_last_file_which_should_be_flushed}, so flushing raw_wav_file[] entries: '${raw_file_list[@]:0:${files_to_flush_count}}'"
         local rc
-        wd_rm ${raw_file_list[@]:0:${files_to_flush_count}}
+        wd_logger 1 "INFO: We can flush or archive raw wav files up to index ${index_of_last_file_which_should_be_flushed}, so flushing raw_wav_file[] entries: '${raw_file_list[@]:0:${files_to_flush_count}}'"
+
+        flush_or_archive_raw_wav_files ${wav_archive_dir} ${raw_file_list[@]:0:${files_to_flush_count}}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Failed flushing old raw_file_list[]: 'wd_rum ${raw_file_list[@]:0:${files_to_flush_count}}' => ${rc}"
+            wd_logger 1 "ERROR: Failed flushing or archiving  old raw_file_list[]: 'flush_or_archive_raw_wav_files ${wav_archive_dir} ${raw_file_list[@]:0:${files_to_flush_count}}' => ${rc}"
         fi
     fi
     
     if [[ ${#return_list[@]} -ne 0 ]]; then
-        wd_logger 2 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'"
+        wd_logger 1 "INFO: Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'"
     else
-        wd_logger 2 "Returning no wav file lists"
+        wd_logger 1 "INFO: Returning no wav file lists"
     fi
 
     eval ${return_variable_name}=\"${return_list[*]}\"
     return 0
 }
+
+function flush_or_archive_raw_wav_files() {
+    local wav_archive_dir=$1
+    local wav_file_list=( ${@:2} )     ### Get list of variable number of arguments from $2 to last argument
+    local config_archive_raw_wav_files
+    local rc
+
+    wd_logger 1 "wav_archive_dir=${wav_archive_dir}, rm or archive: ${wav_file_list[*]}"
+
+    get_config_file_variable config_archive_raw_wav_files "ARCHIVE_RAW_WAV_FILES"
+    if [[ "${config_archive_raw_wav_files}" != "yes" ]]; then
+        wd_rm ${wav_file_list[@]}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Failed flushing old raw_file_list[]: 'wd_rum ${wav_file_list[*]}' => ${rc}"
+        fi
+        return ${rc}
+    else
+        local rrc=0
+        local raw_wav_file
+        for raw_wav_file in ${wav_file_list[@]} ; do
+            queue_wav_file ${raw_wav_file} ${wav_archive_dir}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 1 "INFO: Archived wav file ${raw_wav_file}"
+            else
+                wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' => $?"
+                rrc=${rc}
+            fi
+        done
+        if [[ ${rrc} -eq 0 ]]; then
+            wd_logger 1 "INFO: Archived all wav files"
+        else
+            wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' failed one or more times=> $${rrc}"
+        fi
+        return ${rrc}
+    fi
+}
+
 
 ### Called by the decoding_daemon() to create an enhanced_spot file from the output of ALL_WSPR.TXT
 ### That enhanced_spot file is then posted to the subdirectory where the posting_daemon will process it (and other enhanced_spot files if this receiver is part of a MERGEd group)
@@ -1159,7 +1200,7 @@ function decoding_daemon() {
         wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
-        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes}
+        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} ${wav_archive_dir}
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
@@ -1247,7 +1288,7 @@ function decoding_daemon() {
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_EFFECTS-}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
