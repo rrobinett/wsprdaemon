@@ -535,6 +535,66 @@ alias swa='sudo systemctl start  wsprdaemon.service'
 alias swz='sudo systemctl stop   wsprdaemon.service'
 alias sws='sudo systemctl status wsprdaemon.service'
 
+function wd-9qstats() {
+    local root_dir="/dev/shm/wsprdaemon/posting.d/MERG_6_Q"
+    local band_dir_list=( $(find ${root_dir} -maxdepth 1 -type d -not -wholename ${root_dir}) )
+    local band_list=( ${band_dir_list[@]##*/} )
+
+    echo "Band  Total  Q Missed       SNR    Kiwi Missed       SNR  SNR Diff"
+    for band_dir in ${band_list[@]}  ; do
+        local merged_log_file
+        merged_log_file=${root_dir}/${band_dir}/merged.log
+        if [[ ! -f ${merged_log_file} ]]; then
+            echo "${band_dir}: No    merged.log in ${root_dir}/${band_dir}"
+        else
+            local spots_info_list=( $(awk '! /FREQUENCY/{++spots_count};\
+                                     $10 == "*" {++q_missed_count};\
+                                     $11 == "*" {++kiwi_missed_count};\
+                                     ! /FREQUENCY/ && $10 != "*" && $11 != "*" { q_spots_sum += $10; kiwi_spots_sum += $11; ++sum_count} ;\
+                                     END {printf "%5d %5d %4.2f%% %f %5d  %4.2f%% %f   %f\n", \
+                                                 spots_count,\
+                                                 q_missed_count,  (q_missed_count/spots_count)*100, q_spots_sum /sum_count,\
+                                                 kiwi_missed_count, (kiwi_missed_count/spots_count)*100, kiwi_spots_sum/sum_count,\ 
+                                                (kiwi_spots_sum/sum_count) - (q_spots_sum /sum_count) }'  ${merged_log_file}) )
+            #echo "spots_info_list[] = '${spots_info_list[*]}'"
+            local spots_count=${spots_info_list[0]}
+            local q_missed_count=${spots_info_list[1]}
+            local q_missed_percent=${spots_info_list[2]}
+            local q_average=${spots_info_list[3]}
+            local kiwi_missed_count=${spots_info_list[4]}
+            local kiwi_missed_percent=${spots_info_list[5]}
+            local kiwi_average=${spots_info_list[6]}
+            local spots_diff_average=${spots_info_list[7]}
+
+            printf "%4d: %5d   %4d %6s %5.1f        %4d %6s %5.1f   %4.2f\n" \
+                ${band_dir} ${spots_count} ${q_missed_count} ${q_missed_percent} ${q_average} ${kiwi_missed_count} ${kiwi_missed_percent} ${kiwi_average} ${spots_diff_average}
+        fi
+    done
+}
+
+declare -A KA9Q_band_freq=(
+    [2200]=""
+    [630]=""
+    [160]="1836600"
+    [80]="3568600"
+    [60]="5287200"
+    [40]="7038600"
+    [30]="10138700"
+    [20]="14095600"
+    [17]="18104600"
+    [15]="21094600"
+    [12]="24924600"
+    [10]="28124600"
+)
+
+function wd-9c()
+{
+    local band=${1-20}
+    local tuning_freq=${KA9Q_band_freq[${band}]}
+
+    control -s ${tuning_freq} hf.local
+}
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
