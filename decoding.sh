@@ -707,7 +707,7 @@ function get_wav_file_list() {
             sleep_until_raw_file_is_full ${raw_file_list[0]}
             ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR:  while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
+                wd_logger 1 "Error:  while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
             else
                 if [[ -f ${raw_file_list[0]} ]]; then
                     wd_logger 2 "First file '${raw_file_list[0]}' which is for minute ${raw_file_list[0]:11:2} is filled and good, but since there is only one good file return error 2"
@@ -1247,7 +1247,12 @@ function decoding_daemon() {
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath}
+            if [[ ! ${receiver_name} =~ KPH ]]; then
+                SOX_ASSEMBLE_WAV_FILE_EFFECTS=""     ### Suppress this only while testing at KPH.  Remove when done  RR - 10/24/23
+            fi
+            wd_logger 1 "INFO: when sox is creating 2/5/15/30 wav files, SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS}"
+
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
