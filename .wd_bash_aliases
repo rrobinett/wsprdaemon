@@ -519,6 +519,29 @@ function wd-freqs(){
     done
 }
 
+function wd-wavs() {
+    local rx_band=$1
+
+    if [[ -z "${rx_band}" ]]; then
+        echo "usage: wd-wavs BAND"
+        return 0
+    fi
+
+    for rx_dir in */${band} ; do
+        ls -lt ${rx_dir}/${rx_band}/*.wav | head -1
+    done
+    return 0
+
+    local rec_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local rec_rx_root_dir_list=( $( find ${rec_root_dir}/* -type d -prune ) )
+    local rec_bands_list=( $( find ${rec_root_dir} -mindepth 2 -maxdepth 2 -type d ! -name kiwi_status.d -printf "%f\n" | sort -u ) )
+
+    local first_print="yes"
+    for band in ${rec_bands_list[@]}; do
+        echo =n ${band}
+    done
+}
+
 alias sca='sudo systemctl start  radiod@rx888-wsprdaemon.service'
 alias scz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
 alias scs='sudo systemctl status radiod@rx888-wsprdaemon.service'

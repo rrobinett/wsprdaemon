@@ -60,10 +60,16 @@ function queue_wav_file()
 
     local queue_file_system_percent_used
     if ! wd_root_file_system_has_space queue_file_system_percent_used; then
-        wd_logger 1 "ERROR: ${queue_file_system_percent_used}% of ${WSPRDAEMON_ROOT_DIR}/${WAV_FILE_ARCHIVE_ROOT_DIR} used, so no space for ${source_wav_file_path}, so can't queue it"
+        wd_logger 1 "ERROR: ${queue_file_system_percent_used}% of the ${WAV_FILE_ARCHIVE_ROOT_DIR} is used, so there is no space for ${source_wav_file_path}, so can't queue it.  So just 'rm' this file"
+        local rc
+        wd_rm ${source_wav_file_path}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to 'wd_rm ${source_wav_file_path}' => ${rc}"
+        fi
         return 1
     fi
-     wd_logger 1 "${queue_file_system_percent_used}% of ${WSPRDAEMON_ROOT_DIR}/${WAV_FILE_ARCHIVE_ROOT_DIR} used, so there is space for ${source_wav_file_path}, so queue it"
+     wd_logger 1 "${queue_file_system_percent_used}% of the ${WAV_FILE_ARCHIVE_ROOT_DIR} file system is used, so there is space for ${source_wav_file_path}, so queue it"
 
     mkdir -p ${archive_dir}
 

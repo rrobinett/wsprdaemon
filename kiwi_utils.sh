@@ -262,10 +262,10 @@ function get_kiwi_status()
         if [[ ${rc} -ne 0 ]]; then
             ### Free the lock before returning the error
             local rc1
-            rmdir ${kiwi_cache_lock_dir}
+            wd_mutex_unlock ${kiwi_status_mutex_name}  ${kiwi_status_dir} 
             rc1=$?
             if [[ ${rc1} -ne 0 ]] ; then
-                wd_logger 1 "ERROR: failed 'rmdir ${kiwi_cache_lock_dir}' => ${rc1} after 'curl --connect-timeout ${KIWI_GET_STATUS_TIMEOUT-4} ${kiwi_ip_port}/status 2> ${kiwi_status_cache_file}.stderr.txt > ${kiwi_status_cache_file}' => ${rc}"
+                wd_logger 1 "ERROR: failed 'wd_mutex_free ${kiwi_status_mutex_name}  ${kiwi_status_dir}'  => ${rc1} after 'curl --connect-timeout ${KIWI_GET_STATUS_TIMEOUT-4} ${kiwi_ip_port}/status 2> ${kiwi_status_cache_file}.stderr.txt > ${kiwi_status_cache_file}' => ${rc}"
             fi
             wd_logger 1 "ERROR: error or timeout updating status cache file from ${kiwi_ip_port}/status"
             return ${rc}
@@ -346,7 +346,7 @@ function get_kiwirecorder_status()
 
     wd_logger 2 "Get status with 'get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}'"
 
-    local get_kiwi_status_lines
+    local get_kiwi_status_lines=""     ### In case the Kiwi isn't there
     local rc
     get_kiwi_status get_kiwi_status_lines  ${kiwi_ip_port}
     rc=$?
