@@ -1,275 +1,272 @@
 USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-root           1  0.0  0.1 168228 13136 ?        Ss   Oct01   0:07 /sbin/init splash
-root           2  0.0  0.0      0     0 ?        S    Oct01   0:00 [kthreadd]
-root           3  0.0  0.0      0     0 ?        I<   Oct01   0:00 [rcu_gp]
-root           4  0.0  0.0      0     0 ?        I<   Oct01   0:00 [rcu_par_gp]
-root           5  0.0  0.0      0     0 ?        I<   Oct01   0:00 [slub_flushwq]
-root           6  0.0  0.0      0     0 ?        I<   Oct01   0:00 [netns]
-root           8  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/0:0H-events_highpri]
-root          10  0.0  0.0      0     0 ?        I<   Oct01   0:00 [mm_percpu_wq]
-root          11  0.0  0.0      0     0 ?        I    Oct01   0:00 [rcu_tasks_kthread]
-root          12  0.0  0.0      0     0 ?        I    Oct01   0:00 [rcu_tasks_rude_kthread]
-root          13  0.0  0.0      0     0 ?        I    Oct01   0:00 [rcu_tasks_trace_kthread]
-root          14  0.0  0.0      0     0 ?        S    Oct01   0:32 [ksoftirqd/0]
-root          15  0.1  0.0      0     0 ?        I    Oct01   3:00 [rcu_preempt]
-root          16  0.0  0.0      0     0 ?        S    Oct01   0:02 [migration/0]
-root          17  0.0  0.0      0     0 ?        S    Oct01   0:00 [idle_inject/0]
-root          19  0.0  0.0      0     0 ?        S    Oct01   0:00 [cpuhp/0]
-root          20  0.0  0.0      0     0 ?        S    Oct01   0:00 [cpuhp/1]
-root          21  0.0  0.0      0     0 ?        S    Oct01   0:00 [idle_inject/1]
-root          22  0.0  0.0      0     0 ?        S    Oct01   0:02 [migration/1]
-root          23  0.0  0.0      0     0 ?        S    Oct01   0:33 [ksoftirqd/1]
-root          25  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/1:0H-events_highpri]
-root          26  0.0  0.0      0     0 ?        S    Oct01   0:00 [cpuhp/2]
-root          27  0.0  0.0      0     0 ?        S    Oct01   0:00 [idle_inject/2]
-root          28  0.0  0.0      0     0 ?        S    Oct01   0:02 [migration/2]
-root          29  0.0  0.0      0     0 ?        S    Oct01   0:33 [ksoftirqd/2]
-root          31  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/2:0H-events_highpri]
-root          32  0.0  0.0      0     0 ?        S    Oct01   0:00 [cpuhp/3]
-root          33  0.0  0.0      0     0 ?        S    Oct01   0:00 [idle_inject/3]
-root          34  0.0  0.0      0     0 ?        S    Oct01   0:02 [migration/3]
-root          35  0.0  0.0      0     0 ?        S    Oct01   1:41 [ksoftirqd/3]
-root          37  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/3:0H-events_highpri]
-root          38  0.0  0.0      0     0 ?        S    Oct01   0:00 [kdevtmpfs]
-root          39  0.0  0.0      0     0 ?        I<   Oct01   0:00 [inet_frag_wq]
-root          40  0.0  0.0      0     0 ?        S    Oct01   0:00 [kauditd]
-root          41  0.0  0.0      0     0 ?        S    Oct01   0:00 [khungtaskd]
-root          43  0.0  0.0      0     0 ?        S    Oct01   0:00 [oom_reaper]
-root          45  0.0  0.0      0     0 ?        I<   Oct01   0:00 [writeback]
-root          46  0.0  0.0      0     0 ?        S    Oct01   0:05 [kcompactd0]
-root          47  0.0  0.0      0     0 ?        SN   Oct01   0:00 [ksmd]
-root          49  0.0  0.0      0     0 ?        SN   Oct01   0:00 [khugepaged]
-root          50  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kintegrityd]
-root          51  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kblockd]
-root          52  0.0  0.0      0     0 ?        I<   Oct01   0:00 [blkcg_punt_bio]
-root          53  0.0  0.0      0     0 ?        I<   Oct01   0:00 [tpm_dev_wq]
-root          54  0.0  0.0      0     0 ?        I<   Oct01   0:00 [ata_sff]
-root          55  0.0  0.0      0     0 ?        I<   Oct01   0:00 [md]
-root          56  0.0  0.0      0     0 ?        I<   Oct01   0:00 [edac-poller]
-root          57  0.0  0.0      0     0 ?        I<   Oct01   0:00 [devfreq_wq]
-root          58  0.0  0.0      0     0 ?        S    Oct01   0:00 [watchdogd]
-root          60  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/3:1H-kblockd]
-root          61  0.0  0.0      0     0 ?        S    Oct01   0:00 [kswapd0]
-root          62  0.0  0.0      0     0 ?        S    Oct01   0:00 [ecryptfs-kthread]
-root          63  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kthrotld]
-root          64  0.0  0.0      0     0 ?        S    Oct01   0:00 [irq/120-aerdrv]
-root          65  0.0  0.0      0     0 ?        I<   Oct01   0:00 [acpi_thermal_pm]
-root          66  0.0  0.0      0     0 ?        S    Oct01   0:00 [xenbus_probe]
-root          67  0.0  0.0      0     0 ?        S    Oct01   0:04 [hwrng]
-root          69  0.0  0.0      0     0 ?        I<   Oct01   0:00 [mld]
-root          70  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/1:1H-kblockd]
-root          71  0.0  0.0      0     0 ?        I<   Oct01   0:00 [ipv6_addrconf]
-root          79  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kstrp]
-root          81  0.0  0.0      0     0 ?        I<   Oct01   0:00 [zswap-shrink]
-root          82  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/u9:0-i915_flip]
-root          86  0.0  0.0      0     0 ?        I<   Oct01   0:00 [charger_manager]
-root         108  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/2:1H-kblockd]
-root         134  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/0:1H-kblockd]
-root         138  0.0  0.0      0     0 ?        I<   Oct01   0:00 [nvme-wq]
-root         139  0.0  0.0      0     0 ?        I<   Oct01   0:00 [nvme-reset-wq]
-root         140  0.0  0.0      0     0 ?        I<   Oct01   0:00 [nvme-delete-wq]
-root         141  0.0  0.0      0     0 ?        I<   Oct01   0:00 [nvme-auth-wq]
-root         151  0.0  0.0      0     0 ?        S    Oct01   0:00 [scsi_eh_0]
-root         152  0.0  0.0      0     0 ?        I<   Oct01   0:00 [scsi_tmf_0]
-root         153  0.0  0.0      0     0 ?        S    Oct01   0:00 [scsi_eh_1]
-root         154  0.0  0.0      0     0 ?        I<   Oct01   0:00 [scsi_tmf_1]
-root         155  0.0  0.0      0     0 ?        S    Oct01   0:00 [scsi_eh_2]
-root         156  0.0  0.0      0     0 ?        I<   Oct01   0:00 [scsi_tmf_2]
-root         157  0.0  0.0      0     0 ?        S    Oct01   0:00 [scsi_eh_3]
-root         158  0.0  0.0      0     0 ?        I<   Oct01   0:00 [scsi_tmf_3]
-root         181  0.0  0.0      0     0 ?        S    Oct01   0:02 [jbd2/nvme0n1p6-8]
-root         182  0.0  0.0      0     0 ?        I<   Oct01   0:00 [ext4-rsv-conver]
-root         225  0.0  0.7 105812 56448 ?        S<s  Oct01   0:04 /lib/systemd/systemd-journald
-root         279  0.0  0.0  27168  7168 ?        Ss   Oct01   0:00 /lib/systemd/systemd-udevd
-root         316  0.0  0.0      0     0 ?        S    Oct01   0:00 [irq/129-mei_me]
-root         324  0.0  0.0      0     0 ?        I<   Oct01   0:00 [cryptd]
-root         397  0.0  0.0      0     0 ?        S    Oct01   0:00 [card0-crtc0]
-root         398  0.0  0.0      0     0 ?        S    Oct01   0:00 [card0-crtc1]
-root         399  0.0  0.0      0     0 ?        S    Oct01   0:00 [card0-crtc2]
-systemd+     424  0.1  0.0  14824  6784 ?        Ss   Oct01   3:51 /lib/systemd/systemd-oomd
-systemd+     425  0.0  0.1  25660 13568 ?        Ss   Oct01   0:05 /lib/systemd/systemd-resolved
-root         454  0.0  0.1 249280  8232 ?        Ssl  Oct01   0:03 /usr/libexec/accounts-daemon
-root         455  0.0  0.0   2812  1920 ?        Ss   Oct01   0:00 /usr/sbin/acpid
-avahi        459  0.0  0.0   7628  3712 ?        Ss   Oct01   0:00 avahi-daemon: running [KPH-TC.local]
-root         461  0.0  0.0  18148  2816 ?        Ss   Oct01   0:00 /usr/sbin/cron -f -P
-message+     462  0.0  0.0  10940  6144 ?        Ss   Oct01   0:02 @dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
-root         464  0.0  0.2 343472 18908 ?        Ssl  Oct01   0:07 /usr/sbin/NetworkManager --no-daemon
-root         470  0.0  0.0  82764  3840 ?        Ssl  Oct01   0:10 /usr/sbin/irqbalance --foreground
-root         473  0.0  0.2  49784 20724 ?        Ss   Oct01   0:00 /usr/bin/python3 /usr/bin/networkd-dispatcher --run-startup-triggers
-root         479  0.0  0.1 251708 11296 ?        Ssl  Oct01   0:03 /usr/libexec/polkitd --no-debug
-root         481  0.0  0.0 248748  7532 ?        Ssl  Oct01   0:00 /usr/libexec/power-profiles-daemon
-syslog       483  0.0  0.0 222400  6016 ?        Ssl  Oct01   0:00 /usr/sbin/rsyslogd -n -iNONE
-root         490  0.0  0.3 1467356 31512 ?       Ssl  Oct01   0:10 /usr/lib/snapd/snapd
-root         491  0.0  0.0 245124  6656 ?        Ssl  Oct01   0:00 /usr/libexec/switcheroo-control
-root         496  0.0  0.0  48368  8008 ?        Ss   Oct01   0:00 /lib/systemd/systemd-logind
-root         497  0.0  0.1 137224  9856 ?        Ssl  Oct01   0:18 /usr/sbin/thermald --systemd --dbus-enable --adaptive
-root         500  0.0  0.1 393288 13260 ?        Ssl  Oct01   0:00 /usr/libexec/udisks2/udisksd
-root         501  0.0  0.0  16492  6528 ?        Ss   Oct01   0:00 /sbin/wpa_supplicant -u -s -O /run/wpa_supplicant
-daemon       515  0.0  0.0   3860  2304 ?        Ss   Oct01   0:00 /usr/sbin/atd -f
-avahi        518  0.0  0.0   7440  1280 ?        S    Oct01   0:00 avahi-daemon: chroot helper
-root         529  0.0  0.1 316948 12236 ?        Ssl  Oct01   0:00 /usr/sbin/ModemManager
-ntp          566  0.0  0.0  76112  5888 ?        Ssl  Oct01   0:10 /usr/sbin/ntpd -p /var/run/ntpd.pid -g -u 130:137
-root         743  0.0  0.1  15420  9088 ?        Ss   Oct01   0:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
-root         769  0.0  0.2 126792 23680 ?        Ssl  Oct01   0:00 /usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown --wait-for-signal
-postgres     784  0.0  0.3 229580 30080 ?        Ss   Oct01   0:03 /usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf
-root         785  0.0  0.1 249864  9216 ?        Ssl  Oct01   0:00 /usr/sbin/gdm3
-postgres     791  0.0  0.1 229692  9332 ?        Ss   Oct01   0:00 postgres: 14/main: checkpointer 
-postgres     792  0.0  0.1 229580  8308 ?        Ss   Oct01   0:01 postgres: 14/main: background writer 
-postgres     793  0.0  0.1 229580 11380 ?        Ss   Oct01   0:01 postgres: 14/main: walwriter 
-postgres     794  0.0  0.1 230148 10100 ?        Ss   Oct01   0:01 postgres: 14/main: autovacuum launcher 
-postgres     795  0.0  0.0  84172  7028 ?        Ss   Oct01   0:01 postgres: 14/main: stats collector 
-postgres     796  0.0  0.1 230008  8692 ?        Ss   Oct01   0:00 postgres: 14/main: logical replication launcher 
-root         823  0.0  0.1 179108 10368 ?        Sl   Oct01   0:00 gdm-session-worker [pam/gdm-autologin]
-wsprdae+     830  0.0  0.1  17980 10496 ?        Ss   Oct01   0:00 /lib/systemd/systemd --user
-wsprdae+     831  0.0  0.0 169908  5796 ?        S    Oct01   0:00 (sd-pam)
-wsprdae+     856  0.0  0.0  48216  6400 ?        S<sl Oct01   0:00 /usr/bin/pipewire
-wsprdae+     857  0.0  0.0  32108  6272 ?        Ssl  Oct01   0:12 /usr/bin/pipewire-media-session
-wsprdae+     859  0.0  0.3 832884 25668 ?        S<sl Oct01   0:00 /usr/bin/pulseaudio --daemonize=no --log-target=journal
-wsprdae+     871  0.0  0.0 249556  6684 ?        Sl   Oct01   0:00 /usr/bin/gnome-keyring-daemon --daemonize --login
-rtkit        875  0.0  0.0 154000  3200 ?        SNsl Oct01   0:01 /usr/libexec/rtkit-daemon
-wsprdae+     881  0.0  0.0   9520  5632 ?        Ss   Oct01   0:00 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
-wsprdae+     883  0.0  0.0 171080  5888 tty2     Ssl+ Oct01   0:00 /usr/libexec/gdm-x-session --run-script env GNOME_SHELL_SESSION_MODE=ubuntu /usr/bin/gnome-session --session=ubuntu
-wsprdae+     886  0.0  1.1 989868 89344 tty2     Sl+  Oct01   0:02 /usr/lib/xorg/Xorg vt2 -displayfd 3 -auth /run/user/1001/gdm/Xauthority -nolisten tcp -background none -noreset -keeptty -novtswitch -verbose 3
-wsprdae+     892  0.0  0.0 249296  7808 ?        Ssl  Oct01   0:00 /usr/libexec/gvfsd
-wsprdae+     903  0.0  0.0 380888  6656 ?        Sl   Oct01   0:00 /usr/libexec/gvfsd-fuse /run/user/1001/gvfs -f
-wsprdae+     924  0.0  0.3 642180 28004 ?        SNsl Oct01   0:00 /usr/libexec/tracker-miner-fs-3
-wsprdae+     935  0.0  0.1 324576 10112 ?        Ssl  Oct01   0:00 /usr/libexec/gvfs-udisks2-volume-monitor
-wsprdae+     943  0.0  0.0 245284  6784 ?        Ssl  Oct01   0:00 /usr/libexec/gvfs-goa-volume-monitor
-wsprdae+     947  0.0  0.5 582836 40704 ?        Sl   Oct01   0:00 /usr/libexec/goa-daemon
-wsprdae+     956  0.0  0.0 471824  7168 ?        Ssl  Oct01   0:00 /usr/libexec/xdg-document-portal
-wsprdae+     963  0.0  0.1 347052 15104 ?        Sl   Oct01   0:00 /usr/libexec/goa-identity-service
-wsprdae+     965  0.0  0.0 245108  6528 ?        Ssl  Oct01   0:00 /usr/libexec/gvfs-mtp-volume-monitor
-wsprdae+     974  0.0  0.0 244804  6144 ?        Ssl  Oct01   0:00 /usr/libexec/xdg-permission-store
-wsprdae+     978  0.0  0.1 323856  8192 ?        Ssl  Oct01   0:06 /usr/libexec/gvfs-afc-volume-monitor
-root         982  0.0  0.0   2792  1792 ?        Ss   Oct01   0:00 fusermount3 -o rw,nosuid,nodev,fsname=portal,auto_unmount,subtype=portal -- /run/user/1001/doc
-wsprdae+     989  0.0  0.0 246064  6912 ?        Ssl  Oct01   0:00 /usr/libexec/gvfs-gphoto2-volume-monitor
-root         995  0.0  0.1 250868  8704 ?        Ssl  Oct01   0:00 /usr/libexec/upowerd
-wsprdae+    1034  0.0  0.1 231696 15488 tty2     Sl+  Oct01   0:00 /usr/libexec/gnome-session-binary --session=ubuntu
-wsprdae+    1129  0.0  0.1 309752  8192 ?        Ssl  Oct01   0:00 /usr/libexec/at-spi-bus-launcher
-wsprdae+    1135  0.0  0.0   8428  4352 ?        S    Oct01   0:00 /usr/bin/dbus-daemon --config-file=/usr/share/defaults/at-spi2/accessibility.conf --nofork --print-address 11 --address=unix:path=/run/user/1001/at-spi/bus_0
-wsprdae+    1174  0.0  0.3 523696 24408 ?        Ssl  Oct01   0:00 /usr/libexec/gnome-remote-desktop-daemon
-wsprdae+    1175  0.0  0.0 100560  5632 ?        Ssl  Oct01   0:00 /usr/libexec/gnome-session-ctl --monitor
-wsprdae+    1188  0.0  0.2 527844 17408 ?        Ssl  Oct01   0:00 /usr/libexec/gnome-session-binary --systemd-service --session=ubuntu
-wsprdae+    1214  0.0  3.1 4573584 249680 ?      Ssl  Oct01   0:48 /usr/bin/gnome-shell
-wsprdae+    1244  0.0  0.2 583000 21120 ?        Sl   Oct01   0:00 /usr/libexec/gnome-shell-calendar-server
-wsprdae+    1250  0.0  0.3 1080780 25856 ?       Ssl  Oct01   0:00 /usr/libexec/evolution-source-registry
-wsprdae+    1260  0.0  0.0 156936  5760 ?        Ssl  Oct01   0:00 /usr/libexec/dconf-service
-wsprdae+    1261  0.0  0.3 922844 30848 ?        Ssl  Oct01   0:00 /usr/libexec/evolution-calendar-factory
-root        1268  0.0  0.2 306852 20572 ?        Ssl  Oct01   0:00 /usr/libexec/packagekitd
-wsprdae+    1278  0.0  0.3 680888 28672 ?        Ssl  Oct01   0:00 /usr/libexec/evolution-addressbook-factory
-wsprdae+    1295  0.0  0.1 323516  8960 ?        Sl   Oct01   0:00 /usr/libexec/gvfsd-trash --spawner :1.5 /org/gtk/gvfs/exec_spaw/0
-wsprdae+    1304  0.0  0.3 2603944 27496 ?       Sl   Oct01   0:00 /usr/bin/gjs /usr/share/gnome-shell/org.gnome.Shell.Notifications
-wsprdae+    1306  0.0  0.0 162752  7936 ?        Sl   Oct01   0:00 /usr/libexec/at-spi2-registryd --use-gnome-session
-wsprdae+    1320  0.0  0.1 484976 13696 ?        Ssl  Oct01   0:03 /usr/libexec/xdg-desktop-portal
-wsprdae+    1324  0.0  1.0 901500 84944 ?        Ssl  Oct01   0:00 /usr/libexec/xdg-desktop-portal-gnome
-wsprdae+    1356  0.0  0.0   2888  1536 ?        Ss   Oct01   0:00 sh -c /usr/bin/ibus-daemon --panel disable $([ "$XDG_SESSION_TYPE" = "x11" ] && echo "--xim")
-wsprdae+    1358  0.0  0.1 397492 11696 ?        Sl   Oct01   0:00 /usr/bin/ibus-daemon --panel disable --xim
-wsprdae+    1359  0.0  0.0 319072  6912 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-a11y-settings
-wsprdae+    1360  0.0  0.3 619756 28700 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-color
-wsprdae+    1361  0.0  0.2 384116 16256 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-datetime
-wsprdae+    1363  0.0  0.1 320768  8064 ?        Ssl  Oct01   0:06 /usr/libexec/gsd-housekeeping
-wsprdae+    1364  0.0  0.3 350120 24416 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-keyboard
-wsprdae+    1369  0.0  0.3 873808 29392 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-media-keys
-wsprdae+    1373  0.0  0.3 460080 27496 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-power
-wsprdae+    1375  0.0  0.1 258504 11264 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-print-notifications
-wsprdae+    1376  0.0  0.0 466508  6912 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-rfkill
-wsprdae+    1384  0.0  0.0 244940  6400 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-screensaver-proxy
-wsprdae+    1389  0.0  0.1 474456 10496 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-sharing
-wsprdae+    1391  0.0  0.1 320956  8320 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-smartcard
-wsprdae+    1393  0.0  0.1 327988  9600 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-sound
-wsprdae+    1399  0.0  0.3 350456 24632 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-wacom
-wsprdae+    1405  0.0  0.3 352028 27104 ?        Ssl  Oct01   0:00 /usr/libexec/gsd-xsettings
-wsprdae+    1415  0.0  0.0 232264  7680 ?        Sl   Oct01   0:00 /usr/libexec/gsd-disk-utility-notify
-wsprdae+    1440  0.0  0.8 764856 67320 ?        Sl   Oct01   0:00 /usr/libexec/evolution-data-server/evolution-alarm-notify
-wsprdae+    1442  0.0  0.0 172132  7296 ?        Sl   Oct01   0:00 /usr/libexec/ibus-memconf
-wsprdae+    1446  0.0  0.3 281224 29484 ?        Sl   Oct01   0:01 /usr/libexec/ibus-extension-gtk3
-wsprdae+    1451  0.0  0.3 202848 24768 ?        Sl   Oct01   0:00 /usr/libexec/ibus-x11 --kill-daemon
-wsprdae+    1455  0.0  0.0 245912  7424 ?        Sl   Oct01   0:00 /usr/libexec/ibus-portal
-colord      1503  0.0  0.1 254120 13444 ?        Ssl  Oct01   0:00 /usr/libexec/colord
-wsprdae+    1510  0.0  0.1 351008 14848 ?        Sl   Oct01   0:00 /usr/libexec/gsd-printer
-wsprdae+    1511  0.0  0.1  76252 14080 ?        Ss   Oct01   0:00 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
-wsprdae+    1621  0.0  0.3 2743260 27564 ?       Sl   Oct01   0:00 /usr/bin/gjs /usr/share/gnome-shell/org.gnome.ScreenSaver
-wsprdae+    1639  0.0  0.0 172132  7168 ?        Sl   Oct01   0:00 /usr/libexec/ibus-engine-simple
-wsprdae+    1644  0.0  0.3 314452 26372 ?        Sl   Oct01   0:00 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
-wsprdae+    1655  0.0  0.3 350744 25856 ?        Ssl  Oct01   0:00 /usr/libexec/xdg-desktop-portal-gtk
-kernoops    1685  0.0  0.0  13084  2208 ?        Ss   Oct01   0:00 /usr/sbin/kerneloops --test
-kernoops    1687  0.0  0.0  13084  2180 ?        Ss   Oct01   0:00 /usr/sbin/kerneloops
-root        1726  0.0  0.0      0     0 ?        I<   Oct01   0:00 [kworker/u9:1]
-wsprdae+    1727  0.0  0.7 2925184 57572 ?       Sl   Oct01   0:04 gjs /usr/share/gnome-shell/extensions/ding@rastersoft.com/ding.js -E -P /usr/share/gnome-shell/extensions/ding@rastersoft.com -M 0 -D 0:0:1920:1080:1:27:0:0:0:0
-wsprdae+    1742  0.0  0.0 171660  6528 ?        Ssl  Oct01   0:00 /usr/libexec/gvfsd-metadata
-wsprdae+    1761  0.0  0.1 714424 13000 ?        Sl   Oct01   1:00 ./frpc -c ./frpc_wd.ini
-wsprdae+   10987  0.0  0.3 500304 30080 ?        Sl   Oct01   0:03 update-notifier
-root     2554330  0.0  0.0      0     0 ?        I    Oct02   0:12 [kworker/3:2-events]
-root     2775486  0.0  0.0      0     0 ?        I<   Oct02   0:00 [tls-strp]
-root     3042098  0.0  0.0      0     0 ?        I    Oct02   0:03 [kworker/2:2-events]
-root     3042421  0.0  0.0      0     0 ?        I    Oct02   0:06 [kworker/0:2-events]
-root     3043658  0.0  0.0      0     0 ?        I    Oct02   0:00 [kworker/3:0]
-root     3043832  0.0  0.1  81532 13824 ?        Ss   00:00   0:00 /usr/sbin/cupsd -l
-root     3043834  0.0  0.1 172620 11648 ?        Ssl  00:00   0:00 /usr/sbin/cups-browsed
-root     3044368  0.0  0.0      0     0 ?        I    04:06   0:00 [kworker/1:0-events]
-root     3044369  0.0  0.0      0     0 ?        I    04:06   0:00 [kworker/0:1-cgroup_destroy]
-root     3044402  0.0  0.0      0     0 ?        I    04:22   0:00 [kworker/2:1-cgroup_destroy]
-root     3045223  0.0  0.0      0     0 ?        I    04:39   0:00 [kworker/1:1]
-root     3045523  0.0  0.0      0     0 ?        I    05:35   0:00 [kworker/u8:3-flush-259:0]
-root     3045538  0.0  0.0      0     0 ?        I    05:45   0:00 [kworker/u8:2-events_power_efficient]
-root     3045561  0.0  0.0      0     0 ?        I    06:00   0:00 [kworker/u8:0-events_unbound]
-root     3045587  0.0  0.1  17288 10880 ?        Ss   06:16   0:00 sshd: wsprdaemon [priv]
-wsprdae+ 3045665  0.0  0.1  18152  8552 ?        S    06:16   0:00 sshd: wsprdaemon@pts/0
-wsprdae+ 3045666  0.0  0.0  20340  5632 pts/0    Ss   06:16   0:00 -bash
-root     3046580  0.0  0.0      0     0 ?        I    06:19   0:00 [kworker/u8:1-events_power_efficient]
-root     3046629  0.0  0.0      0     0 ?        I    06:19   0:00 [kworker/2:0]
-root     3046834  0.0  0.0      0     0 ?        I    06:19   0:00 [kworker/3:1]
-root     3053997  0.0  0.0      0     0 ?        I    06:19   0:00 [kworker/0:0-cgroup_destroy]
-wsprdae+ 3079600  4.6  0.1  24424  9380 pts/0    S+   06:23   0:00 /bin/bash /home/wsprdaemon/wsprdaemon/wsprdaemon.sh -z
-root     3080057  0.5  0.0   8724  5376 pts/0    S+   06:23   0:00 sudo systemctl stop wsprdaemon.service
-root     3080058  0.0  0.0   8724  2288 pts/1    Ss   06:23   0:00 sudo systemctl stop wsprdaemon.service
-root     3080059  0.0  0.0   7456  3584 pts/1    S+   06:23   0:00 systemctl stop wsprdaemon.service
-root     3080060  0.0  0.0  14672  5888 pts/1    S+   06:23   0:00 /bin/systemd-tty-ask-password-agent --watch
-wsprdae+ 3080061  7.5  0.1  24468  9224 ?        Ss   06:23   0:00 /bin/bash /home/wsprdaemon/wsprdaemon/wsprdaemon.sh -Z
-wsprdae+ 3080136  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080144  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080145  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080288  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080343  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080346  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080348  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080354  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080362  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080363  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080364  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080367  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080368  0.0  0.0   2788  1408 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080370  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080375  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080377  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080381  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080385  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080386  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080391  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080394  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080395  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080396  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080399  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080401  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080407  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080411  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 2
-wsprdae+ 3080412  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080415  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080419  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080420  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080421  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080422  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080423  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080424  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080433  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080438  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080439  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080440  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080441  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080445  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080448  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080449  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080450  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080455  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080463  0.0  0.0   2788  1536 ?        S    06:23   0:00 sleep 1
-wsprdae+ 3080529  0.0  0.0   7060  2944 ?        R    06:23   0:00 ps aux
+root           1  0.0  0.1 168088 10752 ?        Ss   Aug15   6:27 /lib/systemd/systemd splash --system --deserialize 55
+root           2  0.0  0.0      0     0 ?        S    Aug15   0:00 [kthreadd]
+root           3  0.0  0.0      0     0 ?        I<   Aug15   0:00 [rcu_gp]
+root           4  0.0  0.0      0     0 ?        I<   Aug15   0:00 [rcu_par_gp]
+root           5  0.0  0.0      0     0 ?        I<   Aug15   0:00 [slub_flushwq]
+root           6  0.0  0.0      0     0 ?        I<   Aug15   0:00 [netns]
+root           8  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kworker/0:0H-events_highpri]
+root          10  0.0  0.0      0     0 ?        I<   Aug15   0:00 [mm_percpu_wq]
+root          11  0.0  0.0      0     0 ?        I    Aug15   0:00 [rcu_tasks_kthread]
+root          12  0.0  0.0      0     0 ?        I    Aug15   0:00 [rcu_tasks_rude_kthread]
+root          13  0.0  0.0      0     0 ?        I    Aug15   0:00 [rcu_tasks_trace_kthread]
+root          14  0.0  0.0      0     0 ?        S    Aug15  19:11 [ksoftirqd/0]
+root          15  0.1  0.0      0     0 ?        I    Aug15 158:41 [rcu_preempt]
+root          16  0.0  0.0      0     0 ?        S    Aug15   0:36 [migration/0]
+root          17  0.0  0.0      0     0 ?        S    Aug15   0:00 [idle_inject/0]
+root          19  0.0  0.0      0     0 ?        S    Aug15   0:00 [cpuhp/0]
+root          20  0.0  0.0      0     0 ?        S    Aug15   0:00 [cpuhp/1]
+root          21  0.0  0.0      0     0 ?        S    Aug15   0:00 [idle_inject/1]
+root          22  0.0  0.0      0     0 ?        S    Aug15   0:35 [migration/1]
+root          23  0.0  0.0      0     0 ?        S    Aug15  20:19 [ksoftirqd/1]
+root          25  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kworker/1:0H-events_highpri]
+root          26  0.0  0.0      0     0 ?        S    Aug15   0:00 [cpuhp/2]
+root          27  0.0  0.0      0     0 ?        S    Aug15   0:00 [idle_inject/2]
+root          28  0.0  0.0      0     0 ?        S    Aug15   0:34 [migration/2]
+root          29  0.0  0.0      0     0 ?        S    Aug15  19:20 [ksoftirqd/2]
+root          32  0.0  0.0      0     0 ?        S    Aug15   0:00 [cpuhp/3]
+root          33  0.0  0.0      0     0 ?        S    Aug15   0:00 [idle_inject/3]
+root          34  0.0  0.0      0     0 ?        S    Aug15   0:37 [migration/3]
+root          35  0.0  0.0      0     0 ?        S    Aug15  23:09 [ksoftirqd/3]
+root          38  0.0  0.0      0     0 ?        S    Aug15   0:00 [kdevtmpfs]
+root          39  0.0  0.0      0     0 ?        I<   Aug15   0:00 [inet_frag_wq]
+root          40  0.0  0.0      0     0 ?        S    Aug15   7:39 [kauditd]
+root          41  0.0  0.0      0     0 ?        S    Aug15   0:04 [khungtaskd]
+root          44  0.0  0.0      0     0 ?        S    Aug15   0:00 [oom_reaper]
+root          45  0.0  0.0      0     0 ?        I<   Aug15   0:00 [writeback]
+root          46  0.0  0.0      0     0 ?        S    Aug15  35:37 [kcompactd0]
+root          47  0.0  0.0      0     0 ?        SN   Aug15   0:00 [ksmd]
+root          49  0.0  0.0      0     0 ?        SN   Aug15   0:02 [khugepaged]
+root          50  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kintegrityd]
+root          51  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kblockd]
+root          52  0.0  0.0      0     0 ?        I<   Aug15   0:00 [blkcg_punt_bio]
+root          53  0.0  0.0      0     0 ?        I<   Aug15   0:00 [tpm_dev_wq]
+root          54  0.0  0.0      0     0 ?        I<   Aug15   0:00 [ata_sff]
+root          55  0.0  0.0      0     0 ?        I<   Aug15   0:00 [md]
+root          56  0.0  0.0      0     0 ?        I<   Aug15   0:00 [edac-poller]
+root          57  0.0  0.0      0     0 ?        I<   Aug15   0:00 [devfreq_wq]
+root          58  0.0  0.0      0     0 ?        S    Aug15   0:00 [watchdogd]
+root          60  0.0  0.0      0     0 ?        I<   Aug15   5:37 [kworker/1:1H-kblockd]
+root          61  0.0  0.0      0     0 ?        S    Aug15   3:13 [kswapd0]
+root          62  0.0  0.0      0     0 ?        S    Aug15   0:00 [ecryptfs-kthread]
+root          63  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kthrotld]
+root          65  0.0  0.0      0     0 ?        I<   Aug15   0:00 [acpi_thermal_pm]
+root          66  0.0  0.0      0     0 ?        S    Aug15   0:00 [xenbus_probe]
+root          67  0.0  0.0      0     0 ?        S    Aug15   1:57 [hwrng]
+root          70  0.0  0.0      0     0 ?        I<   Aug15   0:00 [mld]
+root          71  0.0  0.0      0     0 ?        I<   Aug15   0:00 [ipv6_addrconf]
+root          78  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kstrp]
+root          81  0.0  0.0      0     0 ?        I<   Aug15   0:00 [zswap-shrink]
+root          86  0.0  0.0      0     0 ?        I<   Aug15   0:00 [charger_manager]
+root         108  0.0  0.0      0     0 ?        I<   Aug15   5:12 [kworker/2:1H-kblockd]
+root         110  0.0  0.0      0     0 ?        I<   Aug15   2:46 [kworker/0:1H-kblockd]
+root         135  0.0  0.0      0     0 ?        I<   Aug15   0:00 [kworker/3:1H-kblockd]
+root         140  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_0]
+root         141  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_0]
+root         142  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_1]
+root         143  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_1]
+root         144  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_2]
+root         145  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_2]
+root         146  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_3]
+root         147  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_3]
+root         148  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_4]
+root         149  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_4]
+root         150  0.0  0.0      0     0 ?        S    Aug15   0:00 [scsi_eh_5]
+root         151  0.0  0.0      0     0 ?        I<   Aug15   0:00 [scsi_tmf_5]
+root         181  0.0  0.0      0     0 ?        S    Aug15   2:59 [jbd2/sda3-8]
+root         182  0.0  0.0      0     0 ?        I<   Aug15   0:00 [ext4-rsv-conver]
+root         225  0.2  3.3 411816 263996 ?       S<s  Aug15 257:23 /lib/systemd/systemd-journald
+root         276  0.0  0.0  27172  4556 ?        Ss   Aug15   0:06 /lib/systemd/systemd-udevd
+root         308  0.0  0.0      0     0 ?        S    Aug15   0:00 [irq/32-mei_me]
+root         357  0.0  0.0      0     0 ?        I<   Aug15   0:00 [cryptd]
+root         385  0.0  0.0      0     0 ?        S    Aug15   0:00 [card0-crtc0]
+root         389  0.0  0.0      0     0 ?        S    Aug15   0:00 [card0-crtc1]
+systemd+     419  0.0  0.0  26848  5092 ?        Ss   Aug15  19:41 /lib/systemd/systemd-resolved
+root         551  0.0  0.0 248744  4284 ?        Ssl  Aug15  17:45 /usr/libexec/accounts-daemon
+root         552  0.0  0.0   2812   512 ?        Ss   Aug15   0:00 /usr/sbin/acpid
+avahi        556  1.0  0.0   9812  4224 ?        Ss   Aug15 1087:24 avahi-daemon: running [KJ6MKI-TC.local]
+root         557  0.0  0.0  18148  1280 ?        Ss   Aug15   0:09 /usr/sbin/cron -f -P
+message+     558  0.0  0.0  11144  4480 ?        Ss   Aug15   1:17 @dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+root         560  0.0  0.1 556600  9424 ?        Ssl  Aug15  42:09 /usr/sbin/NetworkManager --no-daemon
+root         567  0.0  0.0  82764  1408 ?        Ssl  Aug15   3:01 /usr/sbin/irqbalance --foreground
+root         572  0.0  0.0  49784   768 ?        Ss   Aug15   0:00 /usr/bin/python3 /usr/bin/networkd-dispatcher --run-startup-triggers
+root         577  0.0  0.1 251752  7956 ?        Ssl  Aug15   0:13 /usr/libexec/polkitd --no-debug
+root         582  0.0  0.0 248712  3328 ?        Ssl  Aug15   0:00 /usr/libexec/power-profiles-daemon
+syslog       585  0.0  0.0 222400  3452 ?        Ssl  Aug15  57:29 /usr/sbin/rsyslogd -n -iNONE
+root         589  0.0  0.0 245140  3456 ?        Ssl  Aug15   0:00 /usr/libexec/switcheroo-control
+root         591  0.0  0.0  48408  5316 ?        Ss   Aug15   0:08 /lib/systemd/systemd-logind
+root         593  0.0  0.0 137244  3584 ?        Ssl  Aug15   3:25 /usr/sbin/thermald --systemd --dbus-enable --adaptive
+root         595  0.0  0.0 393296  7768 ?        Ssl  Aug15   8:30 /usr/libexec/udisks2/udisksd
+root         597  0.0  0.0  16492  1152 ?        Ss   Aug15   0:20 /sbin/wpa_supplicant -u -s -O /run/wpa_supplicant
+daemon       599  0.0  0.0   3860   896 ?        Ss   Aug15   0:00 /usr/sbin/atd -f
+avahi        604  0.0  0.0   7440   384 ?        S    Aug15   0:00 avahi-daemon: chroot helper
+root         647  0.0  0.0 317952  4420 ?        Ssl  Aug15   0:00 /usr/sbin/ModemManager
+root         673  0.0  0.0      0     0 ?        I<   Aug15   3:37 [kworker/3:2H-kblockd]
+ntp          684  0.0  0.0  76112  3456 ?        Ssl  Aug15  17:17 /usr/sbin/ntpd -p /var/run/ntpd.pid -g -u 130:137
+root         711  0.0  0.0 126796   384 ?        Ssl  Aug15   0:00 /usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown --wait-for-signal
+root         712  0.0  0.0  15420  3328 ?        Ss   Aug15   0:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+root         718  0.0  0.0 249856  4992 ?        Ssl  Aug15   0:00 /usr/sbin/gdm3
+root         739  0.0  0.0 326572  6144 ?        Sl   Aug15   0:00 gdm-session-worker [pam/gdm-autologin]
+rob          755  0.0  0.0  18064  6488 ?        Ss   Aug15   0:16 /lib/systemd/systemd --user
+rob          756  0.0  0.0 104492  1216 ?        S    Aug15   0:00 (sd-pam)
+rob          764  0.0  0.0  48220  1536 ?        S<sl Aug15   0:00 /usr/bin/pipewire
+rob          765  0.0  0.0  32108  1920 ?        Ssl  Aug15   7:48 /usr/bin/pipewire-media-session
+rob          766  1.6  0.0 1357452 6744 ?        S<sl Aug15 1699:50 /usr/bin/pulseaudio --daemonize=no --log-target=journal
+rob          767  0.0  0.0  76144  1024 ?        Ss   Aug15   0:01 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
+rob          776  0.0  0.0 249544  4636 ?        Sl   Aug15   0:00 /usr/bin/gnome-keyring-daemon --daemonize --login
+rtkit        782  0.0  0.0 154000  1920 ?        SNsl Aug15   0:49 /usr/libexec/rtkit-daemon
+rob          786  0.0  0.0 171040  3200 tty2     Ssl+ Aug15   0:00 /usr/libexec/gdm-wayland-session env GNOME_SHELL_SESSION_MODE=ubuntu /usr/bin/gnome-session --session=ubuntu
+rob          789  0.0  0.0  10508  4224 ?        Ss   Aug15   0:20 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+rob          794  0.0  0.0 231696   512 tty2     Sl+  Aug15   0:00 /usr/libexec/gnome-session-binary --session=ubuntu
+rob          822  0.0  0.0 249400  4352 ?        Ssl  Aug15   0:00 /usr/libexec/gvfsd
+rob          834  0.0  0.0 380888  3328 ?        Sl   Aug15   0:00 /usr/libexec/gvfsd-fuse /run/user/1000/gvfs -f
+rob          847  0.0  0.0 100560   640 ?        Ssl  Aug15   0:00 /usr/libexec/gnome-session-ctl --monitor
+rob          861  0.0  0.0 527916  5376 ?        Ssl  Aug15   0:01 /usr/libexec/gnome-session-binary --systemd-service --session=ubuntu
+rob          877  0.0  0.0 309616  3456 ?        Sl   Aug15   0:00 /usr/libexec/at-spi-bus-launcher --launch-immediately
+rob          884  2.8  2.6 5247216 209428 ?      Ssl  Aug15 2882:35 /usr/bin/gnome-shell
+rob          890  0.0  0.0   8560  2560 ?        S    Aug15   0:00 /usr/bin/dbus-daemon --config-file=/usr/share/defaults/at-spi2/accessibility.conf --nofork --print-address 11 --address=unix:path=/run/user/1000/at-spi/bus
+rob          973  0.0  0.0 545556  3840 ?        Ssl  Aug15   0:00 /usr/libexec/xdg-document-portal
+rob          981  0.0  0.0 244800  3328 ?        Ssl  Aug15   0:00 /usr/libexec/xdg-permission-store
+root         988  0.0  0.0   2792   256 ?        Ss   Aug15   0:00 fusermount3 -o rw,nosuid,nodev,fsname=portal,auto_unmount,subtype=portal -- /run/user/1000/doc
+rob         1051  0.0  0.0 583052  7296 ?        Sl   Aug15   0:01 /usr/libexec/gnome-shell-calendar-server
+rob         1057  0.0  0.0 1080808 5756 ?        Ssl  Aug15   0:00 /usr/libexec/evolution-source-registry
+root        1071  0.0  0.0 250864  4352 ?        Ssl  Aug15   0:00 /usr/libexec/upowerd
+rob         1089  0.0  0.0 582832  3840 ?        Sl   Aug15   0:00 /usr/libexec/goa-daemon
+rob         1100  0.0  0.0 157140  3584 ?        Ssl  Aug15   0:00 /usr/libexec/dconf-service
+rob         1105  0.0  0.0 1324384 6656 ?        Ssl  Aug15   0:01 /usr/libexec/evolution-calendar-factory
+rob         1106  0.0  0.0 324700  6016 ?        Ssl  Aug15   1:33 /usr/libexec/gvfs-udisks2-volume-monitor
+rob         1113  0.0  0.0 246196  4224 ?        Ssl  Aug15   0:00 /usr/libexec/gvfs-gphoto2-volume-monitor
+rob         1127  0.0  0.0 420784  3584 ?        Sl   Aug15   0:02 /usr/libexec/goa-identity-service
+rob         1128  0.0  0.0 245108  3584 ?        Ssl  Aug15   0:00 /usr/libexec/gvfs-mtp-volume-monitor
+rob         1136  0.0  0.0 323852  3840 ?        Ssl  Aug15   2:32 /usr/libexec/gvfs-afc-volume-monitor
+rob         1142  0.0  0.0 245284  3840 ?        Ssl  Aug15   0:00 /usr/libexec/gvfs-goa-volume-monitor
+rob         1152  0.0  0.0 893888  4992 ?        Ssl  Aug15   0:00 /usr/libexec/evolution-addressbook-factory
+root        1155  0.0  0.7 455364 60900 ?        Ssl  Aug15   4:40 /usr/libexec/packagekitd
+rob         1164  0.0  0.0 306020  5360 ?        Sl   Aug15   0:00 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
+rob         1171  0.0  0.0 632592  6912 ?        Ssl  Aug15   1:30 /usr/libexec/xdg-desktop-portal
+rob         1178  0.0  0.0 532408  7008 ?        Ssl  Aug15   0:01 /usr/libexec/xdg-desktop-portal-gnome
+rob         1185  0.0  0.0 397380  5632 ?        Sl   Aug15   0:00 /usr/libexec/gvfsd-trash --spawner :1.6 /org/gtk/gvfs/exec_spaw/0
+rob         1194  0.0  0.1 2677724 14884 ?       Sl   Aug15   0:00 /usr/bin/gjs /usr/share/gnome-shell/org.gnome.Shell.Notifications
+rob         1196  0.0  0.0 162680  3584 ?        Sl   Aug15   0:00 /usr/libexec/at-spi2-registryd --use-gnome-session
+rob         1210  0.0  0.0   2888   256 ?        Ss   Aug15   0:00 sh -c /usr/bin/ibus-daemon --panel disable $([ "$XDG_SESSION_TYPE" = "x11" ] && echo "--xim")
+rob         1211  0.0  0.0 319072  3328 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-a11y-settings
+rob         1213  0.0  0.1 471372  8292 ?        Ssl  Aug15   0:16 /usr/libexec/gsd-color
+rob         1215  0.0  0.0 324188  4448 ?        Sl   Aug15   0:00 /usr/bin/ibus-daemon --panel disable
+rob         1216  0.0  0.0 384116  3968 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-datetime
+rob         1217  0.0  0.0 320732  5372 ?        Ssl  Aug15   1:55 /usr/libexec/gsd-housekeeping
+rob         1218  0.0  0.0 349252  5244 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-keyboard
+rob         1220  0.0  0.0 651648  6612 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-media-keys
+rob         1221  0.0  0.0 385348  6476 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-power
+rob         1222  0.0  0.0 258748  4992 ?        Ssl  Aug15   0:02 /usr/libexec/gsd-print-notifications
+rob         1226  0.0  0.0 466508  3584 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-rfkill
+rob         1233  0.0  0.0 244940  3584 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-screensaver-proxy
+rob         1235  0.0  0.0 474456  4864 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-sharing
+rob         1243  0.0  0.0 468420  3840 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-smartcard
+rob         1251  0.0  0.0 327988  3584 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-sound
+rob         1257  0.0  0.0 349824  4992 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-wacom
+rob         1291  0.0  0.0 823720  7884 ?        Sl   Aug15   0:05 /usr/libexec/evolution-data-server/evolution-alarm-notify
+rob         1303  0.0  0.0 172132  3328 ?        Sl   Aug15   0:00 /usr/libexec/ibus-memconf
+rob         1304  0.0  0.0 356484  5868 ?        Sl   Aug15   0:01 /usr/libexec/ibus-extension-gtk3
+rob         1312  0.0  0.0 232264  4608 ?        Sl   Aug15   0:03 /usr/libexec/gsd-disk-utility-notify
+rob         1319  0.0  0.0 246044  3200 ?        Sl   Aug15   0:00 /usr/libexec/ibus-portal
+rob         1366  0.0  0.0 351008  4224 ?        Sl   Aug15   0:00 /usr/libexec/gsd-printer
+rob         1371  0.0  0.0 172132  3584 ?        Sl   Aug15   0:00 /usr/libexec/ibus-engine-simple
+kernoops    1399  0.0  0.0  13084  1556 ?        Ss   Aug15   0:04 /usr/sbin/kerneloops --test
+kernoops    1401  0.0  0.0  13084  1428 ?        Ss   Aug15   0:04 /usr/sbin/kerneloops
+rob         1435  0.0  0.0 353128  7224 ?        Ssl  Aug15   0:00 /usr/libexec/xdg-desktop-portal-gtk
+colord      1442  0.0  0.1 869632  9044 ?        Ssl  Aug15   0:02 /usr/libexec/colord
+rob         1495  0.0  0.2 715916 19268 ?        SNsl Aug15   0:10 /usr/libexec/tracker-miner-fs-3
+rob         1534  0.0  0.1 2677792 13228 ?       Sl   Aug15   0:00 /usr/bin/gjs /usr/share/gnome-shell/org.gnome.ScreenSaver
+rob         1719  0.0  0.0 171696  4096 ?        Ssl  Aug15   0:00 /usr/libexec/gvfsd-metadata
+rob         7169  0.5  0.1 599976 12676 ?        Sl   Aug15 584:56 /usr/bin/Xwayland :0 -rootless -noreset -accessx -core -auth /run/user/1000/.mutter-Xwaylandauth.U5VR91 -listen 4 -listen 5 -displayfd 6 -initfd 7
+rob         7178  0.0  0.0 612256  6924 ?        Ssl  Aug15   0:00 /usr/libexec/gsd-xsettings
+rob         7207  0.0  0.0 202824  4924 ?        Sl   Aug15   0:00 /usr/libexec/ibus-x11
+rob         7410  0.0  0.0 794584  6400 ?        Sl   Aug15   1:39 /usr/bin/snap userd
+rob        11863  0.0  0.2 429000 16320 ?        Sl   Aug15   1:36 update-notifier
+rob        53878  0.0  4.6 980236 368000 ?       Sl   Aug18   9:20 /snap/snap-store/959/usr/bin/snap-store
+rob        69559  0.0  0.1 107791716 9184 ?      Sl   Aug18  26:12 yelp
+rob        69582  0.0  0.0 107455148 6116 ?      SLl  Aug18   1:59 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.0/WebKitNetworkProcess 13 25
+rob        70623  0.2  0.1 90862220 11828 ?      SLl  Aug18 279:51 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.0/WebKitWebProcess 25 27
+root      100225  0.0  0.0      0     0 ?        I    06:09   0:05 [kworker/3:2-events]
+root      852575  0.0  0.4 1541672 32088 ?       Ssl  Oct11   0:47 /usr/lib/snapd/snapd
+root     1072582  0.0  0.0      0     0 ?        I<   Aug26   0:00 [tls-strp]
+systemd+ 1161458  0.0  0.0  14824  3072 ?        Ss   Oct05  24:55 /lib/systemd/systemd-oomd
+root     1315476  0.0  0.0      0     0 ?        I    Oct21   0:51 [kworker/1:1-events]
+root     2107555  0.0  0.0      0     0 ?        I    Oct24   0:07 [kworker/2:2-events]
+root     2305898  0.0  0.0      0     0 ?        I    14:00   0:00 [kworker/u8:2-events_power_efficient]
+root     2453224  0.0  0.0      0     0 ?        I    14:31   0:00 [kworker/3:1-cgroup_destroy]
+root     2623837  0.0  0.0      0     0 ?        I    15:08   0:00 [kworker/u8:3-flush-8:0]
+root     2632171  0.0  0.0      0     0 ?        I    15:09   0:00 [kworker/1:2-cgroup_destroy]
+root     2643640  0.0  0.1  73944 14848 ?        Ss   00:00   0:00 /usr/sbin/cupsd -l
+root     2643668  0.0  0.1 173808 14080 ?        Ssl  00:00   0:00 /usr/sbin/cups-browsed
+lp       2647130  0.0  0.0  16284  6400 ?        S    00:00   0:00 /usr/lib/cups/notifier/dbus dbus://
+lp       2647131  0.0  0.0  16284  6400 ?        S    00:00   0:00 /usr/lib/cups/notifier/dbus dbus://
+root     2693449  0.0  0.0      0     0 ?        I<   Aug22   0:00 [kworker/2:2H-kblockd]
+root     2735321  0.0  0.0      0     0 ?        I    15:31   0:00 [kworker/0:2]
+root     2743124  0.0  0.0      0     0 ?        I    15:33   0:00 [kworker/u8:4-events_unbound]
+wsprdae+ 2782368  0.0  0.1  17884 10240 ?        Ss   15:41   0:00 /lib/systemd/systemd --user
+wsprdae+ 2782369  0.0  0.0 171360  7188 ?        S    15:41   0:00 (sd-pam)
+root     2782376  0.0  0.0      0     0 ?        I    15:41   0:00 [kworker/2:1-cgroup_destroy]
+wsprdae+ 2782387  0.0  0.0  39436  6400 ?        Ssl  15:41   0:00 /usr/bin/pipewire
+wsprdae+ 2782388  0.0  0.0  23460  6528 ?        Ssl  15:41   0:00 /usr/bin/pipewire-media-session
+wsprdae+ 2782390  0.2  0.1  76252 13696 ?        Ss   15:41   0:00 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
+wsprdae+ 2782419  0.0  0.0   8568  4480 ?        Ss   15:41   0:00 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+wsprdae+ 2782482  0.0  0.0 240636  7680 ?        Ssl  15:41   0:00 /usr/libexec/gvfsd
+wsprdae+ 2782489  0.0  0.0 380888  6656 ?        Sl   15:41   0:00 /usr/libexec/gvfsd-fuse /run/user/1001/gvfs -f
+wsprdae+ 2782519  0.1  0.3 633504 26680 ?        SNsl 15:41   0:00 /usr/libexec/tracker-miner-fs-3
+wsprdae+ 2782525  0.0  0.1 316040 10496 ?        Ssl  15:41   0:00 /usr/libexec/gvfs-udisks2-volume-monitor
+wsprdae+ 2782532  0.0  0.0 237540  7040 ?        Ssl  15:41   0:00 /usr/libexec/gvfs-gphoto2-volume-monitor
+wsprdae+ 2782537  0.0  0.0 236452  6656 ?        Ssl  15:41   0:00 /usr/libexec/gvfs-mtp-volume-monitor
+wsprdae+ 2782544  0.0  0.1 315204  8192 ?        Ssl  15:41   0:00 /usr/libexec/gvfs-afc-volume-monitor
+wsprdae+ 2782550  0.0  0.0 236628  6528 ?        Ssl  15:41   0:00 /usr/libexec/gvfs-goa-volume-monitor
+wsprdae+ 2782554  0.0  0.5 578308 40832 ?        Sl   15:41   0:00 /usr/libexec/goa-daemon
+wsprdae+ 2782563  0.0  0.0 463168  7424 ?        Ssl  15:41   0:00 /usr/libexec/xdg-document-portal
+wsprdae+ 2782575  0.0  0.1 338396 15488 ?        Sl   15:41   0:00 /usr/libexec/goa-identity-service
+wsprdae+ 2782576  0.0  0.0 236148  6144 ?        Ssl  15:41   0:00 /usr/libexec/xdg-permission-store
+root     2782585  0.0  0.0   2792  1920 ?        Ss   15:41   0:00 fusermount3 -o rw,nosuid,nodev,fsname=portal,auto_unmount,subtype=portal -- /run/user/1001/doc
+wsprdae+ 2782650  0.0  0.0 163020  6528 ?        Ssl  15:41   0:00 /usr/libexec/gvfsd-metadata
+wsprdae+ 2782708  0.0  0.1 298160 11476 ?        Sl   15:41   0:00 /snap/snapd-desktop-integration/83/usr/bin/snapd-desktop-integration
+root     2802584  0.0  0.0      0     0 ?        I    15:45   0:00 [kworker/1:0-events]
+root     2802588  0.0  0.1  17296 10752 ?        Ss   15:46   0:00 sshd: wsprdaemon [priv]
+wsprdae+ 2802625  0.0  0.1  17432  7988 ?        S    15:46   0:00 sshd: wsprdaemon@pts/0
+wsprdae+ 2802626  0.0  0.0  11644  5632 pts/0    Ss   15:46   0:00 -bash
+root     2802633  0.0  0.1  17288 10880 ?        Ss   15:46   0:00 sshd: wsprdaemon [priv]
+wsprdae+ 2802670  0.0  0.1  17424  8108 ?        S    15:46   0:00 sshd: wsprdaemon@pts/1
+wsprdae+ 2802671  0.0  0.0  11776  6016 pts/1    Ss   15:46   0:00 -bash
+wsprdae+ 2802719  0.2  0.1  24284 11136 pts/1    S+   15:46   0:00 vim decoding.sh
+wsprdae+ 2805344  7.0  0.1  15828  9636 pts/0    S+   15:47   0:00 /bin/bash /home/wsprdaemon/wsprdaemon/wsprdaemon.sh -Z
+wsprdae+ 2805741  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805746  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805752  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805756  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805761  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805766  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805767  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805771  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805772  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805773  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805778  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805779  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805780  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805785  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805786  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805787  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805792  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805793  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805798  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805800  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805804  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805807  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805808  0.0  0.0   2788  1408 pts/0    S    15:47   0:00 sleep 1
+wsprdae+ 2805835  0.0  0.0   7060  2944 pts/0    R+   15:47   0:00 ps aux
+wsprdae+ 2993051  0.0  0.1 714424  9152 ?        Sl   Aug22  22:41 ./frpc -c ./frpc_wd.ini
+root     3337268  0.0  0.0      0     0 ?        I<   Oct03   1:46 [kworker/u9:1-i915_flip]
+root     3415377  0.0  0.0      0     0 ?        I    Oct24   0:18 [kworker/0:0-events]
+postgres 3449437  0.0  0.0 229576  5504 ?        Ss   Aug18   1:08 /usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf
+postgres 3449442  0.0  0.0 229692  2124 ?        Ss   Aug18   0:01 postgres: 14/main: checkpointer 
+postgres 3449443  0.0  0.0 229576  1868 ?        Ss   Aug18   0:30 postgres: 14/main: background writer 
+postgres 3449444  0.0  0.0 229576  1612 ?        Ss   Aug18   0:31 postgres: 14/main: walwriter 
+postgres 3449445  0.0  0.0 230108  4428 ?        Ss   Aug18   0:29 postgres: 14/main: autovacuum launcher 
+postgres 3449446  0.0  0.0  84168  2636 ?        Ss   Aug18   0:34 postgres: 14/main: stats collector 
+postgres 3449447  0.0  0.0 230008  3276 ?        Ss   Aug18   0:02 postgres: 14/main: logical replication launcher 
+root     4020706  0.0  0.0      0     0 ?        I<   Oct04   0:00 [kworker/u9:0]
