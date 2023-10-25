@@ -573,8 +573,6 @@ function wd-9qstats() {
 }
 
 declare -A KA9Q_band_freq=(
-    [2200]=""
-    [630]=""
     [160]="1836600"
     [80]="3568600"
     [60]="5287200"
@@ -595,6 +593,30 @@ function wd-9c()
     control -s ${tuning_freq} hf.local
 }
 
+function wd-9m()
+{
+    local header_printed="no"
+    local band
+    for band in $( IFS=$'\n'; echo "${!KA9Q_band_freq[*]}" | sort -n ); do
+        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_band_freq[${band}]} hf.local)
+        local rf_gain=$(echo "${metadump_out}" | awk '/rf gain/{print $(NF - 1) }')
+        local if_power=$(echo "${metadump_out}" | awk '/IF pwr/{print $(NF - 1) }')
+        local noise_level=$(echo "${metadump_out}" | awk '/N0 /{print $(NF - 1) }')
+        local agc_enable=$(echo "${metadump_out}" | awk '/agc /{print $(NF - 0) }')
+        local baseband_pwr=$(echo "${metadump_out}" | awk '/baseband pwr/{print $(NF - 1) }')
+        local output_level=$(echo "${metadump_out}" | awk '/output level/{print $(NF - 1) }')
+        local headroom=$(echo "${metadump_out}" | awk '/headroom/{print $(NF - 1) }')
+        local agc_gain=$(echo "${metadump_out}" | awk '/) gain/{print $(NF - 1) }')
+
+        if [[ ${header_printed} == "no" ]]; then
+            printf "RF Gain = %4.1f, AGC %s, AGC gain %4.1f\n" ${rf_gain} ${agc_enable} ${agc_gain}
+            printf "Band  IF_power  Noise_level  Baseband_power Output_level  Headroom\n" 
+            header_printed="yes"
+        fi
+        ##     band    if_power noise_level    baseband_pwr   output_level  headroom
+        printf "%3d      %6.1f      %6.1f          %6.1f       %6.1f    %6.1f\n" ${band} "${if_power}" "${noise_level}" "${baseband_pwr}" "${output_level}" "${headroom}"
+    done
+}
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
