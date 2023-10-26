@@ -673,7 +673,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA9Q_REQUIRED_COMMIT_SHA-05678387b2a1bfd1fda936eeff8424566978685c}"
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-421bf3554f4275858bf21a321b422f30632903cc}"
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 function get_current_commit_sha() {
@@ -758,7 +758,6 @@ function pull_commit(){
 }
 
 ### Default to getting Phl's 9/2/23 18:00 PDT sources
-declare KA9Q_DESIRED_GIT_COMMIT_SHA=${KA9Q_DESIRED_GIT_COMMIT_SHA-abb1cc83310f716acb3028c960aaf56bec8aed6e}
 declare KA9Q_RADIO_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 
 function ka9q_setup()
@@ -776,10 +775,10 @@ function ka9q_setup()
         fi
     fi
 
-    pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_DESIRED_GIT_COMMIT_SHA}
+    pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}
     rc=$?
     if [[ ${rc} -gt 1 ]]; then
-        wd_logger 1 "ERROR: 'pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_DESIRED_GIT_COMMIT_SHA}' => ${rc}"
+        wd_logger 1 "ERROR: 'pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}' => ${rc}"
         return 1
     fi
     if [[ ${rc} -eq 0 ]]; then
