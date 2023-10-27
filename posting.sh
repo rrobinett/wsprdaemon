@@ -382,7 +382,7 @@ function log_merged_snrs()
  
     wd_logger 1 "Log the source of the ${posted_spots_count} posted spots taken from the total ${source_spots_count} spots reported by the ${#real_receiver_list[@]} receivers '${real_receiver_list[*]}' in the MERGEd pool"
     
-    TZ=UTC printf "${WD_TIME_FMT}: %10s %8s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
+    TZ=UTC printf "${WD_TIME_FMT}: %10s %12s %10s" -1 "FREQUENCY" "CALL" "POSTED_SNR" >> merged.log
     local receiver
     for receiver in ${real_receiver_list[@]}; do
         printf "%12s" ${receiver}                            >> merged.log
@@ -393,7 +393,7 @@ function log_merged_snrs()
     for call in ${posted_calls_list[@]}; do
         local posted_freq=$(${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $6}')
         local posted_snr=$( ${GREP_CMD} " $call " ${best_snrs_file} | awk '{print $4}')
-        TZ=UTC printf "${WD_TIME_FMT}: %10s %8s %10s" -1 $posted_freq $call $posted_snr            >>  merged.log
+        TZ=UTC printf "${WD_TIME_FMT}: %10s %12s %10s" -1 $posted_freq $call $posted_snr            >>  merged.log
         local file
         for file in ${all_spot_files_list[@]}; do
             ### Only pick the strongest SNR from each file which went into the .BEST file
