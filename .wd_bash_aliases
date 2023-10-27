@@ -640,6 +640,21 @@ function wd-9m()
         printf "%3d      %6.1f      %6.1f          %6.1f       %6.1f    %6.1f\n" ${band} "${if_power}" "${noise_level}" "${baseband_pwr}" "${output_level}" "${headroom}"
     done
 }
+
+### tmux aliases
+alias tm='tmux'
+alias tml='tmux ls'
+alias tm0='tmux a -t 0'
+alias tm1='tmux a -t 1'
+alias tm2='tmux a -t 2'
+alias tm3='tmux a -t 3'
+alias tm4='tmux a -t 4'
+alias tm5='tmux a -t 5'
+alias tm6='tmux a -t 6'
+alias tm7='tmux a -t 7'
+alias tm8='tmux a -t 8'
+alias tm9='tmux a -t 9'
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
