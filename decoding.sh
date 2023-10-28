@@ -1287,13 +1287,10 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
-            local rc
-            if [[ ! ${receiver_name} =~ KPH ]]; then
-                SOX_ASSEMBLE_WAV_FILE_EFFECTS=""     ### Suppress this only while testing at KPH.  Remove when done  RR - 10/24/23
-            fi
-            wd_logger 1 "INFO: when sox is creating 2/5/15/30 wav files, SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS}"
+            wd_logger 1 "xox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}"
 
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}
+            local rc
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
