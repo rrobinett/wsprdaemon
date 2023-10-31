@@ -31,7 +31,7 @@ declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.s
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-declare    PACKAGE_NEEDED_LIST=( at bc curl host ntp postgresql sox zstd avahi-daemon libnss-mdns \
+declare    PACKAGE_NEEDED_LIST=( at bc curl host postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
@@ -68,7 +68,7 @@ case ${CPU_ARCH} in
         declare os_release    ### We are not in a function, so it can't be local
         get_file_variable os_release "VERSION_ID" /etc/os-release
         wd_logger 2 "Installing on Ubuntu ${os_release}"
-        if [[ "${os_release}" =~ 22.04 || "${os_release}" == "12" || "${os_release}" =~ 21.2 ]]; then
+        if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.2 ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         else
