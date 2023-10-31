@@ -154,9 +154,10 @@ fi
 " >> ~/.bash_aliases
          echo "A reference to '~/wsprdaemon/.wd_bash_aliases' has been added to ' ~/.bash_aliases'"
     else
-         echo ".wd_bash_aliases has already been installed in ~/.bash_aliases"
+         [[ ${verbosity} -gt 1 ]] && echo ".wd_bash_aliases has already been installed in ~/.bash_aliases"
     fi
 }
+wd-rci
 alias wdrci='wd-rci'
 
 ### Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
@@ -681,3 +682,6 @@ wd-gc-ssh                                Execute git remote set-ur + git config
 alias wd-='wd-help'
 alias wd-h='wd-help'
 
+if [[ ! -f ~/.tmux.conf ]]; then
+    echo "set -g mouse on" > ~/.tmux.conf
+fi
