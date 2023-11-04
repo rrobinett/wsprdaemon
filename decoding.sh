@@ -308,6 +308,7 @@ function get_rms_levels()
     return 0
 }
 
+### Runs wsprd and outputs new spots to ALL_WSPR.TXT.new
 function decode_wspr_wav_file() {
     local wav_file_name=$1
     local wspr_decode_capture_freq_hz=$2
@@ -944,7 +945,9 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         real_receiver_wspr_spots_file=no_unknown_type3_spots.txt
     fi
 
-    if [[ ${REMOVE_WD_DUP_SPOTS-yes} =~ [Yy][Ee][Ss] ]]; then
+    if [[ ! ${REMOVE_WD_DUP_SPOTS-yes} =~ [Yy][Ee][Ss] ]]; then
+        wd_logger 1 "WD is confgiured to record duplicate spots, so skip duplicate removal"
+    else
         local spot_count=$(wc -l < ${real_receiver_wspr_spots_file} )
         local tx_calls=$( awk '{print $6}' ${real_receiver_wspr_spots_file} | sort -u )
         local tx_calls_list=( ${tx_calls} )
@@ -1287,7 +1290,7 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
-            wd_logger 1 "xox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}"
+            wd_logger 1 "sox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}"
 
             local rc
             sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}

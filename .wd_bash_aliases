@@ -656,6 +656,15 @@ alias tm7='tmux a -t 7'
 alias tm8='tmux a -t 8'
 alias tm9='tmux a -t 9'
 
+function wd-wait-for_wspr-gap(){
+   printf "Starting at %(%M-%S)T and waiting for the next gap in the WSPR-2 packets\n" -1
+   while printf -v minute "%(%M)T\n" -1 && printf -v sec "%(%S)T\n" -1 && [[ $(( minute % 2 )) -ne 1 || 10#${sec} -lt 55 ]]; do 
+       [[ ${verbosity-0} -gt 0 ]] &&printf '%(%M-%S)T\n' -1
+       sleep 1; 
+   done
+}
+alias wd-wait='wd-wait-for_wspr-gap'
+
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
 alias wdrc='wd-rc'
