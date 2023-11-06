@@ -100,6 +100,10 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             uploading_controls $OPTARG
             ;;
         A)
+            if [[ ${WD_STARTUP_DELAY_SECS-0} -gt 0 ]]; then
+                echo "Wssprdeeamon is delaying startup for ${WD_STARTUP_DELAY_SECS} seconds"
+                wd_sleep ${WD_STARTUP_DELAY_SECS}
+            fi
             watchdog_cmd a
             ;;
         a)
