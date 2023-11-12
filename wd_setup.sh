@@ -368,7 +368,7 @@ function install_python_package()
             exit ${rc}
         fi
     fi
-    if ! sudo pip3 install ${pip_package} ; then
+    if ! sudo pip3 install --break-system-packages ${pip_package} ; then
         wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
         exit 2
     fi
