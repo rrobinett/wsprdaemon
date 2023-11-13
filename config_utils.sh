@@ -781,7 +781,7 @@ function ka9q_setup()
     pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}
     rc=$?
     if [[ ${rc} -eq 0 ]]; then
-        wd_logger 1 "KA9Q software was current, so compiling and installing may not be needed.  Further checking will be done to determine it compiling is needed"
+        wd_logger 2 "KA9Q software was current, so compiling and installing may not be needed.  Further checking will be done to determine it compiling is needed"
     elif [[  ${rc} -eq 1 ]]; then
         ka9q_make_needed="yes"
         wd_logger 1 "KA9Q software was updated, so compile and install it"
@@ -801,8 +801,8 @@ function ka9q_setup()
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
         else
             ### There is a local RX888, WD needs the radiod ser
-            if sudo systemctl status radiod@rx888-wsprdaemon.service > /dev/null ; then
-                wd_logger 1 "KA9Q software wasn't updated and rhe radiod service is running, so KA9Q is setup and running"
+            if sudo systemctl status ${WD_KA9Q_SERICE_NAME} > /dev/null ; then
+                wd_logger 2 "KA9Q software wasn't updated and rhe radiod service is running, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't updated but the needed local radiod service is not running, so compile and install all of KA9Q"
