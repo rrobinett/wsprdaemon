@@ -31,7 +31,7 @@ declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.s
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-declare    PACKAGE_NEEDED_LIST=( at bc curl host postgresql sox zstd avahi-daemon libnss-mdns \
+declare    PACKAGE_NEEDED_LIST=( at bc curl host flac postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 

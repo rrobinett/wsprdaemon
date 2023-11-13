@@ -295,10 +295,6 @@ function print_new_ov_lines() {
     done
 }
 
-declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
-declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
-
 function ka9q_recording_daemon()
 { 
     local rc
