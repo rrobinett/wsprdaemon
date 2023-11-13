@@ -799,7 +799,7 @@ function ka9q_setup()
         get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
         if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
             if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-                wd_logger 1 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
+                wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
