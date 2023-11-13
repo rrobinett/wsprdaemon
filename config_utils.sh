@@ -78,7 +78,6 @@ function get_config_file_variable()
 
     local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
 
-    echo "${_variable_name} = ${conf_file_value}"
     eval ${__return_varaiable}=\${conf_file_value}
 }
 
@@ -652,20 +651,21 @@ function get_list_of_active_real_receivers()
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
 declare WD_CONF_BASE_NAME="rx888-wsprdaemon"
+declare WD_KA9Q_SERICE_NAME="radiod@${WD_CONF_BASE_NAME}"  ### the argument givien to systemctl
 
-declare KA9Q_WSPRDAEMON_CONF_FILE="radiod@${WD_CONF_BASE_NAME}.conf"
-declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"
+declare KA9Q_WSPRDAEMON_CONF_FILE="${WD_KA9Q_SERICE_NAME}.conf"      ### Customized radiod conf file found in ~/wsprdaemon directory
+declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"   ### Template found in WD's git package
 
 
-declare WD_KA9Q_CONF_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"                      ### Can be cutomized by the user
-declare WD_KA9Q_CONF_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"    ### A template with defautls for KA9Q RX-888 installatons
+declare WD_KA9Q_CONF_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"                      ### Full path to conf which Can be cutomized by the user
+declare WD_KA9Q_CONF_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"    ### Full path to template with defautls for KA9Q RX-888 installatons
 
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
 declare KA9Q_RADIOD_WD_CONF_FILE=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}                ### radiod looks in /etc/radio/... for conf files
 
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
-declare KA9Q_PACKAGE_DEPENDANCIES="build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
+declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev"
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
@@ -767,6 +767,7 @@ function ka9q_setup()
     ### A KA9Q rx has been configured, so we need to install and compile  ka9q-radio so that we can run the 'wd-record' command
 
     if [[ ! -d ${KA9Q_RADIO_DIR} ]]; then
+        wd_logger 1 "ka9q-radio subdirectory doesn't exist, so 'get clone' to create it and populate with source code"
         git clone ${KA9Q_GIT_URL}
         rc=$?
         if [[ ${rc} -gt 1 ]]; then
@@ -775,53 +776,63 @@ function ka9q_setup()
         fi
     fi
 
+    ### If KA9Q software was loaded or updated, then it will need to be compiled and installed
+    local ka9q_make_needed="no"
     pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}
     rc=$?
-    if [[ ${rc} -gt 1 ]]; then
-        wd_logger 1 "ERROR: 'pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}' => ${rc}"
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 1 "KA9Q software was current, so compiling and installing may not be needed.  Further checking will be done to determine it compiling is needed"
+    elif [[  ${rc} -eq 1 ]]; then
+        ka9q_make_needed="yes"
+        wd_logger 1 "KA9Q software was updated, so compile and install it"
+    else 
+        wd_logger 1 "ERROR: git could not update KA9Q software"
+        exit 1
+    fi
+    
+    if [[ ${ka9q_make_needed} == "no" ]]; then
+        local ka9q_runs_only_remotely
+        get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
+        if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
+            if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+                wd_logger 1 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
+                return 0
+            fi
+            wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
+        else
+            ### There is a local RX888, WD needs the radiod ser
+            if sudo systemctl status radiod@rx888-wsprdaemon.service > /dev/null ; then
+                wd_logger 1 "KA9Q software wasn't updated and rhe radiod service is running, so KA9Q is setup and running"
+                return 0
+            fi
+            wd_logger 1 "KA9Q software wasn't updated but the needed local radiod service is not running, so compile and install all of KA9Q"
+        fi
+    fi
+
+    sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES} >& apt.log
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd - > /dev/null
+        wd_logger 1 "ERROR: failed to install some or all of the libraries needed by ka9q-radio"
         return 1
     fi
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "KA9Q software is current, so no need to compile and install a new version"
-    else  ##  ${rc} -eq 1
-        wd_logger 1 "KA9Q software was updated, so compile and install the new code. This may take a minute or more..."
-        sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            cd - > /dev/null
-            wd_logger 1 "ERROR: failed to install some or all of the libraries needed by ka9q-radio"
-            return 1
-        fi
-        cd ${KA9Q_RADIO_DIR}
-        if [[ ! -f Makefile ]]; then
-            cp -p Makefile.linux Makefile
-        fi
-        make  > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            cd - > /dev/null
-            wd_logger 1 "ERROR: failed 'make' of new KA9Q software => ${rc}"
-            return 1
-        fi
-        sudo make install > /dev/null
-        rc=$?
+    cd ${KA9Q_RADIO_DIR}
+    if [[ ! -f Makefile ]]; then
+        cp -p Makefile.linux Makefile
+    fi
+    make  > /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
         cd - > /dev/null
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
-            return 1
-        fi
-        wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
-        sudo systemctl stop  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "'sudo systemctl stop  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so no radiod was running.  Proceed to start it"
-        fi
-        sudo systemctl start  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'sudo systemctl start  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so failed to start radiod"
-        fi
-        wd_logger 1 "KA9Q SW is installed"
+        wd_logger 1 "ERROR: failed 'make' of new KA9Q software => ${rc}"
+        return 1
+    fi
+    sudo make install > /dev/null
+    rc=$?
+    cd - > /dev/null
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
+        return 1
     fi
 
      if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
@@ -830,46 +841,12 @@ function ka9q_setup()
         return 0
     fi
 
-    ### wsprdaemon user needs to be a member of th 'radio' group
-    local my_groups=$(groups)
-    if [[ ! "${my_groups}" =~ "radio" ]] ; then
-        wd_logger 1 "This user ${USER} is not a member of the the 'radio' group. Logout now and log back in to join that group"
-        sudo usermod -aG radio ${USER}
-        exit 1
-    fi
- 
-    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    fi
-    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
-        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    wd_logger  2 "Finished validating and updating the KA9Q installation"
+    wd_logger 1 "There is a local RX888, so KA9Q's radiod service needs to run"
 
-   sudo systemctl is-active "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "A KA9Q receiver service is active, so nothing more to do to setup KA9Q-radio"
-        return 0
-    fi
-    wd_logger 1 "Expecting radiod to be running, but it is not active, so start it"
-    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
-        wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
-        exit
-    fi
-    wd_logger 2 "Found a RX888 MkII attached to a USB port"
- 
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM}, so no need to create it"
+        wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
     else
-        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM}, so need to create it.  This may take minutes or even hours..."
+        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
         time fftwf-wisdom -v -T 1 -o nwisdom rof500000 cof36480 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
         rc=$?
@@ -898,15 +875,44 @@ function ka9q_setup()
     fi
      wd_logger 1 "${FFTW_WISDOMF} is current"
 
-    wd_logger 1 "Starting KA9Q 'radiod' service by executing: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}'"
-    sudo systemctl start radiod@${WD_CONF_BASE_NAME}
+    wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
+    sudo systemctl stop  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sudo systemctl start radiod@${WD_CONF_BASE_NAME}' => ${rc}"
-        return ${rc}
+        wd_logger 1 "'sudo systemctl stop  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so no radiod was running.  Proceed to start it"
     fi
-    
-    wd_logger 1 "A local KA9Q receiver is specified in the WD .conf file and now it should be installed and active"
+    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
+        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
+        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
+    fi
+    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
+        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
+        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
+        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    fi
+    wd_logger  1 "Finished validating and updating the KA9Q installation"
+    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
+        wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
+        exit
+    fi
+    wd_logger 1 "Found a RX888 MkII attached to a USB port"
+ 
+    sudo systemctl start  "${WD_KA9Q_SERICE_NAME}" > /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'sudo systemctl start  ${WD_KA9Q_SERICE_NAME}' => ${rc}, so failed to start radiod"
+    fi
+    sudo systemctl is-active "${WD_KA9Q_SERICE_NAME}" > /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: after an otherwise successful installation of KA9Q its 'radiod' is not active"
+        return 1
+    fi
+    wd_logger 1 "after a successful installation of KA9Q its 'radiod' is active"
     return 0
 }
 
