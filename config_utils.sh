@@ -677,7 +677,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-421bf3554f4275858bf21a321b422f30632903cc}"
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-e39b66c5f294c760159d58e73d654f87d90d2615}"
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 function get_current_commit_sha() {
