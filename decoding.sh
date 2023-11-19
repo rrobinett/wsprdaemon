@@ -340,11 +340,44 @@ function decode_wspr_wav_file() {
         return ${ret_code}
     fi
     grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.new
+
+    if [[ -x ${WSPRD_SPREADING_CMD} ]]; then
+        [[ -f ALL_WSPR.TXT ]] && cp -p  ALL_WSPR.TXT  ALL_WSPR.TXT.save
+        [[ -f ALL_WSPR.TXT.spreading.save ]] && cp -p ALL_WSPR.TXT.spreading.save ALL_WSPR.TXT
+        last_line=$(tail -n 1 ALL_WSPR.TXT)
+        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
+            # return ${ret_code}
+        fi
+        grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.spreading.new
+        [[ -f ALL_WSPR.TXT ]] && cp -p  ALL_WSPR.TXT ALL_WSPR.TXT.spreading.save
+        [[ -f ALL_WSPR.TXT.save ]] && cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
+        local spots_count=$(wc -l < ALL_WSPR.TXT.new)
+        local spreading_spots_count=$(wc -l < ALL_WSPR.TXT.spreading.new )
+        if [[ ${spreading_spots_count} -lt ${spots_count} ]]; then
+            wd_logger 1 "WSJT-x wsprd reported ${spots_count} spots, more than Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots. So save both spot files to ALL_WSPR.TXT.more_wspr:\n$(< ALL_WSPR.TXT.spreading.new)"
+            cat  ALL_WSPR.TXT.new ALL_WSPR.TXT.spreading.new > ALL_WSPR.TXT.more_wspr
+        elif [[ ${spreading_spots_count} -gt ${spots_count} ]]; then
+            wd_logger 1 "WSJT-x wsprd reported ${spots_count} spots, less than Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots. So save both spot files to ALL_WSPR.TXT.more_spreading:\n$(< ALL_WSPR.TXT.spreading.new)"
+            cat  ALL_WSPR.TXT.new ALL_WSPR.TXT.spreading.new > ALL_WSPR.TXT.more_spreading
+        else
+            wd_logger 2 "WSJT-x wsprd reported ${spots_count} spots, the same as Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots:\n$(< ALL_WSPR.TXT.spreading.new)"
+        fi
+        local zero_spreading_spots_count=$(awk '$18 == "0.000"' ALL_WSPR.TXT.spreading.new | wc -l )
+        if [[ ${zero_spreading_spots_count} -gt ${SAVE_ZERO_SPREADING_WAVS-2} ]]; then
+            local archive_file_name="/tmp/${wspr_decode_capture_freq_mhz}_${zero_spreading_spots_count}_${wav_file_name}"
+            wd_logger 1 "Found ${zero_spreading_spots_count} zero spreading spots, so archiving the wav file containing them to ${archive_file_name}:\n$(< ALL_WSPR.TXT.spreading.new)"
+            cp -p ${wav_file_name} ${archive_file_name}
+        fi
+    fi
     return ${ret_code}
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
+declare WSPRD_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
