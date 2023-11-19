@@ -1,7 +1,6 @@
 .*.swp
 *.deb
 save
-bin
 uploads.d
 expected.jobs
 hashtable.d
