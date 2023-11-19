@@ -32,6 +32,7 @@
     }
 }
 
+### Pipe the output through 'sort -k 5,5n' to get a nicely ascending frequency output file
 END {
     for (spot_call in spot_lines_for_calls)
         printf "%s\n", spot_lines_for_calls[spot_call] 
