@@ -8,7 +8,7 @@
 #
 {
     spot_line = $0
-    if ( $NF ~ /^[0-9]+$/ ) {
+    if ( $NF ~ /^[0-9\-]+$/ ) {
         ### The last column is an integer, so this spot line comes from the WSJT-x wsprd
         spot_line = spot_line "  9.999"
         this_spot_has_spreding_infomation = 0
