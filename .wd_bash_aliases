@@ -478,7 +478,7 @@ function wd-query()
     local query_minutes=$((query_hours * 60))
 
     PGPASSWORD=JTWSPR2008 psql -U wdread -h wsprdaemon.org -p 5432 -d tutorial -c \
-        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >2 and time > now() - interval '${query_minutes} minutes' order by (time,rx_id,receiver) desc;"
+        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >0 and time > now() - interval '${query_minutes} minutes' order by (time,rx_id,receiver) desc;"
 }
 alias wd-q='wd-query'
 alias wdq='wd-query'
@@ -665,6 +665,8 @@ function wd-wait-for_wspr-gap(){
    done
 }
 alias wd-wait='wd-wait-for_wspr-gap'
+
+alias wd-nf="awk '{printf \"%2d: %s\n\", NF, \$0}'"
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
