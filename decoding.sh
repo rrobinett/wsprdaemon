@@ -322,16 +322,11 @@ function decode_wspr_wav_file() {
     local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
     local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
 
-    if [[ ! -s ALL_WSPR.TXT ]]; then
-        touch ALL_WSPR.TXT
+    if [[  -f ALL_WSPR.TXT ]]; then
+        mv ALL_WSPR.TXT ALL_WSPR.TXT.save
+    else
+        touch  ALL_WSPR.TXT.save
     fi
-    local all_wspr_size=$(${GET_FILE_SIZE_CMD} ALL_WSPR.TXT)
-    if [[ ${all_wspr_size} -gt ${MAX_ALL_WSPR_SIZE} ]]; then
-        wd_logger 1 "ALL_WSPR.TXT has grown too large, so truncating it"
-        tail -n 1000 ALL_WSPR.TXT > ALL_WSPR.tmp
-        mv ALL_WSPR.tmp ALL_WSPR.TXT
-    fi
-    local last_line=$(tail -n 1 ALL_WSPR.TXT)
 
     timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     local ret_code=$?
@@ -339,45 +334,47 @@ function decode_wspr_wav_file() {
         wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
         return ${ret_code}
     fi
-    grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.new
+    mv ALL_WSPR.TXT ALL_WSPR.TXT.new
+    wd_logger 2 "Moved WSJTx ALL_WSPR.TXT to ALL_WSPR.TXT.new:\n$(<  ALL_WSPR.TXT.new)"
 
-    if [[ -x ${WSPRD_SPREADING_CMD} ]]; then
-        [[ -f ALL_WSPR.TXT ]] && cp -p  ALL_WSPR.TXT  ALL_WSPR.TXT.save
-        [[ -f ALL_WSPR.TXT.spreading.save ]] && cp -p ALL_WSPR.TXT.spreading.save ALL_WSPR.TXT
-        last_line=$(tail -n 1 ALL_WSPR.TXT)
-        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+    local wsprd_with_spreading_cmd=""
+    local cpu_arch=$(uname -m)
+    if [[ ${cpu_arch}  == "x86_64"  && -x ${WSPRD_X86_SPREADING_CMD} ]]; then
+        wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
+    elif [[ ${cpu_arch}  == "aarch64" && -x ${WSPRD_ARM_SPREADING_CMD} ]]; then
+        wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
+    fi
+    if [[ -n "${wsprd_with_spreading_cmd}" ]]; then
+        wd_logger 1 "Decoding WSPR a second time to obtain spreading information"
+        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
             # return ${ret_code}
         fi
-        grep -A 10000 "${last_line}" ALL_WSPR.TXT | grep -v "${last_line}" > ALL_WSPR.TXT.spreading.new
-        [[ -f ALL_WSPR.TXT ]] && cp -p  ALL_WSPR.TXT ALL_WSPR.TXT.spreading.save
-        [[ -f ALL_WSPR.TXT.save ]] && cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
-        local spots_count=$(wc -l < ALL_WSPR.TXT.new)
-        local spreading_spots_count=$(wc -l < ALL_WSPR.TXT.spreading.new )
-        if [[ ${spreading_spots_count} -lt ${spots_count} ]]; then
-            wd_logger 1 "WSJT-x wsprd reported ${spots_count} spots, more than Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots. So save both spot files to ALL_WSPR.TXT.more_wspr:\n$(< ALL_WSPR.TXT.spreading.new)"
-            cat  ALL_WSPR.TXT.new ALL_WSPR.TXT.spreading.new > ALL_WSPR.TXT.more_wspr
-        elif [[ ${spreading_spots_count} -gt ${spots_count} ]]; then
-            wd_logger 1 "WSJT-x wsprd reported ${spots_count} spots, less than Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots. So save both spot files to ALL_WSPR.TXT.more_spreading:\n$(< ALL_WSPR.TXT.spreading.new)"
-            cat  ALL_WSPR.TXT.new ALL_WSPR.TXT.spreading.new > ALL_WSPR.TXT.more_spreading
-        else
-            wd_logger 2 "WSJT-x wsprd reported ${spots_count} spots, the same as Ryan's spreading wsprd with drift compensation turned off reported ${spreading_spots_count} spots:\n$(< ALL_WSPR.TXT.spreading.new)"
-        fi
-        local zero_spreading_spots_count=$(awk '$18 == "0.000"' ALL_WSPR.TXT.spreading.new | wc -l )
-        if [[ ${zero_spreading_spots_count} -gt ${SAVE_ZERO_SPREADING_WAVS-2} ]]; then
+        # It might be possible to instead save away teh current ALL_WSPR-TXT and get wsprd to creat a new one with only the spots in this wav file.  That would probably would be more CPU efficient, but this  algorithm works and the savings would be small
+        local zero_spreading_spots_count=$(awk '$18 == "0.000"' ALL_WSPR.TXT | wc -l )
+        if [[ ${zero_spreading_spots_count} -gt ${SAVE_ZERO_SPREADING_WAVS-99} ]]; then
             local archive_file_name="/tmp/${wspr_decode_capture_freq_mhz}_${zero_spreading_spots_count}_${wav_file_name}"
-            wd_logger 1 "Found ${zero_spreading_spots_count} zero spreading spots, so archiving the wav file containing them to ${archive_file_name}:\n$(< ALL_WSPR.TXT.spreading.new)"
+            wd_logger 1 "Found ${zero_spreading_spots_count} zero spreading spots, so archiving the wav file containing them to ${archive_file_name}"
             cp -p ${wav_file_name} ${archive_file_name}
         fi
+        cat  ALL_WSPR.TXT >> ALL_WSPR.TXT.new
+        wd_logger 2 "Added Ryan's ALL_WSPR.TXT to ALL_WSPR.TXT.new:\n$(<  ALL_WSPR.TXT.new)"
     fi
+    awk -f ${AWK_FIND_BEST_SPOT_LINES} ALL_WSPR.TXT.new | sort -k 5n > best.new
+    mv best.new ALL_WSPR.TXT.new
+    mv   ALL_WSPR.TXT.save  ALL_WSPR.TXT
+    cat  ALL_WSPR.TXT.new  >> ALL_WSPR.TXT
+    truncate_file  ALL_WSPR.TXT  ${MAX_ALL_WSPR_SIZE}
     return ${ret_code}
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
-declare WSPRD_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift
+declare WSPRD_X86_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.x86
+declare WSPRD_ARM_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.arm
+declare AWK_FIND_BEST_SPOT_LINES=${WSPRDAEMON_ROOT_DIR}/best_spots.awk
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
@@ -956,7 +953,7 @@ function flush_or_archive_raw_wav_files() {
 #    fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
 #                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
 
-declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=18                                              ### wsprd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
+declare  FIELD_COUNT_DECODE_LINE_WITH_GRID=19                                              ### wsprd v2.2 adds two fields and we have added the 'upload to wsprnet.org' field, so lines with a GRID will have 17 + 1 + 2 noise level fields.  V3.x added spot_mode to the end of each line
 declare  FIELD_COUNT_DECODE_LINE_WITHOUT_GRID=$((FIELD_COUNT_DECODE_LINE_WITH_GRID - 1))   ### Lines without a GRID will have one fewer field
 
 function create_enhanced_spots_file_and_queue_to_posting_daemon () {
@@ -1016,17 +1013,22 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         local spot_line_list_count=${#spot_line_list[@]}
         local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
         read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_mode ### the order of the rest of the fields in the spot lines created by decoding_daemon()
+        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode ### the order of the rest of the fields in the spot lines created by decoding_daemon()
         if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
+            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
         elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
             spot_grid="none"
-            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
+            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
         else
             ### The decoding daemon formated a line we don't recognize
             wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in ALL_WSPR.TXT spot line '${spot_line}'" 
             continue
         fi
+        ### AI6VN 21 Nov 2023      add spot-sopreading to WSP=R-2 lines and copy that speading in hertz * 1000 into the metric field, then remove anty leading 0s with the 10#
+        local spreading_metric=$(( 10#${spot_spreading##*.} ))   ### Instead of performing a floatin gpoint *1000.0 with 'bc', just chop off the leading 'N.' 
+        wd_logger 2 "For a type ${spot_pkt_mode} spot, overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
+        spot_metric=${spreading_metric}
+
         ### G3ZIL April 2020 V1    add azi to each spot line
         wd_logger 2 "'add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}'"
         add_derived ${spot_grid} ${real_receiver_grid} ${spot_freq}
@@ -1326,7 +1328,7 @@ function decoding_daemon() {
             wd_logger 1 "sox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}"
 
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700} >& sox.log
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
@@ -1616,7 +1618,7 @@ function decoding_daemon() {
                             ###  fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
                             ###                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
-                                    'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d 0 0 0 0 %2d 0 %5d %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, ($19 * 1000), pkt_mode}' \
+                                    'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d     0   0   0   0   %2d   0   0 %6.3f %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, $19, pkt_mode}' \
                                     ${decode_dir_path}/new_fst4w_decodes.dat > ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt
                             if [[ -s ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt ]]; then
                                 wd_logger  2 "Reformatted high resolution FST4W type 1 and/or type 3 spots to:\n$(<${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt)"
