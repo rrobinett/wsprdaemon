@@ -345,7 +345,7 @@ function decode_wspr_wav_file() {
         wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
     fi
     if [[ -n "${wsprd_with_spreading_cmd}" ]]; then
-        wd_logger 1 "Decoding WSPR a second time to obtain spreading information"
+        wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
         timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -991,14 +991,22 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
             for tx_call in ${tx_calls_list[@]} ; do
                 grep "${tx_call}" ${real_receiver_wspr_spots_file} > spot_lines.txt
                 if [[ $(wc -l < spot_lines.txt) -eq 1 ]]; then
+                    ### There is only one spot line for this call, so there can be no duplicate lines
                     cat spot_lines.txt >> ${no_dups_spot_file}
                 else
-                    sort -k 3,3n spot_lines.txt | tail -n 1 > add_spot_line.txt 
-                    wd_logger 1 "Found duplicate spot lines for tx_call=${tx_call}:\n$(< spot_lines.txt)\nSo adding only this spot line with the best SNR:\n$( < add_spot_line.txt)"
-                    cat add_spot_line.txt >> ${no_dups_spot_file}
+                    ### There are more than one spot line, but the duplicates could be from the same TX sending in different modes
+                    local modes_list=($( awk  '{print $NF}' spot_lines.txt | sort -u ) )   ## last field is the mode of the spot
+                    wd_logger 1 "Found multiple spot lines for tx_call=${tx_call}:\n$(< spot_lines.txt)\nSo for each spot mode in modes_list=${modes_list[*]} adding only the spot line with the best SNR"
+                    > add_spot_lines.txt
+                    for mode in ${modes_list[@]}; do
+                        grep "${mode}\$" spot_lines.txt | sort -k 3,3n | tail -n 1 > best_spot_line.txt 
+                        wd_logger 1 "For mode ${mode} adding only this spot line which has the best SNR:\n$( < best_spot_line.txt)"
+                        cat best_spot_line.txt >> add_spot_lines.txt
+                    done
+                    cat add_spot_lines.txt >> ${no_dups_spot_file}
                 fi
             done
-            sort -k 5,5n ${no_dups_spot_file} > no_dup_spots.txt
+            sort -k 5,5n ${no_dups_spot_file} > no_dup_spots.txt   ### sort by frequency
             wd_logger 1 "Posting the newly created 'no_dup_spots.txt' which differs from ${real_receiver_wspr_spots_file}:\n$(diff ${real_receiver_wspr_spots_file} no_dup_spots.txt)"
             real_receiver_wspr_spots_file=no_dup_spots.txt
         fi
@@ -1344,6 +1352,9 @@ function decoding_daemon() {
                 continue
             fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
+            if [[ -s sox.log ]]; then
+                wd_logger 1 "ERROR: sox reported these errors while creating the minute wav file:\n$(< sox.log)"
+            fi
             wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
