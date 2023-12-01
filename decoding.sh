@@ -1033,12 +1033,14 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode)
         local input_spot_grid_field_index=6
         local input_spot_field_name_list_count=${#input_spot_field_name_list[@]}
-        if [[ ${input_spot_field_name_list_count} -ne ${spot_line_list_count} ]]; then
-            if [[ ${input_spot_field_name_list_count} -eq $(( ${spot_line_list_count} - 1 )) ]]; then
-                wd_logger 1 "This is a type 2/3 spot line which has ${input_spot_field_name_list_count} fields"
-            else
-                wd_logger 1 "ERROR: this spot line has neither ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} nor ${FIELD_COUNT_DECODE_LINE_WITH_GRID} fields, rather is has ${input_spot_field_name_list_count} fields"
-            fi
+        local type1_field_count=${input_spot_field_name_list_count}
+        local type3_field_count=$((  ${type1_field_count} - 1 ))
+        if [[ ${spot_line_list_count} -eq ${type1_field_count} ]]; then
+            wd_logger 2 "Found a spot line with the normal ${type1_field_count} fields of a type 1 spot"
+        elif [[ ${spot_line_list_count} -eq ${type3_field_count} ]]; then
+            wd_logger 1 "Found a spot line with the normal ${type3_field_count} fields of a type 3 spot"
+        else
+            wd_logger 1 "ERROR: Found a spot line with ${spot_line_list_count} fields, not the expected ${type1_field_count} type 1 or ${type3_field_count} type 3 fields"
         fi
 
         ### Assign the field values to their associated bash variables
