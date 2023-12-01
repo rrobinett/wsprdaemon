@@ -1025,9 +1025,9 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
             wd_logger 1 "ERROR: input spot line has ${spot_line_list_count} fields instead of the expected  ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} fields"
             continue
         fi
-        wd_logger 1 "Creating an enhanced spot line from file ${real_receiver_wspr_spots_file} which has ${spot_line_list_count} fields and store them in ${cached_spots_file_name}:\n${spot_line}"
+        wd_logger 2 "Creating an enhanced spot line from file ${real_receiver_wspr_spots_file} which has ${spot_line_list_count} fields and store them in ${cached_spots_file_name}:\n${spot_line}"
 
-        wd_logger 1 "Extracting fields from the spot line and assigning them to their associated bash variables"
+        wd_logger 2 "Extracting fields from the spot line and assigning them to their associated bash variables"
         ### Name of the fields in their order on the input line
         local input_spot_field_name_list=(spot_date spot_time spot_snr spot_dt spot_freq spot_call spot_grid \
                                           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode)
@@ -1066,7 +1066,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
 
         ### AI6VN 21 Nov 2023      add spot-sopreading to WSP=R-2 lines and copy that speading in hertz * 1000 into the metric field, then remove anty leading 0s with the 10#
         local spreading_metric=$(( 10#${spot_spreading##*.} ))   ### Instead of performing a floatin gpoint *1000.0 with 'bc', just chop off the leading 'N.' 
-        wd_logger 1 "Overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
+        wd_logger 2 "Overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
         spot_metric=${spreading_metric}
 
         ### G3ZIL April 2020 V1    add azi to each spot line
@@ -1107,7 +1107,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                           km rx_az  rx_lat  rx_lon tx_az tx_lat tx_lon v_lat v_lon wspr_cycle_kiwi_overloads_count proxy_upload_this_spot)
          local output_field_name_list_count=${#output_field_name_list[@]}
 
-         local output_field_format_string="%6s %4s %5.2f %5.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d"
+         local output_field_format_string="%6s %4s %5.2f %6.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d"
          local output_field_format_string_list=( ${output_field_format_string} )
          local output_field_format_string_list_count=${#output_field_format_string_list[@]}
 
