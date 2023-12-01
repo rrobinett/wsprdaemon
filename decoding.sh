@@ -965,6 +965,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     local wspr_cycle_kiwi_overloads_count=$6
     local real_receiver_call_sign=$7                    ### For real receivers, these are taken from the conf file line
     local real_receiver_grid=$8                         ### But for MERGEd receivers, the posting daemon will change them to the call+grid of the MERGEd receiver
+    local freq_adj_mhz=$9
     local proxy_upload_this_spot=0    ### This is the last field of the enhanced_spot line. If ${SIGNAL_LEVEL_UPLOAD} == "proxy" AND this is the only spot (or best spot among a MERGEd group), 
                                       ### then the posting daemon will modify this last field to '1' to signal to the upload_server to forward this spot to wsprnet.org
     local cached_spots_file_name="${spot_file_date}_${spot_file_time}_spots.txt"
@@ -976,7 +977,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     fi
 
     if [[ ! ${REMOVE_WD_DUP_SPOTS-yes} =~ [Yy][Ee][Ss] ]]; then
-        wd_logger 1 "WD is confgiured to record duplicate spots, so skip duplicate removal"
+        wd_logger 1 "WD is configured to record duplicate spots, so skip duplicate removal"
     else
         local spot_count=$(wc -l < ${real_receiver_wspr_spots_file} )
         local tx_calls=$( awk '{print $6}' ${real_receiver_wspr_spots_file} | sort -u )
@@ -992,14 +993,16 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                 grep "${tx_call}" ${real_receiver_wspr_spots_file} > spot_lines.txt
                 if [[ $(wc -l < spot_lines.txt) -eq 1 ]]; then
                     ### There is only one spot line for this call, so there can be no duplicate lines
+                    wd_logger 1 "There is only one spot line for call ${tx_call}, so queue it for posting"
                     cat spot_lines.txt >> ${no_dups_spot_file}
                 else
                     ### There are more than one spot line, but the duplicates could be from the same TX sending in different modes
                     local modes_list=($( awk  '{print $NF}' spot_lines.txt | sort -u ) )   ## last field is the mode of the spot
-                    wd_logger 1 "Found multiple spot lines for tx_call=${tx_call}:\n$(< spot_lines.txt)\nSo for each spot mode in modes_list=${modes_list[*]} adding only the spot line with the best SNR"
+                    wd_logger 1 "Found ${#modes_list[@]} spot lines for tx_call=${tx_call}:\n$(< spot_lines.txt)\nSo for each spot mode in modes_list=${modes_list[*]} adding only the spot line with the best SNR"
                     > add_spot_lines.txt
                     for mode in ${modes_list[@]}; do
-                        grep "${mode}\$" spot_lines.txt | sort -k 3,3n | tail -n 1 > best_spot_line.txt 
+                        ### The spot mode is the last field in the spot line
+                        grep " ${mode}\$" spot_lines.txt | sort -k 3,3n | tail -n 1 > best_spot_line.txt 
                         wd_logger 1 "For mode ${mode} adding only this spot line which has the best SNR:\n$( < best_spot_line.txt)"
                         cat best_spot_line.txt >> add_spot_lines.txt
                     done
@@ -1007,7 +1010,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                 fi
             done
             sort -k 5,5n ${no_dups_spot_file} > no_dup_spots.txt   ### sort by frequency
-            wd_logger 1 "Posting the newly created 'no_dup_spots.txt' which differs from ${real_receiver_wspr_spots_file}:\n$(diff ${real_receiver_wspr_spots_file} no_dup_spots.txt)"
+            wd_logger 2 "Posting the newly created 'no_dup_spots.txt' which differs from ${real_receiver_wspr_spots_file}:\n$(diff ${real_receiver_wspr_spots_file} no_dup_spots.txt)"
             real_receiver_wspr_spots_file=no_dup_spots.txt
         fi
     fi
@@ -1016,25 +1019,54 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     > ${cached_spots_file_name}         ### truncates or creates a zero length file
     local spot_line
     while read spot_line ; do
-        wd_logger 3 "Enhance line '${spot_line}'"
         local spot_line_list=(${spot_line/,/})         
         local spot_line_list_count=${#spot_line_list[@]}
-        local spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields                                                                                             ### the order of the first fields in the spot lines created by decoding_daemon()
-        read  spot_date spot_time spot_snr spot_dt spot_freq spot_call other_fields <<< "${spot_line/,/}"
-        local    spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode ### the order of the rest of the fields in the spot lines created by decoding_daemon()
-        if [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITH_GRID} ]]; then
-            read spot_grid spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
-        elif [[ ${spot_line_list_count} -eq ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
-            spot_grid="none"
-            read           spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode <<< "${other_fields}"    ### Most spot lines have a GRID
-        else
-            ### The decoding daemon formated a line we don't recognize
-            wd_logger 1 "INTERNAL ERROR: unexpected number of fields ${spot_line_list_count} rather than the expected ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} in ALL_WSPR.TXT spot line '${spot_line}'" 
+        if [[ ${spot_line_list_count} -ne  ${FIELD_COUNT_DECODE_LINE_WITH_GRID} && ${spot_line_list_count} -ne ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
+            wd_logger 1 "ERROR: input spot line has ${spot_line_list_count} fields instead of the expected  ${FIELD_COUNT_DECODE_LINE_WITH_GRID} or ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} fields"
             continue
         fi
+        wd_logger 1 "Creating an enhanced spot line from file ${real_receiver_wspr_spots_file} which has ${spot_line_list_count} fields and store them in ${cached_spots_file_name}:\n${spot_line}"
+
+        wd_logger 1 "Extracting fields from the spot line and assigning them to their associated bash variables"
+        ### Name of the fields in their order on the input line
+        local input_spot_field_name_list=(spot_date spot_time spot_snr spot_dt spot_freq spot_call spot_grid \
+                                          spot_pwr spot_drift spot_sync_quality spot_ipass spot_blocksize spot_jitter spot_decodetype  spot_nhardmin spot_cycles spot_metric spot_spreading spot_pkt_mode)
+        local input_spot_grid_field_index=6
+        local input_spot_field_name_list_count=${#input_spot_field_name_list[@]}
+        if [[ ${input_spot_field_name_list_count} -ne ${spot_line_list_count} ]]; then
+            if [[ ${input_spot_field_name_list_count} -eq $(( ${spot_line_list_count} - 1 )) ]]; then
+                wd_logger 1 "This is a type 2/3 spot line which has ${input_spot_field_name_list_count} fields"
+            else
+                wd_logger 1 "ERROR: this spot line has neither ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} nor ${FIELD_COUNT_DECODE_LINE_WITH_GRID} fields, rather is has ${input_spot_field_name_list_count} fields"
+            fi
+        fi
+
+        ### Assign the field values to their associated bash variables
+        local i
+        local j=0
+        for (( i = 0; i <  ${spot_line_list_count}; ++i )) ; do
+            local field_name="${input_spot_field_name_list[i]}"
+            wd_logger 2 "Checking field ${field_name} found at index ${i}"
+            if [[ ${i} == ${input_spot_grid_field_index} && ${spot_line_list_count} == ${FIELD_COUNT_DECODE_LINE_WITHOUT_GRID} ]]; then
+                wd_logger 1 "This spot line contains no GRID, so assign it the value 'none'"
+                eval ${field_name}="none"
+            else
+                local field_value=${spot_line_list[${j}]}
+                eval ${field_name}=\${field_value}
+                wd_logger 2 "Assigned input field value ${field_value} to variable ${field_name}"
+                (( ++j ))
+            fi
+        done
+
+        if [[ ${freq_adj_mhz} != "0" ]]; then
+            local adj_spot_freq=$( echo "scale=7; ${spot_freq} + ${freq_adj_mhz} " | bc )
+            wd_logger 1 "Adjusting spot freqency by ${freq_adj_mhz} MHz from ${spot_freq} to ${adj_spot_freq}"
+            spot_freq=${adj_spot_freq}
+        fi
+
         ### AI6VN 21 Nov 2023      add spot-sopreading to WSP=R-2 lines and copy that speading in hertz * 1000 into the metric field, then remove anty leading 0s with the 10#
         local spreading_metric=$(( 10#${spot_spreading##*.} ))   ### Instead of performing a floatin gpoint *1000.0 with 'bc', just chop off the leading 'N.' 
-        wd_logger 2 "For a type ${spot_pkt_mode} spot, overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
+        wd_logger 1 "Overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
         spot_metric=${spreading_metric}
 
         ### G3ZIL April 2020 V1    add azi to each spot line
@@ -1058,6 +1090,9 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
             wd_logger 1 "WARNING: the time in spot line ${spot_time} doesn't match the time in the filename: ${spot_file_time}"
         fi
 
+        ### We are done gathering data and assigning it to the associated bash variables.
+        ### Now print the extended spot format line from the values in those variables.
+
         ### Output a space-separated line of enhanced spot data.  The first 14 fields are in the same order but with "none" added when the message field with CALL doesn't include a GRID field
         ### Each of these lines should be uploaded to logs.wsprdaemon.org.  If ${SIGNAL_LEVEL_UPLOAD} == "proxy" AND this is the only spot (or best spot among a MERGEd group), then the posting daemon will modify the last field to signal the upload_server to forward this spot to wsprnet.org
         ### The first row of printed variables are taken from the ALL_WSPR.TXT file lines with the 10th field sync_quality moved to field 3 so the line format is a superset of the lines created by WD 2.10
@@ -1065,22 +1100,49 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         ### The third row are values taken from WD's  rms_noise, fft_noise, WD.conf call sign and grid, etc.
         # printf "%6s        %4s            %3.2f               %3d     %5.2f         %12.7f         %-14s        %-6s          %2d           %2d         %4d             %4d              %4d             %4d             %2d              %3d             %3d             %2d               %6.1f                   %6.1f            %4d            %6s                %12s                  %5d     %6.1f      %6.1f     %6.1f      %6.1f   %6.1f     %6.1f     %6.1f    %6.1f               %4d                             %4d\n" \
         # field#:  1           2               10                 3         4              5             6           7            8             9          11              12               13              14              15               16             17               18                  19                      20             21            22                   23                   24        25         26        27         28      29        30       31      32                  33                              34    \
-        printf "%6s %4s %3.2f %5.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\n" \
-             ${spot_date} ${spot_time} ${spot_sync_quality} ${spot_snr} ${spot_dt} ${spot_freq} ${spot_call} ${spot_grid} ${spot_pwr} ${spot_drift} ${spot_cycles} ${spot_jitter} ${spot_blocksize} ${spot_metric} ${spot_decodetype} ${spot_ipass} ${spot_nhardmin} ${spot_pkt_mode} ${wspr_cycle_rms_noise} ${wspr_cycle_fft_noise} ${band} ${real_receiver_grid} ${real_receiver_call_sign} ${km} ${rx_az}  ${rx_lat}  ${rx_lon} ${tx_az} ${tx_lat} ${tx_lon} ${v_lat} ${v_lon} ${wspr_cycle_kiwi_overloads_count} ${proxy_upload_this_spot} >> ${cached_spots_file_name}
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: printf \"%6s %4s %3.2f %3d %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d\" \
-             '${spot_date}' '${spot_time}' '${spot_sync_quality}' '${spot_snr}' '${spot_dt}' '${spot_freq}' '${spot_call}' '${spot_grid}' '${spot_pwr}' '${spot_drift}' '${spot_cycles}' '${spot_jitter}' '${spot_blocksize}' '${spot_metric}' '${spot_decodetype}' \
-             '${spot_ipass}' '${spot_nhardmin}' '${spot_pkt_mode}' '${wspr_cycle_rms_noise}' '${wspr_cycle_fft_noise}' '${band}' '${real_receiver_grid}' '${real_receiver_call_sign}' '${km}' '${rx_az}  ${rx_lat}  ${rx_lon}' '${tx_az}' '${tx_lat}' '${tx_lon}' \
-             '${v_lat}' '${v_lon}' '${wspr_cycle_kiwi_overloads_count}' '${proxy_upload_this_spot}'   => ${rc}"
-        fi
+        local output_field_name_list=(spot_date spot_time spot_sync_quality spot_snr spot_dt spot_freq spot_call spot_grid \
+                                          spot_pwr spot_drift spot_cycles spot_jitter spot_blocksize spot_metric spot_decodetype \
+                                          spot_ipass spot_nhardmin spot_pkt_mode wspr_cycle_rms_noise wspr_cycle_fft_noise \
+                                          band real_receiver_grid real_receiver_call_sign \
+                                          km rx_az  rx_lat  rx_lon tx_az tx_lat tx_lon v_lat v_lon wspr_cycle_kiwi_overloads_count proxy_upload_this_spot)
+         local output_field_name_list_count=${#output_field_name_list[@]}
 
+         local output_field_format_string="%6s %4s %5.2f %5.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d"
+         local output_field_format_string_list=( ${output_field_format_string} )
+         local output_field_format_string_list_count=${#output_field_format_string_list[@]}
+
+         ### It would be even better to verify that the format of the variables' contents match the printf format fields , but this a first layer check
+         if [[ ${output_field_format_string_list_count} != ${output_field_name_list_count} ]]; then
+             wd_logger 1 "ERROR:  (INTERNAL) output_field_format_string_list_count=${output_field_format_string_list_count} != output_field_name_list_count=${output_field_name_list_count}"
+             exit 1
+         fi
+
+         ###  Create the list of values which will be passed to printf
+         local printf_values_list=()
+         local i
+         for (( i=0; i < ${output_field_name_list_count}; ++i )) ; do
+             local field_name=${output_field_name_list[i]}
+             local field_value
+             field_value=${!field_name}
+             wd_logger 2 "Output value for field '${field_name}' with expected format '${output_field_format_string_list[i]}' = ${field_value}"
+             if ! printf ${output_field_format_string_list[i]} ${field_value} >& printf.log ; then
+                 wd_logger 1 "ERROR: for field ${i}:, 'printf ${output_field_format_string_list[i]} ${field_value}' returned error $?:$(< printf.log)"
+             fi
+             printf_values_list+=( ${field_value} )
+        done
+        ### 
+        printf "${output_field_format_string}\n" ${printf_values_list[@]}  >> ${cached_spots_file_name}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            local printf_error_output_lines=$(printf ${output_field_format_string} ${printf_values_list[@]})
+            wd_logger 1 "ERROR: output printf reports error ${rc}:\n printf ${output_field_format_string} ${printf_values_list[@]}:\n ${printf_error_output_lines}"
+        fi
     done < ${real_receiver_wspr_spots_file}
 
     if [[ ! -s ${cached_spots_file_name} ]]; then
-        wd_logger 2 "Found no spots to queue, so queuing zero length spot file"
+        wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
     else
-        wd_logger 2 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
+        wd_logger 1 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
     fi
 
     if grep "<...>" ${cached_spots_file_name} > bad_spots.txt; then
@@ -1207,6 +1269,20 @@ function decoding_daemon() {
     local fft_nl_adjust
     calculate_nl_adjustments  rms_nl_adjust fft_nl_adjust ${receiver_band}
     wd_logger 1 "Calculated rms_nl_adjust=${rms_nl_adjust} and fft_nl_adjust=${fft_nl_adjust}"
+
+    ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
+    ### Kiwi by 12001.1/12000 that is 1.00009167. This is a frequency increase of 0.128 Hz at 1400 Hz and 0.147 Hz at 1600 Hz.
+    ### So if  SPOT_FREQ_ADJ_HZ is not blank, then modify the frequency of each spot by that floating point HZ value.  SPOT_FREQ_ADJ_HZ defaults to +.1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
+    local freq_adj_mhz=0
+    if [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] ; then
+        ### One could learn if the Kiwi is GPS controlled from the Kiwi's status page
+        wd_logger 1 "No frequency adjustment for this KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
+    elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
+        ### Come here by default and fix the freqeuncies
+        local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
+        local freq_adj_mhz=$( echo "scale=9;(${freq_adj_hz} / 1000000)" | bc)
+        wd_logger 1 "Fixing spot frequencies of receiver '${receiver_name} by ${freq_adj_hz} Hz == ${freq_adj_mhz} MHz"
+    fi
 
     wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
     local decoded_spots=0             ### Maintain a running count of the total number of spots_decoded
@@ -1772,25 +1848,9 @@ function decoding_daemon() {
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
             queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
-            ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
-            ### Kiwi by 12001.1/12000 that is 1.00009167. This is a frequency increase of 0.128 Hz at 1400 Hz and 0.147 Hz at 1600 Hz.
-            ### So if  SPOT_FREQ_ADJ_HZ is not blank, then modify the frequency of each spot by that floating point HZ value.  SPOT_FREQ_ADJ_HZ defaults to +.1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
-            if [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] ; then
-                ### Once could learn if the Kiwi is GPS controlled from the Kiwi's status page
-                wd_logger 1 "Skipping frequency adjustment for KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
-            elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
-                local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
-                wd_logger 1 "Fixing spot frequencies by ${freq_adj_hz} Hz"
-                cp decodes_cache.txt decodes_cache.txt.unfixed
-                awk -v freq_adj_hz=${freq_adj_hz} \
-                    'BEGIN{freq_adj_mhz = freq_adj_hz / 1000000} {fixed_freq_mhz = $5 + freq_adj_mhz; printf( "%6s %4s %5.1f %5.2f %12.7f  %-22s %2s %5s %2s %2s %4s %2s %3s %5s %5s %s\n", $1, $2, $3, $4, fixed_freq_mhz, $6 " " $7 " " $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18 )}' \
-                    decodes_cache.txt > decodes_cache.txt.fixed
-                cp -p decodes_cache.txt.fixed decodes_cache.txt
-            fi
-
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_kiwi_ov_count}" ${receiver_call} ${receiver_grid}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_kiwi_ov_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
     done
