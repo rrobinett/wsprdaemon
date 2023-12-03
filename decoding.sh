@@ -1062,7 +1062,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
 
         if [[ ${freq_adj_mhz} != "0" ]]; then
             local adj_spot_freq=$( echo "scale=7; ${spot_freq} + ${freq_adj_mhz} " | bc )
-            wd_logger 1 "Adjusting spot freqency by ${freq_adj_mhz} MHz from ${spot_freq} to ${adj_spot_freq}"
+            wd_logger 2 "Adjusting spot freqency by ${freq_adj_mhz} MHz from ${spot_freq} to ${adj_spot_freq}"
             spot_freq=${adj_spot_freq}
         fi
 
@@ -1080,10 +1080,17 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         fi
         local derived_fields=$(cat ${DERIVED_ADDED_FILE} | tr -d '\r')
         derived_fields=${derived_fields//,/ }   ### Strip out the ,s
+        local  derived_field_list=( ${derived_fields} )
         wd_logger 2 "derived_fields='${derived_fields}'"
 
-        local band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon
-        read  band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon <<< "${derived_fields}"
+        local derived_veriables_list=( band km rx_az rx_lat rx_lon tx_az tx_lat tx_lon v_lat v_lon )
+        if [[ ${#derived_field_list[@]} -ne ${#derived_veriables_list[@]} ]]; then
+            wd_logger 1 "ERROR: Number of fields in derived_field_list[]=${#derived_field_list[@]} is not equal to the number of bash variables ${#derived_veriables_list[@]} they are being assigned to.  So initialize those variables to 0"
+            for variable in ${derived_veriables_list[@]} ]]; do
+                ${variable}=0
+            done
+        fi
+        read ${derived_veriables_list[@]} <<< "${derived_fields}"
 
         if [[ ${spot_date} != ${spot_file_date} ]]; then
             wd_logger 1 "WARNING: the date in spot line ${spot_date} doesn't match the date in the filename: ${spot_file_date}"
@@ -1144,7 +1151,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     if [[ ! -s ${cached_spots_file_name} ]]; then
         wd_logger 1 "Found no spots to queue, so queuing zero length spot file"
     else
-        wd_logger 1 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}):\n$(< ${cached_spots_file_name})"
+        wd_logger 1 "Created '${cached_spots_file_name}' of size $(wc -c < ${cached_spots_file_name}) which contains $( wc -l < ${cached_spots_file_name}) spots:\n$(< ${cached_spots_file_name})"
     fi
 
     if grep "<...>" ${cached_spots_file_name} > bad_spots.txt; then
