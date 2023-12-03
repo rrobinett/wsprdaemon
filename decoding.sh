@@ -993,7 +993,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                 grep "${tx_call}" ${real_receiver_wspr_spots_file} > spot_lines.txt
                 if [[ $(wc -l < spot_lines.txt) -eq 1 ]]; then
                     ### There is only one spot line for this call, so there can be no duplicate lines
-                    wd_logger 1 "There is only one spot line for call ${tx_call}, so queue it for posting"
+                    wd_logger 2 "There is only one spot line for call ${tx_call}, so queue it for posting"
                     cat spot_lines.txt >> ${no_dups_spot_file}
                 else
                     ### There are more than one spot line, but the duplicates could be from the same TX sending in different modes
