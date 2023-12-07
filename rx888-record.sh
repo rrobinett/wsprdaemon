@@ -27,11 +27,9 @@ declare -r CMD_PATH=$(realpath "$0")
 declare -r CMD_DIR=$( dirname "${CMD_PATH}")
 declare -r CONF_PATH="${CMD_PATH%.sh}.conf"
 
-if [[ ! -f ${CONF_PATH} ]]; then
-    echo "ERROR: can't find expected config file ${CONF_PATH}"
-    exit 1
+if [[ -f ${CONF_PATH} ]]; then
+    source ${CONF_PATH}
 fi
-exit 0
 
 declare -r CACHE_DIR="${CACHE_DIR-/dev/shm/RX888_recording_cache}"        ### The uncompressed raw files are written here
 mkdir -p ${CACHE_DIR}                                        ### /dev/shm always exists, so this should never fail
@@ -42,7 +40,6 @@ if [[ ! -d ${ARCHIVE_DIR} ]]; then
 fi
 
 echo "Raw IQ files will be cached in '${CACHE_DIR}' and flac compressed versions will be saved in '${ARCHIVE_DIR}'"
-exit 0
 
 declare -r CMD_DESCRIPTION="RX888 Recording Daemon"
 declare -r RX_RECORD_DAEMON_PID_FILE=${CMD_DIR}/rx_record_daemon.pid
@@ -220,6 +217,7 @@ function usage()
     -z               kill that daemon
     -s               show the daemon status
     -h               print this message
+    "
 }
 
 case ${1--h} in
