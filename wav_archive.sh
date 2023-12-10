@@ -83,11 +83,12 @@ function queue_wav_file()
     return 0
 }
 
+### If the  ${WAV_FILE_ARCHIVE_ROOT_DIR} filesystem grows too large, this function truncates the oldest 25% of the flat files found under the  ${WAV_FILE_ARCHIVE_ROOT_DIR} directory tree 
  function truncate_wav_file_archive()
 {
     local file_system_percent_used
     if wd_root_file_system_has_space file_system_percent_used; then
-        wd_logger 1 "The ${WAV_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so it has enough space for more wav and tar files.  So there is no need to cull older tar files"
+        wd_logger 1 "The ${WAV_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so it has enough space for more wav and flac files.  So there is no need to cull files"
         return 0
     fi
     wd_logger 1 "The ${WAV_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so we need to flush some older wav files"
@@ -114,7 +115,9 @@ function queue_wav_file()
     return 0
 }
 
-function wd_tar_wavs()
+### Called every odd two minutes by the watchdog_daemon(), this compresses all the pcm and iq wav files it finds and moves the compressed version of each file to ${WAV_FILE_ARCHIVE_ROOT_DIR}/YYYMMDD (of the file)/....
+### So all the compressed files for one UTC day are found under the .../YYYYMMDD/... directory for the date in the wav file name
+function wd_archive_wavs()
 {
     truncate_wav_file_archive
 
@@ -123,58 +126,33 @@ function wd_tar_wavs()
         wd_logger 1 "Found no wav files to archive"
         return 0
     fi
-    local wav_files_size_kB=$(du -s ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} | awk '{print $1}')
 
-    local wav_file_path_list=( ${wav_file_list[0]//\// } )
+    wd_logger 1 "Starting to compress and archive wav files"
 
-    ### Find the date of the newest wav file by sorting on the filenames
-    local wav_list_sort_key=${#wav_file_path_list[@]}
-    local newest_wav_file=$(IFS=$'\n'; echo "${wav_file_list[*]}" | sort -t / -k ${wav_list_sort_key} | tail -n 1)
-    local newest_date=${newest_wav_file##*/}
-          newest_date=${newest_date%.wav}
-    local wav_list_rx_site_index=$((wav_list_sort_key - 4))
-    local rx_site_id=${wav_file_path_list[${wav_list_rx_site_index}]}
-    local tar_file_name=${WAV_FILE_ARCHIVE_ROOT_DIR}/${rx_site_id}_${newest_date}.tar.zst
-    mkdir -p ${WAV_FILE_ARCHIVE_ROOT_DIR}
+    local wav_file_name
+    for wav_file_path in ${wav_file_list[@]} ; do
+        local wav_file_name=${wav_file_path##*/}
+        local wav_file_date=${wav_file_name:0:8}
+        local wav_file_dir=${wav_file_path%/*}
+        local flac_file_path=${wav_file_path%.wav}.flac
+        local dest_file_dir=${WAV_FILE_ARCHIVE_ROOT_DIR}/${wav_file_date}/${wav_file_dir#${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/}
+        local dest_flac_path=${dest_file_dir}/${wav_file_name/.wav/.flac}
+        wd_logger 2 "Flac compressing wav file ${wav_file_path} and archiving it to ${dest_flac_path}"
 
-    if [[ -f ${tar_file_name} ]]; then
-        local old_file_name=${tar_file_name/.tar/_a.tar}
-        wd_logger 1 "Found existing ${tar_file_name}, so move it to ${old_file_name}"
-        mv ${tar_file_name} ${old_file_name}
-    fi
-
-    wd_logger 1 "Found ${wav_files_size_kB} KBytes in ${#wav_file_list[@]} wav files.  Date of newest ${newest_date}. creating ${tar_file_name}"
-    local wav_files_size_kB=$(du -s ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} | awk '{print $1}')
-
-    cd ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}
-
-    ### have tar compress using zstd
-    echo "${wav_file_list[@]#*wav-archive.d/}" | tr " " "\n" > tar_file.list    ### bash expands "${wav_file_list[@]}" into a  single long argument to tar, so use this hack to get around that
-    local zstd_tar_file_size_kB=0
-    if [[ ${ARCHIVE_TO_ZST-no} == "no" ]]; then
-        wd_logger 1 "Configured to not create zst format tar file from wav files"
-    else
-        if ! tar -acf ${tar_file_name} --files-from=tar_file.list ; then
-            local rc=$?
-            cd - > /dev/null
-            wd_logger 1 "ERROR: tar => ${rc}"
+        local rc
+        flac --silent --delete-input-file ${wav_file_path}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: ' flac --silent --delete-input-file ${wav_file_path}' => ${rc}"
+            continue
         fi
-        zstd_tar_file_size_kB=$( du -s ${tar_file_name}  | awk '{print $1}' )
-    fi
-
-    ### Use flac to comoress the indiviual .wav files to .flac files, then tar the .flac files together
-    local tar_file_list=( $(< tar_file.list) )
-    local flac_file_list=( ${tar_file_list[@]/%.wav/.flac} )
-
-    flac --silent --delete-input-file ${tar_file_list[@]}
-
-    local flac_tar_file_name=${tar_file_name%.tar.zst}.flac.tar
-    tar -cf ${flac_tar_file_name} ${flac_file_list[@]}
-    wd_rm ${flac_file_list[@]}
-    local flac_tar_file_size_kB=$( du -s ${flac_tar_file_name}  | awk '{print $1}' )
-
-    cd - > /dev/null
-    wd_logger 1 "${#wav_file_list[@]} wav files of ${wav_files_size_kB} KBytes were compressed to a zst tar file of ${zstd_tar_file_size_kB} KBytes and a flac tar of ${flac_tar_file_size_kB} KBytes"
-
+        mkdir -p ${dest_file_dir}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'mkdir -p ${dest_file_dir}' => ${rc}"
+            continue
+        fi
+        mv ${flac_file_path} ${dest_flac_path}
+    done
     return 0
 }
