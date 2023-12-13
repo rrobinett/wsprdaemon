@@ -368,7 +368,11 @@ function install_python_package()
             exit ${rc}
         fi
     fi
-    if ! sudo pip3 install --break-system-packages ${pip_package} ; then
+    local pip3_extra_args=""
+    if [[ ${os_release} == "12" ]]; then
+        pip3_extra_args="--break-system-packages"
+    fi
+    if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then
         wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
         exit 2
     fi
