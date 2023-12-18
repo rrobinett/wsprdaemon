@@ -51,6 +51,9 @@ else
     declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
 fi
 
+declare os_release    ### We are not in a function, so it can't be local
+get_file_variable os_release "VERSION_ID" /etc/os-release
+
 declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
@@ -61,12 +64,16 @@ case ${CPU_ARCH} in
         fi
         ;;
     aarch64)
-        ### This is a 64 bit bullseye Pi4 and teh OrangePi
-        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
+         if [[ "${os_release}" == "12" ]]; then
+            ### The 64 bit Pi 5 OS is based upon  Debian 12
+            wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${os_release}"
+            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )
+        else
+            ### This is a 64 bit bullseye Pi4 and the OrangePi
+            PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
+         fi
         ;;
     x86_64)
-        declare os_release    ### We are not in a function, so it can't be local
-        get_file_variable os_release "VERSION_ID" /etc/os-release
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.2 ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
@@ -495,7 +502,12 @@ function load_wsjtx_commands()
                 wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
                 ;;
             aarch64)
-                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
+                if [[ ${os_release} == "12" ]]; then
+                    ### This is the WSJT-x package which runs on the Pi 5
+                    wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
+                else
+                    wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
+                fi
                 ;;
             *)
                 wd_logger 1 "ERROR: CPU architecture '${CPU_ARCH}' is not supported by this program"
@@ -534,7 +546,13 @@ function load_wsjtx_commands()
             wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the downloaded WSJT-x package"
             exit 1
         fi
-        sudo apt install libboost-log1.67.0       ### Needed by jt9
+        if [[  ${CPU_ARCH} == "aarch64" && ${os_release} == "12" ]]; then
+            ## libboost isn't needed on the Pi 5, and maybe nowhere, but I don't have tiem to check.   12/16/23  - RR
+            wd_logger 1 "Skipping installation of libboost-log1 which is not needed by jt9 on the Pi 5"
+        else
+            wd_logger 1 "Installing libboost-log1 (maybe) needed by jt9"
+            sudo apt install libboost-log1       ### Needed by jt9
+        fi
         cp -p ${dpkg_jt9_file} ${JT9_CMD} 
         wd_logger 1 "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
     fi
