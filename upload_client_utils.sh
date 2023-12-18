@@ -436,6 +436,7 @@ function upload_to_wsprdaemon_daemon() {
 
         local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
         local tar_file_path="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${tar_file_name}"
+        mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
         wd_logger 1 "Creating tar file '${tar_file_path}' with:  '( cd ${UPLOADS_ROOT_DIR}; tar cfj ${tar_file_path} \${tar_source_file_list[*]})"
         ( cd ${UPLOADS_ROOT_DIR}; tar cfj ${tar_file_path} ${tar_source_file_list[*]} )
         local ret_code=$?
