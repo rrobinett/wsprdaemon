@@ -1,6 +1,4 @@
-// $Id: wspr-decoded.c,v 1.4 2022/12/29 05:54:37 karn Exp $ 
 // Read and record PCM audio streams
-// Adapted from iqrecord.c which is out of date
 // Copyright 2021 Phil Karn, KA9Q
 //
 // Modified "wspr-decoded" to "wd-record" to record 1 minute .wav files, synchronized to the UTC
@@ -36,16 +34,10 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sysexits.h>
 #include "misc.h"
 #include "attr.h"
 #include "multicast.h"
-
-// Largest Ethernet packet
-// Normally this would be <1500,
-// but what about Ethernet interfaces that can reassemble fragments?
-// 65536 should be safe since that's the largest IPv4 datagram.
-// But what about IPv6?
-#define MAXPKT 65535
 
 // size of stdio buffer for disk I/O
 // This should be large to minimize write calls, but how big?
@@ -94,6 +86,10 @@ struct session {
   int64_t TotalFileSamples;
 };
 
+int     Searching_for_first_minute = 1;    // 1 => don't write to wav file until transition from second 59 to second zero.  
+                                           // This should be done for each source stream, but wd-record only records one stream so this can be a global variable
+int     Samples_per_second = 0;            // If non-zero from -S RATE arg, overrides the sp->samprate value which is infered from sample size
+int     timestamp_of_first_sample_in_next_wav_file = 0;   // The timestamp in the radiod RTP files is actually the sample number 
 
 char const *App_path;
 int verbosity;
@@ -123,8 +119,13 @@ int main(int argc,char *argv[]){
 
   // Defaults
   int c;
-  while((c = getopt(argc,argv,"d:l:s:vk1")) != EOF){
+  while((c = getopt(argc,argv,"d:l:s:S:vk1V")) != EOF){
     switch(c){
+    case 'V':
+      VERSION();
+      fprintf(stdout,"Copyright 2023, Clint Turner, KA7OEI\n");
+      fprintf(stdout,"Copyright 2023, Rob Robinett, AI6VN\n");
+      exit(EX_OK);
     case 'd':
       Recordings = optarg;
       break;
@@ -143,8 +144,11 @@ int main(int argc,char *argv[]){
     case 's':
       Ssrc = strtol(optarg,NULL,0);
       break;
+    case 'S':
+      Samples_per_second = strtol(optarg,NULL,0);
+      break;
     default:
-      fprintf(stderr,"Usage: %s [-l locale] [-v] [-k] [-d recdir] PCM_multicast_address\n",argv[0]);
+      fprintf(stderr,"Usage: %s [-l locale] [-v] [-k] [-d recdir] [-S samples_per_second] PCM_multicast_address\n",argv[0]);
       exit(1);
       break;
     }
@@ -212,9 +216,10 @@ void closedown(int a){
 // Read from RTP network socket, assemble blocks of samples
 void input_loop(){
     int64_t loop_count = INT64_MAX - 1;
-    int last_sec = -1;
+    int last_flush_second = -1;                // Flush all streams once per second
+    int last_data_second = -1;        // Used in search for the first data packet to be put in the first wav fileafter tansition from second 50 to second 0
 
-   while ( loop_count > 0 ) {
+    while ( loop_count > 0 ) {
         --loop_count;
 
         // Wait for data or timeout after one second
@@ -222,45 +227,30 @@ void input_loop(){
         FD_ZERO(&fdset);
         FD_SET(Input_fd,&fdset);        // This macro adds the file descriptor Input_fd to fdset
         {
-            // Wait up to one second for date to be avaiable frmm this multicast stream
+            // Wait up to one second for data to be avaiable frmm this multicast stream
             struct timespec const polltime = {1, 0}; // return after 1 sec
             int n = pselect(Input_fd + 1,&fdset,NULL,NULL,&polltime,NULL);
             if(n < 0) {
                 fprintf(stderr, "input_loop(): ERROR: unexpected pselect() => %d\n.  Timeout waiting for audio from stream", n);
-                break; 
+                exit(1); 
             }
         }
 
         int const current_epoch = utc_time_sec();
-        int const current_sec   = current_epoch % 60; // UTC second within 0-60 period
-        if ( verbosity > 1 && last_sec == -1 ) {
-            fprintf(stderr, "input_loop(): Starting at second% 2d\n", current_sec);
+        int const current_second   = current_epoch % 60; // UTC second within 0-60 period
+        if ( verbosity > 1 && last_flush_second == -1 ) {
+            fprintf(stderr, "input_loop(): Starting at second% 2d\n", current_second);
         }
-        // Close wav file when second goes from 59 to 00
-        if ( last_sec == 59 && current_sec != 59 ) {
-            // WARNING: assumes that RTP buffer are in time order and we get to run at least one every second
-            // This is the first time through the loop, so just remember the time 
-            // OR we have just from second 59 to second 0
-            // So close any open wav files.  A new one will be created far down
-            if ( verbosity > 1 ) {
-                 fprintf(stderr, "input_loop(): wall clock has changed from %2d to %2d, so close any open wav files\n", last_sec, current_sec);
-            }
+
+        // Flush the samples to the wav files once each second
+        if ( (last_flush_second >= 0 ) && ( current_second != last_flush_second ) ) {
             for(struct session *sp = Sessions; sp != NULL;){
                 struct session * const next = sp->next;
-                close_session(&sp);
+                flush_session(&sp);
                 sp = next;
             }
-        } else {
-            // Flush the samples to the wav files once each second
-            if ( (last_sec >= 0 ) && ( current_sec != last_sec ) ) {
-                for(struct session *sp = Sessions; sp != NULL;){
-                    struct session * const next = sp->next;
-                    flush_session(&sp);
-                    sp = next;
-                }
-            }
         }
-        last_sec = current_sec;
+        last_flush_second = current_second;
 
         if(FD_ISSET(Input_fd,&fdset) == 0 ){
             if(verbosity > 1) {
@@ -270,7 +260,7 @@ void input_loop(){
             if ( verbosity > 2 ) {
                 fprintf(stderr, "input_loop(): FD_ISSET() => %d\n", FD_ISSET(Input_fd,&fdset));
             }
-            uint8_t buffer[MAXPKT];
+            uint8_t buffer[PKTSIZE];
             socklen_t socksize = sizeof(Sender);
             int size = recvfrom(Input_fd,buffer,sizeof(buffer),0,&Sender,&socksize);
             if(size <= 0){ 
@@ -315,11 +305,11 @@ void input_loop(){
                 }
                 continue; // Bogus RTP header
             }
-            if( (verbosity > 1 && size != 492 )  || (verbosity > 2) ) {
+            if( verbosity > 2 ) {
                 fprintf(stderr, "input_loop(): rtp buffer size = %d\n",  size );
             } 
 
-            // Find the frist session which wants the SSRC or if none in found create a new session 
+            // Find the first session which wants the SSRC or if none in found create a new session 
             struct session *sp;
             for( sp = Sessions; sp != NULL; sp=sp->next)  {
                 if(    sp->ssrc == rtp.ssrc
@@ -329,6 +319,32 @@ void input_loop(){
                         fprintf(stderr, "input_loop(): found an exisiting session for SSRD %d\n", sp->ssrc);
                     }
                     break;
+                }
+            }
+ 
+            if ( (timestamp_of_first_sample_in_next_wav_file > 0) && (rtp.timestamp  >= timestamp_of_first_sample_in_next_wav_file) )  {
+                // An open wav file will be overfilled by the data in this rtp packet
+                if ( sp == NULL ) {
+                    // We should never get it, since timestamp_of_first_sample_in_next_wav_file is set only after there is an open sp
+                     if ( verbosity > 0 ) {
+                         fprintf(stderr, "input_loop(): ERROR: rtp.timestamp=%d >= timestamp_of_first_sample_in_next_wav_file=%d, but no sp\n",  rtp.timestamp, timestamp_of_first_sample_in_next_wav_file  );
+                     }
+                } else {
+                    // We have filled the current wav file, so increment the last timestamp to reflect the end of the next wav file
+                    int samples_per_minute =  sp->samprate * 60;
+                    int new_last_timestamp = timestamp_of_first_sample_in_next_wav_file +  samples_per_minute;
+                    if ( verbosity > 1 ) {
+                        fprintf(stderr, "input_loop(): after writing %7ld samples to it, closing wav file because this new rtp packet is for the next wav file.  rtp.timestamp=%d >= timestamp_of_first_sample_in_next_wav_file=%d\n",  
+                                sp->SamplesWritten, rtp.timestamp, timestamp_of_first_sample_in_next_wav_file );
+                    }
+                    close_session(&sp);
+                    sp = NULL;
+
+                    if ( verbosity > 1 ) {
+                        fprintf(stderr, "input_loop(): adding samples_per_minute=%d to timestamp_of_first_sample_in_next_wav_file=%d, so it is now new_last_timestamp=%d\n",
+                                samples_per_minute, timestamp_of_first_sample_in_next_wav_file, new_last_timestamp);
+                    }
+                    timestamp_of_first_sample_in_next_wav_file = new_last_timestamp;
                 }
             }
             if ( sp == NULL ) {
@@ -341,40 +357,84 @@ void input_loop(){
                     if ( verbosity > 0 ) {
                         fprintf(stderr, "wd-record->input_loop(): ERROR: failed to open new wav file\n");
                     }
-                    continue;
+                    exit(1);
                 }   
                  if ( verbosity > 1 ) { 
                     fprintf(stderr, "input_loop(): opened  new wav file\n");
                 }
             }
 
-            // A "sample" is a single audio sample, usually 16 bits.
-            // A "frame" is the same as a sample for mono. It's two audio samples for stereo
-            int16_t const * const samples = (int16_t *)dp;
-            size -= (dp - buffer);
-            int const samp_count = size / sizeof(*samples); // number of individual audio samples (not frames)
-            int const frame_count = samp_count / sp->channels; // 1 every sample period (e.g., 4 for stereo 16-bit)
-            off_t const offset = rtp_process(&sp->rtp_state,&rtp,frame_count); // rtp timestamps refer to frames
-
-            // The seek offset relative to the current position in the file is the signed (modular) difference between
-            // the actual and expected RTP timestamps. This should automatically handle
-            // 32-bit RTP timestamp wraps, which occur every ~1 days at 48 kHz and only 6 hr @ 192 kHz
-            // Should I limit the range on this?
-            if(offset)
-                fseeko(sp->fp,offset * sizeof(*samples) * sp->channels,SEEK_CUR); // offset is in bytes
-
-            sp->TotalFileSamples += samp_count + offset;
-            sp->SamplesWritten += samp_count;
-
-            // Packet samples are in big-endian order; write to .wav file in little-endian order
-
-            for(int n = 0; n < samp_count; n++){
-                fputc(samples[n] >> 8,sp->fp);
-                fputc(samples[n],sp->fp);
+            if ( Searching_for_first_minute == 1 ) {
+                // We are waiting for the transition from second 59 to second 0 before starting to write data
+                if ( verbosity > 2 ) {
+                    fprintf(stderr, "input_loop(): searching for first data received in second 0\n");
+                }
+                if ( last_data_second != 59 ) {
+                    // The current second is 0-58, so toss the data
+                    if ( verbosity > 2 ) {
+                        fprintf(stderr, "input_loop(): tossing data during second %2d while searching for first data received in second 0\n", current_second);
+                    }
+                    last_data_second = current_second;
+                } else {
+                    // Last data second was second 59
+                    if ( current_second == 59 ) {
+                        // This is the second or more packet received during second 59
+                        if ( verbosity > 2 ) {
+                            fprintf(stderr, "input_loop(): tossing the second or more data packet during second %2d while searching for first data received in second 0\n", current_second);
+                        }
+                    } else {
+                        if ( current_second != 0 ) {
+                            // We appear to have missed receiving data during second 0, which would surprise me.
+                            if ( verbosity > 1 ) {
+                                fprintf(stderr, "input_loop(): ERROR: unexpected transition from second %2d to second %d while missing data during second 0.  Continue searching\n", last_data_second, current_second);
+                            }
+                        } else {
+                            timestamp_of_first_sample_in_next_wav_file = rtp.timestamp + (sp->samprate * 60);
+                            if ( verbosity > 1 ) {
+                                fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0.\nrtp.timestamp=%d + (sp->samprate=%d * 60 ) = timestamp_of_first_sample_in_next_wav_file=%d\nSo start recording data to wav file\n", 
+                                        rtp.timestamp, sp->samprate,  timestamp_of_first_sample_in_next_wav_file);
+                            }
+                            Searching_for_first_minute = 0;
+                        }
+                    }
+                }
             }
 
+            if ( Searching_for_first_minute == 1 ) {
+                // We are waiting for the transition from second 59 to second 0 before starting to write data
+                if ( verbosity > 2 ) {
+                    fprintf(stderr, "input_loop(): dumping data packet.  Search for the next one\n");
+                }
+            } else {
+                if ( verbosity > 2 ) {
+                    fprintf(stderr, "input_loop(): recording data packet to wav file\n");
+                }
+                // A "sample" is a single audio sample, usually 16 bits.
+                // A "frame" is the same as a sample for mono. It's two audio samples for stereo
+                int16_t const * const samples = (int16_t *)dp;
+                size -= (dp - buffer);
+                int const samp_count = size / sizeof(*samples); // number of individual audio samples (not frames)
+                int const frame_count = samp_count / sp->channels; // 1 every sample period (e.g., 4 for stereo 16-bit)
+                off_t const offset = rtp_process(&sp->rtp_state,&rtp,frame_count); // rtp timestamps refer to frames
+
+                // The seek offset relative to the current position in the file is the signed (modular) difference between
+                // the actual and expected RTP timestamps. This should automatically handle
+                // 32-bit RTP timestamp wraps, which occur every ~1 days at 48 kHz and only 6 hr @ 192 kHz
+                // Should I limit the range on this?
+                if(offset)
+                    fseeko(sp->fp,offset * sizeof(*samples) * sp->channels,SEEK_CUR); // offset is in bytes
+
+                sp->TotalFileSamples += samp_count + offset;
+                sp->SamplesWritten += samp_count;
+
+                // Packet samples are in big-endian order; write to .wav file in little-endian order
+                for(int n = 0; n < samp_count; n++){
+                    fputc(samples[n] >> 8,sp->fp);
+                    fputc(samples[n],sp->fp);
+                }
+            }
         } // end of packet processing
-    }      
+    }     // end of forever loop
 }
 
 void cleanup(void){
@@ -410,9 +470,23 @@ struct session *create_session(
     sp->ssrc = rtp->ssrc;
 
     sp->channels = channels_from_pt(sp->type);
-    sp->samprate = samprate_from_pt(sp->type);
+    if ( Samples_per_second != 0 ) {
+        sp->samprate = Samples_per_second;
+    } else {
+        sp->samprate = samprate_from_pt(sp->type);
+    }
 
-    time_t start_time_sec = wav_start_epoch;
+    int filename_epoch = wav_start_epoch;
+    if ( Searching_for_first_minute == 1 ) {
+        // If this is the first wav file, then samples will start being written at the begining of the next minute
+        // So the filname should reflect that future time
+        int  wav_start_second = wav_start_epoch % 60;
+        filename_epoch = wav_start_epoch + 60 - wav_start_second;
+        if ( verbosity > 1 ) {
+            fprintf( stderr,"create_session(): changing the filename of the first wav file to be derived from epoch=%d rather than from wav_start_epoch=%d\n", filename_epoch, wav_start_epoch);
+        }
+    }
+    time_t start_time_sec = filename_epoch;
     struct tm const * const tm = gmtime(&start_time_sec);
     snprintf( sp->filename, sizeof(sp->filename), "%04d%02d%02dT%02d%02d%02dZ_%d_usb.wav",
             tm->tm_year+1900,
@@ -430,13 +504,14 @@ struct session *create_session(
             fprintf(stderr,"wd-record->create_session(): ERROR: can't create/write file %s: %s\n",sp->filename,strerror(errno));
         }
         FREE(sp);
+        exit(1);
         return NULL;
     }
     // Use fdopen on a file descriptor instead of fopen(,"w+") to avoid the implicit truncation
     // This allows testing where we're killed and rapidly restarted in the same cycle
     sp->fp = fdopen(fd,"w+");
     if( verbosity > 1) {
-        fprintf(stderr,"create_session(): creating %s\n",sp->filename);
+        fprintf(stderr,"create_session(): creating %s with sample rate of %d\n",sp->filename, sp->samprate);
     }
 
     assert(sp->fp != NULL);
@@ -494,7 +569,7 @@ void flush_session(struct session **p){
   if(sp == NULL)
     return;
 
-  if(verbosity > 1)
+  if ( (verbosity > 2) && (sp->SamplesWritten != 0) )
     printf("Flushing %s %'.1f/%'.1f sec\n",sp->filename,
 	   (float)sp->SamplesWritten / sp->samprate,
 	   (float)sp->TotalFileSamples / sp->samprate);
