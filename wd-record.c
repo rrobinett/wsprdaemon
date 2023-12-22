@@ -86,10 +86,10 @@ struct session {
   int64_t TotalFileSamples;
 };
 
-int     Searching_for_first_minute = 1;    // 1 => don't write to wav file until transition from second 59 to second zero.  
+int          Searching_for_first_minute = 1;    // 1 => don't write to wav file until transition from second 59 to second zero.  
                                            // This should be done for each source stream, but wd-record only records one stream so this can be a global variable
-int     Samples_per_second = 0;            // If non-zero from -S RATE arg, overrides the sp->samprate value which is infered from sample size
-int     timestamp_of_first_sample_in_next_wav_file = 0;   // The timestamp in the radiod RTP files is actually the sample number 
+int          Samples_per_second = 0;            // If non-zero from -S RATE arg, overrides the sp->samprate value which is infered from sample size
+uint32_t     sample_number_of_first_sample_in_current_wav_file = 0;   // The timestamp in the radiod RTP files is actually the sample number 
 
 char const *App_path;
 int verbosity;
@@ -257,7 +257,7 @@ void input_loop(){
                 fprintf(stderr, "input_loop(): FD_ISSET() => 0\n");
             }
         } else {
-            if ( verbosity > 2 ) {
+            if ( verbosity > 3 ) {
                 fprintf(stderr, "input_loop(): FD_ISSET() => %d\n", FD_ISSET(Input_fd,&fdset));
             }
             uint8_t buffer[PKTSIZE];
@@ -283,7 +283,7 @@ void input_loop(){
             uint8_t const     *dp = ntoh_rtp(&rtp,buffer);
  
             if(rtp.ssrc != Ssrc) {
-                if(verbosity > 2) {
+                if(verbosity > 3) {
                     fprintf(stderr, "input_loop(): discard data from rtp.ssrc %8d != Ssrc %8d\n", rtp.ssrc, Ssrc);
                 }
                 ++loop_count;   // So we process loop_count buffers of the SSRC packet stream
@@ -322,37 +322,36 @@ void input_loop(){
                 }
             }
  
-            if ( (timestamp_of_first_sample_in_next_wav_file > 0) && (rtp.timestamp  >= timestamp_of_first_sample_in_next_wav_file) )  {
-                // An open wav file will be overfilled by the data in this rtp packet
-                if ( sp == NULL ) {
-                    // We should never get it, since timestamp_of_first_sample_in_next_wav_file is set only after there is an open sp
+            if ( sample_number_of_first_sample_in_current_wav_file > 0 ) {
+               if ( sp == NULL ) {
+                    // We should never get here, since sample_number_of_first_sample_in_current_wav_file is set only after there is an open sp
                      if ( verbosity > 0 ) {
-                         fprintf(stderr, "input_loop(): ERROR: rtp.timestamp=%d >= timestamp_of_first_sample_in_next_wav_file=%d, but no sp\n",  rtp.timestamp, timestamp_of_first_sample_in_next_wav_file  );
+                         fprintf(stderr, "input_loop(): ERROR: rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u, but no sp\n",  rtp.timestamp, sample_number_of_first_sample_in_current_wav_file  );
                      }
+                     sample_number_of_first_sample_in_current_wav_file = 0;
                 } else {
-                    // We have filled the current wav file, so increment the last timestamp to reflect the end of the next wav file
-                    int samples_per_minute =  sp->samprate * 60;
-                    int new_last_timestamp = timestamp_of_first_sample_in_next_wav_file +  samples_per_minute;
-                    if ( verbosity > 1 ) {
-                        fprintf(stderr, "input_loop(): after writing %7ld samples to it, closing wav file because this new rtp packet is for the next wav file.  rtp.timestamp=%d >= timestamp_of_first_sample_in_next_wav_file=%d\n",  
-                                sp->SamplesWritten, rtp.timestamp, timestamp_of_first_sample_in_next_wav_file );
+                    if (rtp.timestamp  < sample_number_of_first_sample_in_current_wav_file ) {
+                        if ( verbosity > 1 ) {
+                            fprintf(stderr, "input_loop(): WARNING: tossing late arriving RTP packet with timestamp rtp.timestam=%u which is less than the timestamp=%u of the first sample of the curent wav file\n", rtp.timestamp, sample_number_of_first_sample_in_current_wav_file);
+                        }
+                        continue;
                     }
-                    close_session(&sp);
-                    sp = NULL;
-
-                    if ( verbosity > 1 ) {
-                        fprintf(stderr, "input_loop(): adding samples_per_minute=%d to timestamp_of_first_sample_in_next_wav_file=%d, so it is now new_last_timestamp=%d\n",
-                                samples_per_minute, timestamp_of_first_sample_in_next_wav_file, new_last_timestamp);
+                    int      samples_per_minute =  sp->samprate * 60;
+                    uint32_t sample_number_of_first_sample_of_next_wav_file = sample_number_of_first_sample_in_current_wav_file +  samples_per_minute;
+                    if ( rtp.timestamp >= sample_number_of_first_sample_of_next_wav_file ) {
+                        if ( verbosity > 1 ) {
+                            fprintf(stderr, "input_loop(): after writing %7ld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",  
+                                    sp->SamplesWritten, samples_per_minute, rtp.timestamp, sample_number_of_first_sample_in_current_wav_file );
+                        }
+                        close_session(&sp);
+                        sp = NULL;
+                        sample_number_of_first_sample_in_current_wav_file = sample_number_of_first_sample_of_next_wav_file;
                     }
-                    timestamp_of_first_sample_in_next_wav_file = new_last_timestamp;
                 }
             }
             if ( sp == NULL ) {
                 // Open new session for new 1 minute wav fle
-                if ( verbosity > 1 ) {
-                    fprintf(stderr, "input_loop(): opening new wav file record session\n");
-                }
-                sp = create_session(&rtp, current_epoch, rtp.ssrc );	
+               sp = create_session(&rtp, current_epoch, rtp.ssrc );	
                 if ( sp == NULL ) {
                     if ( verbosity > 0 ) {
                         fprintf(stderr, "wd-record->input_loop(): ERROR: failed to open new wav file\n");
@@ -360,7 +359,7 @@ void input_loop(){
                     exit(1);
                 }   
                  if ( verbosity > 1 ) { 
-                    fprintf(stderr, "input_loop(): opened  new wav file\n");
+                    fprintf(stderr, "input_loop(): opened new wav file for samples starting at %u\n", sample_number_of_first_sample_in_current_wav_file);
                 }
             }
 
@@ -388,11 +387,12 @@ void input_loop(){
                             if ( verbosity > 1 ) {
                                 fprintf(stderr, "input_loop(): ERROR: unexpected transition from second %2d to second %d while missing data during second 0.  Continue searching\n", last_data_second, current_second);
                             }
+                            continue;
                         } else {
-                            timestamp_of_first_sample_in_next_wav_file = rtp.timestamp + (sp->samprate * 60);
+                            sample_number_of_first_sample_in_current_wav_file = rtp.timestamp;
                             if ( verbosity > 1 ) {
-                                fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0.\nrtp.timestamp=%d + (sp->samprate=%d * 60 ) = timestamp_of_first_sample_in_next_wav_file=%d\nSo start recording data to wav file\n", 
-                                        rtp.timestamp, sp->samprate,  timestamp_of_first_sample_in_next_wav_file);
+                                fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0, so sample_number_of_first_sample_in_current_wav_file=%u.  Record to this wav file until we receive a pkt with timestamp >= %u\n", 
+                                        sample_number_of_first_sample_in_current_wav_file, sample_number_of_first_sample_in_current_wav_file + ( sp->samprate * 60 ) );
                             }
                             Searching_for_first_minute = 0;
                         }
