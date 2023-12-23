@@ -260,12 +260,13 @@ struct test_entry test_list_fails[] = {
 
 struct test_entry test_list[] = {
     //  first wav     test        
-    {        100,        110,   10 },       // wav starts with sample 100, RTP is timestamp 110 => OK to add to wav file
-    { 0xfffffff0, 0xffffffff,   15},
-    { 0xfffffff0,        100,  116},
-    {        100, 0xffffffff,   -1},
-    {        100,        90 ,   -1},
-    { 0xfffffff0, 0xfffff000,   -1}
+    {        100,        110,    10 },       // wav starts with sample 100, RTP is timestamp 110 => OK to add to wav file
+    {        100,      16100, 16000 },       // wav starts with sample 100, RTP is timestamp 110 => OK to add to wav file
+    { 0xfffffff0, 0xffffffff,    15},
+    { 0xfffffff0,        100,   116},
+    {        100, 0xffffffff,    -1},
+    {        100,        90 ,    -1},
+    { 0xfffffff0, 0xfffff000,    -1}
 };
 
 void test_rtp_sample_offset() {
@@ -285,8 +286,7 @@ void input_loop(){
     int last_flush_second = -1;                // Flush all streams once per second
     int last_data_second = -1;        // Used in search for the first data packet to be put in the first wav fileafter tansition from second 50 to second 0
 
-//    test_rtp_sample_offset();
- //   exit (0);
+   test_rtp_sample_offset();
 
     while ( loop_count > 0 ) {
         --loop_count;
@@ -410,7 +410,7 @@ void input_loop(){
                     uint32_t sample_number_of_first_sample_of_next_wav_file = sp->first_sample_number + samples_per_minute;
                     if ( sample_offset_in_current_wav_file >= samples_per_minute ) {
                         int sample_offset_in_next_wav_file = sample_offset_in_current_wav_file - samples_per_minute;
-                        if ( verbosity > 1 ) {
+                        if ( verbosity > 2 ) {
                             fprintf(stderr, "input_loop(): after writing %7ld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for offset %d in the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",  
                                     sp->SamplesWritten, samples_per_minute, sample_offset_in_next_wav_file, rtp.timestamp, sample_number_of_first_sample_in_current_wav_file );
                         }
@@ -431,7 +431,7 @@ void input_loop(){
                     exit(1);
                 }   
                 sp->first_sample_number = sample_number_of_first_sample_in_current_wav_file;
-                if ( verbosity > 1 ) { 
+                if ( verbosity > 2 ) { 
                     fprintf(stderr, "input_loop(): opened new wav file for samples starting at sample #%u which is at wav file offset %d\n", sp->first_sample_number, sample_offset_in_current_wav_file );
                 }
             }
@@ -583,7 +583,7 @@ struct session *create_session(
     // Use fdopen on a file descriptor instead of fopen(,"w+") to avoid the implicit truncation
     // This allows testing where we're killed and rapidly restarted in the same cycle
     sp->fp = fdopen(fd,"w+");
-    if( verbosity > 1) {
+    if( verbosity > 2) {
         fprintf(stderr,"create_session(): creating %s with sample rate of %d\n",sp->filename, sp->samprate);
     }
 
