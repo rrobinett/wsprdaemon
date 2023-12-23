@@ -84,6 +84,7 @@ struct session {
 
   int64_t SamplesWritten;
   int64_t TotalFileSamples;
+  uint32_t first_sample_number;
 };
 
 int          Searching_for_first_minute = 1;    // 1 => don't write to wav file until transition from second 59 to second zero.  
@@ -213,11 +214,79 @@ void closedown(int a){
   exit(1);  // Will call cleanup()
 }
 
+// Retuns the sample offset of the rtp.timestam or -1 if it is earlier than 
+#define WD_MAX_SAMPLES_PER_MINUTE 16000
+#define MAX_U32_BIT_VALUE 0xffffffff
+#define FIRST_WRAP_SAMPLE ( MAX_U32_BIT_VALUE - WD_MAX_SAMPLES_PER_MINUTE )
+
+int rtp_sample_offset( uint32_t timestamp, uint32_t first_sample_number){
+    uint32_t timestamp_offset = timestamp -  first_sample_number;
+    if ( verbosity > 2 ) {
+        fprintf(stderr, "rtp_sample_offset(): timestamp=%x - first_sample_number=%x = timestamp_offset=%x\n",  timestamp,  first_sample_number, timestamp_offset);
+    }
+    if ( timestamp_offset > WD_MAX_SAMPLES_PER_MINUTE ) {
+        if ( first_sample_number < FIRST_WRAP_SAMPLE ) {
+            // No wrap is possible, so just return the offset
+            if ( verbosity > 2 ) {
+                fprintf(stderr, "rtp_sample_offset(): first_sample_number=%x < FIRST_WRAP_SAMPLE=%x, so return timestamp_offset=%x\n",  first_sample_number, FIRST_WRAP_SAMPLE, timestamp_offset);
+            }       
+            return timestamp_offset;
+        }
+        if ( verbosity > 1 ) {
+            fprintf(stderr, "rtp_sample_offset():  timestamp_offset=%x >  WD_MAX_SAMPLES_PER_MINUTE=%x and first_sample_number=%x > FIRST_WRAP_SAMPLE=%x, so check for wrap\n",   
+                                                  timestamp_offset,       WD_MAX_SAMPLES_PER_MINUTE,        first_sample_number,    FIRST_WRAP_SAMPLE);
+        }
+        // Test for wrap around of 32 bit timestamp field in RFP header
+        int samples_before_wrap = MAX_U32_BIT_VALUE - first_sample_number;
+
+        int max_samples_after_wrap  = WD_MAX_SAMPLES_PER_MINUTE - samples_before_wrap;
+        if ( verbosity > 1 ) {
+            fprintf(stderr, "rtp_sample_offset(): timestamp_offset=%x > WD_MAX_SAMPLES_PER_MINUTE=%d, max_samples_after_wrap=%d\n", timestamp_offset, WD_MAX_SAMPLES_PER_MINUTE, max_samples_after_wrap);
+        }
+        return -1;
+    }
+    return timestamp_offset;
+}
+
+struct test_entry {
+    uint32_t rs;     // The reference sample, i.e. the sample number of the first sample of a wav file
+    uint32_t ts;     // The test sammple, i.e. the sample number carried in the timestamp field of an RTP packet
+    int  expected;
+};
+
+struct test_entry test_list_fails[] = {
+    {0xfffffff0,        100,  116}
+};
+
+struct test_entry test_list[] = {
+    //  first wav     test        
+    {        100,        110,   10 },       // wav starts with sample 100, RTP is timestamp 110 => OK to add to wav file
+    { 0xfffffff0, 0xffffffff,   15},
+    { 0xfffffff0,        100,  116},
+    {        100, 0xffffffff,   -1},
+    {        100,        90 ,   -1},
+    { 0xfffffff0, 0xfffff000,   -1}
+};
+
+void test_rtp_sample_offset() {
+    struct test_entry *tep, *tepe;
+
+    for ( tep = &test_list[0], tepe = &test_list[sizeof(test_list)/sizeof(test_list[0])]; tep < tepe; ++tep ) {
+        int offset = rtp_sample_offset( tep->ts, tep->rs);
+        if ( offset != tep->expected ) {
+            printf( "ERROR: reference=%12x, test=%12x  => %d, not the expected %d\n", tep->rs, tep->ts, offset, tep->expected);
+        }
+    }
+}
+
 // Read from RTP network socket, assemble blocks of samples
 void input_loop(){
     int64_t loop_count = INT64_MAX - 1;
     int last_flush_second = -1;                // Flush all streams once per second
     int last_data_second = -1;        // Used in search for the first data packet to be put in the first wav fileafter tansition from second 50 to second 0
+
+//    test_rtp_sample_offset();
+ //   exit (0);
 
     while ( loop_count > 0 ) {
         --loop_count;
@@ -322,30 +391,33 @@ void input_loop(){
                 }
             }
  
-            if ( sample_number_of_first_sample_in_current_wav_file > 0 ) {
-               if ( sp == NULL ) {
-                    // We should never get here, since sample_number_of_first_sample_in_current_wav_file is set only after there is an open sp
-                     if ( verbosity > 0 ) {
-                         fprintf(stderr, "input_loop(): ERROR: rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u, but no sp\n",  rtp.timestamp, sample_number_of_first_sample_in_current_wav_file  );
-                     }
-                     sample_number_of_first_sample_in_current_wav_file = 0;
+            int sample_offset_in_current_wav_file = -1;
+            if ( sp != NULL ) {
+                // We have already opened a wav file.  Make sure the samples in this RTP packet are for that file
+                if ( Searching_for_first_minute == 1 ) {
+                     if ( verbosity > 2 ) {
+                        fprintf(stderr, "input_loop(): Got RTP packet with timestamp rtp.timestamp=%u while searching for first second 0\n", rtp.timestamp);
+                    }
                 } else {
-                    if (rtp.timestamp  < sample_number_of_first_sample_in_current_wav_file ) {
+                    sample_offset_in_current_wav_file = rtp_sample_offset( rtp.timestamp, sp->first_sample_number );
+                    if ( sample_offset_in_current_wav_file < 0 ) {
                         if ( verbosity > 1 ) {
-                            fprintf(stderr, "input_loop(): WARNING: tossing late arriving RTP packet with timestamp rtp.timestam=%u which is less than the timestamp=%u of the first sample of the curent wav file\n", rtp.timestamp, sample_number_of_first_sample_in_current_wav_file);
+                            fprintf(stderr, "input_loop(): WARNING: tossing late arriving RTP packet with timestamp rtp.timestam=%u which is less than the timestamp=%u of the first sample of the curent wav file\n", rtp.timestamp, sp->first_sample_number);
                         }
                         continue;
                     }
                     int      samples_per_minute =  sp->samprate * 60;
-                    uint32_t sample_number_of_first_sample_of_next_wav_file = sample_number_of_first_sample_in_current_wav_file +  samples_per_minute;
-                    if ( rtp.timestamp >= sample_number_of_first_sample_of_next_wav_file ) {
+                    uint32_t sample_number_of_first_sample_of_next_wav_file = sp->first_sample_number + samples_per_minute;
+                    if ( sample_offset_in_current_wav_file >= samples_per_minute ) {
+                        int sample_offset_in_next_wav_file = sample_offset_in_current_wav_file - samples_per_minute;
                         if ( verbosity > 1 ) {
-                            fprintf(stderr, "input_loop(): after writing %7ld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",  
-                                    sp->SamplesWritten, samples_per_minute, rtp.timestamp, sample_number_of_first_sample_in_current_wav_file );
+                            fprintf(stderr, "input_loop(): after writing %7ld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for offset %d in the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",  
+                                    sp->SamplesWritten, samples_per_minute, sample_offset_in_next_wav_file, rtp.timestamp, sample_number_of_first_sample_in_current_wav_file );
                         }
                         close_session(&sp);
                         sp = NULL;
                         sample_number_of_first_sample_in_current_wav_file = sample_number_of_first_sample_of_next_wav_file;
+                        sample_offset_in_current_wav_file = sample_offset_in_next_wav_file;
                     }
                 }
             }
@@ -358,8 +430,9 @@ void input_loop(){
                     }
                     exit(1);
                 }   
-                 if ( verbosity > 1 ) { 
-                    fprintf(stderr, "input_loop(): opened new wav file for samples starting at %u\n", sample_number_of_first_sample_in_current_wav_file);
+                sp->first_sample_number = sample_number_of_first_sample_in_current_wav_file;
+                if ( verbosity > 1 ) { 
+                    fprintf(stderr, "input_loop(): opened new wav file for samples starting at sample #%u which is at wav file offset %d\n", sp->first_sample_number, sample_offset_in_current_wav_file );
                 }
             }
 
@@ -389,10 +462,10 @@ void input_loop(){
                             }
                             continue;
                         } else {
-                            sample_number_of_first_sample_in_current_wav_file = rtp.timestamp;
+                            sp->first_sample_number = rtp.timestamp;
                             if ( verbosity > 1 ) {
-                                fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0, so sample_number_of_first_sample_in_current_wav_file=%u.  Record to this wav file until we receive a pkt with timestamp >= %u\n", 
-                                        sample_number_of_first_sample_in_current_wav_file, sample_number_of_first_sample_in_current_wav_file + ( sp->samprate * 60 ) );
+                                fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0, so sp->first_sample_number=%u.  Record to this wav file until we receive a pkt with timestamp >= %u\n", 
+                                        sp->first_sample_number, sp->first_sample_number + ( sp->samprate * 60 ) );
                             }
                             Searching_for_first_minute = 0;
                         }
@@ -570,7 +643,7 @@ void flush_session(struct session **p){
     return;
 
   if ( (verbosity > 2) && (sp->SamplesWritten != 0) )
-    printf("Flushing %s %'.1f/%'.1f sec\n",sp->filename,
+    printf("flush_session(): Flushing %s %'.1f/%'.1f sec\n",sp->filename,
 	   (float)sp->SamplesWritten / sp->samprate,
 	   (float)sp->TotalFileSamples / sp->samprate);
   
@@ -589,7 +662,7 @@ void close_session(struct session **p){
     return;
 
   if(verbosity > 1)
-    printf("closing %s %'.1f/%'.1f sec\n",sp->filename,
+    printf("close_session(): closing %s %'.1f/%'.1f sec\n",sp->filename,
 	   (float)sp->SamplesWritten / sp->samprate,
 	   (float)sp->TotalFileSamples / sp->samprate);
   
