@@ -667,8 +667,9 @@ function wd-wait-for_wspr-gap(){
 alias wd-wait='wd-wait-for_wspr-gap'
 
 alias wd-nf="awk '{printf \"%2d: %s\n\", NF, \$0}'"
-alias git-https='git remote set-url origin https://github.com/$(git remote get-url origin | sed 's/https:\/\/github.com\///' | sed 's/git@github.com://')'
-alias git-ssh='  git remote set-url origin git@github.com:$(    git remote get-url origin | sed 's/https:\/\/github.com\///' | sed 's/git@github.com://')'
+
+### git aliases
+alias git-ssh='git config --global user.email "rob@robinett.us";  git config --global user.name "Rob Robinett" ;  git remote set-url origin  $( git remote get-url origin | sed "s/https:\/\/github.com\///" | sed "s/^/git@github.com:/") ; echo "git rmeote get-url origin: $(git remote get-url origin)"'
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
