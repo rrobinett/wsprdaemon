@@ -393,7 +393,7 @@ void input_loop(){
                     if ( sample_offset_in_current_wav_file >= samples_per_minute ) {
                         int sample_offset_in_next_wav_file = sample_offset_in_current_wav_file - samples_per_minute;
                         if ( verbosity > 2 ) {
-                            fprintf(stderr, "input_loop(): after writing %7lld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for offset %d in the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",
+                            fprintf(stderr, "input_loop(): after writing %7ld samples to wav file which should have %d samples in it, closing wav file because this new rtp packet is for offset %d in the next wav file.  rtp.timestamp=%u >= sample_number_of_first_sample_in_current_wav_file=%u\n",
                                     sp->SamplesWritten, samples_per_minute, sample_offset_in_next_wav_file, rtp.timestamp, sample_number_of_first_sample_in_current_wav_file );
                         }
                         close_session(&sp);
@@ -405,7 +405,14 @@ void input_loop(){
             }
             if ( sp == NULL ) {
                 // Open new session for new 1 minute wav fle
-               sp = create_session(&rtp, current_epoch, rtp.ssrc );	
+                if ( ( Searching_for_first_minute == 0 ) &&  ( current_second != 0 ) ) {
+                    if ( verbosity > 0 ) {
+                        fprintf(stderr, "wd-record->input_loop(): ERROR: opening new file at second %d, not expected second 0. The RX-888 sample rate is wrong or this server's NTP time is wrong.  Flushing RTP packets until the next second zero\n", current_second);
+                    }
+                    Searching_for_first_minute = 1;
+                    continue;
+                }
+                sp = create_session(&rtp, current_epoch, rtp.ssrc );	
                 if ( sp == NULL ) {
                     if ( verbosity > 0 ) {
                         fprintf(stderr, "wd-record->input_loop(): ERROR: failed to open new wav file\n");
@@ -439,13 +446,14 @@ void input_loop(){
                     } else {
                         if ( current_second != 0 ) {
                             // We appear to have missed receiving data during second 0, which would surprise me.
-                            if ( verbosity > 1 ) {
-                                fprintf(stderr, "input_loop(): ERROR: unexpected transition from second %2d to second %d while missing data during second 0.  Continue searching\n", last_data_second, current_second);
+                            if ( verbosity > 2 ) {
+                                fprintf(stderr, "input_loop(): ERROR: unexpected transition from second %2d to second %d while missing data during second 0. Start searching for next second 0\n", last_data_second, current_second);
                             }
+                            Searching_for_first_minute = 1;
                             continue;
                         } else {
                             sp->first_sample_number = rtp.timestamp;
-                            if ( verbosity > 1 ) {
+                            if ( verbosity > 2 ) {
                                 fprintf(stderr, "input_loop(): found first data after transition from second 59 to second 0, so sp->first_sample_number=%u.  Record to this wav file until we receive a pkt with timestamp >= %u\n", 
                                         sp->first_sample_number, sp->first_sample_number + ( sp->samprate * 60 ) );
                             }
@@ -511,8 +519,24 @@ struct session *create_session(
         const int wav_start_epoch,    // The WD wav file name is derived from the epoch of the first samples of the wav fle 
         const int tuning_freq_hz )
 {
-    if( verbosity > 2 ) {
-        fprintf( stderr,"create_session(): wav_start_epoch=%d, tuning_freq_hz,%d\n", wav_start_epoch, tuning_freq_hz );
+    int filename_epoch = wav_start_epoch;
+    int  wav_start_second = wav_start_epoch % 60;
+    if ( Searching_for_first_minute == 1 ) {
+        // If this is the first wav file, then samples will start being written at the begining of the next minute
+        // So the filname should reflect that future time
+        filename_epoch = wav_start_epoch + 60 - wav_start_second;
+        if ( verbosity > 2 ) {
+            fprintf( stderr,"create_session(): changing the filename of the first wav file to be derived from epoch=%d rather than from wav_start_epoch=%d\n", filename_epoch, wav_start_epoch);
+        }
+    } else {
+        if ( wav_start_second != 0 ) {
+            if( verbosity > 1 ) {
+            fprintf( stderr,"create_session(): ERRROR: (INTERNAL) wav_start_epoch=%d is for second %d, not for an expected second 0\n", wav_start_epoch, wav_start_second );
+            }
+        }
+        if( verbosity > 1 ) {
+            fprintf( stderr,"create_session(): wav_start_epoch=%d, tuning_freq_hz,%d\n", wav_start_epoch, tuning_freq_hz );
+        }
     }
     struct session *sp = calloc(1,sizeof(*sp));
     if ( sp == NULL)  {
@@ -531,16 +555,6 @@ struct session *create_session(
         sp->samprate = samprate_from_pt(sp->type);
     }
 
-    int filename_epoch = wav_start_epoch;
-    if ( Searching_for_first_minute == 1 ) {
-        // If this is the first wav file, then samples will start being written at the begining of the next minute
-        // So the filname should reflect that future time
-        int  wav_start_second = wav_start_epoch % 60;
-        filename_epoch = wav_start_epoch + 60 - wav_start_second;
-        if ( verbosity > 1 ) {
-            fprintf( stderr,"create_session(): changing the filename of the first wav file to be derived from epoch=%d rather than from wav_start_epoch=%d\n", filename_epoch, wav_start_epoch);
-        }
-    }
     time_t start_time_sec = filename_epoch;
     struct tm const * const tm = gmtime(&start_time_sec);
     snprintf( sp->filename, sizeof(sp->filename), "%04d%02d%02dT%02d%02d%02dZ_%d_usb.wav",
@@ -612,7 +626,7 @@ struct session *create_session(
     getnameinfo((struct sockaddr *)&Sender,sizeof(Sender),sender_text,sizeof(sender_text),NULL,0,NI_NOFQDN|NI_DGRAM|NI_NUMERICHOST);
     attrprintf(fd,"source","%s",sender_text);
     attrprintf(fd,"multicast","%s",PCM_mcast_address_text);
-    attrprintf(fd,"unixstarttime","%.9lf",(double)wav_start_epoch);
+    attrprintf(fd,"unixstarttime","%.9lf",(double)filename_epoch);
 
     return sp;
 }
