@@ -782,16 +782,20 @@ function ka9q_setup()
 
     ### If KA9Q software was loaded or updated, then it will need to be compiled and installed
     local ka9q_make_needed="no"
-    pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "KA9Q software was current, so compiling and installing may not be needed.  Further checking will be done to determine it compiling is needed"
-    elif [[  ${rc} -eq 1 ]]; then
-        ka9q_make_needed="yes"
-        wd_logger 1 "KA9Q software was updated, so compile and install it"
-    else 
-        wd_logger 1 "ERROR: git could not update KA9Q software"
-        exit 1
+    if [[ ${KA9Q_GIT_PULL_ENABLED-yes} == "no" ]]; then
+        wd_logger 1 "Configured to not 'git pull' in the ka9q-radio/ directory"
+    else
+        pull_commit ${KA9Q_RADIO_DIR} ${KA9Q_REQUIRED_COMMIT_SHA}
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 2 "KA9Q software was current, so compiling and installing may not be needed.  Further checking will be done to determine it compiling is needed"
+        elif [[  ${rc} -eq 1 ]]; then
+            ka9q_make_needed="yes"
+            wd_logger 1 "KA9Q software was updated, so compile and install it"
+        else 
+            wd_logger 1 "ERROR: git could not update KA9Q software"
+            exit 1
+        fi
     fi
     
     if [[ ${ka9q_make_needed} == "no" ]]; then
