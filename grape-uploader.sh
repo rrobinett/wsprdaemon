@@ -246,29 +246,69 @@ function get_daemon_status()
 ######### The fucntions which implment this service daemon follow this line ###############
 declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
 function upload_grape_data() {
-    local date=$1
+    local date_list=($@)
 
-    if [[ ${date} == "h" ]]; then
-        echo "-c expects a DATE argument in the form YYYYMMDD"
+    if [[ ${#date_list[@]} -eq 0 || ${date_list[0]} == "h" ]]; then
+        [[ ${VERBOSITY} -gt 0 ]] && echo "-c expects a DATE argument in the form YYYYMMDD [YYYYMMDD ...]"
         exit 1
     fi
-    [[ ${VERBOSITY} -gt 2 ]] && echo "Creating and uploading a GRAPE report for date ${date}"
-    local date_list=($( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -maxdepth 1 -type d ) )
-    [[ ${VERBOSITY} -gt 2 ]] && echo "Found date directories for ${#date_list[@]} dates: '${date_list[*]}'"
-    if [[ ! "${date_list[*]}" =~ "${date}" ]]; then
-         [[ ${VERBOSITY} -gt 1 ]] && echo "Can't find find a date directory for date ${date}"
-         return 1
-    fi
-    [[ ${VERBOSITY} -gt 1 ]] && echo "Found the date directory ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
-    local site_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}/ -mindepth 1 -maxdepth 1 -type d) )
-    if [[ ${#site_list[@]} -eq 0 ]]; then
-        [[ ${VERBOSITY} -gt 1 ]] && echo "Found no site directories for  ${date}"
-        return 2
-    fi
-    [[ ${VERBOSITY} -gt 1 ]] && echo "Found ${#site_list[@]} site directories for date ${date}: ${site_list[*]}"
+    [[ ${VERBOSITY} -gt 1 ]] && echo "Creating and uploading a GRAPE report for date(s) ${date_list[@]}"
+    local directory_list=($( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -maxdepth 1 -type d ) )
 
+    if [[ ${#directory_list[@]} -eq 0 ]] ; then
+        [[ ${VERBOSITY} -gt 1 ]] && echo "Can't find any date directories in ${GRAPE_WAV_ARCHIVE_ROOT_PATH}.  Is WD configured to record and archive WWV* channels?"
+         return 2
+    fi
+
+    for date in ${date_list[@]}; do
+        if [[ ! "${directory_list[*]}" =~ "${date}" ]]; then
+            [[ ${VERBOSITY} -gt 1 ]] && echo "Can't find find a date directory for date ${date}"
+            continue
+        fi
+        [[ ${VERBOSITY} -gt 1 ]] && echo "Found the date directory ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
+        local site_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}/ -mindepth 1 -maxdepth 1 -type d) )
+        if [[ ${#site_dir_list[@]} -eq 0 ]]; then
+            [[ ${VERBOSITY} -gt 1 ]] && echo "Found no site directories for ${date}"
+            continue
+        fi
+        [[ ${VERBOSITY} -gt 1 ]] && echo "Found ${#site_dir_list[@]} site directories for date ${date}: ${site_dir_list[*]}"
+        local site_dir
+        for site_dir in ${site_dir_list[@]} ; do
+            local receiver_dir_list=( $(find ${site_dir} -mindepth 1 -maxdepth 1 -type d) )
+            if [[ ${#receiver_dir_list[@]} -eq 0 ]]; then
+                [[ ${VERBOSITY} -gt 1 ]] && echo "Found no receiver directories for ${date}"
+                continue
+            fi
+            [[ ${VERBOSITY} -gt 1 ]] && echo "found ${#receiver_dir_list[@]} receivers at site ${site_dir}"
+            
+            local receiver_dir
+            for receiver_dir in ${receiver_dir_list[@]}; do
+                local band_dir_list=( $(find ${receiver_dir} -mindepth 1 -maxdepth 1 -type d) )
+                if [[ ${#band_dir_list[@]} -eq 0 ]]; then
+                    [[ ${VERBOSITY} -gt 1 ]] && echo "Found no band directories for receiver  ${receiver_dir}"
+                    continue
+                fi
+                [[ ${VERBOSITY} -gt 1 ]] && echo "found ${#band_dir_list[@]} bands for receiver  ${receiver_dir}"
+                local band_dir
+                for band_dir in ${band_dir_list[@]} ; do
+                    local flac_file_list=( $(find ${band_dir} -type f -name '*.flac') )
+                    if [[ ${#flac_file_list[@]} -eq 0 ]]; then
+                        [[ ${VERBOSITY} -gt 1 ]] && echo "Found no flac files for band ${band_dir}"
+                        continue
+                    fi
+                    [[ ${VERBOSITY} -gt 2 ]] && echo "Found ${#flac_file_list[@]} flac files in band ${band_dir}"
+                    if [[ ${#flac_file_list[@]} -ne ${MINUTES_PER_DAY} ]]; then
+                         [[ ${VERBOSITY} -gt 1 ]] && echo "band ${band_dir} has ${#flac_file_list[@]} flac files, not the expected  ${MINUTES_PER_DAY}"
+                     else
+                         [[ ${VERBOSITY} -gt 1 ]] && echo "found band dir ${band_dir} has the expected  ${MINUTES_PER_DAY} *.flac files" 
+                    fi
+                done
+            done
+        done
+    done
 }
 
+declare MINUTES_PER_DAY=$((60 * 24))   ### = 1440 minutes per day
 
 function usage()
 {
