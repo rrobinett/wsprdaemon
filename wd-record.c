@@ -9,6 +9,9 @@
 // TO DO:
 //  - Cleanup from previous "wspr-decoded" version (e.g. remove unneeded variables/code)
 //
+
+char const * wd_record_version = "This is wd-record version 0.2 which ensures that all wav files have the same number of samples and sample times are derived from the SDR (i.e RX-888) clock";
+
 #define _GNU_SOURCE 1
 #include <assert.h>
 #include <errno.h>
@@ -126,6 +129,7 @@ int main(int argc,char *argv[]){
       VERSION();
       fprintf(stdout,"Copyright 2023, Clint Turner, KA7OEI\n");
       fprintf(stdout,"Copyright 2023, Rob Robinett, AI6VN\n");
+      fprintf(stdout,"%s\n", wd_record_version);
       exit(EX_OK);
     case 'd':
       Recordings = optarg;
