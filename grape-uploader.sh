@@ -34,7 +34,8 @@ declare -r SYSTEMNCTL_SERVICE_NAME=${SYSTEMNCTL_UNIT_FILE_NAME%.*}
 declare -r SYSTEMNCTL_UNIT_DIR=/lib/systemd/system
 declare -r SYSTEMNCTL_UNIT_PATH=${SYSTEMNCTL_UNIT_DIR}/${SYSTEMNCTL_UNIT_FILE_NAME}
 
-cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
+function create_service_file() {
+    cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
     [Unit]
     Description= ${CMD_DESCRIPTION}
     After=multi-user.target
@@ -51,6 +52,7 @@ cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
     [Install]
     WantedBy=multi-user.target
 EOF
+    }
 
 function setup_systemctl_deamon() 
 {
@@ -253,7 +255,7 @@ function upload_grape_data() {
         exit 1
     fi
     [[ ${VERBOSITY} -gt 1 ]] && echo "Creating and uploading a GRAPE report for date(s) ${date_list[@]}"
-    local directory_list=($( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -maxdepth 1 -type d ) )
+    local directory_list=($( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -maxdepth 1 -type d | sort -n ) )
 
     if [[ ${#directory_list[@]} -eq 0 ]] ; then
         [[ ${VERBOSITY} -gt 1 ]] && echo "Can't find any date directories in ${GRAPE_WAV_ARCHIVE_ROOT_PATH}.  Is WD configured to record and archive WWV* channels?"
@@ -274,7 +276,7 @@ function upload_grape_data() {
         [[ ${VERBOSITY} -gt 1 ]] && echo "Found ${#site_dir_list[@]} site directories for date ${date}: ${site_dir_list[*]}"
         local site_dir
         for site_dir in ${site_dir_list[@]} ; do
-            local receiver_dir_list=( $(find ${site_dir} -mindepth 1 -maxdepth 1 -type d) )
+            local receiver_dir_list=( $(find ${site_dir} -mindepth 1 -maxdepth 1 -type d | sort ) )
             if [[ ${#receiver_dir_list[@]} -eq 0 ]]; then
                 [[ ${VERBOSITY} -gt 1 ]] && echo "Found no receiver directories for ${date}"
                 continue
@@ -283,7 +285,7 @@ function upload_grape_data() {
             
             local receiver_dir
             for receiver_dir in ${receiver_dir_list[@]}; do
-                local band_dir_list=( $(find ${receiver_dir} -mindepth 1 -maxdepth 1 -type d) )
+                local band_dir_list=( $(find ${receiver_dir} -mindepth 1 -maxdepth 1 -type d | sort -n ) )
                 if [[ ${#band_dir_list[@]} -eq 0 ]]; then
                     [[ ${VERBOSITY} -gt 1 ]] && echo "Found no band directories for receiver  ${receiver_dir}"
                     continue
@@ -298,14 +300,53 @@ function upload_grape_data() {
                     fi
                     [[ ${VERBOSITY} -gt 2 ]] && echo "Found ${#flac_file_list[@]} flac files in band ${band_dir}"
                     if [[ ${#flac_file_list[@]} -ne ${MINUTES_PER_DAY} ]]; then
-                         [[ ${VERBOSITY} -gt 1 ]] && echo "band ${band_dir} has ${#flac_file_list[@]} flac files, not the expected  ${MINUTES_PER_DAY}"
+                         [[ ${VERBOSITY} -gt 1 ]] && echo "band ${band_dir} has ${#flac_file_list[@]} flac files, not the expected ${MINUTES_PER_DAY}"
                      else
-                         [[ ${VERBOSITY} -gt 1 ]] && echo "found band dir ${band_dir} has the expected  ${MINUTES_PER_DAY} *.flac files" 
+                         [[ ${VERBOSITY} -gt 1 ]] && echo "found band dir ${band_dir} has the expected ${MINUTES_PER_DAY} *.flac files" 
+                         create_grape_wav_file ${flac_file_list[@]}
                     fi
                 done
             done
         done
     done
+}
+
+function create_grape_wav_file()
+{
+    local flac_file_list=($@)
+    local flac_file_dir="${flac_file_list[0]%/*}"
+    local output_10sps_wav_file="${flac_file_dir}/24_hour_10sps_iq.wav"
+
+    if [[ -f ${output_10sps_wav_file} ]]; then
+        [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): the 10 sps wav file ${output_10sps_wav_file} exists, so there is nothing to do in this directory"
+        return 0
+    fi
+
+    local flac_base_hour_name="${flac_file_list[0]%T*}T"
+
+    [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): create one 24 hour, 10 hz wav file from ${#flac_file_list[@]} flac files. flac_base_hour_name=${flac_base_hour_name}"
+
+    local hours_list=( $(seq -f "%02g" 0 23) )
+    local hours_files_list=()
+    local hour
+    for hour in ${hours_list[@]}  ; do
+        local one_hour_of_flac_files_list=( $( find ${flac_file_dir} -name "*T${hour}*flac" | sort ) )
+        [[ ${VERBOSITY} -gt 2 ]] && echo "create_grape_wav_file(): decompressing ${#one_hour_of_flac_files_list[@]} flac files in order to  create the hour ${hour} wav file"
+        flac -s -d ${one_hour_of_flac_files_list[@]}
+
+        local one_hour_of_wav_files_list=( ${one_hour_of_flac_files_list[*]/.flac/.wav} )
+        local one_hour_iq_wav_file="${flac_file_dir}/hour_${hour}_400sps.wav"
+        [[ ${VERBOSITY} -gt 2 ]] && echo -e "create_grape_wav_file(): decimate ${#one_hour_of_wav_files_list[@]} wav files into one 400 sps wav file:\nfirst wav = ${one_hour_of_wav_files_list[0]}\nlast wav =  ${one_hour_of_wav_files_list[-1]}"
+        sox  ${one_hour_of_wav_files_list[@]}  ${one_hour_iq_wav_file} rate 400
+
+        rm   ${one_hour_of_wav_files_list[@]}
+        hours_files_list+=(  ${one_hour_iq_wav_file} )
+    done
+
+    sox ${hours_files_list[@]} ${output_10sps_wav_file} rate 10
+    rm  ${hours_files_list[@]}
+
+    [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): created ${output_10sps_wav_file}"
 }
 
 declare MINUTES_PER_DAY=$((60 * 24))   ### = 1440 minutes per day
