@@ -75,7 +75,7 @@ case ${CPU_ARCH} in
         ;;
     x86_64)
         wd_logger 2 "Installing on Ubuntu ${os_release}"
-        if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.2 ]]; then
+        if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         else
