@@ -217,6 +217,7 @@ function upload_to_wsprnet_daemon() {
         else
             sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
         fi
+        sleep_secs=5
         wd_logger 1 "Waiting ${sleep_secs} seconds until cycle offset ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} when we will start to look for spot files and for all decodes to finish"
         wd_sleep ${sleep_secs}
 
