@@ -67,7 +67,7 @@ case ${CPU_ARCH} in
          if [[ "${os_release}" == "12" ]]; then
             ### The 64 bit Pi 5 OS is based upon  Debian 12
             wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${os_release}"
-            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )
         else
             ### This is a 64 bit bullseye Pi4 and the OrangePi
             PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
