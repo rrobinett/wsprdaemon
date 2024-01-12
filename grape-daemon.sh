@@ -227,9 +227,13 @@ function get_daemon_status()
 
 ######### The fucntions which implment this service daemon follow this line ###############
 declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
+declare WD_SILENT_FLAC_FILE_PATH="${HOME}/wsprdaemon/silent_iq.flac"
+declare MINUTES_PER_DAY=$(( 60 * 24 ))
 
-function date_status() {
+function date_repair() {
     local date=$1
+    local hours_list=( $(seq -f "%02g" 0 23) )
+    local minutes_list=( $(seq -f "%02g" 0 59) )
 
     if [[ "${date}" == "h" ]]; then
         echo "usage: -S YYYYMMDD"
@@ -245,8 +249,101 @@ function date_status() {
     echo "Found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
         local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
-        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}"
+        if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
+            echo "Found ${#flac_file_list[@]} flac files in ${band_dir}"
+        else
+            # read -p "Found only ${#flac_file_list[@]} flac files in ${band_dir} so it needs repair. Press <RETURN}> to repair all missing flac files in this directory => "
+            local band_freq=${flac_file_list[0]##*/}
+                  band_freq=${band_freq#*_}
+                  band_freq=${band_freq/_iq.flac/}
+            local hour
+            for hour in ${hours_list[@]} ; do
+                local minute 
+                for minute in ${minutes_list[@]} ; do
+                    local expected_file_name="${date}T${hour}${minute}00Z_${band_freq}_iq.flac"
+                    local expected_file_path=${band_dir}/${expected_file_name}
+                    if [[ ! -f ${expected_file_path} ]]; then
+                        echo "Can't find expected IQ file ${expected_file_path}"
+                        #read -p "Press <RETURN> to create it from ${WD_SILENT_FLAC_FILE_PATH} .flac: "
+                        ln ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
+                    fi
+                done
+            done
+        fi
     done
+}
+
+
+function date_status() {
+    local date=$1
+
+    if [[ "${date}" == "h" ]]; then
+        echo "usage: -S YYYYMMDD"
+        return 0
+    fi
+    local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
+    
+    if [[  ! -d ${date_root_dir} ]]; then
+        echo "Can't find ${date_root_dir}"
+        return 1
+    fi
+    local rc=0
+    local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
+    echo "Found ${#band_dir_list[@]} bands"
+    for band_dir in ${band_dir_list[@]} ; do
+        local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
+        local silent_files_count=0
+        local flac_file
+        for flac_file in ${flac_file_list[@]} ; do
+            local file_link_count
+            file_link_count=$(stat -c %h ${flac_file} )
+            if [[ ${file_link_count} -gt 1 ]]; then
+                (( ++silent_files_count ))
+                rc=2
+            fi
+         done
+        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}. ${silent_files_count} of them are silent files"
+    done
+    return ${rc}
+}
+
+function date_create_24_hour_wav() {
+     if [[ "${date}" == "h" ]]; then
+        echo "usage: -S YYYYMMDD"
+        return 0
+    fi
+    local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
+
+    if [[  ! -d ${date_root_dir} ]]; then
+        echo "Can't find ${date_root_dir}"
+        return 1
+    fi
+
+    local rc
+    date_status ${date}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo "ERROR: the ${date} file tree doesn't have the correct number of flac files"
+        return 2
+    fi
+
+    rc=0
+    local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
+    for band_dir in ${band_dir_list[@]} ; do
+        local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
+        local silent_files_count=0
+        local flac_file
+        for flac_file in ${flac_file_list[@]} ; do
+            local file_link_count
+            file_link_count=$(stat -c %h ${flac_file} )
+            if [[ ${file_link_count} -gt 1 ]]; then
+                (( ++silent_files_count ))
+                rc=2
+            fi
+         done
+        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}. ${silent_files_count} of them are silent files"
+    done
+    return ${rc}
 }
 
 function upload_grape_data() {
@@ -361,6 +458,10 @@ function usage()
     -A               start daemon with a delay of ${KIWI_STARTUP_DELAY_SECONDS}
     -z               kill the daemon
     -s               show the daemon status
+    === Internal and diagnostic commands =====
+    -C YYYYMMDD      Create a 24 hour 10 Hz wav file
+    -S YYYYMMDD      Show the status of the files in that tree
+    -R YYYYMMDD      Repair the directory tree by filling in missing minutes with silent_iq.flac
     -d [a|i|z|s]     systemctl commands for daemon (a=start, i=install and enable, z=disable and stop, s=show status"
 }
 
@@ -368,8 +469,14 @@ case ${1--h} in
     -c)
         upload_grape_data  ${2-h}
         ;;
+    -C)
+        date_create_24_hour_wav ${2-h}
+        ;;
     -S)
         date_status ${2-h}
+        ;;
+    -R)
+        date_repair ${2-h}
         ;;
     -a)
         spawn_daemon ${2-0}
