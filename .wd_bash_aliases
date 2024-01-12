@@ -1,6 +1,19 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+function wd-find-functions() {
+   local bash_file=$1
+
+   local functions_list=( $( awk '/^function/{print $2}' ${bash_file} | sed 's/(.*//' ) )
+
+   echo "Found ${#functions_list[@]} functions: '${functions_list[*]}'"
+
+   for function in ${functions_list[@]} ; do
+       grep -w ${function}  ${bash_file}
+       read
+   done
+}
+
 export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
 
 if [[ -d /dev/shm/wsprdaemon ]]; then
