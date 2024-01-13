@@ -225,10 +225,44 @@ function get_daemon_status()
     fi
 }
 
-######### The fucntions which implment this service daemon follow this line ###############
+######### The functions which implment this service daemon follow this line ###############
+declare MINUTES_PER_DAY=$(( 60 * 24 ))
+declare GRAPE_TMP_DIR="/dev/shm/wsprdaemon/grape.d"
 declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
 declare WD_SILENT_FLAC_FILE_PATH="${HOME}/wsprdaemon/silent_iq.flac"
-declare MINUTES_PER_DAY=$(( 60 * 24 ))
+
+function date_status() {
+    local date=$1
+
+    if [[ "${date}" == "h" ]]; then
+        echo "usage: -S YYYYMMDD"
+        return 0
+    fi
+    local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
+    
+    if [[  ! -d ${date_root_dir} ]]; then
+        echo "Can't find ${date_root_dir}"
+        return 1
+    fi
+    local rc=0
+    local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
+    echo "Found ${#band_dir_list[@]} bands"
+    for band_dir in ${band_dir_list[@]} ; do
+        local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
+        local silent_files_count=0
+        local flac_file
+        for flac_file in ${flac_file_list[@]} ; do
+            local file_link_count
+            file_link_count=$(stat -c %h ${flac_file} )
+            if [[ ${file_link_count} -gt 1 ]]; then
+                (( ++silent_files_count ))
+                rc=2
+            fi
+         done
+        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}. ${silent_files_count} of them are silent files"
+    done
+    return ${rc}
+}
 
 function date_repair() {
     local date=$1
@@ -273,8 +307,65 @@ function date_repair() {
     done
 }
 
+### Give a DATE...BAND directory which has the requried 1440 minute flac files. create a single w4 hour long 10 Hz BW wav file
+function create_grape_wav_file()
+{
+    local flac_file_dir=$1
+    local flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
 
-function date_status() {
+    if [[ ${TEST_ARRAY_ORDER-no} == "yes" ]]; then
+        ( IFS=$'\n' ; echo "${flac_file_list[*]}" > flac_file_list.txt )
+        local i
+        for (( i = 0; i <  ${#flac_file_list[@]}; ++i )) ; do
+            printf "%4d: %s\n" $i ${flac_file_list[i]}
+        done | less
+    fi
+    if [[ ${#flac_file_list[@]} -ne ${MINUTES_PER_DAY}  ]]; then
+        echo "create_grape_wav_file(): ERROR: found only ${#flac_file_list[@]} flac files in ${flac_file_dir}, not the expected ${MINUTES_PER_DAY} files"
+        return 1
+    fi
+    local output_10sps_wav_file="${flac_file_dir}/24_hour_10sps_iq.wav"
+
+    if [[ -f ${output_10sps_wav_file} ]]; then
+        [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): the 10 sps wav file ${output_10sps_wav_file} exists, so there is nothing to do in this directory"
+        return 0
+    fi
+
+    local flac_base_hour_name="${flac_file_list[0]%T*}T"
+
+    [[ ${VERBOSITY} -gt 0 ]] && echo "create_grape_wav_file(): create one 24 hour, 10 hz wav file from ${#flac_file_list[@]} flac files. flac_base_hour_name=${flac_base_hour_name}"
+
+    mkdir -p ${GRAPE_TMP_DIR}
+    rm -f ${GRAPE_TMP_DIR}/*
+
+
+    set -x
+    local hours_list=( $(seq -f "%02g" 0 23) )
+    local hours_files_list=()
+    local hour
+    for hour in ${hours_list[@]}  ; do
+        local one_hour_of_flac_files_list=( $( find ${flac_file_dir} -name "*T${hour}*flac" -printf '%p\n' | sort ) )
+        [[ ${VERBOSITY} -gt 2 ]] && echo "create_grape_wav_file(): decompressing ${#one_hour_of_flac_files_list[@]} flac files in order to  create the hour ${hour} wav file"
+        ${flac_file_dir}; flac -d --output-prefix=${GRAPE_TMP_DIR}/ ${one_hour_of_flac_files_list[@]} 
+        exit 0
+
+        local one_hour_of_wav_files_list=( ${one_hour_of_flac_files_list[*]/.flac/.wav} )
+        local one_hour_iq_wav_file="${flac_file_dir}/hour_${hour}_400sps.wav"
+        [[ ${VERBOSITY} -gt 2 ]] && echo -e "create_grape_wav_file(): decimate ${#one_hour_of_wav_files_list[@]} wav files into one 400 sps wav file:\nfirst wav = ${one_hour_of_wav_files_list[0]}\nlast wav =  ${one_hour_of_wav_files_list[-1]}"
+        sox  ${one_hour_of_wav_files_list[@]}  ${one_hour_iq_wav_file} rate 400
+
+        rm   ${one_hour_of_wav_files_list[@]}
+        hours_files_list+=(  ${one_hour_iq_wav_file} )
+    done
+
+    sox ${hours_files_list[@]} ${output_10sps_wav_file} rate 10
+    rm  ${hours_files_list[@]}
+
+    [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): created ${output_10sps_wav_file}"
+}
+
+### '-C' Verify or create a 24 hour 10 Hz BW wav file for each band 
+function create_24_hour_wavs() {
     local date=$1
 
     if [[ "${date}" == "h" ]]; then
@@ -282,7 +373,7 @@ function date_status() {
         return 0
     fi
     local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
-    
+
     if [[  ! -d ${date_root_dir} ]]; then
         echo "Can't find ${date_root_dir}"
         return 1
@@ -291,59 +382,9 @@ function date_status() {
     local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
     echo "Found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
-        local silent_files_count=0
-        local flac_file
-        for flac_file in ${flac_file_list[@]} ; do
-            local file_link_count
-            file_link_count=$(stat -c %h ${flac_file} )
-            if [[ ${file_link_count} -gt 1 ]]; then
-                (( ++silent_files_count ))
-                rc=2
-            fi
-         done
-        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}. ${silent_files_count} of them are silent files"
+        create_grape_wav_file ${band_dir}
+        read -p "Next band? => "
     done
-    return ${rc}
-}
-
-function date_create_24_hour_wav() {
-     if [[ "${date}" == "h" ]]; then
-        echo "usage: -S YYYYMMDD"
-        return 0
-    fi
-    local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
-
-    if [[  ! -d ${date_root_dir} ]]; then
-        echo "Can't find ${date_root_dir}"
-        return 1
-    fi
-
-    local rc
-    date_status ${date}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        echo "ERROR: the ${date} file tree doesn't have the correct number of flac files"
-        return 2
-    fi
-
-    rc=0
-    local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
-    for band_dir in ${band_dir_list[@]} ; do
-        local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
-        local silent_files_count=0
-        local flac_file
-        for flac_file in ${flac_file_list[@]} ; do
-            local file_link_count
-            file_link_count=$(stat -c %h ${flac_file} )
-            if [[ ${file_link_count} -gt 1 ]]; then
-                (( ++silent_files_count ))
-                rc=2
-            fi
-         done
-        echo "Found ${#flac_file_list[@]} flac files in ${band_dir}. ${silent_files_count} of them are silent files"
-    done
-    return ${rc}
 }
 
 function upload_grape_data() {
@@ -410,46 +451,6 @@ function upload_grape_data() {
     done
 }
 
-function create_grape_wav_file()
-{
-    local flac_file_list=($@)
-    local flac_file_dir="${flac_file_list[0]%/*}"
-    local output_10sps_wav_file="${flac_file_dir}/24_hour_10sps_iq.wav"
-
-    if [[ -f ${output_10sps_wav_file} ]]; then
-        [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): the 10 sps wav file ${output_10sps_wav_file} exists, so there is nothing to do in this directory"
-        return 0
-    fi
-
-    local flac_base_hour_name="${flac_file_list[0]%T*}T"
-
-    [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): create one 24 hour, 10 hz wav file from ${#flac_file_list[@]} flac files. flac_base_hour_name=${flac_base_hour_name}"
-
-    local hours_list=( $(seq -f "%02g" 0 23) )
-    local hours_files_list=()
-    local hour
-    for hour in ${hours_list[@]}  ; do
-        local one_hour_of_flac_files_list=( $( find ${flac_file_dir} -name "*T${hour}*flac" | sort ) )
-        [[ ${VERBOSITY} -gt 2 ]] && echo "create_grape_wav_file(): decompressing ${#one_hour_of_flac_files_list[@]} flac files in order to  create the hour ${hour} wav file"
-        flac -s -d ${one_hour_of_flac_files_list[@]}
-
-        local one_hour_of_wav_files_list=( ${one_hour_of_flac_files_list[*]/.flac/.wav} )
-        local one_hour_iq_wav_file="${flac_file_dir}/hour_${hour}_400sps.wav"
-        [[ ${VERBOSITY} -gt 2 ]] && echo -e "create_grape_wav_file(): decimate ${#one_hour_of_wav_files_list[@]} wav files into one 400 sps wav file:\nfirst wav = ${one_hour_of_wav_files_list[0]}\nlast wav =  ${one_hour_of_wav_files_list[-1]}"
-        sox  ${one_hour_of_wav_files_list[@]}  ${one_hour_iq_wav_file} rate 400
-
-        rm   ${one_hour_of_wav_files_list[@]}
-        hours_files_list+=(  ${one_hour_iq_wav_file} )
-    done
-
-    sox ${hours_files_list[@]} ${output_10sps_wav_file} rate 10
-    rm  ${hours_files_list[@]}
-
-    [[ ${VERBOSITY} -gt 1 ]] && echo "create_grape_wav_file(): created ${output_10sps_wav_file}"
-}
-
-declare MINUTES_PER_DAY=$((60 * 24))   ### = 1440 minutes per day
-
 function usage()
 {
     echo "$0 Version ${VERSION}: 
@@ -459,7 +460,7 @@ function usage()
     -z               kill the daemon
     -s               show the daemon status
     === Internal and diagnostic commands =====
-    -C YYYYMMDD      Create a 24 hour 10 Hz wav file
+    -C YYYYMMDD      Create 24 hour 10 Hz wav files for all bands 
     -S YYYYMMDD      Show the status of the files in that tree
     -R YYYYMMDD      Repair the directory tree by filling in missing minutes with silent_iq.flac
     -d [a|i|z|s]     systemctl commands for daemon (a=start, i=install and enable, z=disable and stop, s=show status"
@@ -470,7 +471,7 @@ case ${1--h} in
         upload_grape_data  ${2-h}
         ;;
     -C)
-        date_create_24_hour_wav ${2-h}
+        create_24_hour_wavs ${2-h}
         ;;
     -S)
         date_status ${2-h}
