@@ -19,8 +19,8 @@
 
 shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
 
-declare -r VERSION=0.1
-declare    VERBOSITY=${VERBOSITY-2}     ### default to level 1
+declare    VERSION=${VERSION-0.1}
+declare    VERBOSITY=${VERBOSITY-1}     ### default to level 1
 declare -r CMD_NAME=${0##*/}
 declare -r CMD_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r CMD_PATH="${CMD_DIR}/${CMD_NAME}"
@@ -33,6 +33,25 @@ declare -r SYSTEMNCTL_SERVICE_NAME=${SYSTEMNCTL_UNIT_FILE_NAME%.*}
            SYSTEMNCTL_UNIT_FILE_NAME=${SYSTEMNCTL_SERVICE_NAME}.service
 declare -r SYSTEMNCTL_UNIT_DIR=/lib/systemd/system
 declare -r SYSTEMNCTL_UNIT_PATH=${SYSTEMNCTL_UNIT_DIR}/${SYSTEMNCTL_UNIT_FILE_NAME}
+
+declare MINUTES_PER_DAY=$(( 60 * 24 ))
+declare GRAPE_TMP_DIR="/tmp/wd_grape_wavs"
+declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
+declare WD_SILENT_FLAC_FILE_PATH="${HOME}/wsprdaemon/silent_iq.flac"
+
+function grape_init() {
+    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
+        echo "Creating ${GRAPE_TMP_DIR}"
+        sudo mkdir ${GRAPE_TMP_DIR}
+    fi
+    local rc
+    mountpoint -q ${GRAPE_TMP_DIR}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        sudo mount -t tmpfs -o size=6G tmpfs ${GRAPE_TMP_DIR}
+    fi
+    rm -rf ${GRAPE_TMP_DIR}/*
+}
 
 function create_service_file() {
     cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
@@ -226,12 +245,7 @@ function get_daemon_status()
 }
 
 ######### The functions which implment this service daemon follow this line ###############
-declare MINUTES_PER_DAY=$(( 60 * 24 ))
-declare GRAPE_TMP_DIR="/dev/shm/grape.d"
-declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
-declare WD_SILENT_FLAC_FILE_PATH="${HOME}/wsprdaemon/silent_iq.flac"
-
-function date_status() {
+function grape_get_date_status() {
     local date=$1
 
     if [[ "${date}" == "h" ]]; then
@@ -259,7 +273,7 @@ function date_status() {
     return ${rc}
 }
 
-function date_repair() {
+function grape_repair_date_wavs() {
     local date=$1
     local hours_list=( $(seq -f "%02g" 0 23) )
     local minutes_list=( $(seq -f "%02g" 0 59) )
@@ -292,7 +306,7 @@ function date_repair() {
                     local expected_file_name="${date}T${hour}${minute}00Z_${band_freq}_iq.flac"
                     local expected_file_path=${band_dir}/${expected_file_name}
                     if [[ ! -f ${expected_file_path} ]]; then
-                        echo "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
+                        [[ ${VERBOSITY} -ge 2 ]] && echo "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
                         #read -p "Press <RETURN> to create it from ${WD_SILENT_FLAC_FILE_PATH} .flac: "
                         ln ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
                     fi
@@ -356,14 +370,14 @@ function create_grape_wav_file()
 }
 
 ### '-C' verify or create a 24 hour 10 hz bw wav file for each band 
-function create_24_hour_wavs() {
+function grape_create_24_hour_wavs() {
     local date=$1
 
     if [[ "${date}" == "h" ]]; then
         echo "usage: -s yyyymmdd"
         return 0
     fi
-    local date_root_dir="${grape_wav_archive_root_path}/${date}"
+    local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${date}"
 
     if [[  ! -d ${date_root_dir} ]]; then
         echo "can't find ${date_root_dir}"
@@ -379,17 +393,32 @@ function create_24_hour_wavs() {
     return 0
 }
 
-### '-t' 
-function show_all_dates_status(){
+### '-p' 
+function grape_purge_all_empty_date_trees(){
     local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
-        date_status ${wav_archive_date}
+        local date_files_list=( $( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date} -type f ) )
+        if [[ ${#date_files_list[@]} -eq 0 ]]; then
+            echo "Purging empty date  tree ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}"
+            rm -r ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}
+        else
+            printf  "Found %5d files in ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}\n" ${#date_files_list[@]}
+        fi
+    done
+}
+
+### '-t' 
+function grape_show_all_dates_status(){
+    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_date
+    for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
+        grape_get_date_status ${wav_archive_date}
     done
 }
 
 ### '-r' 
-function repair_all_dates()
+function grape_repair_all_dates_wavs()
 {
     local current_date
     TZ=UTC printf -v current_date "%(%Y%m%d)T"
@@ -397,21 +426,21 @@ function repair_all_dates()
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
-            echo "Skipping date_repair for current UTC day ${current_date}"
+            echo "Skipping grape_repair_date_wavs for current UTC day ${current_date}"
         else
-            date_repair ${wav_archive_date}
+            grape_repair_date_wavs ${wav_archive_date}
         fi
     done
 }
 
 
 ### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
-function upload_grape_iq_wav_files() {
+function grape_upload_all_10hz_wavs() {
     restore_all_dates
     ( cd ~/wdprdaemon; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav  wav-archive.d/ grape@wsprdaemon.org:wav-archive.d/ )
 }    
 
-function usage()
+function grape_print_usage()
 {
     echo "$0 Version ${VERSION}: 
     -c YYYYMMDD      Create 10 sps wav files for each band from flac.tar files for YYYYMMDD
@@ -423,56 +452,65 @@ function usage()
     -C YYYYMMDD      Create 24 hour 10 Hz wav files for all bands 
     -S YYYYMMDD      Show the status of the files in that tree
     -R YYYYMMDD      Repair the directory tree by filling in missing minutes with silent_iq.flac
+    -p               Purge all empty date trees
     -r               Repair all date trees
     -t               Show status of all the date trees
     -U               Upload all of the local 24_hour_10sps_iq.wav files to the grape@wsprdaemon.org account
     -d [a|i|z|s]     systemctl commands for daemon (a=start, i=install and enable, z=disable and stop, s=show status"
 }
 
-case ${1--h} in
-    -c)
-        upload_grape_data  ${2-h}
-        ;;
-    -C)
-        create_24_hour_wavs ${2-h}
-        ;;
-    -S)
-        date_status ${2-h}
-        ;;
-    -R)
-        date_repair ${2-h}
-        ;;
-    -t)
-        show_all_dates_status
-        ;; 
-    -r) 
-        repair_all_dates
-        ;;
-    -U)
-        upload_grape_iq_wav_files
-        ;;
-    -a)
-        spawn_daemon ${2-0}
-        ;;
-    -A)
-        ### If this is installed as a Pi daemon by '-d a', the systemctl system will execute '-A'.  
-        spawn_daemon ${KIWI_STARTUP_DELAY_SECONDS}
-        ;;
-    -z)
-        kill_daemon
-        ;;
-    -s)
-        get_daemon_status
-        ;;
-    -d)
-        startup_daemon_control ${2-h}
-        ;;
-    -h)
-        usage
-        ;;
-    *)
-        echo "ERROR: flag '$1' is not valid"
-        ;;
-esac
+function grape_menu() {
+    case ${1--h} in
+        -c)
+            grape_data_upload  ${2-h}
+            ;;
+        -C)
+            grape_create_24_hour_wavs ${2-h}
+            ;;
+        -S)
+            grape_get_date_status ${2-h}
+            ;;
+        -R)
+            grape_repair_date_wavs ${2-h}
+            ;;
+        -p)
+            grape_purge_all_empty_date_trees
+            ;;
+        -t)
+            grape_show_all_dates_status
+            ;; 
+        -r) 
+            grape_repair_all_dates_wavs
+            ;;
+        -U)
+            grape_upload_all_10hz_wavs
+            ;;
+        -a)
+            spawn_daemon ${2-0}
+            ;;
+        -A)
+            ### If this is installed as a Pi daemon by '-d a', the systemctl system will execute '-A'.  
+            spawn_daemon ${KIWI_STARTUP_DELAY_SECONDS}
+            ;;
+        -z)
+            kill_daemon
+            ;;
+        -s)
+            get_daemon_status
+            ;;
+        -d)
+            startup_daemon_control ${2-h}
+            ;;
+        -h)
+            grape_print_usage
+            ;;
+        *)
+            echo "ERROR: flag '$1' is not valid"
+            ;;
+    esac
+}
+
+grape_init
+grape_menu $@
 
 exit 0
