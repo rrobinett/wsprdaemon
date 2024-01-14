@@ -717,3 +717,6 @@ alias wd-h='wd-help'
 if [[ ! -f ~/.tmux.conf ]]; then
     echo "set -g mouse on" > ~/.tmux.conf
 fi
+
+alias wdg='~/wsprdaemon/grape-daemon.sh'
+
