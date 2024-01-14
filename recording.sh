@@ -528,7 +528,7 @@ function kill_wav_recording_daemon()
 declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
 function purge_stale_recordings() 
 {
-    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN}) )
+    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN}) )
 
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
         return 0
