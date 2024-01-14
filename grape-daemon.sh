@@ -50,7 +50,6 @@ function grape_init() {
     if [[ ${rc} -ne 0 ]]; then
         sudo mount -t tmpfs -o size=6G tmpfs ${GRAPE_TMP_DIR}
     fi
-    rm -rf ${GRAPE_TMP_DIR}/*
 }
 
 function create_service_file() {
@@ -387,7 +386,7 @@ function grape_create_24_hour_wavs() {
     local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d -printf '%p\n' | sort) )
     echo "found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        echo "create 24 hour wav file in ${band_dir}"
+        [[ ${VERBOSITY} -gt 1 ]] && echo "create 24 hour wav file in ${band_dir}"
         create_grape_wav_file ${band_dir}
     done
     return 0
@@ -417,6 +416,7 @@ function grape_show_all_dates_status(){
     done
 }
 
+
 ### '-r' 
 function grape_repair_all_dates_wavs()
 {
@@ -433,17 +433,29 @@ function grape_repair_all_dates_wavs()
     done
 }
 
+### '-c' 
+function grape_create_all_24_hour_wavs(){
+    local current_date
+    TZ=UTC printf -v current_date "%(%Y%m%d)T"
+    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_date
+    for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
+        if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
+            echo "Skipping grape_create_24_hour_wavs for current UTC day ${current_date}"
+        else
+            grape_create_24_hour_wavs ${wav_archive_date}
+        fi
+    done
+}
 
 ### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
 function grape_upload_all_10hz_wavs() {
-    restore_all_dates
-    ( cd ~/wdprdaemon; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav  wav-archive.d/ grape@wsprdaemon.org:wav-archive.d/ )
+    ( cd ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav .  grape@wsprdaemon.org:wav-archive.d/ )
 }    
 
 function grape_print_usage()
 {
     echo "$0 Version ${VERSION}: 
-    -c YYYYMMDD      Create 10 sps wav files for each band from flac.tar files for YYYYMMDD
     -a               Start daemon which pings kiwis and power cycles them if they don't respond
     -A               start daemon with a delay of ${KIWI_STARTUP_DELAY_SECONDS}
     -z               kill the daemon
@@ -452,6 +464,7 @@ function grape_print_usage()
     -C YYYYMMDD      Create 24 hour 10 Hz wav files for all bands 
     -S YYYYMMDD      Show the status of the files in that tree
     -R YYYYMMDD      Repair the directory tree by filling in missing minutes with silent_iq.flac
+    -c               Create 10 sps wav files for each band from flac.tar files for all dates
     -p               Purge all empty date trees
     -r               Repair all date trees
     -t               Show status of all the date trees
@@ -462,7 +475,7 @@ function grape_print_usage()
 function grape_menu() {
     case ${1--h} in
         -c)
-            grape_data_upload  ${2-h}
+            grape_create_all_24_hour_wavs
             ;;
         -C)
             grape_create_24_hour_wavs ${2-h}
