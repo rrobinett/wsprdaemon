@@ -1287,10 +1287,12 @@ function decoding_daemon() {
         ### One could learn if the Kiwi is GPS controlled from the Kiwi's status page
         wd_logger 1 "No frequency adjustment for this KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
     elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
-        ### Come here by default and fix the freqeuncies
+        ### The default is to add 0.1 Hz to spot frequencies, or by the value of SPOT_FREQ_ADJ_HZ specified in the wsprdaemon.conf file
         local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
-        local freq_adj_mhz=$( echo "scale=9;(${freq_adj_hz} / 1000000)" | bc)
-        wd_logger 1 "Fixing spot frequencies of receiver '${receiver_name} by ${freq_adj_hz} Hz == ${freq_adj_mhz} MHz"
+        freq_adj_mhz=$( echo "scale=9;(${freq_adj_hz} / 1000000)" | bc)
+        wd_logger 1 "Because  [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]] is TRUE, fixing spot frequencies of receiver '${receiver_name} by ${freq_adj_hz} Hz == ${freq_adj_mhz} MHz"
+    else
+         wd_logger 1 " [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] FAILED and [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ] FAILED so no frequency adjustment for this KIWI"
     fi
 
     wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
