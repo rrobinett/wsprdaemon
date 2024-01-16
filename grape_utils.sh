@@ -1,6 +1,6 @@
 #!/bin/bash
 
-###  grape-daemon.sh:  wakes up at every UTC 00:05, creates and uploads Digial RF files of the last 24 hours of WWV IQ recordings
+###  grape_utils.sh:  wakes up at every UTC 00:05, creates and uploads Digial RF files of the last 24 hours of WWV IQ recordings
 
 ###    Copyright (C) 2024  Robert S. Robinett
 ###
@@ -17,34 +17,10 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-shopt -s -o nounset          ### bash stops with error if undeclared variable is referenced
-
-declare    VERSION=${VERSION-0.1}
-declare    VERBOSITY=${VERBOSITY-1}     ### default to level 1
-declare -r CMD_NAME=${0##*/}
-declare -r CMD_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-declare -r CMD_PATH="${CMD_DIR}/${CMD_NAME}"
-declare -r CMD_DESCRIPTION="GRAPE WWV IQ uploader"
-
-###  Manage 
-declare -r KIWI_STARTUP_DELAY_SECONDS=60   ### When starting the Pi wait this long before checking the Kiwis which may be powering up at the same time.
-declare    SYSTEMNCTL_UNIT_FILE_NAME=${0##*/}
-declare -r SYSTEMNCTL_SERVICE_NAME=${SYSTEMNCTL_UNIT_FILE_NAME%.*}
-           SYSTEMNCTL_UNIT_FILE_NAME=${SYSTEMNCTL_SERVICE_NAME}.service
-declare -r SYSTEMNCTL_UNIT_DIR=/lib/systemd/system
-declare -r SYSTEMNCTL_UNIT_PATH=${SYSTEMNCTL_UNIT_DIR}/${SYSTEMNCTL_UNIT_FILE_NAME}
-
+declare GRAPE_TMP_DIR="/tmp/wd_grape_wavs"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
+declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"  ### Cache all 1440 one minute long, flac-compressed, 16000 IQ wav files in this dir tree
+declare WD_SILENT_FLAC_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/silent_iq.flac"    ### A flac-compressed wav file of one minute of silence.  When a minute file is missing , hard link to this file
 declare MINUTES_PER_DAY=$(( 60 * 24 ))
-declare GRAPE_TMP_DIR="/tmp/wd_grape_wavs"
-declare GRAPE_WAV_ARCHIVE_ROOT_PATH="${HOME}/wsprdaemon/wav-archive.d"
-declare WD_SILENT_FLAC_FILE_PATH="${HOME}/wsprdaemon/silent_iq.flac"
-
-function wd_logger() {
-    local level=$1
-    local print_string=$2
-
-    printf "%s\n" "${print_string}"
-}
 
 ######### The functions which implment this service daemon follow this line ###############
 function grape_init() {
@@ -275,12 +251,7 @@ function grape_upload_all_10hz_wavs() {
 }    
 
 function grape_print_usage() {
-    wd_logger 1 "$0 Version ${VERSION}: 
-    -a               Start daemon which pings kiwis and power cycles them if they don't respond
-    -A               start daemon with a delay of ${KIWI_STARTUP_DELAY_SECONDS}
-    -z               kill the daemon
-    -s               show the daemon status
-    === Internal and diagnostic commands =====
+    wd_logger 1 "GRAPE sub-menu commands:
     -C YYYYMMDD      Create 24 hour 10 Hz wav files for all bands 
     -S YYYYMMDD      Show the status of the files in that tree
     -R YYYYMMDD      Repair the directory tree by filling in missing minutes with silent_iq.flac
@@ -344,6 +315,3 @@ function grape_menu() {
 }
 
 grape_init
-grape_menu $@
-
-exit 0

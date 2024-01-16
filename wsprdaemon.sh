@@ -86,10 +86,11 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav_archive.sh
+source ${WSPRDAEMON_ROOT_DIR}/grape_utils.sh
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
+while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
@@ -137,6 +138,9 @@ while getopts :aAzZshij:l:pvVw:dDu:U:r: opt ; do
             ;;
         u)
             upload_server_cmd $OPTARG
+            ;;
+        g)
+            grape_menu -$OPTARG
             ;;
         v)
             ((verbosity++))
