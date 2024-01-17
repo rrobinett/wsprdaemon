@@ -556,17 +556,25 @@ function wd-wavs() {
     done
 }
 
-alias sca='sudo systemctl start  radiod@rx888-wsprdaemon.service'
-alias scz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'
-alias scs='sudo systemctl status radiod@rx888-wsprdaemon.service'
+### Monitor and control the KA9Q-radio service
 
-alias sca1='sudo systemctl start  radiod@rx888-wsprdaemon1.service'
-alias scz1='sudo systemctl stop   radiod@rx888-wsprdaemon1.service'
-alias scs1='sudo systemctl status radiod@rx888-wsprdaemon1.service'
+alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
+alias wdrl='wd-rl'
 
-alias sca2='sudo systemctl start  radiod@rx888-wsprdaemon2.service'
-alias scz2='sudo systemctl stop   radiod@rx888-wsprdaemon2.service'
-alias scs2='sudo systemctl status radiod@rx888-wsprdaemon2.service'
+alias wd-ra='sudo systemctl start  radiod@rx888-wsprdaemon.service'  ### start the radiod service
+alias wdra='wd-ra'
+alias wd-rz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'  ### stop it
+alias wdrz='wd-rz'
+alias wd-rs='sudo systemctl status radiod@rx888-wsprdaemon.service'  ### show it's status
+alias wdrs='wd-rs'
+
+alias wd-ra1='sudo systemctl start  radiod@rx888-wsprdaemon1.service'
+alias wd-rz1='sudo systemctl stop   radiod@rx888-wsprdaemon1.service'
+alias wd-rs1='sudo systemctl status radiod@rx888-wsprdaemon1.service'
+
+alias wd-ra2='sudo systemctl start  radiod@rx888-wsprdaemon2.service'
+alias wd-rz2='sudo systemctl stop   radiod@rx888-wsprdaemon2.service'
+alias wd-rs2='sudo systemctl status radiod@rx888-wsprdaemon2.service'
 
 alias swa='sudo systemctl start  wsprdaemon.service'
 alias swz='sudo systemctl stop   wsprdaemon.service'
@@ -686,7 +694,9 @@ alias wd-git-ssh='git config --global user.email "rob@robinett.us";  git config 
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
-alias wd-watch-wavs='watch "ls -l *.wav"'
+alias wd-watch-wavs='watch "ls -l *.wav"'  ### watch for wd-record or kwirecorder to create wav files in cwd
+alias wdww='wd-watch-wavs'
+alias wdps='ps aux | grep wd-record | grep -v grep'
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'

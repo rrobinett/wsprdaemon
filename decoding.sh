@@ -1064,6 +1064,8 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
             local adj_spot_freq=$( echo "scale=7; ${spot_freq} + ${freq_adj_mhz} " | bc )
             wd_logger 2 "Adjusting spot freqency by ${freq_adj_mhz} MHz from ${spot_freq} to ${adj_spot_freq}"
             spot_freq=${adj_spot_freq}
+        else
+            wd_logger 3 "Not adjusting spot frequency ${spot_freq}"
         fi
 
         ### AI6VN 21 Nov 2023      add spot-sopreading to WSP=R-2 lines and copy that speading in hertz * 1000 into the metric field, then remove anty leading 0s with the 10#
