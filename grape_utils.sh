@@ -237,15 +237,16 @@ function grape_create_wav_file()
     wav_files_list=( ${wav_files_list[@]/#/${GRAPE_TMP_DIR}/} )  ### Prepends the path to the temp directory
     wav_files_list=( ${wav_files_list[@]/.flac/.wav} )           ### replaces the filename extension .flac with .wav
 
+    local sox_log_file_name="${flac_file_dir}/sox.log"
     ulimit -n 2048    ### sox will open 1440+ files, so up the open file limit
-    nice -n 19 sox ${wav_files_list[@]} ${output_10sps_wav_file} rate 10 >& sox.log
+    nice -n 19 sox ${wav_files_list[@]} ${output_10sps_wav_file} rate 10 >& ${sox_log_file_name}
     rc=$?
     rm  ${wav_files_list[@]}
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'sox ...' => ${rc} "
          return -4
     fi
-    wd_logger 1 "Created ${output_10sps_wav_file}.  sox reported: $(< sox.log)"
+    wd_logger 1 "Created ${output_10sps_wav_file}.  sox reported:\n$(< ${sox_log_file_name})"
     return 1
 }
 
@@ -327,7 +328,7 @@ function grape_create_all_24_hour_wavs(){
                 return_code=${rc}
             elif [[  ${rc} -gt 0 ]]; then
                 wd_logger 1 "'grape_create_24_hour_wavs ${wav_archive_date}' encountered no errors and created ${rc} new wav files"
-                $(( new_wav_count +=  ${rc} ))
+                (( new_wav_count +=  ${rc} ))
             else
                 wd_logger 2 "'grape_create_24_hour_wavs ${wav_archive_date}' encountered no errors, nor did it need to create one or more wav files"
             fi
