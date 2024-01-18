@@ -26,7 +26,23 @@ declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
 
-######### The functions which implment this service daemon follow this line ###############
+### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
+declare -r GRAPE_ERROR_RETURN_BASE=240
+declare -r GRAPE_ERROR_RETURN_NO_FLACS=$(( ${GRAPE_ERROR_RETURN_BASE} + 0 ))
+declare -r GRAPE_ERROR_RETURN_BAND=$(( ${GRAPE_ERROR_RETURN_BASE} + 1 ))
+declare -r GRAPE_ERROR_REPAIR_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 2 ))
+declare -r GRAPE_ERROR_FLAC_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 3 ))
+declare -r GRAPE_ERROR_SOX_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 4 ))
+declare -r GRAPE_ERROR_RETURN_MAX=$(( ${GRAPE_ERROR_RETURN_BASE} + 10 ))
+
+function grape_return_code_is_error() {
+    if [[ $1 -ge  ${GRAPE_ERROR_RETURN_BASE} && $1 -le  ${GRAPE_ERROR_RETURN_MAX} ]]; then
+        return 0
+    fi
+    return 1
+}
+
+######### The functions which implement this service daemon follow this line ###############
 function grape_init() {
     if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
         wd_logger 1 "Creating ${GRAPE_TMP_DIR}"
@@ -131,11 +147,16 @@ function grape_repair_band_flacs() {
         done
     done
 
-    if [[ ${#silence_file_list[@]} -gt 0 ]] ; then
+    local silence_files_added=${#silence_file_list[@]}
+    if [[ ${silence_files_added} -gt 0 ]] ; then
         echo "${silence_file_list[@]}" > silence_file_list.txt
-        wd_logger 2 "Created ${#silence_file_list[@]} silence files:  $( < silence_file_list.txt)"
+        wd_logger 2 "Created ${silence_files_added} silence files:  $( < silence_file_list.txt)"
+        if [[ ${silence_files_added} -ge ${GRAPE_ERROR_RETURN_BASE} ]]; then
+            silence_files_added=$(( ${GRAPE_ERROR_RETURN_BASE} - 1 ))
+            wd_logger 1 "Added ${#silence_file_list[@]} silence files, more than can be returned from a bash function.  So returning instead ${silence_files_added}"
+        fi
     fi
-    return ${#silence_file_list[@]}
+    return ${silence_files_added}
 }
 
 
@@ -177,7 +198,7 @@ function grape_repair_all_dates_flacs()
 }
 
 ### Give a DATE...BAND directory which should have the requried 1440 minute flac files. create a single w4 hour long 10 Hz BW wav file
-### Returns: < 0 => there was an error, 0 => if GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME existed, 1 => created new GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME
+### Returns: 0 => if GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME existed, 1 => created new GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME, >  ${GRAPE_ERROR_RETURN_BASE} if there was a error
 function grape_create_wav_file()
 {
     local flac_file_dir=$1
@@ -191,8 +212,9 @@ function grape_create_wav_file()
 
     local flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
-        wd_logger 1 "ERROR: found no flac files in ${flac_file_dir}"
-        return -1
+        wd_logger 1 "ERROR: found no flac files in ${flac_file_dir}, so delete that directory"
+        rm -r ${flac_file_dir}
+        return ${GRAPE_ERROR_RETURN_NO_FLACS} 
     fi
     if [[ ${#flac_file_list[@]} -ne ${MINUTES_PER_DAY}  ]]; then
         local files_date=${flac_file_list[0]##*/}       ### The file date of all the flac files should match the date of the root directory, but it is easier to parse th eflac file name to get the date
@@ -207,15 +229,11 @@ function grape_create_wav_file()
         wd_logger 2 "${missing_flac_file_count} flac files are missing in ${flac_file_dir}, so add silence files to fill the directory"
         grape_repair_band_flacs ${flac_file_dir}
         rc=$?
-        if [[ ${rc} -lt 0 ]]; then
-            wd_logger 1 "ERROR: grape_repair_band_flacs ${flac_file_dir} =>  ${rc}"
-            return ${rc}
-        elif [[ ${rc} -eq 0 ]]; then
-            wd_logger 1 "ERROR: grape_repair_band_flacs ${flac_file_dir} =>  ${rc}, so no repairs were done"
-            return -2
-        elif [[ ${rc} -ne ${missing_flac_file_count}  ]]; then
-            wd_logger 1 "ERROR: grape_repair_band_flacs ${flac_file_dir} =>  ${rc}, not the expected number of repaired flac files  ${missing_flac_file_count}"
-            return -3
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "ERROR: grape_repair_band_flacs ${flac_file_dir} =>  ${rc}, but  no repairs were done"
+            return ${GRAPE_ERROR_RETURN_REPAIR_FAILED}
+        else 
+            wd_logger 1 "grape_repair_band_flacs ${flac_file_dir} reported it repaired by adding ${rc} (or more) silence files"
         fi
         wd_logger 2 "Fixed ${missing_flac_file_count} missing flac files"
         flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )
@@ -230,7 +248,7 @@ function grape_create_wav_file()
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'flac ...' => ${rc} "
         rm -f  ${GRAPE_TMP_DIR}/*
-        return ${rc}
+        return ${GRAPE_ERROR_FLAC_FAILED}
     fi
 
     local wav_files_list=( ${flac_file_list[@]##*/} )            ### Chops off the paths
@@ -244,7 +262,7 @@ function grape_create_wav_file()
     rm  ${wav_files_list[@]}
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'sox ...' => ${rc} "
-         return -4
+         return ${GRAPE_ERROR_SOX_FAILED}
     fi
     wd_logger 1 "Created ${output_10sps_wav_file}.  sox reported:\n$(< ${sox_log_file_name})"
     return 1
@@ -282,15 +300,15 @@ function grape_create_24_hour_wavs() {
         local rc
         grape_create_wav_file ${band_dir}
         rc=$?
-        if [[ ${rc} -eq 0 ]]; then
-            wd_logger 2 "Found 24h.wav file for band ${band_dir}"
-        elif [[ ${rc} -gt 0 ]]; then
+        if grape_return_code_is_error ${rc} ; then
+             wd_logger 1 "ERROR: 'grape_create_wav_file ${band_dir}' => ${rc}"
+        elif [[ ${rc} -eq 0 ]]; then
+            wd_logger 2 "Found existing 24h.wav file for band ${band_dir}"
+        else
             wd_logger 1 "Created a new 24h.wav file for band ${band_dir}"
             (( ++ new_wav_count ))
-        else
-             wd_logger 1 "ERROR: 'grape_create_wav_file ${band_dir}' => ${rc}"
-             return_code=${rc}
         fi
+        #read -p "Next Band? => "
     done
     
     if [[ ${return_code} -lt 0 ]]; then

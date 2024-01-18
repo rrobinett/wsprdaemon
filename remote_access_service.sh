@@ -218,7 +218,8 @@ WorkingDirectory=${WSPRDAEMON_ROOT_DIR}/bin
 ExecStart=${WD_REMOTE_ACCESS_DAEMON_CMD} ${start_args}
 ExecStop=${WD_REMOTE_ACCESS_DAEMON_CMD}  ${stop_args}
 Type=forking
-Restart=on-abort
+Restart=on-failure
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
