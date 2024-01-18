@@ -25,6 +25,7 @@ declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
+export     RSYNC_PASSWORD=${RSYNC_PASSWORD-hamsci}
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
 declare -r GRAPE_ERROR_RETURN_BASE=240
@@ -110,7 +111,7 @@ function grape_purge_all_empty_date_trees(){
             wd_logger 1 "Purging empty date  tree ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}"
             rm -r ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}
         else
-            printf  "Found %5d files in ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}\n" ${#date_files_list[@]}
+            wd_logger 2 "$(printf  "Found %5d files in %s\n" ${#date_files_list[@]} "${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}" )"
         fi
     done
 }
@@ -363,7 +364,8 @@ function grape_create_all_24_hour_wavs(){
 
 ### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
 function grape_upload_all_10hz_wavs() {
-    ( cd ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav .  grape@wsprdaemon.org:wav-archive.d/ )
+    #( cd ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav .  grape@grape.wsprdaemon.org::grape/wav-archive.d/ )
+    rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape/ 
 }    
 
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
@@ -393,6 +395,10 @@ function grape_uploader() {
     fi
     return ${rc}
 }
+
+### Calculate the semitones needed by sox to change freqeuncies in a file:  "soc in.wav out.wav pitch PITCH_CHANGE_IN_CENTS"
+### Where PITCH_CHANGE_IN_CENTS can be computed by:  'bc -l <<< "l(NEW_FREQ/OLD_FREQ) / l(2) * 12 *100 "'
+### But I don't know if soc can change the pitch of 800 to 10 hz.
 
 function grape_print_usage() {
     wd_logger 1 "GRAPE sub-menu commands:
