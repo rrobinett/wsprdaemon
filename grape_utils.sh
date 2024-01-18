@@ -364,8 +364,15 @@ function grape_create_all_24_hour_wavs(){
 
 ### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
 function grape_upload_all_10hz_wavs() {
-    #( cd ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ; rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav .  grape@grape.wsprdaemon.org::grape/wav-archive.d/ )
-    rsync -avP --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape/ 
+    local rc
+    rsync --quiet --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape/ 
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "'rsync --quiet --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape' => ${rc}"
+    else
+        wd_logger 1 "All local wav and status files have been uploaded to grape.wspdaemon.org"
+    fi
+    return ${rc}
 }    
 
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
