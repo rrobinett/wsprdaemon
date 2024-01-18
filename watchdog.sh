@@ -21,6 +21,7 @@ function watchdog_daemon()
         if [[ ${last_minute} -lt 0 || ( ${last_minute} == 0  && ${current_minute} == 1 ) ]]; then
             wd_logger 1 "Starting odd minute, do all watching functions"
             validate_configuration_file
+            source ${WSPRDAEMON_CONFIG_FILE}
             spawn_upload_daemons
             # check_for_zombies
             start_or_kill_jobs a all
