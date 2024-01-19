@@ -178,7 +178,7 @@ function grape_repair_date_flacs() {
     local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
     wd_logger 1 "Found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        grape_repair_band_flacs ${band_dior}
+        grape_repair_band_flacs ${band_dir}
     done
 }
 
