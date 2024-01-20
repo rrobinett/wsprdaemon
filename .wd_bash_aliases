@@ -1,6 +1,18 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+function wd-flush-empty-dirs() {
+    for dir in * ;  do 
+        if [[ -d $dir ]]; then
+            file_count=$(find $dir -type f | wc -l)
+            if [[ $file_count -eq 0 ]]; then 
+                echo "Deleting empty directory $dir"
+                rm -r $dir
+            fi
+        fi
+    done
+}
+
 function wd-find-functions() {
    local bash_file=$1
 
