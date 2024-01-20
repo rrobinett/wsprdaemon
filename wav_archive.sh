@@ -92,15 +92,17 @@ function queue_wav_file()
         return 0
     fi
     wd_logger 1 "The ${WAV_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so we need to flush some older wav files"
-    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_ROOT_DIR} -type f -printf '%T+,%p\n' | sort) )
+    ### find returns a time-sorted array of flac files
+    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_ROOT_DIR} -type f -name '*.flac' -printf '%T+,%p\n' | sort) )
     local wav_file_count=${#wav_file_list[@]}
 
     if [[ ${wav_file_count} -lt ${MIN_WAV_ARCHIVE_FILE_COUNT} ]]; then
         wd_logger 1 "File system is ${file_system_percent_used}% full, but there are only ${wav_file_count} archived wav files, so flushing them won't gain much space"
         return 0
     fi
+    ### delete the oldest 25% of those flac files
     local wav_file_flush_max_index=$(( ${wav_file_count} / 4 ))
-    wd_logger 1 "Flushing wav files [0]='${wav_file_list[0]}' through [${wav_file_flush_max_index}]='${wav_file_list[${wav_file_flush_max_index}]}" 
+    wd_logger 1 "Flushing the oldest 25% of files [0]='${wav_file_list[0]}' through [${wav_file_flush_max_index}]='${wav_file_list[${wav_file_flush_max_index}]}" 
     local wav_info_index
     for (( wav_info_index=0; wav_info_index < ${wav_file_flush_max_index}; ++wav_info_index )); do
         wd_logger 2 "Flushing [${wav_info_index}] = '${wav_file_list[${wav_info_index}]}'"
@@ -108,7 +110,7 @@ function queue_wav_file()
         local wav_file_name=${wav_info_list[1]}
 
         wd_logger 2 "Flushing ${wav_file_name}"
-        rm ${wav_file_name}
+        rm -f ${wav_file_name}
     done
     wd_logger 1 "Done flushing oldest 25% of files"
 
@@ -135,7 +137,12 @@ function wd_archive_wavs()
         local wav_file_date=${wav_file_name:0:8}
         local wav_file_dir=${wav_file_path%/*}
         local flac_file_path=${wav_file_path%.wav}.flac
-        local dest_file_dir=${WAV_FILE_ARCHIVE_ROOT_DIR}/${wav_file_date}/${wav_file_dir#${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/}
+
+        ### The HamSCI GRAPE project wants the top dir of the wav/flac archive tree for one date to have the format: 'OBSYYYY-MM-DDTHH-MM'
+        local grape_top_dir_name=$(printf "OBS%4s-%2s-%2sT00-00" ${wav_file_name:0:4} ${wav_file_name:4:2} ${wav_file_name:6:2} )
+        local dest_date_top_dir="${WAV_FILE_ARCHIVE_ROOT_DIR}/${grape_top_dir_name}"
+
+        local dest_file_dir=${dest_date_top_dir}/${wav_file_dir#${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/}
         local dest_flac_path=${dest_file_dir}/${wav_file_name/.wav/.flac}
         wd_logger 2 "Flac compressing wav file ${wav_file_path} and archiving it to ${dest_flac_path}"
 
