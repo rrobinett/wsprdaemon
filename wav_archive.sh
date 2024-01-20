@@ -139,7 +139,7 @@ function wd_archive_wavs()
         local flac_file_path=${wav_file_path%.wav}.flac
 
         ### The HamSCI GRAPE project wants the top dir of the wav/flac archive tree for one date to have the format: 'OBSYYYY-MM-DDTHH-MM'
-        local grape_top_dir_name=$(printf "OBS%4s-%2s-%2sT00-00" ${wav_file_name:0:4} ${wav_file_name:4:2} ${wav_file_name:6:2} )
+        local grape_top_dir_name=$(printf "%4s%2s%2s" ${wav_file_name:0:4} ${wav_file_name:4:2} ${wav_file_name:6:2} )
         local dest_date_top_dir="${WAV_FILE_ARCHIVE_ROOT_DIR}/${grape_top_dir_name}"
 
         local dest_file_dir=${dest_date_top_dir}/${wav_file_dir#${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/}
