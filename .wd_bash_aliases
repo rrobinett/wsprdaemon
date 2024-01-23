@@ -34,6 +34,34 @@ function wd-wsprd-report-spreading-file(){
     return 0
 }
 
+function wd-spreading-enable(){
+    local spreading_file
+    local rc
+    spreading_file=$( wd-wsprd-report-spreading-file )
+    rc=$?
+    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
+        echo "WSPR-2 spreading reporting is not supported on this server"
+        return 1
+    fi
+    if [[ -x ${spreading_file} ]]; then
+        echo "WSPR-2 spreading reporting is already enabled"
+        return 0
+    fi
+    local disabled_spreading_file="${spreading_file}.disabled"
+    if [[ ! -x ${disabled_spreading_file} ]]; then
+        echo "ERROR: missing the expected saved WSPR-2 spreading reporting file"
+        return 2
+    fi
+    cp -p ${disabled_spreading_file} ${spreading_file}
+    rc=$?
+     if [[ ${rc} -ne 0 ]]; then
+         echo "ERROR: failed to restore the saved spreading command ${disabled_spreading_file}"
+        return 3
+    fi
+    echo "WSPR-2 spreading reporting is enabled on this server"
+    return 0
+}
+
 function wd-spreading-disable(){
     local spreading_file
     local rc
