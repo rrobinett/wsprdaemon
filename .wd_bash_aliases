@@ -1,6 +1,100 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+function wd-machine-name() {
+    echo $(uname -m)
+}
+
+declare WD_ALIAS_BIN_DIR=~/wsprdaemon/bin
+declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86"
+declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
+declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.aarch64"
+declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
+
+### Returns the full path to where the wsprd.spread.. file should be
+function wd-wsprd-report-spreading-file(){
+    local spreading_file=""
+    local machine_name=$(uname -m)
+    case ${machine_name} in
+        x86_64)
+            spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86}
+            ;;
+        ##aarch64)
+        ##    spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64}
+        ##     ;;
+         *)
+             echo "WSPR-2 frequency spreading is not supported on this ${machine_name} CPU server" 1>&2 
+             return 1
+             ;;
+    esac
+    if [[ -n "${spreading_file}" ]]; then
+        spreading_path=$(realpath ${spreading_file})
+    fi
+    echo ${spreading_path}
+    return 0
+}
+
+function wd-spreading-disable(){
+    local spreading_file
+    local rc
+    spreading_file=$( wd-wsprd-report-spreading-file )
+    rc=$?
+    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
+        echo "WSPR-2 spreading reporting is not supported on this server"
+        return 1
+    fi
+    if [[ ! -x ${spreading_file} ]]; then
+        echo "WSPR-2 spreading reporting is already disabled"
+        return 0
+    fi
+    local disabled_spreading_file="${spreading_file}.disabled"
+    mv ${spreading_file} ${disabled_spreading_file} 
+    rc=$?
+     if [[ ${rc} -ne 0 ]]; then
+         echo "ERROR: failed to 'mv${spreading_file}  ${disabled_spreading_file}"
+        return 2
+    fi
+    echo "WSPR-2 spreading reporting is now diabled on this server"
+    return 0
+}
+
+function wd-spreading-status() {
+    local spreading_file
+    local rc
+    spreading_file=$( wd-wsprd-report-spreading-file )
+    rc=$?
+    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
+        echo "WSPR-2 spreading reporting is not supported on this server"
+        return 1
+    fi
+    if [[ -x ${spreading_file} ]]; then
+        echo "WSPR-2 spreading reporting is ensabled"
+    else
+        echo "WSPR-2 spreading reporting is disabled"
+    fi
+    return 0
+}
+
+function wd-spreading() {
+    if [[ ${#@} -eq 0 ]]; then
+        wd-spreading-status
+        echo "usage: wd-spreading [on|off]"
+        return
+    fi
+    case $1 in
+        on)
+            wd-spreading-enable
+            ;;
+        off)
+            wd-spreading-disable
+            ;;
+        *)
+            echo "ERROR: '$1' is not a valid argument"
+            ;;
+    esac
+    return 0
+}
+
 function wd-flush-empty-dirs() {
     for dir in * ;  do 
         if [[ -d $dir ]]; then
