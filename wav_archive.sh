@@ -21,7 +21,11 @@ function get_wav_archive_queue_directory()
     fi
     ### Linux directory names can't have the '/' character in them which is so common in ham callsigns.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal
     local call_dir_name=${receiver_call_grid//\//=}
-    local wav_queue_directory=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/${receiver_call_grid}/${receiver_name}/${receiver_band}
+    local grape_id=""
+    if [[ -n "${GRAPE_PSWS_ID-}" ]]; then
+         grape_id="@${GRAPE_PSWS_ID}"     ### If the user has registered his site/receiver with HamSCI's GRAPE, then append it to the rx directory name
+    fi
+    local wav_queue_directory=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}/${receiver_call_grid}/${receiver_name}${grape_id}/${receiver_band}
 
     mkdir -p ${wav_queue_directory}
     eval ${__return_directory_name_return_variable}=${wav_queue_directory}
