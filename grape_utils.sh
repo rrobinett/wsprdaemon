@@ -17,6 +17,7 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the flac files for the April 8th 2024 total eclipse +- 1 day
 declare -r GRAPE_TMP_DIR="/tmp/wd_grape_wavs"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"  ### Cache all 1440 one minute long, flac-compressed, 16000 IQ wav files in this dir tree
 declare -r WD_SILENT_FLAC_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/silent_iq.flac"    ### A flac-compressed wav file of one minute of silence.  When a minute file is missing , hard link to this file
@@ -25,7 +26,7 @@ declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
-export     RSYNC_PASSWORD=${RSYNC_PASSWORD-hamsci}
+export     RSYNC_PASSWORD="${GRAPE_PSWS_PASSWORD-}"          ### This is the 'token' issued by the PSWS server which we use as the rsync password
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
 declare -r GRAPE_ERROR_RETURN_BASE=240
@@ -363,12 +364,20 @@ function grape_create_all_24_hour_wavs(){
 }
 
 ### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
+###       It is normallay cqlled every odd minute by the watchdog_daemon() which reloads the 
 function grape_upload_all_10hz_wavs() {
+    local grape_psws_id=""
+    local rsync_password=""
+
+    if [[ -z "${GRAPE_PSWS_TOKEN-}" ]] ; then
+        wd_logger 1 "ERROR: The GRAPE_PSWS_ID=${GRAPE_PSWS_ID} has been defined in WD.conf, but GRAPE_PSWS_TOKEN was not defined"
+        return 1
+    fi
     local rc
-    rsync --quiet --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape/ 
+    RSYNC_PASSWORD=${GRAPE_PSWS_TOKEN} rsync --quiet --bwlimit=${RSYNC_KBPS_BW_LIMIT-100} --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_PSWS_ID}@grape.wsprdaemon.org::grape/ 
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "'rsync --quiet --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  grape@grape.wsprdaemon.org::grape' => ${rc}"
+        wd_logger 1 "'RSYNC_PASSWORD=${RSYNC_PASSWORD} rsync --quiet --bwlimit=${RSYNC_KBPS_BW_LIMIT-100} --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  ${GRAPE_PSWS_ID}@grape.wsprdaemon.org::grape' => ${rc}"
     else
         wd_logger 1 "All local wav and status files have been uploaded to grape.wspdaemon.org"
     fi
@@ -377,7 +386,7 @@ function grape_upload_all_10hz_wavs() {
 
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
-    if [[ ${GRAPE_UPLOADS_ENABLED-no} !=  "yes" ]]; then
+    if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
          wd_logger 1 "GRAPE uploades are not enabled, so do nothing"
          return 0
     fi
@@ -386,19 +395,17 @@ function grape_uploader() {
 
     grape_create_all_24_hour_wavs
     rc=$?
-    if [[ ${rc} -lt 0 ]]; then
-        wd_logger 1 "ERROR: grape_create_all_24_hour_wavs => ${rc}"
-    elif  [[ ${rc} -lt 0 ]]; then
-        wd_logger 1 "There are no new 24h.wav files which need to be uploaded"
+    if  [[ ${rc} -eq 0 ]]; then
+        wd_logger 1 "There were no new 24h.wav files created"
     else
-        wd_logger 1 "Found ${rc} new 24h.wav files which need to be uploaded"
-        grape_upload_all_10hz_wavs
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-             wd_logger 1 "ERROR: grape_upload_all_10hz_wavs => ${rc}"
-         else
-             wd_logger 1 "Successful upload of  ${rc} new 24h.wav files"
-        fi
+        wd_logger 1 "There were ${rc} new 24h.wav files created"
+    fi
+    grape_upload_all_10hz_wavs
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: grape_upload_all_10hz_wavs => ${rc}"
+    else
+        wd_logger 1 "Successful upload of  ${rc} new 24h.wav files"
     fi
     return ${rc}
 }
