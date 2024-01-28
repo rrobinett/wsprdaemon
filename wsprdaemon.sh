@@ -69,6 +69,7 @@ declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands s
 
 cd ${WSPRDAEMON_ROOT_DIR}
 
+source ${WSPRDAEMON_ROOT_DIR}/wd-bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
@@ -87,7 +88,7 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav_archive.sh
-source ${WSPRDAEMON_ROOT_DIR}/grape_utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 
 [[ -z "$*" ]] && usage
 
