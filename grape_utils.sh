@@ -64,6 +64,53 @@ function grape_init() {
     return 0
 }
 
+declare -r PSWS_URL="pswsnetwork.caps.ua.edu"
+declare -r WD_PSWS_PUB_FILE="${WSPRDAEMON_ROOT_DIR}/grape_pswsnetwork.pub"
+
+function grape_test_ssh_auto_login() {
+    local station_id=$1
+    local rc
+    ssh -F /dev/null -l ${station_id} -i ${WD_PSWS_PUB_FILE} -o BatchMode=yes -o ConnectTimeout=1 ${PSWS_URL} true # &>/dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "Can't autologin to account '${station_id}'"
+    else
+        wd_logger 1 "Autologin to account '${station_id}' was successful"
+    fi
+    return ${rc}
+}
+
+######  '-p'   upload public key to PSWS server
+function grape_upload_public_key() {
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        wd_logger 1 "ERROR: GRAPE_PSWS_ID has not been defined in wsprdameon.conf"
+        return 1
+    fi
+    if [[ -z "${GRAPE_PSWS_TOKEN-}" ]]; then
+        wd_logger 1 "ERROR: GRAPE_PSWS_ID has been defined as '${GRAPE_PSWS_ID}' in wsprdameon.conf, but GRAPE_PSWS_TOKEN has not been defined"
+    fi
+    local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
+    if grape_test_ssh_auto_login ${station_id} ; then
+        wd_login 1 "Autologin for site ${station_id} is already setup"
+        return 0
+    fi
+    wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering the password ' ${GRAPE_PSWS_TOKEN} ' when prompted "
+    ssh-copy-id                           ${site_id}@${PSWS_URL}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Failed to setup autologin with this server's public key"
+        return ${rc}
+    fi
+    wd_logger 1 "Autologin setup from this server.  Now copying the grape.wsprdaemon.org public key to PSWS server"
+    ssh-copy-id -f -i ${WD_PSWS_PUB_FILE} ${site_id}@${PSWS_URL}
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Failed to setup autologin with the grape.wsprdaemon.org  server's public key"
+        return ${rc}
+    fi
+    wd_logger 1 "Auto login has be successfully set up"
+    return 0
+}
+
 ###### '-S'
 function grape_get_date_status() {
     local date=$1
@@ -446,6 +493,9 @@ function grape_menu() {
             grape_repair_date_flacs ${2-h}
             ;;
         -p)
+            grape_upload_public_key
+            ;;
+        -P)
             grape_purge_all_empty_date_trees
             ;;
         -t)
