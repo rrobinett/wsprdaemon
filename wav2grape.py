@@ -246,7 +246,7 @@ def main():
     grid_square = None
     receiver_name = None
 
-    inputdir_regex = re.compile('(?:.+/|^)(?P<date>\d{8})/(?P<station>(?P<site>(?P<callsign>[a-zA-Z0-9=]+)_(?P<grid_square>[a-zA-Z0-9]+))/(?P<receiver_name>\w+))$')
+    inputdir_regex = re.compile('(?:.+/|^)(?P<date>\d{8})/(?P<station>(?P<site>(?P<callsign>[a-zA-Z0-9=]+)_(?P<grid_square>[a-zA-Z0-9]+))/(?P<receiver_info>((?P<receiver_name>\w+)@(?P<psws_station_id>[a-zA-Z0-9]+)_(?P<psws_instrument_id>\d+))))$')
     m = inputdir_regex.match(inputdir)
     if m:
         if start_time is None:
@@ -258,7 +258,10 @@ def main():
         grid_square = m.group('grid_square')
         if latitude is None and longitude is None:
             longitude, latitude = maidenhead_to_long_lat(grid_square)
+        receiver_info = m.group('receiver_info')
         receiver_name = m.group('receiver_name')
+        psws_station_id = m.group('psws_station_id')
+        psws_instrument_id = m.group('psws_instrument_id')
     else:
         print('unable to extract station information from input directory', file=sys.stderr)
 
