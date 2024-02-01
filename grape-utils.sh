@@ -74,7 +74,7 @@ function grape_init() {
 # Franco Venturi - K4VZ - Mon 22 Jan 2024 01:20:14 PM UTC
 # Rob Robinett - AI6VN - Mon Jan 30 2024 modified to be part of a Wsprdaemon client
 
-set -euo pipefail
+#set -euo pipefail
 
 declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
