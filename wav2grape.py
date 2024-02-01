@@ -230,7 +230,7 @@ def main():
         print('missing output dir (-o) option', file=sys.stderr)
         sys.exit(1)
 
-    if start_time == 0:
+    if start_time is None:
         for path_element in inputdir.split(os.path.sep):
             try:
                 start_datetime = datetime.strptime(path_element, '%Y%m%d').replace(tzinfo=timezone.utc)
@@ -278,7 +278,8 @@ def main():
         print('subchannels:', subchannels)
 
     if station_path is not None:
-        grape_toplevel = datetime.fromtimestamp(start_time).strftime('OBS%Y-%m-%dT%H-%M')
+        start_datetime = datetime.fromtimestamp(start_time, tz=timezone.utc)
+        grape_toplevel = start_datetime.strftime('OBS%Y-%m-%dT%H-%M')
         dataset_dir = os.path.join(outputdir, station_path, grape_toplevel)
     else:
         dataset_dir = outputdir
