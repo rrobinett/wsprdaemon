@@ -98,16 +98,14 @@ function grape_upload_all_local_wavs() {
         wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
         return ${rc}
     fi
-    wd_logger 1 "Upload wav files not yet uploaded to the GRAPE server"
+    wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
 
     local date_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )
     local date_dir
     for date_dir in ${date_dir_list[@]} ; do
-        read -p "Upload any wav files found for date ${date_dir}? => "
         local site_dir_list=( $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
         for site_dir in ${site_dir_list[@]} ; do
-            read -p "Upload any wav files found for site ${site_dir}? => "
             upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
@@ -150,7 +148,6 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 1  "There are no receiver dirs under ${reporter_wav_root_dir}"
         return 1
     fi
-    # set -x
     for receiver_dir in ${receiver_dir_list[@]} ; do
         local receiver_info="${receiver_dir##*/}"
         local receiver_name="${receiver_info%@*}"
@@ -158,8 +155,8 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
-        wd_logger 1  "Processing ${receiver_dir}:
-                      date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
+        wd_logger 1  "Uploading  ${receiver_dir}"
+        wd_logger 2  "date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
 
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
         umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
@@ -172,15 +169,13 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
         local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
-        wd_logger 1  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
-        #read -p "Press <CR> to proceed with the upload => "
+        wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
         echo "put -r . 
-              mkdir c$(basename ${receiver_tmp_dir})_#${psws_instrument_id}_#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
+              mkdir c$(basename ${receiver_tmp_dir})_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
         # upload to PSWS network, but don't run in a subshell where the sftp return code would be lost
         cd "$(dirname "$receiver_tmp_dir")"
-
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
@@ -202,7 +197,7 @@ function grape_test_ssh_auto_login() {
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "Can't autologin to account '${station_id}'"
     else
-        wd_logger 1 "Autologin to account '${station_id}' was successful"
+        wd_logger 2 "Autologin to account '${station_id}' was successful"
     fi
     return ${rc}
 }
@@ -215,7 +210,7 @@ function grape_upload_public_key() {
     fi
     local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
     if grape_test_ssh_auto_login ${station_id} ; then
-        wd_logger 1 "Autologin for site ${station_id} is already setup"
+        wd_logger 2 "Autologin for site ${station_id} is already setup"
         return 0
     fi
     wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
@@ -305,7 +300,6 @@ function grape_repair_band_flacs() {
             # if [[ ! -f ${expected_file_path} ]]; then
             if [[ ! "${flac_file_list[@]}" =~ ${expected_file_path} ]]; then
                 wd_logger 2 "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
-                #read -p "Create silence file ${expected_file_path}? => "
                 ln ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
                 silence_file_list+=( ${expected_file_path##*/} )
             else
@@ -462,7 +456,6 @@ function grape_create_24_hour_wavs() {
     local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d -printf '%p\n' | sort) )
     wd_logger 2 "found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        # read -p "Create 24 hour wav file in ${band_dir}? => "
         wd_logger 2 "create 24 hour wav file in ${band_dir}"
         local rc
         grape_create_wav_file ${band_dir}
@@ -475,7 +468,6 @@ function grape_create_24_hour_wavs() {
             wd_logger 1 "Created a new 24h.wav file for band ${band_dir}"
             (( ++ new_wav_count ))
         fi
-        #read -p "Next Band? => "
     done
     
     if [[ ${return_code} -lt 0 ]]; then
@@ -500,7 +492,6 @@ function grape_create_all_24_hour_wavs(){
     local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
-        #read -p " grape_create_all_24_hour_wavs(): check ${wav_archive_date}? => "
         local rc
         if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
             wd_logger 1 "Skipping grape_create_24_hour_wavs for current UTC day ${current_date}"
@@ -549,7 +540,7 @@ function grape_uploader() {
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: grape_upload_all_local_wavs => ${rc}"
     else
-        wd_logger 1 "Successful upload of  ${rc} new 24h.wav files"
+        wd_logger 2 "Successful upload of  ${rc} new 24h.wav files"
     fi
     return ${rc}
 }
