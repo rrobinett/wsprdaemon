@@ -65,6 +65,17 @@ function grape_init() {
         fi
         wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
     fi
+
+    if ! [[ -d ~/.ssh ]] || ! find ~/.ssh -type f -name '*.pub' | grep -q .; then
+        wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"
+        ssh-keygen
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR:  GRAPE_PSWS_ID is configured, but this server has no ssh public key needed for this feature to run"
+            return ${rc}
+        fi
+    fi
+
     ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
     grape_upload_public_key
     rc=$?
