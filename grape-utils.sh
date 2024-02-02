@@ -50,7 +50,7 @@ function grape_return_code_is_error() {
 
 ### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
 function grape_init() {
-    if [[ -z "${GRAPE_PSWS_ID}" ]]; then
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
         wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
         return 0
     fi
@@ -176,6 +176,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
               mkdir c$(basename ${receiver_tmp_dir})_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
         # upload to PSWS network, but don't run in a subshell where the sftp return code would be lost
         cd "$(dirname "$receiver_tmp_dir")"
+        find . -type f -delete
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
