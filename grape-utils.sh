@@ -557,7 +557,7 @@ function grape_uploader() {
     else
         wd_logger 1 "There were ${rc} new 24h.wav files created"
     fi
-    grape_upload_all_localz_wavs
+    grape_upload_all_local_wavs
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: grape_upload_all_local_wavs => ${rc}"
