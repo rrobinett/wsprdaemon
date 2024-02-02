@@ -60,14 +60,15 @@ function upload_24hour_wavs_to_grape_drf_server() {
         echo "Processing ${receiver_dir}:
                date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id" 1>&2
         rm -rf  ${GRAPE_TMP_DIR}/*
+        umask 022
         local receiver_tmp_dir="$("$WAV2GRAPE_PYTHON_CMD" -i "$receiver_dir" -o "$GRAPE_TMP_DIR")"
         echo "DRF files can be found in ${receiver_tmp_dir}.  Now upload them"
         # upload to PSWS network
         (
             cd "$(dirname "$receiver_tmp_dir")"
             {
-                #echo "put -r .";
-		        echo "mkdir c$(basename "$receiver_tmp_dir")\#$psws_instrument_id\#$(date +%Y-%m%dT%H-%M)";
+                echo "put -r .";
+		        echo "mkdir c$(basename "$receiver_tmp_dir")\#$psws_instrument_id\#$(date -u +%Y-%m-%dT%H-%M)";
             } | sftp -b - "$psws_station_id"@"$PSWS_SERVER_URL"
         )
         rm -r "$receiver_tmp_dir"
