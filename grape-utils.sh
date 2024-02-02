@@ -169,6 +169,16 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 1  "Uploading  ${receiver_dir}"
         wd_logger 2  "date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
 
+        ### Remove any wav files which don't have the expected 860,000 samples in a 10Hz 24 hour wav file
+        local wav_file
+        for wav_file in $( find ${receiver_dir} -type f -name "24_hour_10sps_iq.wav") ; do
+            if ! soxi ${wav_file} | grep -q '864000 samples' ; then
+                wd_logger 1 "ERROR: Found wav file ${wav_file} doesn't have the expected  860,000 samples in a 10Hz 24 hour wav file, so deleting it"
+                wd_rm ${wav_file}
+            fi
+        done
+        wd_logger 2 "Done validating the wav files freom the output of soxi"
+
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
         umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
         local wav2grape_stdout_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stdout"
@@ -187,7 +197,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
               mkdir c$(basename ${receiver_tmp_dir})_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
         # upload to PSWS network, but don't run in a subshell where the sftp return code would be lost
         cd "$(dirname "$receiver_tmp_dir")"
-        find . -type f -delete
+        # find . -type f -delete     #### while debuggin
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
