@@ -18,7 +18,7 @@
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the flac files for the April 8th 2024 total eclipse +- 1 day
-declare -r GRAPE_TMP_DIR="/tmp/wd_grape_wavs"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
+declare -r GRAPE_TMP_DIR="/dev/shm/wsprdaemon/grape_drf_cache"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"  ### Cache all 1440 one minute long, flac-compressed, 16000 IQ wav files in this dir tree
 declare -r WD_SILENT_FLAC_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/silent_iq.flac"    ### A flac-compressed wav file of one minute of silence.  When a minute file is missing , hard link to this file
 declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
@@ -47,22 +47,31 @@ function grape_return_code_is_error() {
 }
 
 ######### The functions which implement this service daemon follow this line ###############
+
+### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
 function grape_init() {
-    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
-        wd_logger 1 "Creating ${GRAPE_TMP_DIR}"
-        sudo mkdir ${GRAPE_TMP_DIR}
+    if [[ -z "${GRAPE_PSWS_ID}" ]]; then
+        wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
+        return 0
     fi
     local rc
-    mountpoint -q ${GRAPE_TMP_DIR}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        sudo mount -t tmpfs -o size=6G tmpfs ${GRAPE_TMP_DIR}
+    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
+        umask 022
+        mkdir -p ${GRAPE_TMP_DIR}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: ' sudo mount -t tmpfs -o size=6G tmpfs ${GRAPE_TMP_DIR}' => ${rc}"
+            wd_logger 1 "ERROR: can't create grape tmp directory '${GRAPE_TMP_DIR}'"
             return ${rc}
         fi
+        wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
     fi
+    ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
+    grape_upload_public_key
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+        return ${rc}
+    fi  
     return 0
 }
 
@@ -80,12 +89,33 @@ declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
+### '-u' 
+function grape_upload_all_local_wavs() {
+    local rc
+    grape_upload_public_key
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+        return ${rc}
+    fi
+    wd_logger 1 "Upload wav files not yet uploaded to the GRAPE server"
+
+    local date_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )
+    local date_dir
+    for date_dir in ${date_dir_list[@]} ; do
+        read -p "Upload any wav files found for date ${date_dir}? => "
+        local site_dir_list=( $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
+        local site_dir
+        for site_dir in ${site_dir_list[@]} ; do
+            read -p "Upload any wav files found for site ${site_dir}? => "
+            upload_24hour_wavs_to_grape_drf_server ${site_dir}
+        done
+    done
+}
 
 ### Given: the path to the .../wav-archive.d/<DATE>/<RPORTER>_<GRID> directory under which there  may be  one or  more receivers with 24 hour wav files which have not 
 ###  been converted to DRF and uploaded to the GRAPE server
 ### Returns:  0 on nothing to do or success on uploading
-
-declare    WD_TEST_RX_DIR=~/wsprdaemon/wav-archive.d/20240128/KFS=Q_CM87tj
 
 function upload_24hour_wavs_to_grape_drf_server() {
     local reporter_wav_root_dir=$( realpath $1 )
@@ -127,30 +157,47 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local pswsnetwork_info="${receiver_info#*@}"
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
+
         wd_logger 1  "Processing ${receiver_dir}:
-        date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id" 1>&2
-        rm -rf  ${GRAPE_TMP_DIR}/*
-        local receiver_tmp_dir="$("$WAV2GRAPE_PYTHON_CMD" -i "$receiver_dir" -o "$GRAPE_TMP_DIR" 2> ${WAV2GRAPE_PYTHON_CMD%.py}.log)"
-        wd_logger 1  "DRF files can be found in ${receiver_tmp_dir}.  Now upload them.."
-        # upload to PSWS network
-        (
+                      date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
+
+        rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
+        umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
+        local wav2grape_stdout_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stdout"
+        local wav2grape_stderr_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stderr"
+        ${WAV2GRAPE_PYTHON_CMD} -i "${receiver_dir}" -o "${GRAPE_TMP_DIR}" > ${wav2grape_stdout_file}  2> ${wav2grape_stderr_file}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: '${WAV2GRAPE_PYTHON_CMD} -i $receiver_dir -o $GRAPE_TMP_DIR' =${rc}:\n$(<${wav2grape_stderr_file})"
+            return ${rc}
+        fi
+        local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
+        wd_logger 1  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
+        #read -p "Press <CR> to proceed with the upload => "
+
+        local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
+        echo "put -r . 
+              mkdir c$(basename ${receiver_tmp_dir})_#${psws_instrument_id}_#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
+        # upload to PSWS network, but don't run in a subshell where the sftp return code would be lost
         cd "$(dirname "$receiver_tmp_dir")"
-        {
-            echo "put -r .";
-            echo "mkdir c$(basename "$receiver_tmp_dir")\#$psws_instrument_id\#$(date +%Y-%m%dT%H-%M)";
-        } > /dev/null # | echo  sftp -b - "$psws_station_id"@"$PSWS_SERVER_URL"
-        )
+
+        local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
+        sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        rc=$?
+        cd - > /dev/null
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}'\n$(<${sftp_stderr_file})"
+            return ${rc}
+        fi
     done
     touch "${reporter_upload_complete_file_name}"
     wd_logger 1  "Indicate that uploads have been successful by creating '${reporter_upload_complete_file_name}'"
 }
 
-declare -r WD_PSWS_PUB_FILE="${WSPRDAEMON_ROOT_DIR}/grape_pswsnetwork.pub"
-
 function grape_test_ssh_auto_login() {
     local station_id=$1
     local rc
-    ssh -F /dev/null -l ${station_id} -i ${WD_PSWS_PUB_FILE} -o BatchMode=yes -o ConnectTimeout=1 ${PSWS_URL} true # &>/dev/null
+    ssh -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=1 ${PSWS_URL} true # &>/dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "Can't autologin to account '${station_id}'"
@@ -166,28 +213,19 @@ function grape_upload_public_key() {
         wd_logger 1 "ERROR: GRAPE_PSWS_ID has not been defined in wsprdameon.conf"
         return 1
     fi
-    if [[ -z "${GRAPE_PSWS_TOKEN-}" ]]; then
-        wd_logger 1 "ERROR: GRAPE_PSWS_ID has been defined as '${GRAPE_PSWS_ID}' in wsprdameon.conf, but GRAPE_PSWS_TOKEN has not been defined"
-    fi
     local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
     if grape_test_ssh_auto_login ${station_id} ; then
-        wd_login 1 "Autologin for site ${station_id} is already setup"
+        wd_logger 1 "Autologin for site ${station_id} is already setup"
         return 0
     fi
-    wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering the password ' ${GRAPE_PSWS_TOKEN} ' when prompted "
+    wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
     ssh-copy-id  ${station_id}@${PSWS_URL}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Failed to setup autologin with this server's public key"
+        wd_logger 1 "ERROR: Failed to setup auto login"
         return ${rc}
     fi
-    wd_logger 1 "Autologin setup from this server.  Now copying the grape.wsprdaemon.org public key to PSWS server"
-    ssh-copy-id -f -i ${WD_PSWS_PUB_FILE} ${station_id}@${PSWS_URL}
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Failed to setup autologin with the grape.wsprdaemon.org  server's public key"
-        return ${rc}
-    fi
-    wd_logger 1 "Auto login has be successfully set up"
+    wd_logger 1 "Auto login has been successfully set up"
     return 0
 }
 
@@ -368,7 +406,7 @@ function grape_create_wav_file()
         flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )
     fi
     wd_logger 1 "Creating one 24 hour, 10 hz wav file ${output_10sps_wav_file} from ${#flac_file_list[@]} flac files..."
-    rm -f ${GRAPE_TMP_DIR}/*
+    rm -rf ${GRAPE_TMP_DIR}/*     ## the -f suppresses an error when there are no files
 
     local rc
     nice -n 19 flac -s --output-prefix=${GRAPE_TMP_DIR}/ -d ${flac_file_list[@]}
@@ -376,7 +414,7 @@ function grape_create_wav_file()
     rc=0
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'flac ...' => ${rc} "
-        rm -f  ${GRAPE_TMP_DIR}/*
+        rm -rf  ${GRAPE_TMP_DIR}/*
         return ${GRAPE_ERROR_FLAC_FAILED}
     fi
 
@@ -490,27 +528,6 @@ function grape_create_all_24_hour_wavs(){
      return ${new_wav_count}
 }
 
-### '-U'  Runs rsync to upload all the 24_hour_10sps_iq.wav wav files to the grape user account at wsprdaemon.org
-###       It is normallay cqlled every odd minute by the watchdog_daemon() which reloads the 
-function grape_upload_all_10hz_wavs() {
-    local grape_psws_id=""
-    local rsync_password=""
-
-    if [[ -z "${GRAPE_PSWS_TOKEN-}" ]] ; then
-        wd_logger 1 "ERROR: The GRAPE_PSWS_ID=${GRAPE_PSWS_ID} has been defined in WD.conf, but GRAPE_PSWS_TOKEN was not defined"
-        return 1
-    fi
-    local rc
-    RSYNC_PASSWORD=${GRAPE_PSWS_TOKEN} rsync --quiet --bwlimit=${RSYNC_KBPS_BW_LIMIT-100} --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_PSWS_ID}@grape.wsprdaemon.org::grape/ 
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "'RSYNC_PASSWORD=${RSYNC_PASSWORD} rsync --quiet --bwlimit=${RSYNC_KBPS_BW_LIMIT-100} --archive --partial --exclude=*.flac --include=24_hour_10sps_iq.wav ${GRAPE_WAV_ARCHIVE_ROOT_PATH}  ${GRAPE_PSWS_ID}@grape.wsprdaemon.org::grape' => ${rc}"
-    else
-        wd_logger 1 "All local wav and status files have been uploaded to grape.wspdaemon.org"
-    fi
-    return ${rc}
-}    
-
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
@@ -527,10 +544,10 @@ function grape_uploader() {
     else
         wd_logger 1 "There were ${rc} new 24h.wav files created"
     fi
-    grape_upload_all_10hz_wavs
+    grape_upload_all_localz_wavs
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: grape_upload_all_10hz_wavs => ${rc}"
+        wd_logger 1 "ERROR: grape_upload_all_local_wavs => ${rc}"
     else
         wd_logger 1 "Successful upload of  ${rc} new 24h.wav files"
     fi
@@ -585,12 +602,9 @@ function grape_menu() {
             grape_repair_all_dates_flacs
             ;;
         -u)
-            upload_24hour_wavs_to_grape_drf_server ${WD_TEST_RX_DIR}
+            grape_upload_all_local_wavs
             ;;
-        -U)
-            grape_upload_all_10hz_wavs
-            ;;
-        -a)
+       -a)
             spawn_daemon ${2-0}
             ;;
         -A)
