@@ -532,6 +532,10 @@ function wd-wav-archive-fix(){
         echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directcories"
         return 0
     fi
+    if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the the expected format 'Snnnn_nnn'"
+        return 0
+    fi
     local date_dir
     for date_dir in $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
         #echo "date_dir = ${date_dir}"
@@ -540,8 +544,12 @@ function wd-wav-archive-fix(){
             #echo "reporter_dir = ${reporter_dir}"
             local receiver_dir
             for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
-                if ! [[ ${receiver_dir} =~ "@" ]]; then
-                   echo "Fix receiver directory ${receiver_dir} by renamaing it to ${receiver_dir}@${GRAPE_PSWS_ID}"
+                echo  ${receiver_dir}
+                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]]; then
+                    read -p "Fix ${receiver_dir} to become ${receiver_dir}_${GRAPE_PSWS_ID#*_}? "
+                    mv  ${receiver_dir} ${receiver_dir}_${GRAPE_PSWS_ID#*_}
+                elif ! [[ ${receiver_dir} =~ "@" ]]; then
+                   read -p  "Fix receiver directory ${receiver_dir} by renamaing it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
                    mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
                 fi
             done
