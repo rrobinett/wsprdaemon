@@ -1,5 +1,5 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/wd-bash-aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
 function wd-machine-name() {
     echo $(uname -m)
@@ -287,21 +287,21 @@ function wd-gc-ssh() {
 }
 
 ### Reload this file
-alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'       ### Just reload this file
+alias wd-rc='source ~/wsprdaemon/wd-bash-aliases'       ### Just reload this file
 alias wdrc='wd-rc'
 
 ### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
 function wd-rci() 
 {
-    if [[ ! -f ~/.bash_aliases ]] || ! grep wd_bash_aliases ~/.bash_aliases > /dev/null ; then
+    if [[ ! -f ~/.bash_aliases ]] || ! grep wd-bash-aliases ~/.bash_aliases > /dev/null ; then
         echo "
-if [[ -f ~/wsprdaemon/.wd_bash_aliases ]]; then
-    source ~/wsprdaemon/.wd_bash_aliases
+if [[ -f ~/wsprdaemon/wd-bash-aliases ]]; then
+    source ~/wsprdaemon/wd-bash-aliases
 fi
 " >> ~/.bash_aliases
-         echo "A reference to '~/wsprdaemon/.wd_bash_aliases' has been added to ' ~/.bash_aliases'"
+         echo "A reference to '~/wsprdaemon/wd-bash-aliases' has been added to ' ~/.bash_aliases'"
     else
-         [[ ${verbosity} -gt 1 ]] && echo ".wd_bash_aliases has already been installed in ~/.bash_aliases"
+         [[ ${verbosity-0} -gt 1 ]] && echo "wd-bash-aliases has already been installed in ~/.bash_aliases"
     fi
 }
 wd-rci
@@ -344,7 +344,7 @@ function vi()
     vim $*
 }
 
-alias vib='vi ~/wsprdaemon/.wd_bash_aliases'
+alias vib='vi ~/wsprdaemon/wd-bash-aliases'
 alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
 alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
@@ -833,7 +833,7 @@ alias wdww='wd-watch-wavs'
 alias wdps='ps aux | grep wd-record | grep -v grep'
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
-alias wd-rc='source ~/wsprdaemon/.wd_bash_aliases'
+alias wd-rc='source ~/wsprdaemon/wd-bash-aliases'
 alias wdrc='wd-rc'
 
 function wd-help()

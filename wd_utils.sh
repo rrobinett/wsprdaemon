@@ -213,8 +213,8 @@ function wd_logger() {
     fi
     local printout_line="${time_and_calling_function_name}${printout_string}"
 
-    if [ -t 0 -a -t 1 -a -t 2 ]; then
-        ### This program is not a daemon, it is attached to a terminal.  So echo to that terminal
+    if [[ "${TERM}" = "screen" ]] || [ -t 0 -a -t 1 -a -t 2 ]; then
+        ### This program is not a daemon, it is running in a tmxu window or attached to a terminal.  So echo to that terminal
         echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
 

@@ -1291,6 +1291,7 @@ function decoding_daemon() {
     elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
         ### The default is to add 0.1 Hz to spot frequencies, or by the value of SPOT_FREQ_ADJ_HZ specified in the wsprdaemon.conf file
         local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
+        freq_adj_hz=${freq_adj_hz/+/}     ## 'bc' doesn't like leading '+' signs in numbers
         freq_adj_mhz=$( echo "scale=9;(${freq_adj_hz} / 1000000)" | bc)
         wd_logger 1 "Because  [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]] is TRUE, fixing spot frequencies of receiver '${receiver_name} by ${freq_adj_hz} Hz == ${freq_adj_mhz} MHz"
     else
