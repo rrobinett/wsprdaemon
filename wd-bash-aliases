@@ -525,6 +525,31 @@ alias wdwav='wd-wav'
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 
+declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
+function wd-wav-archive-fix(){
+    source ~/wsprdaemon/wsprdaemon.conf
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directcories"
+        return 0
+    fi
+    local date_dir
+    for date_dir in $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
+        #echo "date_dir = ${date_dir}"
+        local reporter_dir
+        for reporter_dir in $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
+            #echo "reporter_dir = ${reporter_dir}"
+            local receiver_dir
+            for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
+                if ! [[ ${receiver_dir} =~ "@" ]]; then
+                   echo "Fix receiver directory ${receiver_dir} by renamaing it to ${receiver_dir}@${GRAPE_PSWS_ID}"
+                   mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
+                fi
+            done
+        done
+    done
+}
+alias wdwaf=wd-wav-archive-fix
+
 function wd-overloads()
 {
 : <<"comment_out"
