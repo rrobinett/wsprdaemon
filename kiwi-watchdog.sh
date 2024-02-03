@@ -56,7 +56,8 @@ cat > ${SYSTEMNCTL_UNIT_FILE_NAME} <<EOF
     ExecStart=${CMD_PATH} -A
     ExecStop=${CMD_PATH} -z
     Type=forking
-    Restart=on-abort
+    Restart=always
+    RestartSec=5
 
     [Install]
     WantedBy=multi-user.target

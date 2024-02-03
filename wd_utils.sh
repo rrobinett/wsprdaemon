@@ -336,8 +336,8 @@ function setup_systemctl_daemon() {
     ExecStart=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${start_args}
     ExecStop=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.sh ${stop_args}
     Type=forking
-    Restart=on-failure
-    RestartSec=30s
+    Restart=always
+    RestartSec=10
 
     [Install]
     WantedBy=multi-user.target

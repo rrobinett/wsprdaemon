@@ -94,6 +94,7 @@ function setup_noise_graphs()
         fi
     fi
 }
+setup_noise_graphs
 
 ### these could be modified from these default values by declaring them in the .conf file.
 declare    SIGNAL_LEVEL_PRE_TX_SEC=${SIGNAL_LEVEL_PRE_TX_SEC-.25}

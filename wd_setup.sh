@@ -77,7 +77,7 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${os_release}"
         if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
-            PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
+            PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi
@@ -263,11 +263,6 @@ function check_for_kiwirecorder_cmd() {
     fi
 }
 
-if ! check_for_kiwirecorder_cmd ; then
-    echo "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
-    exit 1
-fi
-
 function ask_user_to_install_sw() {
     local prompt_string=$1
     local is_requried_by_wd=${2:-}
@@ -321,6 +316,8 @@ declare APT_GET_UPDATE_HAS_RUN="no"
 function install_debian_package(){
     local package_name=$1
     local ret_code
+
+    wd_logger 2 "Check that package ${package_name} is installed"
 
     #if [[ " ${INSTALLED_DEBIAN_PACKAGES} " =~  " ${package_name} " ]]; then
     if dpkg -l ${package_name} >& /dev/null ; then
@@ -602,6 +599,8 @@ function setup_wd_auto_ssh()
 ### This is called once at startup
 function check_for_needed_utilities()
 {
+    wd_logger 2 "Starting"
+
     setup_wd_auto_ssh
 
     local package_needed
@@ -615,7 +614,15 @@ function check_for_needed_utilities()
     wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
     wd_logger 2 "Setting up noise graphing"
-    setup_noise_graphs
 }
 
 ### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
+if ! check_for_needed_utilities ; then
+    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
+    exit 1
+fi
+
+if ! check_for_kiwirecorder_cmd ; then
+    wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
+    exit 1
+fi
