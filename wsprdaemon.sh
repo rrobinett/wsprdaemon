@@ -73,7 +73,6 @@ source ${WSPRDAEMON_ROOT_DIR}/wd-bash-aliases       ### Set up WD aliases for al
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
-check_for_needed_utilities
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
