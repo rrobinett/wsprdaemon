@@ -89,10 +89,8 @@ function grape_init() {
     fi
 
     ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
-    set -x
     grape_upload_public_key
     rc=$?
-    set +x
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
         return ${rc}
