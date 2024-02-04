@@ -544,7 +544,7 @@ function wd-wav-archive-fix(){
             #echo "reporter_dir = ${reporter_dir}"
             local receiver_dir
             for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
-                echo  ${receiver_dir}
+                echo  "Examining  ${receiver_dir} "
                 if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]]; then
                     read -p "Fix ${receiver_dir} to become ${receiver_dir}_${GRAPE_PSWS_ID#*_}? "
                     mv  ${receiver_dir} ${receiver_dir}_${GRAPE_PSWS_ID#*_}
@@ -557,6 +557,20 @@ function wd-wav-archive-fix(){
     done
 }
 alias wdwaf=wd-wav-archive-fix
+
+function wd-ssh-psws(){
+    source ~/wsprdaemon/wsprdaemon.conf
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directcories"
+        return 0
+    fi
+    if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the the expected format 'Snnnn_nnn'"
+        return 0
+    fi
+    ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu
+}
+alias wdssp=wd-ssh-psws
 
 function wd-overloads()
 {
