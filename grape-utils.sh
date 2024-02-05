@@ -144,14 +144,14 @@ function upload_24hour_wavs_to_grape_drf_server() {
     if [[ ! -d ${reporter_wav_root_dir} ]]; then
         wd_logger 1 "ERROR:  reporter_wav_root_dir='${reporter_wav_root_dir}' does not exist"
     fi
-    wd_logger 1 "Upload the wav files in ${reporter_wav_root_dir} to the GRAPE server"
-
     local reporter_upload_complete_file_name="${reporter_wav_root_dir}/${UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME}"
 
     if [[ -f ${reporter_upload_complete_file_name} ]]; then
         wd_logger 1  "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
         return 0
     fi
+    wd_logger 1 "Upload the wav files in ${reporter_wav_root_dir} to the GRAPE server"
+
     ### On the WD client the flac and 24hour.wav files are cached in the non-volitile  file system which has the format:
     ### ...../wsprdaemon/wav-archive.d/<DATE>/<WSPR_REPORTER_ID>_<WSPR_REPORTER_GRID>/<WD_RECEIVER_NAME>@<PSWS_SITE_ID>_<PSWS_INSTRUMENT_NUMBER>/<BAND>
     ### WSPR_REPORTER_ID, WSPR_REPORTER_GRID and WD_RECEIVER and WD_RECEIVER_NAME are assigned by the WD client and entered into the wsprdaemon.conf file
@@ -202,13 +202,28 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
         local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
+        if [[ -z "${receiver_tmp_dir}" ]]; then
+            wd_logger 1 "ERROR: flac decompressed files, but return a zero length name for its  receiver_tmp_dir"
+            return 1
+        fi
+
         wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
+
+        local psws_trigger_dir_name="c${receiver_tmp_dir%%*/}\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
+        wd_logger 1 "After uploading our DRF we will create trigger dir ${psws_trigger_dir_name}"
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
         echo "put -r . 
-              mkdir c$(basename ${receiver_tmp_dir})_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
+              mkdir ${psws_trigger_dir_name}" > ${sftp_cmds_file}
+        #echo "put -r . 
+        #      mkdir c$(basename ${receiver_tmp_dir})_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)" > ${sftp_cmds_file}
         # upload to PSWS network, but don't run in a subshell where the sftp return code would be lost
-        cd "$(dirname "$receiver_tmp_dir")"
+        cd "${receiver_tmp_dir%/*}"
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'cd ${receiver_tmp_dir%/*}' => ${rc}"
+            return ${rc}
+        fi
         # find . -type f -delete     #### while debuggin
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
@@ -251,7 +266,7 @@ function grape_upload_public_key() {
     ssh-copy-id  ${station_id}@${PSWS_URL}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Failed to setup auto login"
+        wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_URL}' => ${rc}"
         return ${rc}
     fi
     wd_logger 1 "Auto login has been successfully set up"
@@ -314,10 +329,27 @@ function grape_purge_all_empty_date_trees(){
 function grape_repair_band_flacs() {
     local band_dir=$1
     local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
-    if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
-        wd_logger 1 "Found the expected ${#flac_file_list[@]} flac files in ${band_dir}"
+    if [[ ${#flac_file_list[@]} -eq 0 ]]; then
+        wd_logger 1 "There are no flac files in ${band_dir}"
         return 0
     fi
+#    if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
+#        wd_logger 1 "Found the expected ${#flac_file_list[@]} flac files in ${band_dir}"
+#        return 0
+#    fi
+
+    wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in a partially filled band dir ${band_dir} are valid"
+    local rc
+    local flac_file
+    for flac_file in  ${flac_file_list[@]} ; do
+        flac --silent --test ${flac_file} 
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: flac reports file ${flac_file} is corrupt, so deleting it"
+            wd_rm  ${flac_file}
+        fi
+    done
+
     local band_date=${flac_file_list[0]##*/}
     band_date=${band_date%%T*}
     local band_freq=${flac_file_list[0]##*/}
@@ -392,6 +424,21 @@ function grape_repair_all_dates_flacs()
     done
 }
 
+declare GRAPE_TMP_NEEDED_SIZE=6291456
+
+function grape_check_tmp_size(){
+    local df_info=( $(df /dev/shm | awk '/\/dev\/shm/{printf "%s %s\n", $2, $4}') )
+    local df_size=${df_info[0]}
+    local df_free=${df_info[1]}
+
+    wd_logger 1 "/dev/shm size=${df_size}, free=${df_free}"
+    if [[ ${df_size} -lt ${GRAPE_TMP_NEEDED_SIZE} ]]; then
+        wd_logger 1 "WARNING: /dev/shm size=${df_size}, free=${df_free} is too small, resizing it to 6G"
+        sudo mount -o remount,size=6G /dev/shm
+    fi
+    return 0
+}
+
 ### Give a DATE...BAND directory which should have the requried 1440 minute flac files. create a single w4 hour long 10 Hz BW wav file
 ### Returns: 0 => if GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME existed, 1 => created new GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME, >  ${GRAPE_ERROR_RETURN_BASE} if there was a error
 function grape_create_wav_file()
@@ -405,7 +452,13 @@ function grape_create_wav_file()
         return 0
     fi
 
-    local flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
+    local flac_file_list=()
+    flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort' => ${rc}"
+        return ${rc}
+    fi
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "ERROR: found no flac files in ${flac_file_dir}, so delete that directory"
         rm -r ${flac_file_dir}
@@ -431,18 +484,28 @@ function grape_create_wav_file()
             wd_logger 1 "grape_repair_band_flacs ${flac_file_dir} reported it repaired by adding ${rc} (or more) silence files"
         fi
         wd_logger 2 "Fixed ${missing_flac_file_count} missing flac files"
+        ### Since the repair reported success we can presume that the list will be full
         flac_file_list=( $(find ${flac_file_dir} -type f -name '*.flac' -printf '%p\n' | sort ) )
     fi
     wd_logger 1 "Creating one 24 hour, 10 hz wav file ${output_10sps_wav_file} from ${#flac_file_list[@]} flac files..."
+    grape_check_tmp_size
+    mkdir -p ${GRAPE_TMP_DIR}
     rm -rf ${GRAPE_TMP_DIR}/*     ## the -f suppresses an error when there are no files
 
     local rc
-    nice -n 19 flac -s --output-prefix=${GRAPE_TMP_DIR}/ -d ${flac_file_list[@]}
-     rc=$?
-    rc=0
+    nice -n 19 flac --silent --output-prefix=${GRAPE_TMP_DIR}/ -d ${flac_file_list[@]}
+    rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'flac ...' => ${rc} "
+        wd_logger 1 "ERROR: failed while decompressing all the flac files to ${GRAPE_TMP_DIR} which df says is $(df ${GRAPE_TMP_DIR}) full: 'flac ...' => ${rc}, so repair that directory"
+        read -p "proceed with attempt to repair? => "
         rm -rf  ${GRAPE_TMP_DIR}/*
+        grape_repair_band_flacs ${flac_file_dir}
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "ERROR: grape_repair_band_flacs ${flac_file_dir} =>  ${rc}, but no repairs were done"
+        else
+            wd_logger 1 "grape_repair_band_flacs ${flac_file_dir} reported it repaired by cleaning corrupt files and adding ${rc} (or more) silence files"
+        fi
         return ${GRAPE_ERROR_FLAC_FAILED}
     fi
 
@@ -456,7 +519,8 @@ function grape_create_wav_file()
     rc=$?
     rm  ${wav_files_list[@]}
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sox ...' => ${rc} "
+        wd_logger 1 "ERROR: 'sox ...' => ${rc}:\n$(<${sox_log_file_name})"
+        read - "Continue? => "
          return ${GRAPE_ERROR_SOX_FAILED}
     fi
     wd_logger 1 "Created ${output_10sps_wav_file}.  sox reported:\n$(< ${sox_log_file_name})"
@@ -553,12 +617,23 @@ function grape_create_all_24_hour_wavs(){
      return ${new_wav_count}
 }
 
+declare LAST_HHMM="0"                       ### Check and upload each time WD is started
+declare GRAPE_UPLOAD_START_HHMM="0005"      ### Then check and upload each dat at 5 minutes after UTC 00:00
+
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
          wd_logger 1 "GRAPE uploades are not enabled, so do nothing"
          return 0
     fi
+    local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
+    if [[ ${LAST_HHMM} != "0" && ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+        LAST_HHMM=${current_hhmm}
+        wd_logger 1 "Skipping upload at HHMM =  ${current_hhmm}"
+        set +x
+        return 0
+    fi
+    LAST_HHMM=${current_hhmm}
     wd_logger 1 "Checking for new 24h.wav files to upload"
     local rc
 
@@ -654,4 +729,3 @@ function grape_menu() {
     esac
 }
 
-grape_init
