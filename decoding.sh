@@ -322,20 +322,22 @@ function decode_wspr_wav_file() {
     local wspr_decode_capture_freq_hzx=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
     local wspr_decode_capture_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_decode_capture_freq_hz}/1000000.0" ) )
 
-    if [[  -f ALL_WSPR.TXT ]]; then
-        mv ALL_WSPR.TXT ALL_WSPR.TXT.save
-    else
-        touch  ALL_WSPR.TXT.save
+    if ! [[  -f ALL_WSPR.TXT ]]; then
+        touch  ALL_WSPR.TXT
     fi
+    sort -k 1,2 -k 5,5 ALL_WSPR.TXT > ALL_WSPR.TXT.save
+    cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
 
     timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
         return ${ret_code}
-    fi
-    mv ALL_WSPR.TXT ALL_WSPR.TXT.new
-    wd_logger 2 "Moved WSJTx ALL_WSPR.TXT to ALL_WSPR.TXT.new:\n$(<  ALL_WSPR.TXT.new)"
+    fi  
+    sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
+    mv sort.tmp ALL_WSPR.TXT
+    comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp
+    wd_logger 1 "wsprd added $(wc -l < ALL_WSPR.TXT.new.tmp) spots to ALL_WSPR.txt and we saved those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp)"
 
     local wsprd_with_spreading_cmd=""
     local cpu_arch=$(uname -m)
@@ -345,27 +347,29 @@ function decode_wspr_wav_file() {
         wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
     fi
     if [[ -n "${wsprd_with_spreading_cmd}" ]]; then
+        ### Start with the original ALL_WSPR.TXT and see what spots are reported by  wsprd.spreading 
         wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
+        cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
         timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
             # return ${ret_code}
         fi
-        # It might be possible to instead save away teh current ALL_WSPR-TXT and get wsprd to creat a new one with only the spots in this wav file.  That would probably would be more CPU efficient, but this  algorithm works and the savings would be small
-        local zero_spreading_spots_count=$(awk '$18 == "0.000"' ALL_WSPR.TXT | wc -l )
-        if [[ ${zero_spreading_spots_count} -gt ${SAVE_ZERO_SPREADING_WAVS-99} ]]; then
-            local archive_file_name="/tmp/${wspr_decode_capture_freq_mhz}_${zero_spreading_spots_count}_${wav_file_name}"
-            wd_logger 1 "Found ${zero_spreading_spots_count} zero spreading spots, so archiving the wav file containing them to ${archive_file_name}"
-            cp -p ${wav_file_name} ${archive_file_name}
-        fi
-        cat  ALL_WSPR.TXT >> ALL_WSPR.TXT.new
-        wd_logger 2 "Added Ryan's ALL_WSPR.TXT to ALL_WSPR.TXT.new:\n$(<  ALL_WSPR.TXT.new)"
+        sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
+        mv sort.tmp ALL_WSPR.TXT
+        comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp.spreading
+        wd_logger 1 "wsprd.spreading added $(wc -l < ALL_WSPR.TXT.new.tmp.spreading) spots to ALL_WSPR.txt and added those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp.spreading)"
+        cat  ALL_WSPR.TXT.new.tmp.spreading  >> ALL_WSPR.TXT.new.tmp
     fi
-    awk -f ${AWK_FIND_BEST_SPOT_LINES} ALL_WSPR.TXT.new | sort -k 5n > best.new
-    mv best.new ALL_WSPR.TXT.new
+    ### Restore ALL_WSPR.TXT to its state before either of the decodes added spots
     mv   ALL_WSPR.TXT.save  ALL_WSPR.TXT
+
+    ### Find the best set of spots from the two passes, giving preference to spots with WSPR-2 spreading information, and append them to ALL_WSPR.TXT so it can use them in the next decoding 
+    awk -f ${AWK_FIND_BEST_SPOT_LINES} ALL_WSPR.TXT.new.tmp | sort -k 1,2 -k 5,5  >  ALL_WSPR.TXT.new
     cat  ALL_WSPR.TXT.new  >> ALL_WSPR.TXT
+    wd_logger 1 "Added the $(wc -l < ALL_WSPR.TXT.new) spots which are the union of the standard and spreading decodes:\n$(< ALL_WSPR.TXT.new)" 
+
     truncate_file  ALL_WSPR.TXT  ${MAX_ALL_WSPR_SIZE}
     return ${ret_code}
 }
@@ -430,6 +434,7 @@ function flush_wav_files_older_than()
     return 0
 }
 
+declare WD_RECORD_HDR_SIZE_BYTES=44                                ## wd-record writes a wav file header and then waits until the first sample of the next minute before starting to write samples to the file
 declare WAV_FILE_SIZE_POLL_SECS=${WAV_FILE_SIZE_POLL_SECS-2}       ## Check that the wav file is growing every NN seconds, 2 seconds by default
 function sleep_until_raw_file_is_full() {
     local filename=$1
@@ -442,7 +447,7 @@ function sleep_until_raw_file_is_full() {
     local start_seconds=${SECONDS}
 
     sleep ${WAV_FILE_SIZE_POLL_SECS}
-    while [[ -f ${filename} ]] && new_file_size=$( ${GET_FILE_SIZE_CMD} ${filename}) && [[ ${new_file_size} -gt ${old_file_size} ]]; do
+    while [[ -f ${filename} ]] && new_file_size=$( ${GET_FILE_SIZE_CMD} ${filename}) && [[ ${new_file_size} -eq ${WD_RECORD_HDR_SIZE_BYTES} || ${new_file_size} -gt ${old_file_size} ]]; do
         wd_logger 3 "Waiting for file ${filename} to stop growing in size. old_file_size=${old_file_size}, new_file_size=${new_file_size}"
         old_file_size=${new_file_size}
         sleep ${WAV_FILE_SIZE_POLL_SECS}
@@ -1423,10 +1428,10 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
-            wd_logger 1 "sox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700}"
+            wd_logger 1 "sox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc -t 170 1340-1660}"
 
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc 1300-1700} >& sox.log
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc -t 170 1340-1660} >& sox.log
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
