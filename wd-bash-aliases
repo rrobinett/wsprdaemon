@@ -871,7 +871,38 @@ alias wd-wait='wd-wait-for_wspr-gap'
 alias wd-nf="awk '{printf \"%2d: %s\n\", NF, \$0}'"
 
 ### git aliases
-alias wd-git-ssh='git config --global user.email "rob@robinett.us";  git config --global user.name "Rob Robinett" ;  git remote set-url origin  $( git remote get-url origin | sed "s/https:\/\/github.com\///" | sed "s/^/git@github.com:/") ; echo "git rmeote get-url origin: $(git remote get-url origin)"'
+
+### Change a ~/wsprdaemon from https:..(git read only) to git@github.com (git read/write) so you can check in WD source code changes
+function  wd-git-to-ssh(){
+    local current_url=$(git remote get-url origin)
+    if ! [[ "${current_url}" =~ https ]]; then
+        echo "Nothing to do since current_url='${current_url}' doesn't contain the string 'https'"
+        return 0
+    fi
+    local repo_name=${current_url/*github.com\//}
+    local new_repo_url="git@github.com:${repo_name}"
+    read -p "Change git's url from '${current_url}' to '${new_repo_url}'? => "
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob Robinett"
+    git remote set-url origin ${new_repo_url}
+    if ! [[ -d ~/.ssh ]]; then
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to genreate one.  Press <CR> to accept all of its defaults:"
+        ssh-keygen
+    fi
+    local public_key_file=$(find ~/.ssh -type f -name '*pub')
+    if [[ -z "${public_key_file}" ]]; then
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to genreate one.  Press <CR> to accept all of its defaults:"
+        ssh-keygen
+    fi
+    public_key_file=$(find ~/.ssh -type f -name '*pub')
+    if [[ -z "${public_key_file}" ]]; then
+        echo "There is still no local ssh public key file, this has failed"
+        return 1
+    fi
+    echo "Copy and paste this ssh public key to the github.com account:"
+    echo "$(< ${public_key_file})"
+    return 0
+}
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
