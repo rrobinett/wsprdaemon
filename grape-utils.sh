@@ -221,7 +221,6 @@ function upload_24hour_wavs_to_grape_drf_server() {
         done
 
         wd_logger 1  "Creating the DRF file "
-        read -p "=> "
 
         ### Create the DRF files for all the bands on this receiver
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
@@ -361,7 +360,7 @@ function grape_purge_all_empty_date_trees(){
 
 function grape_repair_band_flacs() {
     local band_dir=$1
-    local flac_file_list=( $( find ${band_dir} -type f -name '*.flac') )
+    local flac_file_list=( $( find ${band_dir} -type f -name '*.flac' | sort) )
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "There are no flac files in ${band_dir}"
         return 0
@@ -371,17 +370,36 @@ function grape_repair_band_flacs() {
 #        return 0
 #    fi
 
-    wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in a partially filled band dir ${band_dir} are valid"
+    wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in band dir ${band_dir} are present and valid"
+    rm -rf ${GRAPE_TMP_DIR}/*
     local rc
+    local bad_wav_file_count=0
     local flac_file
     for flac_file in  ${flac_file_list[@]} ; do
-        flac --silent --test ${flac_file} 
+        flac --silent --output-prefix=${GRAPE_TMP_DIR}/ ${flac_file} 
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: flac reports file ${flac_file} is corrupt, so deleting it"
             wd_rm  ${flac_file}
+        else
+            set +x
+            local test_wav_file=${GRAPE_TMP_DIR}/${flac_file##*/}
+            if soxi ${test_wav_file} | grep -q '960000 samples' ; then
+                wd_logger 2 "soxi reports ${test_wav_file} is OK"
+            else
+                wd_logger 2 "soxi found corrupt flac file ${flac_file}, so deleting it"
+            #    read -p "Delete it? => "
+                wd_rm ${flac_file}
+                (( ++bad_wav_file_count ))
+            fi
+            wd_rm  ${test_wav_file}
         fi
+        set +x
     done
+    if [[ ${bad_wav_file_count} -gt 0 ]]; then
+        wd_logger 1 "Removed ${bad_wav_file_count} bad flac/wav files"
+    fi
+    # read -p "Proceed after checking all the flaq files? => "
 
     local band_date=${flac_file_list[0]##*/}
     band_date=${band_date%%T*}
@@ -660,7 +678,7 @@ function grape_uploader() {
          return 0
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
-    if [[ ${LAST_HHMM} != "0" && ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+    if [[ ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
         LAST_HHMM=${current_hhmm}
         wd_logger 1 "Skipping upload at HHMM =  ${current_hhmm}"
         set +x
