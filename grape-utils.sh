@@ -548,7 +548,7 @@ function grape_create_wav_file()
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: failed while decompressing all the flac files to ${GRAPE_TMP_DIR} which df says is $(df ${GRAPE_TMP_DIR}) full: 'flac ...' => ${rc}, so repair that directory"
-        read -p "proceed with attempt to repair? => "
+        # read -p "proceed with attempt to repair? => "
         rm -rf  ${GRAPE_TMP_DIR}/*
         grape_repair_band_flacs ${flac_file_dir}
         rc=$?
@@ -571,7 +571,7 @@ function grape_create_wav_file()
     rm  ${wav_files_list[@]}
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'sox ...' => ${rc}:\n$(<${sox_log_file_name})"
-        read - "Continue? => "
+        # read - "Continue? => "
          return ${GRAPE_ERROR_SOX_FAILED}
     fi
     wd_logger 1 "Created ${output_10sps_wav_file}.  sox reported:\n$(< ${sox_log_file_name})"
