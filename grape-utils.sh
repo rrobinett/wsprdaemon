@@ -140,17 +140,28 @@ function grape_upload_all_local_wavs() {
 
 function upload_24hour_wavs_to_grape_drf_server() {
     local reporter_wav_root_dir=$( realpath $1 )
+    wd_logger 2 "Upload bands for reporter ${reporter_wav_root_dir##*/}"
 
     if [[ ! -d ${reporter_wav_root_dir} ]]; then
         wd_logger 1 "ERROR:  reporter_wav_root_dir='${reporter_wav_root_dir}' does not exist"
+        return 1
     fi
+    local reporter_wav_root_dir_list=( ${reporter_wav_root_dir//\// } )
+    local reporter_wav_root_dir_date="${reporter_wav_root_dir_list[-2]}"
+    local current_date=$(TZ=UTC printf "%(%Y%m%d)T" -1)
+    if [[ "${reporter_wav_root_dir_date}" == "${current_date}" ]]; then
+        wd_logger 2 "Skipping work on flac files for today's date ${current_date}"
+        return 0
+    fi
+    wd_logger 2 "On date '${current_date}' checking for date '${reporter_wav_root_dir_date}' bands which need a wav file to be created and then convert them to DRF and upload to the GRAPE server"
+
     local reporter_upload_complete_file_name="${reporter_wav_root_dir}/${UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME}"
 
     if [[ -f ${reporter_upload_complete_file_name} ]]; then
-        wd_logger 1  "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
+        wd_logger 2  "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
         return 0
     fi
-    wd_logger 1 "Upload the wav files in ${reporter_wav_root_dir} to the GRAPE server"
+    wd_logger 1 "File ${reporter_upload_complete_file_name} does not exist, so create the wav files and upload the DRF files"
 
     ### On the WD client the flac and 24hour.wav files are cached in the non-volitile  file system which has the format:
     ### ...../wsprdaemon/wav-archive.d/<DATE>/<WSPR_REPORTER_ID>_<WSPR_REPORTER_GRID>/<WD_RECEIVER_NAME>@<PSWS_SITE_ID>_<PSWS_INSTRUMENT_NUMBER>/<BAND>
@@ -178,19 +189,41 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
-        wd_logger 1  "Uploading  ${receiver_dir}"
+        wd_logger 1  "Checking and cleaning up the band directorys for receiver ${receiver_dir}"
         wd_logger 2  "date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
 
-        ### Remove any wav files which don't have the expected 860,000 samples in a 10Hz 24 hour wav file
-        local wav_file
-        for wav_file in $( find ${receiver_dir} -type f -name "24_hour_10sps_iq.wav") ; do
-            if ! soxi ${wav_file} | grep -q '864000 samples' ; then
-                wd_logger 1 "ERROR: Found wav file ${wav_file} doesn't have the expected  860,000 samples in a 10Hz 24 hour wav file, so deleting it"
-                wd_rm ${wav_file}
+        ### Cleanup the flacs and create 24hour.wavs in all the bands
+        local band_dir
+        for band_dir in $( find ${receiver_dir} -mindepth 1 -type d ); do
+            wd_logger 2 "Checking band dir ${band_dir}"
+            local band_24hour_wav_file="${band_dir}/24_hour_10sps_iq.wav"
+            if [[ -f ${band_24hour_wav_file} ]]; then
+                 if soxi ${band_24hour_wav_file} | grep -q '864000 samples' ; then
+                     wd_logger 2 "Found a good existing ${band_24hour_wav_file}"
+                  else
+                     wd_logger 1 "ERROR: Found wav file ${band_24hour_wav_file} doesn't have the expected 860,000 samples in a 10Hz 24 hour wav file, so deleting it"
+                     wd_rm ${band_24hour_wav_file}
+                 fi
             fi
+            if !  [[ -f ${band_24hour_wav_file} ]]; then
+                wd_logger 1 "Creating ${band_24hour_wav_file}"
+                grape_repair_band_flacs ${band_dir}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "WARNING: 'grape_repair_band_flacs ${band_dir}' => ${rc}"
+                fi
+                grape_create_wav_file  ${band_dir}
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "WARNING: 'grape_create_wav_file ${band_dir}' => ${rc}"
+                fi
+            fi 
         done
-        wd_logger 2 "Done validating the wav files freom the output of soxi"
 
+        wd_logger 1  "Creating the DRF file "
+        read -p "=> "
+
+        ### Create the DRF files for all the bands on this receiver
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
         umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
         local wav2grape_stdout_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stdout"
@@ -209,8 +242,8 @@ function upload_24hour_wavs_to_grape_drf_server() {
 
         wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
 
-        local psws_trigger_dir_name="c${receiver_tmp_dir%%*/}\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
-        wd_logger 1 "After uploading our DRF we will create trigger dir ${psws_trigger_dir_name}"
+        local psws_trigger_dir_name="c${receiver_tmp_dir##*/}\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
+        wd_logger 1 "Uploading our DRF directory tree an then create trigger dir '${psws_trigger_dir_name}'"
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
         echo "put -r . 
@@ -431,7 +464,7 @@ function grape_check_tmp_size(){
     local df_size=${df_info[0]}
     local df_free=${df_info[1]}
 
-    wd_logger 1 "/dev/shm size=${df_size}, free=${df_free}"
+    wd_logger 2 "/dev/shm size=${df_size}, free=${df_free}"
     if [[ ${df_size} -lt ${GRAPE_TMP_NEEDED_SIZE} ]]; then
         wd_logger 1 "WARNING: /dev/shm size=${df_size}, free=${df_free} is too small, resizing it to 6G"
         sudo mount -o remount,size=6G /dev/shm
