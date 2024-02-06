@@ -62,7 +62,7 @@ declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
-### '-u' 
+### '-u ' sub menu
 function grape_upload_all_local_wavs() {
     local rc
     grape_upload_public_key
@@ -82,6 +82,7 @@ function grape_upload_all_local_wavs() {
             upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
+    wd_logger 1 "Completed"
 }
 
 ### Given: the path to the .../wav-archive.d/<DATE>/<RPORTER>_<GRID> directory under which there  may be  one or  more receivers with 24 hour wav files which have not 
@@ -193,7 +194,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
 
         local psws_trigger_dir_name="c${receiver_tmp_dir##*/}\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
-        wd_logger 1 "Uploading our DRF directory tree an then create trigger dir '${psws_trigger_dir_name}'"
+        wd_logger 1 "Uploading our DRF directory tree and creating the trigger dir '${psws_trigger_dir_name}'"
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
         echo "put -r . 
@@ -778,6 +779,7 @@ function grape_init() {
         wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
         return ${rc}
     fi
+    mkdir -p ${GRAPE_TMP_DIR}
     return 0
 }
 
