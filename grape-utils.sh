@@ -48,56 +48,6 @@ function grape_return_code_is_error() {
 
 ######### The functions which implement this service daemon follow this line ###############
 
-### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
-function grape_init() {
-    wd_logger 2 "Starting"
-    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
-        return 0
-    fi
-    local rc
-    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
-        umask 022
-        mkdir -p ${GRAPE_TMP_DIR}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: can't create grape tmp directory '${GRAPE_TMP_DIR}'"
-            return ${rc}
-        fi
-        wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
-    fi
-
-    local grape_python_package_list=( "digital_rf" "soundfile" )
-    local python_package
-    for python_package in ${grape_python_package_list[@]}; do
-        install_python_package "${python_package}"
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: can't install python package '${python_package}'"
-            return ${rc}
-        fi
-    done
-
-    if ! [[ -d ~/.ssh ]] || ! find ~/.ssh -type f -name '*.pub' | grep -q .; then
-        wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"
-        ssh-keygen
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR:  GRAPE_PSWS_ID is configured, but this server has no ssh public key needed for this feature to run"
-            return ${rc}
-        fi
-    fi
-
-    ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
-    grape_upload_public_key
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
-        return ${rc}
-    fi
-    return 0
-}
-
 # upload_24hour_wavs_to_grape_drf_server() is derived from Franco's grape.sh
 # go from wav files to Grape:
 # - convert from wav to Digital RF dataset
@@ -223,6 +173,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 1  "Creating the DRF file "
 
         ### Create the DRF files for all the bands on this receiver
+        mkdir -p ${GRAPE_TMP_DIR}
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
         umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
         local wav2grape_stdout_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stdout"
@@ -780,3 +731,57 @@ function grape_menu() {
     esac
 }
 
+### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
+function grape_init() {
+    wd_logger 2 "Starting"
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
+        return 0
+    fi
+    local rc
+    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
+        umask 022
+        mkdir -p ${GRAPE_TMP_DIR}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: can't create grape tmp directory '${GRAPE_TMP_DIR}'"
+            return ${rc}
+        fi
+        wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
+    fi
+
+    local grape_python_package_list=( "digital_rf" "soundfile" )
+    local python_package
+    for python_package in ${grape_python_package_list[@]}; do
+        install_python_package "${python_package}"
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: can't install python package '${python_package}'"
+            return ${rc}
+        fi
+    done
+
+    if ! [[ -d ~/.ssh ]] || ! find ~/.ssh -type f -name '*.pub' | grep -q .; then
+        wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"
+        ssh-keygen
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR:  GRAPE_PSWS_ID is configured, but this server has no ssh public key needed for this feature to run"
+            return ${rc}
+        fi
+    fi
+
+    ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
+    grape_upload_public_key
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+        return ${rc}
+    fi
+    return 0
+}
+
+if ! grape_init ; then
+    wd_logger 1 "ERROR: grape_init => $?"
+    exit 1
+fi
