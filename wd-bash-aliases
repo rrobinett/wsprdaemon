@@ -797,7 +797,7 @@ function wd-radiod-bw-check() {
     fi
     local rx_audio_low=$( awk '/^low =/{print $3}' ${running_radiod_conf_file})
     local rx_audio_high=$( awk '/^high =/{print $3}' ${running_radiod_conf_file})
-    wd_logger 1 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
+    wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
 
     if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
         wd_logger 1 "ERROR: can't find the expected low and/or high settings in  ${running_radiod_conf_file}"
@@ -815,7 +815,7 @@ function wd-radiod-bw-check() {
         rx_needs_restart="yes"
     fi
     if [[ ${rx_needs_restart} == "no" ]]; then
-        wd_logger 1 "No changes needed"
+        wd_logger 2 "No changes needed"
     else
         wd_logger 1 "Restarting the radiod service"
         local radiod_service_name=${running_radiod_conf_file##*/}
