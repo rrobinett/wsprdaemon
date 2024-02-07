@@ -1428,10 +1428,12 @@ function decoding_daemon() {
             local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
-            wd_logger 1 "sox is creating a 2/5/15/30 wav files with SOX_ASSEMBLE_WAV_FILE_EFFECS=${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc -t 170 1340-1660}"
+            local sox_effects="${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}"
+
+            wd_logger 1 "sox is creating a 2/5/15/30 wav files with '${sox_effects}' effects"
 
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${SOX_ASSEMBLE_WAV_FILE_EFFECTS-sinc -t 170 1340-1660} >& sox.log
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& sox.log
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
