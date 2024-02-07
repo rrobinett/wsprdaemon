@@ -768,8 +768,7 @@ function ka9q_setup()
 {
     local rc
 
-    ### A KA9Q rx has been configured, so we need to install and compile  ka9q-radio so that we can run the 'wd-record' command
-
+    ### This has been called because A KA9Q rx has been configured, so we may need to install and compile ka9q-radio so that we can run the 'wd-record' command
     if [[ ! -d ${KA9Q_RADIO_DIR} ]]; then
         wd_logger 1 "ka9q-radio subdirectory doesn't exist, so 'get clone' to create it and populate with source code"
         git clone ${KA9Q_GIT_URL}
@@ -797,7 +796,7 @@ function ka9q_setup()
             exit 1
         fi
     fi
-    
+
     if [[ ${ka9q_make_needed} == "no" ]]; then
         local ka9q_runs_only_remotely
         get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
@@ -808,9 +807,10 @@ function ka9q_setup()
             fi
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
         else
-            ### There is a local RX888, WD needs the radiod ser
+            ### There is a local RX888.  Ensure it is properly configured and running
+            wd-radiod-bw-check
             if sudo systemctl status ${WD_KA9Q_SERICE_NAME} > /dev/null ; then
-                wd_logger 2 "KA9Q software wasn't updated and rhe radiod service is running, so KA9Q is setup and running"
+                wd_logger 2 "KA9Q software wasn't updated and the radiod service is running, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't updated but the needed local radiod service is not running, so compile and install all of KA9Q"
@@ -909,6 +909,9 @@ function ka9q_setup()
     fi
     wd_logger 1 "Found a RX888 MkII attached to a USB port"
  
+    ### Make sure the config doesn't have the broken low = 100, high = 5000 values
+    wd-radiod-bw-check
+
     sudo systemctl start  "${WD_KA9Q_SERICE_NAME}" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
