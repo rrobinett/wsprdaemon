@@ -788,6 +788,7 @@ alias swa='sudo systemctl start  wsprdaemon.service'
 alias swz='sudo systemctl stop   wsprdaemon.service'
 alias sws='sudo systemctl status wsprdaemon.service'
 
+### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
 function wd-radiod-bw-check() {
     local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/radiod.*conf/{print $NF}' )
     if [[ -z "${running_radiod_conf_file}" ]]; then
