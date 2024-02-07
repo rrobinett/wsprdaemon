@@ -1,6 +1,17 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/wd-bash-aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
 
+### Emulate WD's wd_logger() function when these functions are run from the linux cmd line
+### When this file is sourced by wsprdaemon.sh this function will be redfined in wd-utils.sh to the full wd_logger() used by WD
+function wd_logger(){
+    local verbosity_printing_level=${1:-1}
+    local printout_string="${2:-Missing printout string}"
+
+    if [[ ${verbosity_printing_level} -ge ${verbosity:-1} ]]; then
+        echo -e "${printout_string}"
+    fi
+}
+
 function wd-machine-name() {
     echo $(uname -m)
 }
@@ -776,6 +787,42 @@ alias wd-rs2='sudo systemctl status radiod@rx888-wsprdaemon2.service'
 alias swa='sudo systemctl start  wsprdaemon.service'
 alias swz='sudo systemctl stop   wsprdaemon.service'
 alias sws='sudo systemctl status wsprdaemon.service'
+
+function wd-radiod-bw-check() {
+    local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/radiod.*conf/{print $NF}' )
+    if [[ -z "${running_radiod_conf_file}" ]]; then
+        wd_logger 1 "radiod is not configured to run on this server"
+        return 0
+    fi
+    local rx_audio_low=$( awk '/^low =/{print $3}' ${running_radiod_conf_file})
+    local rx_audio_high=$( awk '/^high =/{print $3}' ${running_radiod_conf_file})
+    wd_logger 1 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
+
+    if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
+        wd_logger 1 "ERROR: can't find the expected low and/or high settings in  ${running_radiod_conf_file}"
+        return 1
+    fi
+    local rx_needs_restart="no"
+    if [[ "${rx_audio_low}" != "1300" ]]; then
+        wd_logger 1 "WARNING: found low = ${rx_audio_low}, so changing it to the desired value of 1300"
+        sed -i "s/low = ${rx_audio_low}/low = 1300/"  ${running_radiod_conf_file}
+        rx_needs_restart="yes"
+    fi
+    if [[ "${rx_audio_high}" != "1700" ]]; then
+        wd_logger 1 "WARNING: found high = ${rx_audio_high}, so changing it to the desired value of 1700"
+        sed -i "s/high = ${rx_audio_high}/high = 1700/"  ${running_radiod_conf_file}
+        rx_needs_restart="yes"
+    fi
+    if [[ ${rx_needs_restart} == "no" ]]; then
+        wd_logger 1 "No changes needed"
+    else
+        wd_logger 1 "Restarting the radiod service"
+        local radiod_service_name=${running_radiod_conf_file##*/}
+        radiod_service_name=${radiod_service_name/.conf/.service}
+        sudo systemctl restart ${radiod_service_name}
+    fi
+    return 0
+}
 
 function wd-9qstats() {
     local root_dir="/dev/shm/wsprdaemon/posting.d/MERG_6_Q"
