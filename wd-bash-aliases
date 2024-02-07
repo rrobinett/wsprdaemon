@@ -516,16 +516,32 @@ local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log) )
 }
 
 
+declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
 ### 11/2/22 - This doesn't work anymore, but it could be modifed 
 function wd-wav(){
-    awk -f ~/wsprdaemon/.show-wav.awk `find ${WD_TMP_ROOT}/recording.d -name decoding_daemon.log | sort -t "/" -k 6,6n`
+    du -s ${WD_WAV_ARCHIVE_ROOT_DIR}/* | awk '{printf "%s: %s\n", $2, $1}' | sort
 }
 alias wdwav='wd-wav'
+
+function wd-wav-clean() {
+    local wav_archive_root_dir_list=( $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
+    local wav_archive_root_dir
+    for wav_archive_root_dir in ${wav_archive_root_dir_list[@]} ; do
+        local flat_file_list=( $(find ${wav_archive_root_dir} -type f | sort) )  
+        if [[ ${#flat_file_list[@]} -eq 0 ]]; then
+            read -p "wav file root dir ${wav_archive_root_dir} conatins only directory files, so delete it? [Yn] => "
+            if [[ "${REPLY:-y}" == "y" ]]; then
+                rm -r ${wav_archive_root_dir}
+            fi
+        else
+            printf "Found %6d files under %s\n"  ${#flat_file_list[@]}  ${wav_archive_root_dir}
+        fi
+    done
+}
 
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 
-declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
 function wd-wav-archive-fix(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
