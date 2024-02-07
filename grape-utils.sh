@@ -140,10 +140,11 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
-        wd_logger 1  "Checking and cleaning up the band directorys for receiver ${receiver_dir}"
+        wd_logger 1  "Checking and cleaning up the band directories for receiver ${receiver_dir}"
         wd_logger 2  "date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
 
         ### Cleanup the flacs and create 24hour.wavs in all the bands
+        local wav_file_count=0
         local band_dir
         for band_dir in $( find ${receiver_dir} -mindepth 1 -type d ); do
             wd_logger 2 "Checking band dir ${band_dir}"
@@ -169,9 +170,19 @@ function upload_24hour_wavs_to_grape_drf_server() {
                     wd_logger 1 "WARNING: 'grape_create_wav_file ${band_dir}' => ${rc}"
                 fi
             fi 
+            if [[  -f ${band_24hour_wav_file} ]]; then
+                wd_logger 1 "Found wav file ${band_24hour_wav_file}"
+                (( ++wav_file_count ))
+            else
+                 wd_logger 1 "Neither found nor could create  ${band_24hour_wav_file}"
+            fi
         done
+        if [[ ${wav_file_count} -eq 0 ]]; then
+            wd_logger 1 "WARNING: no wav files found or created for any bands, so skip DRF creation"
+            return 0
+        fi
 
-        wd_logger 1  "Creating the DRF file "
+        wd_logger 1  "Creating the DRF file from ${wav_file_count} bands of wav files"
 
         ### Create the DRF files for all the bands on this receiver
         mkdir -p ${GRAPE_TMP_DIR}
@@ -317,41 +328,54 @@ function grape_repair_band_flacs() {
         wd_logger 1 "There are no flac files in ${band_dir}"
         return 0
     fi
-#    if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
-#        wd_logger 1 "Found the expected ${#flac_file_list[@]} flac files in ${band_dir}"
-#        return 0
-#    fi
+    #    if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
+    #        wd_logger 1 "Found the expected ${#flac_file_list[@]} flac files in ${band_dir}"
+    #        return 0
+    #    fi
 
     wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in band dir ${band_dir} are present and valid"
     rm -rf ${GRAPE_TMP_DIR}/*
     local rc
     local bad_wav_file_count=0
+    local good_wav_file_count=0
     local flac_file
     for flac_file in  ${flac_file_list[@]} ; do
         flac --silent --output-prefix=${GRAPE_TMP_DIR}/ ${flac_file} 
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: flac reports file ${flac_file} is corrupt, so deleting it"
+            (( ++bad_wav_file_count ))
             wd_rm  ${flac_file}
         else
-            set +x
+            ### flac returned success, not check that it really produced a wav file
             local test_wav_file=${GRAPE_TMP_DIR}/${flac_file##*/}
-            if soxi ${test_wav_file} | grep -q '960000 samples' ; then
-                wd_logger 2 "soxi reports ${test_wav_file} is OK"
-            else
-                wd_logger 2 "soxi found corrupt flac file ${flac_file}, so deleting it"
-            #    read -p "Delete it? => "
-                wd_rm ${flac_file}
+            test_wav_file=${test_wav_file/\.flac/.wav}
+            if [[ ! -s ${test_wav_file} ]]; then
+                wd_logger 1 "ERROR: flac returned success, but it didn't create the expected wav file ${test_wav_file}"
+                read -p "? => "
                 (( ++bad_wav_file_count ))
+                wd_rm  ${flac_file}
+            else
+                ### flac created the wav file
+                if soxi ${test_wav_file} | grep -q '960000 samples' ; then
+                    wd_logger 1 "soxi reports ${test_wav_file} is OK"
+                    (( ++good_file_count ))
+                else
+                    wd_logger 1 "soxi found good flac file ${flac_file} but its wav file is corrupt, so deleting it"
+                    wd_rm ${flac_file}
+                    (( ++bad_wav_file_count ))
+                fi
+                wd_rm  ${test_wav_file}
             fi
-            wd_rm  ${test_wav_file}
         fi
-        set +x
     done
     if [[ ${bad_wav_file_count} -gt 0 ]]; then
         wd_logger 1 "Removed ${bad_wav_file_count} bad flac/wav files"
     fi
-    # read -p "Proceed after checking all the flaq files? => "
+    if [[ ${good_wav_file_count} -eq 0 ]]; then
+        wd_logger 1 "There are no good flac/wav files in this ${band_dir}"
+        return 0
+    fi
 
     local band_date=${flac_file_list[0]##*/}
     band_date=${band_date%%T*}
@@ -372,7 +396,7 @@ function grape_repair_band_flacs() {
                 ln ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
                 silence_file_list+=( ${expected_file_path##*/} )
             else
-                 wd_logger 2 "Found expected IQ file ${expected_file_path}"
+                wd_logger 2 "Found expected IQ file ${expected_file_path}"
             fi
         done
     done
