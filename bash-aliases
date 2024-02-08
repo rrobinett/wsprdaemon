@@ -916,6 +916,7 @@ function wd-9c()
 
     control -s ${tuning_freq} hf.local
 }
+alias wd9c=wd-9c
 
 function wd-9m()
 {
@@ -941,6 +942,7 @@ function wd-9m()
         printf "%3d      %6.1f      %6.1f          %6.1f       %6.1f    %6.1f\n" ${band} "${if_power}" "${noise_level}" "${baseband_pwr}" "${output_level}" "${headroom}"
     done
 }
+alias wd9c=wd-9m
 
 ### tmux aliases
 alias tm='tmux'
@@ -1006,6 +1008,20 @@ alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.co
 alias wd-watch-wavs='watch "ls -l *.wav"'  ### watch for wd-record or kwirecorder to create wav files in cwd
 alias wdww='wd-watch-wavs'
 alias wdps='ps aux | grep wd-record | grep -v grep'
+
+function wd-ssh-to-wdclient() {
+    local rac_id=${1:-usage}
+
+    if [[ "${rac_id}" == "usage" ]]; then
+        echo "usage:   wd-ssh-to-wdclient (or wdssr) RAD_ID"
+        return 0
+    fi
+    if [[ ${#rac_id} -eq 1 ]]; then
+        rac_id="0${rac}"
+    fi
+    ssh -p 358${rac_id} wsprdaemon@wsprdaemon.org
+}
+alias wdssr=wd-ssh-to-wdclient
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
 alias wd-rc='source ~/wsprdaemon/bash-aliases'
