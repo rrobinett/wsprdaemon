@@ -82,7 +82,7 @@ function grape_upload_all_local_wavs() {
             upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
-    wd_logger 1 "Completed"
+    wd_logger 2 "Completed"
 }
 
 ### Given: the path to the .../wav-archive.d/<DATE>/<RPORTER>_<GRID> directory under which there  may be  one or  more receivers with 24 hour wav files which have not 
@@ -325,43 +325,38 @@ function grape_repair_band_flacs() {
     local band_dir=$1
     local flac_file_list=( $( find ${band_dir} -type f -name '*.flac' | sort) )
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
-        wd_logger 1 "There are no flac files in ${band_dir}"
-        return 0
+        wd_logger 1 "There are no flac files in ${band_dir}, so returning an this as an error"
+        return 1
     fi
-    #    if [[ ${#flac_file_list[@]} -eq ${MINUTES_PER_DAY} ]]; then
-    #        wd_logger 1 "Found the expected ${#flac_file_list[@]} flac files in ${band_dir}"
-    #        return 0
-    #    fi
 
-    wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in band dir ${band_dir} are present and valid"
+    wd_logger 1 "Checking all the ${#flac_file_list[@]} flac files in band dir ${band_dir} are present and valid and that the wav files they contin are valid"
     rm -rf ${GRAPE_TMP_DIR}/*
     local rc
     local bad_wav_file_count=0
     local good_wav_file_count=0
     local flac_file
     for flac_file in  ${flac_file_list[@]} ; do
-        flac --silent --output-prefix=${GRAPE_TMP_DIR}/ ${flac_file} 
+        flac -d --silent --output-prefix=${GRAPE_TMP_DIR}/ ${flac_file} 
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: flac reports file ${flac_file} is corrupt, so deleting it"
             (( ++bad_wav_file_count ))
             wd_rm  ${flac_file}
         else
-            ### flac returned success, not check that it really produced a wav file
+            ### flac returned success, now check that it really produced a wav file
             local test_wav_file=${GRAPE_TMP_DIR}/${flac_file##*/}
             test_wav_file=${test_wav_file/\.flac/.wav}
             if [[ ! -s ${test_wav_file} ]]; then
-                wd_logger 1 "ERROR: flac returned success, but it didn't create the expected wav file ${test_wav_file}"
-                read -p "? => "
+                wd_logger 1 "ERROR: flac returned success decompressing '${flac_file}', but it didn't create the expected wav file ${test_wav_file}"
                 (( ++bad_wav_file_count ))
                 wd_rm  ${flac_file}
             else
                 ### flac created the wav file
                 if soxi ${test_wav_file} | grep -q '960000 samples' ; then
-                    wd_logger 1 "soxi reports ${test_wav_file} is OK"
-                    (( ++good_file_count ))
+                    wd_logger 2 "soxi reports ${test_wav_file} is OK"
+                    (( ++good_wav_file_count ))
                 else
-                    wd_logger 1 "soxi found good flac file ${flac_file} but its wav file is corrupt, so deleting it"
+                    wd_logger 1 "flac reported no errors in decompressing ${flac_file}, but soxi reported that the resulting  wav file is corrupt, so deleting the flac file"
                     wd_rm ${flac_file}
                     (( ++bad_wav_file_count ))
                 fi
@@ -376,6 +371,8 @@ function grape_repair_band_flacs() {
         wd_logger 1 "There are no good flac/wav files in this ${band_dir}"
         return 0
     fi
+
+    # read -p "Done checking existing flac files.  Proceed to fill the band up with flac files? => "
 
     local band_date=${flac_file_list[0]##*/}
     band_date=${band_date%%T*}
@@ -640,7 +637,7 @@ function grape_create_all_24_hour_wavs(){
          wd_logger 1 "Returning error ${return_code} after one or more errors.  Also created ${new_wav_count} new wav files"
          return ${return_code}
     fi
-     wd_logger 1 "Returning ${new_wav_count} new wav files"
+     wd_logger 2 "Returning ${new_wav_count} new wav files"
      return ${new_wav_count}
 }
 
@@ -661,13 +658,13 @@ function grape_uploader() {
         return 0
     fi
     LAST_HHMM=${current_hhmm}
-    wd_logger 1 "Checking for new 24h.wav files to upload"
+    wd_logger 2 "Checking for new 24h.wav files to upload"
     local rc
 
     grape_create_all_24_hour_wavs
     rc=$?
     if  [[ ${rc} -eq 0 ]]; then
-        wd_logger 1 "There were no new 24h.wav files created"
+        wd_logger 2 "There were no new 24h.wav files created"
     else
         wd_logger 1 "There were ${rc} new 24h.wav files created"
     fi
