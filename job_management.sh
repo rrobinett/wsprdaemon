@@ -642,14 +642,14 @@ function setup_expected_jobs_file () {
             hhmm_expected_jobs=(${hhmm_expected_jobs[*]:1})          ### Chop off first array element which is the schedule start time
             index_now=index                                ### Remember the index of the HHMM job which should be active at this time
             index_now_time=$index_time                     ### And the time of that HHMM job
-            wd_logger 1 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so hhmm_expected_jobs[*] =${hhmm_expected_jobs[*]}'"
+            wd_logger 2 "current time '$current_time' is later than HHMM_SCHED[$index] time '${index_time}', so hhmm_expected_jobs[*] =${hhmm_expected_jobs[*]}'"
         fi
     done
     if [[ -z "${hhmm_expected_jobs[*]}" ]]; then
         wd_logger 1 "ERROR: couldn't find a schedule"
         return 1
     fi
-    wd_logger 1 "Found hhmm_expected_jobs[${index_now}] for the current TOD: ${index_now_time}: ${hhmm_expected_jobs[*]}"
+    wd_logger 2 "Found hhmm_expected_jobs[${index_now}] for the current TOD: ${index_now_time}: ${hhmm_expected_jobs[*]}"
 
     ### See if the EXPECTED_JOBS match the hhmm_expected_jobs we found above
     if [[ ! -f ${EXPECTED_JOBS_FILE} ]]; then
@@ -659,8 +659,8 @@ function setup_expected_jobs_file () {
     source ${EXPECTED_JOBS_FILE}
 
     if [[ "${EXPECTED_JOBS[*]-}" == "${hhmm_expected_jobs[*]}" ]]; then
-        wd_logger 1 "No need to update EXPECTED_JOBS_FILE at time ${current_time} since:\n     EXPECTED_JOBS=${EXPECTED_JOBS[*]-}\nhhmm_expected_jobs=${hhmm_expected_jobs[*]}"
-        wd_logger 1 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
+        wd_logger 2 "No need to update EXPECTED_JOBS_FILE at time ${current_time} since:\n     EXPECTED_JOBS=${EXPECTED_JOBS[*]-}\nhhmm_expected_jobs=${hhmm_expected_jobs[*]}"
+        wd_logger 2 "At time ${current_time} the entry for time ${index_now_time} in EXPECTED_JOBS[] is present in EXPECTED_JOBS_FILE, so update of that file is not needed"
     else
         wd_logger 1 "Writing  new schedule for time ${current_time} to ${EXPECTED_JOBS_FILE}: '${hhmm_expected_jobs[*]}'"
         ### Save the new schedule to be read by the calling function and for use the next time this function is run
@@ -675,14 +675,14 @@ function update_running_jobs_to_match_expected_jobs()
 {
     setup_expected_jobs_file
     source ${EXPECTED_JOBS_FILE}
-    wd_logger 1 "EXPECTED_JOBS='${EXPECTED_JOBS[*]}'"
+    wd_logger 2 "EXPECTED_JOBS='${EXPECTED_JOBS[*]}'"
 
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
         echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
     fi
     source ${RUNNING_JOBS_FILE}
     local temp_running_jobs=( ${RUNNING_JOBS[*]-} )
-    wd_logger 1 "RUNNING_JOBS=${RUNNING_JOBS[*]-}"
+    wd_logger 2 "RUNNING_JOBS=${RUNNING_JOBS[*]-}"
 
     ### Check that posting jobs which should be running are still running, and terminate any jobs currently running which will no longer be running 
     ### posting_daemon() will ensure that decoding_daemon() and recording_daemon()s are running
