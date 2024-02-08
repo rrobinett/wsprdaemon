@@ -595,6 +595,7 @@ function wd-ssh-psws(){
         echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the the expected format 'Snnnn_nnn'"
         return 0
     fi
+    wd_logger 1 "Executing: 'ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu'"
     ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu
 }
 alias wdssp=wd-ssh-psws
