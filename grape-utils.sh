@@ -204,7 +204,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 
         wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
 
-        local psws_trigger_dir_name="c${receiver_tmp_dir##*/}\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
+        local psws_trigger_dir_name="c${receiver_tmp_dir##*/}_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
         wd_logger 1 "Uploading our DRF directory tree and creating the trigger dir '${psws_trigger_dir_name}'"
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
