@@ -54,7 +54,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare VERSION=3.1.2                 ### Add support for fixed AGC level to KA9Q receivers
                                        ### Add support for WSPR ansd WWV IQ file recording into compressed files in a series of tar archives
 #declare VERSION=3.1.3                 ### Add support for WSPR-2 spectral spreading reports 
-declare VERSION=3.1.4                 ### Add support for the GRAPE system
+#declare VERSION=3.1.4                 ### Add support for the GRAPE system
+declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
@@ -76,7 +77,7 @@ source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
-source ${WSPRDAEMON_ROOT_DIR}/kiwi_utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/kiwi-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
