@@ -529,10 +529,42 @@ local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log) )
 
 declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
 ### 11/2/22 - This doesn't work anymore, but it could be modifed 
-function wd-wav(){
-    du -s ${WD_WAV_ARCHIVE_ROOT_DIR}/* | awk '{printf "%s: %s\n", $2, $1}' | sort
+function wd-grape-info(){
+    local grape_date_dirs_list=( $( find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
+    wd_logger 1 "Found ${#grape_date_dirs_list[@]} date dirs: ${grape_date_dirs_list[*]##*/}"
+    local date_dir
+    for date_dir in ${grape_date_dirs_list[@]}; do
+        local file_count=$( find ${date_dir} -type f | wc -l )
+        printf "Date %s contains %5d files: " ${date_dir##*/} ${file_count}
+        case ${file_count} in
+            0)
+                read -N 1 -p "There are no files in the date ${date_dir##*/} tree, so delete that tree? [Yn] => "
+                if [[ ${REPLY:-y} == "y" ]]; then
+                    echo "\nDeleting directory tree ${date_dir}"
+                    rm -r ${date_dir}
+                fi
+                ;;
+            21)
+                echo "has been purged of all but the sox.log, 24h.wav and the 'has been uploaded' files"
+                ;;
+            14421)
+                echo "and is fill with 14400 flac files, the sox, wav and 'has been uploaded' files"
+                ;;
+            *)
+                local date=$(printf "%(%Y%m%d)T")
+                if [[ "${date_dir##*/}" == "${date}" ]]; then
+                    echo "Skipping more checks for files being created today"
+                else
+                    read -p "has invalid number ${file_count} of files. List the non-flac files? => "
+                    if [[ ${REPLY:-n} == "y" ]]; then
+                        find ${date_dir} -type f ! -name '*.flac' | less
+                    fi
+                fi
+                ;;
+        esac
+    done
 }
-alias wdwav='wd-wav'
+alias wdgi='wd-grape-info'
 
 function wd-wav-clean() {
     local wav_archive_root_dir_list=( $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
