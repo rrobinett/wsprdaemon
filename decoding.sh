@@ -920,6 +920,10 @@ function flush_or_archive_raw_wav_files() {
     wd_logger 1 "wav_archive_dir=${wav_archive_dir}, rm or archive: ${wav_file_list[*]}"
 
     get_config_file_variable config_archive_raw_wav_files "ARCHIVE_RAW_WAV_FILES"
+    if [[  "${config_archive_raw_wav_files}" != "yes" && -f "archive-raw-wav-files" ]]; then
+        wd_logger 1 "Found file 'archive-raw-wav-file', so save this raw file"
+        config_archive_raw_wav_files="yes"
+    fi
     if [[ "${config_archive_raw_wav_files}" != "yes" ]]; then
         wd_rm ${wav_file_list[@]}
         rc=$?
