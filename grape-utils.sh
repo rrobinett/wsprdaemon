@@ -647,7 +647,7 @@ declare GRAPE_UPLOAD_START_HHMM="0005"      ### Then check and upload each dat a
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
-         wd_logger 1 "GRAPE uploades are not enabled, so do nothing"
+         wd_logger 2 "GRAPE uploads are not enabled, so do nothing"
          return 0
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
