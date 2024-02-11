@@ -828,8 +828,8 @@ function wd-radiod-bw-check() {
         wd_logger 1 "radiod is not configured to run on this server"
         return 0
     fi
-    local rx_audio_low=$( awk '/^low =/{print $3}' ${running_radiod_conf_file})
-    local rx_audio_high=$( awk '/^high =/{print $3}' ${running_radiod_conf_file})
+    local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurance of '^low' and '^high' is in the [WSPR] section
+    local rx_audio_high=$( awk '/^high =/{print $3;exit}' ${running_radiod_conf_file})
     wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
 
     if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
@@ -839,12 +839,12 @@ function wd-radiod-bw-check() {
     local rx_needs_restart="no"
     if [[ "${rx_audio_low}" != "1300" ]]; then
         wd_logger 1 "WARNING: found low = ${rx_audio_low}, so changing it to the desired value of 1300"
-        sed -i "s/low = ${rx_audio_low}/low = 1300/"  ${running_radiod_conf_file}
+        sed -i "0, /^low =/{s/low = ${rx_audio_low}/low = 1300/}"  ${running_radiod_conf_file}      ### Only change the first 'low = ' line in the conf file
         rx_needs_restart="yes"
     fi
     if [[ "${rx_audio_high}" != "1700" ]]; then
         wd_logger 1 "WARNING: found high = ${rx_audio_high}, so changing it to the desired value of 1700"
-        sed -i "s/high = ${rx_audio_high}/high = 1700/"  ${running_radiod_conf_file}
+        sed -i "0, /^high/{s/high = ${rx_audio_high}/high = 1700/}"  ${running_radiod_conf_file}
         rx_needs_restart="yes"
     fi
     if [[ ${rx_needs_restart} == "no" ]]; then
@@ -911,10 +911,12 @@ declare -A KA9Q_band_freq=(
 
 function wd-9c()
 {
+    local mc_id="${2:-}"         ### At KFS there are hf, hf1 and hf2 streams
+
     local band=${1-20}
     local tuning_freq=${KA9Q_band_freq[${band}]}
 
-    control -s ${tuning_freq} hf.local
+    control -s ${tuning_freq} hf${mc_id}.local
 }
 alias wd9c=wd-9c
 
@@ -942,7 +944,7 @@ function wd-9m()
         printf "%3d      %6.1f      %6.1f          %6.1f       %6.1f    %6.1f\n" ${band} "${if_power}" "${noise_level}" "${baseband_pwr}" "${output_level}" "${headroom}"
     done
 }
-alias wd9c=wd-9m
+alias wd9m=wd-9m
 
 ### tmux aliases
 alias tm='tmux'
