@@ -28,7 +28,7 @@ function wd-statistics() {
                 printf "${obs_date:3:10}: "
                 local site_home
                 for site_home in ${site_home_list[@]}; do
-                        local obs_val="****"
+                        local dir_size="    "
                         local obs_date_dir=${site_home}/${obs_date}
                         if [[ -d ${obs_date_dir} ]]; then
                                 dir_size="$(du -sh ${obs_date_dir} | cut -f 1)"
