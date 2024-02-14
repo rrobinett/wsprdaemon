@@ -75,7 +75,11 @@ wdln => watch the log of WD uploading spots to wsprnet.org
 
 wd-help => list all the added commands
 
+Beware : newer versions, since 3.1.5 will need to use 
 
+```
+source ~/wsprdaemon/bash-aliases
+```
 
 ## Installation on a system running wsprdaemon that was not installed using 'git clone'
 
