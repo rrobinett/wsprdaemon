@@ -236,7 +236,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 function grape_test_ssh_auto_login() {
     local station_id=$1
     local rc
-    ssh -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=1 ${PSWS_URL} true # &>/dev/null
+    ssh -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=${GRAPE_PSWS_CONNECTION_TIMEOUT-4} ${PSWS_URL} true # &>/dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "Can't autologin to account '${station_id}'"
