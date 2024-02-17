@@ -194,6 +194,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: '${WAV2GRAPE_PYTHON_CMD} -i $receiver_dir -o $GRAPE_TMP_DIR' =${rc}:\n$(<${wav2grape_stderr_file})"
+            exit 1
             return ${rc}
         fi
         local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
@@ -221,7 +222,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         fi
         # find . -type f -delete     #### while debuggin
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
-        sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
