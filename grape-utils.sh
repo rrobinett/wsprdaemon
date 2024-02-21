@@ -194,6 +194,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: '${WAV2GRAPE_PYTHON_CMD} -i $receiver_dir -o $GRAPE_TMP_DIR' =${rc}:\n$(<${wav2grape_stderr_file})"
+            exit 1
             return ${rc}
         fi
         local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
@@ -221,7 +222,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         fi
         # find . -type f -delete     #### while debuggin
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
-        sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
@@ -236,7 +237,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 function grape_test_ssh_auto_login() {
     local station_id=$1
     local rc
-    ssh -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=1 ${PSWS_URL} true # &>/dev/null
+    ssh -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=${GRAPE_PSWS_CONNECTION_TIMEOUT-4} ${PSWS_URL} true # &>/dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "Can't autologin to account '${station_id}'"
