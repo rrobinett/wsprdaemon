@@ -758,7 +758,7 @@ function grape_menu() {
 function grape_init() {
     wd_logger 2 "Starting"
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
+        wd_logger 2 "This WD server is not configured to upload to the HamSCI GRAPE server"
         return 0
     fi
     local rc
