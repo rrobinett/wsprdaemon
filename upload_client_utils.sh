@@ -123,7 +123,7 @@ function upload_wsprnet_create_spot_file_list_file()
     cycle_list=( ${cycle_list[@]##*/} ) 
     IFS=$'\n'; cycle_list=( $(IFS=$'\n' echo "${cycle_list[*]}" | sort -u )  ); unset IFS
 
-    wd_logger 1 "Given list of ${#spots_files_list[@]} spot files and found ${#cycle_list[@]} WSPR cycles among them: '${cycle_list[*]}'"
+    wd_logger 1 "Found ${#spots_files_list[@]} spot files among ${#cycle_list[@]} WSPR cycles: '${cycle_list[*]}'"
 
     local upload_file_list=()
     local upload_spots_count=0
@@ -217,8 +217,8 @@ function upload_to_wsprnet_daemon() {
         else
             sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
         fi
-        sleep_secs=5
-        wd_logger 1 "Waiting ${sleep_secs} seconds until cycle offset ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} when we will start to look for spot files and for all decodes to finish"
+        sleep_secs=5       ### Just start searching after 5 seconds, not 10 seconds after the even minutes
+        wd_logger 1 "Wait for ${sleep_secs} seconds then look for spot files and for all decodes to finish"
         wd_sleep ${sleep_secs}
 
         ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
@@ -234,6 +234,9 @@ function upload_to_wsprnet_daemon() {
             ### There are no spot files, new spots are being added, or 'wsprd' and/or 'jt9' is running
             if [[ ${#spots_files_list[@]} -eq 0 ]]; then
                 wd_logger 1 "Not ready to start uploads because there are no spot files"
+            elif [[ ${#spots_files_list[@]} -gt 15 ]]; then
+                 wd_logger 1 "There are already more than 15 spot files, so start upload now"
+                 break
             elif [[ ${#spots_files_list[@]} -ne ${old_spot_file_count} ]]; then
                  wd_logger 1 "Not ready to start uploads because there are now ${#spots_files_list[@]} spot files, more than the ${old_spot_file_count} spot files we previously found"
             else
@@ -305,7 +308,8 @@ function upload_to_wsprnet_daemon() {
             fi
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
             if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
-                wd_logger 1 "Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 2 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})So presume no spots were recorded and the our spots queued for the next upload attempt."
+                wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}) So presume spots were recorded and flush them from our cache"
+                wd_rm ${upload_spots_file_list[@]}
             else
                 local spots_xfered=${spot_xfer_counts[0]}
                 local spots_offered=${spot_xfer_counts[1]}
