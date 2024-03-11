@@ -209,7 +209,7 @@ function record_spot_files()
                 python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD} >& python.out
                 local ret_code=$?
                 if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: ' ${TS_BATCH_UPLOAD_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table:\n$(< python.out)"
+                    wd_logger 1 "ERROR: ' ${TS_BATCH_UPLOAD_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table:\n$(< python.out)\n$(<${split_csv_file})"
                 else
                     wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
                 fi
