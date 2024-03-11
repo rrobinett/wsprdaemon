@@ -1058,3 +1058,10 @@ fi
 
 alias wdg='wd -g'
 
+###  Runs du and sorts output by name rather than ???   Useful in the ~/wsprdaemon/wav-archive directory
+function wddu() {
+    local files="$@"
+
+    du -s ${files}  | awk '{print $2 ":  " $1}'
+}
+
