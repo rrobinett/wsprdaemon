@@ -18,7 +18,8 @@
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the flac files for the April 8th 2024 total eclipse +- 1 day
-declare -r GRAPE_TMP_DIR="/dev/shm/wsprdaemon/grape_drf_cache"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
+declare -r GRAPE_TMP_DIR="/mnt/grape_drf_cache"                                  ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
+declare -r GRAPE_TMP_DIR_SIZE="6G"      ### It needs 5.5G
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"  ### Cache all 1440 one minute long, flac-compressed, 16000 IQ wav files in this dir tree
 declare -r WD_SILENT_FLAC_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/silent_iq.flac"    ### A flac-compressed wav file of one minute of silence.  When a minute file is missing , hard link to this file
 declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
@@ -185,7 +186,6 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 1  "Creating the DRF file from ${wav_file_count} bands of wav files"
 
         ### Create the DRF files for all the bands on this receiver
-        mkdir -p ${GRAPE_TMP_DIR}
         rm -rf  ${GRAPE_TMP_DIR}/*          ## the -f suppresses an error when there are no files in that dir
         umask 022    ### Ensures that our 'sftp put .' doesn't enable the group access to the PSWS home directory and thus disable ssh autologin
         local wav2grape_stdout_file="${GRAPE_TMP_DIR}/${WAV2GRAPE_PYTHON_CMD##*/}.stdout"
@@ -764,13 +764,18 @@ function grape_init() {
     local rc
     if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
         umask 022
-        mkdir -p ${GRAPE_TMP_DIR}
+        sudo mkdir -p ${GRAPE_TMP_DIR}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: can't create grape tmp directory '${GRAPE_TMP_DIR}'"
             return ${rc}
         fi
         wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
+        sudo chown ${USER}:$(id -gn)  ${GRAPE_TMP_DIR}
+        sudo chmod 777 ${GRAPE_TMP_DIR}
+    fi
+    if ! mountpoint -q ${GRAPE_TMP_DIR} ; then
+        sudo mount -t tmpfs -o size=${GRAPE_TMP_DIR_SIZE} tmpfs ${GRAPE_TMP_DIR}
     fi
 
     local grape_python_package_list=( "digital_rf" "soundfile" )
@@ -801,7 +806,6 @@ function grape_init() {
         wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
         return ${rc}
     fi
-    mkdir -p ${GRAPE_TMP_DIR}
     return 0
 }
 
