@@ -338,6 +338,7 @@ alias hg='history | grep'
 alias j=jobs
 
 alias cdw='cd ~/wsprdaemon/'
+alias cdww='cd ~/wsprdaemon/wav-archive.d/'
 alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdt='cd /dev/shm/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
