@@ -799,28 +799,66 @@ function wd-wavs() {
 }
 
 ### Monitor and control the KA9Q-radio service
+###
+function wd-get_ka9q-conf_file-base_name() {
+    source ~/wsprdaemon/wsprdaemon.conf
+    local conf_base_name=${KA9Q_CONF_FILE:-rx888-wsprdaemon}
+    echo "${conf_base_name}"
+}
 
-alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
+function wd-get-ka9q-conf-file-path () {
+    local base_name=$(wd-get_ka9q-conf_file-base_name)
+    local conf_file_path="/etc/radio/radiod@${base_name}.conf"
+    if [[ ! -f ${conf_file_path} ]]; then
+        echo "ERROR: can't find expected conf file: ${conf_file_path}"
+        return 1
+    fi
+    echo ${conf_file_path}
+    return 0
+}
+
+#alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
+function wd-rl() {
+    local base_name=$(wd-get_ka9q-conf_file-base_name)
+    sudo journalctl -u radiod@${base_name}
+}
 alias wdrl='wd-rl'
 
-alias wd-ra='sudo systemctl start  radiod@rx888-wsprdaemon.service'  ### start the radiod service
+function wd-radiod-action(){
+   local action=$1
+   local base_name=$(wd-get_ka9q-conf_file-base_name)
+   sudo systemctl ${action} radiod@${base_name}.service
+}
+
+alias wd-ra='wd-radiod-action start'  ### show it's status
 alias wdra='wd-ra'
-alias wd-rz='sudo systemctl stop   radiod@rx888-wsprdaemon.service'  ### stop it
+
+alias wd-rz='wd-radiod-action stop'  ### show it's status
 alias wdrz='wd-rz'
-alias wd-rs='sudo systemctl status radiod@rx888-wsprdaemon.service'  ### show it's status
+
+alias wd-rs='wd-radiod-action status'  ### show it's status
 alias wdrs='wd-rs'
 
-alias wd-ra1='sudo systemctl start  radiod@rx888-wsprdaemon1.service'
-alias wd-rz1='sudo systemctl stop   radiod@rx888-wsprdaemon1.service'
-alias wd-rs1='sudo systemctl status radiod@rx888-wsprdaemon1.service'
+function wd-radiod-conf-edit() {
+   local conf_file_path
 
-alias wd-ra2='sudo systemctl start  radiod@rx888-wsprdaemon2.service'
-alias wd-rz2='sudo systemctl stop   radiod@rx888-wsprdaemon2.service'
-alias wd-rs2='sudo systemctl status radiod@rx888-wsprdaemon2.service'
+   if ! conf_file_path=$(wd-get-ka9q-conf-file-path); then
+       echo "ERROR: ${conf_file_path}"
+       return 1;
+   fi
+   vi ${conf_file_path}
+}
+alias wdrv='wd-radiod-conf-edit'
 
-alias swa='sudo systemctl start  wsprdaemon.service'
-alias swz='sudo systemctl stop   wsprdaemon.service'
-alias sws='sudo systemctl status wsprdaemon.service'
+### WD systemctl 
+alias wd-wd-start='sudo systemctl start wsprdaemon.service'
+alias wdwa='wd-wd-start'
+
+alias wd-wd-stop='sudo systemctl stop wsprdaemon.service'
+alias wdwz='wd-wd-stop'
+
+alias wd-wd-status='sudo systemctl status wsprdaemon.service'
+alias wdws='wd-wd-status'
 
 ### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
 function wd-radiod-bw-check() {
