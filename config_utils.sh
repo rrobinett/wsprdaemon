@@ -654,7 +654,7 @@ function get_list_of_active_real_receivers()
 
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
-declare WD_CONF_BASE_NAME="rx888-wsprdaemon"
+declare WD_CONF_BASE_NAME="${KA9Q_CONF_FILE-rx888-wsprdaemon}"
 declare WD_KA9Q_SERICE_NAME="radiod@${WD_CONF_BASE_NAME}"  ### the argument givien to systemctl
 
 declare KA9Q_WSPRDAEMON_CONF_FILE="${WD_KA9Q_SERICE_NAME}.conf"      ### Customized radiod conf file found in ~/wsprdaemon directory
