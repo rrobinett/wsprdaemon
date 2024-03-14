@@ -950,12 +950,15 @@ declare -A KA9Q_band_freq=(
 
 function wd-9c()
 {
-    local mc_id="${2:-}"         ### At KFS there are hf, hf1 and hf2 streams
-
     local band=${1-20}
+    local mc_id=$(wd-get_ka9q-conf_file-base_name)
+    if [[ -n "${2-}" ]]; then
+        mc_id="${2}"
+    fi
+
     local tuning_freq=${KA9Q_band_freq[${band}]}
 
-    control -s ${tuning_freq} hf${mc_id}.local
+    control -s ${tuning_freq} hf-${mc_id}-status.local
 }
 alias wd9c=wd-9c
 
