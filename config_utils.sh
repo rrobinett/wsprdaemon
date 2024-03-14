@@ -655,9 +655,9 @@ function get_list_of_active_real_receivers()
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
 declare WD_CONF_BASE_NAME="${KA9Q_CONF_FILE-rx888-wsprdaemon}"
-declare WD_KA9Q_SERICE_NAME="radiod@${WD_CONF_BASE_NAME}"  ### the argument givien to systemctl
+declare WD_KA9Q_SERVICE_NAME="radiod@${WD_CONF_BASE_NAME}"  ### the argument givien to systemctl
 
-declare KA9Q_WSPRDAEMON_CONF_FILE="${WD_KA9Q_SERICE_NAME}.conf"      ### Customized radiod conf file found in ~/wsprdaemon directory
+declare KA9Q_WSPRDAEMON_CONF_FILE="${WD_KA9Q_SERVICE_NAME}.conf"      ### Customized radiod conf file found in ~/wsprdaemon directory
 declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"   ### Template found in WD's git package
 
 
@@ -809,7 +809,7 @@ function ka9q_setup()
         else
             ### There is a local RX888.  Ensure it is properly configured and running
             wd-radiod-bw-check
-            if sudo systemctl status ${WD_KA9Q_SERICE_NAME} > /dev/null ; then
+            if sudo systemctl status ${WD_KA9Q_SERVICE_NAME} > /dev/null ; then
                 wd_logger 2 "KA9Q software wasn't updated and the radiod service is running, so KA9Q is setup and running"
                 return 0
             fi
@@ -912,12 +912,12 @@ function ka9q_setup()
     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
     wd-radiod-bw-check
 
-    sudo systemctl start  "${WD_KA9Q_SERICE_NAME}" > /dev/null
+    sudo systemctl start  "${WD_KA9Q_SERVICE_NAME}" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sudo systemctl start  ${WD_KA9Q_SERICE_NAME}' => ${rc}, so failed to start radiod"
+        wd_logger 1 "ERROR: 'sudo systemctl start  ${WD_KA9Q_SERVICE_NAME}' => ${rc}, so failed to start radiod"
     fi
-    sudo systemctl is-active "${WD_KA9Q_SERICE_NAME}" > /dev/null
+    sudo systemctl is-active "${WD_KA9Q_SERVICE_NAME}" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: after an otherwise successful installation of KA9Q its 'radiod' is not active"
