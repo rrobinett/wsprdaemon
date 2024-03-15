@@ -322,6 +322,8 @@ function grape_purge_all_empty_date_trees(){
     done
 }
 
+declare auto_delete_bad_flacs="no"
+
 function grape_repair_band_flacs() {
     local band_dir=$1
     local flac_file_list=( $( find ${band_dir} -type f -name '*.flac' | sort) )
@@ -335,7 +337,6 @@ function grape_repair_band_flacs() {
     local rc
     local bad_wav_file_count=0
     local good_wav_file_count=0
-    local auto_delete_bad_flacs="no"
     local flac_file
     for flac_file in  ${flac_file_list[@]} ; do
         flac -d --silent --output-prefix=${GRAPE_TMP_DIR}/ ${flac_file} 
@@ -361,7 +362,7 @@ function grape_repair_band_flacs() {
                     wd_logger 1 "flac reported no errors in decompressing ${flac_file}, but soxi reported that the resulting wav file doesn't have the required 960000 samples"
                     local delete_it="no"
                     if [[ ${auto_delete_bad_flacs} != "yes" ]]; then
-                        read -p "$(soxi ${test_wav_file})Delete it [yN]? => " 
+                        read -p "$(soxi ${test_wav_file}) Delete it [yN]? => " 
                         if [[ ${REPLY} == "Y" ]]; then
                             auto_delete_bad_flacs="yes"
                             delete_it="yes"
