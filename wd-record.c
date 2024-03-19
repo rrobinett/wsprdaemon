@@ -274,7 +274,7 @@ void input_loop(){
    test_calculateAbsoluteDifference();
    // exit (0);
 
-    while ( loop_count > 0 ) {
+    while ( loop_count > 0 ) {        /// In effect this is a forever() loop
         --loop_count;
 
         // Wait for data or timeout after one second
@@ -308,9 +308,17 @@ void input_loop(){
         last_flush_second = current_second;
 
         if(FD_ISSET(Input_fd,&fdset) == 0 ){
+            // After waiting for one second we received no packets, so close any open sessions and search for the begining of a new one minute stream 
             if(verbosity > 1) {
-                fprintf(stderr, "input_loop(): FD_ISSET() => 0\n");
+                fprintf(stderr, "input_loop(): FD_ISSET() => 0, so close current file and search for start of next minute\n");
             }
+            for(struct session *sp = Sessions; sp != NULL;){
+                struct session * const next = sp->next;
+                close_session(&sp);
+                sp = next;
+            }
+            Searching_for_first_minute = 1;
+            continue;
         } else {
             if ( verbosity > 3 ) {
                 fprintf(stderr, "input_loop(): FD_ISSET() => %d\n", FD_ISSET(Input_fd,&fdset));
@@ -388,8 +396,11 @@ void input_loop(){
                     sample_offset_in_current_wav_file = calculateAbsoluteDifference( rtp.timestamp, sp->first_sample_number );
                     if ( sample_offset_in_current_wav_file < 0 ) {
                         if ( verbosity > 1 ) {
-                            fprintf(stderr, "input_loop(): WARNING: tossing late arriving RTP packet with timestamp rtp.timestam=%u which is less than the timestamp=%u of the first sample of the curent wav file\n", rtp.timestamp, sp->first_sample_number);
+                            fprintf(stderr, "input_loop(): WARNING: RTP packet with timestamp rtp.timestamp=%u which is less than the timestamp=%u of the first sample of the current wav file. Open new wav file.\n", rtp.timestamp, sp->first_sample_number);
                         }
+                        close_session(&sp);
+                        sp = NULL;
+                        Searching_for_first_minute = 1;
                         continue;
                     }
                     int      samples_per_minute =  sp->samprate * 60;
