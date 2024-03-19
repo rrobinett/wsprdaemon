@@ -1049,7 +1049,7 @@ function  wd-git-to-ssh(){
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
-alias wd-watch-wavs='watch "ls -l *.wav"'  ### watch for wd-record or kwirecorder to create wav files in cwd
+alias wd-watch-wavs='watch "ls -lr *.wav"'  ### watch for wd-record or kwirecorder to create wav files in cwd
 alias wdww='wd-watch-wavs'
 alias wdps='ps aux | grep wd-record | grep -v grep'
 
