@@ -1424,7 +1424,7 @@ function decoding_daemon() {
                     wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${WWV_IQ_SAMPLES_PER_MINUTE-1920000} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
-                    wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples, max PCM value = ${wav_file_max_value}, min PCM value = -0.${wav_file_min_value}"
+                    wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples, max PCM value = 0.${wav_file_max_value}, min PCM value = -0.${wav_file_min_value}"
                     queue_wav_file ${iq_file_name} ${wav_archive_dir}
                     rc=$?
                     if [[ ${rc} -eq 0 ]]; then
