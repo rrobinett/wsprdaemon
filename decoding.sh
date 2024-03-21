@@ -1410,21 +1410,19 @@ function decoding_daemon() {
                 local iq_file_name=${wav_file_list[0]/_usb.wav/_iq.wav}
                 mv ${wav_file_list[0]} ${iq_file_name}
                 local wav_file_stat_list=( $(sox  ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
-                local wav_file_samples=${wav_file_stat_list[0]}      ### Always an integer which should be 1920000
-                local wav_file_max_value=${wav_file_stat_list[1]#*.}  ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
-                local wav_file_min_value=${wav_file_stat_list[2]#*.}  ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
+                local wav_file_stats_list=( $(sox  ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
+                local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
+                local wav_file_peak_dBFS_value=${wav_file_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
+                local wav_file_RMS_dBFS_value=${wav_file_stats_list[1]}    ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
+                local wav_file_RMS_Trough_value=${wav_file_stats_list[2]}  ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
 
-               if [[ 10#${wav_file_max_value} -gt ${WWV_IQ_SAMPLES_MAX_VALUE-500000} ]]; then
-                     wd_logger 1 "WARNING: IQ file '${iq_file_name}' contains PCM samples   up to ${wav_file_stat_list[1]}, which indicates demodulation overflow. So demodulation gain should be turned down"
-                fi
-                if [[ 10#${wav_file_min_value} -gt ${WWV_IQ_SAMPLES_MAX_VALUE-500000} ]]; then
-                     wd_logger 1 "WARNING: IQ file '${iq_file_name}' contains PCN samples down to ${wav_file_stat_list[2]}, which indicates demodulation overflow. So demodulation gain should be turned down"
-                fi
+                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} 16 bit samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
+
                 if [[ ${wav_file_samples} -ne ${WWV_IQ_SAMPLES_PER_MINUTE-1920000} ]]; then
                     wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${WWV_IQ_SAMPLES_PER_MINUTE-1920000} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
-                    wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples, max PCM value = ${wav_file_stat_list[1]}, min PCM value = ${wav_file_stat_list[2]}"
+                    wd_logger 2 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
                     queue_wav_file ${iq_file_name} ${wav_archive_dir}
                     rc=$?
                     if [[ ${rc} -eq 0 ]]; then
