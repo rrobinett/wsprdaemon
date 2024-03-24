@@ -659,6 +659,14 @@ function grape_create_all_24_hour_wavs(){
 declare LAST_HHMM="0"                       ### Check and upload each time WD is started
 declare GRAPE_UPLOAD_START_HHMM="0005"      ### Then check and upload each dat at 5 minutes after UTC 00:00
 
+function grape_upload_service() {
+    local grape_uploads_enabled="no"
+    get_config_file_variable grape_uploads_enabled "GRAPE_UPLOADS_ENABLED"
+    if [[ ${grape_uploads_enabled} == "yes" ]]; then
+        grape_uploader
+    fi
+}
+
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
