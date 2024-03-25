@@ -951,14 +951,21 @@ declare -A KA9Q_band_freq=(
 function wd-9c()
 {
     local band=${1-20}
-    local mc_id=$(wd-get_ka9q-conf_file-base_name)
-    if [[ -n "${2-}" ]]; then
-        mc_id="${2}"
+    local tuning_freq=${KA9Q_band_freq[${band}]}
+    local mc_url
+
+    local radiod_conf_base_name=$(wd-get_ka9q-conf_file-base_name)
+    if [[ "${radiod_conf_base_name}" == "rx888-wsprdaemon" ]]; then
+        mc_url="hf.local"
+    else
+        if [[ -z "${2-}" ]]; then
+            mc_url="hf-${radiod_conf_base_name}-status.local"
+        else
+            mc_url="hf-${2}-status.local"
+        fi
     fi
 
-    local tuning_freq=${KA9Q_band_freq[${band}]}
-
-    control -s ${tuning_freq} hf-${mc_id}-status.local
+    control -s ${tuning_freq} ${mc_url}
 }
 alias wd9c=wd-9c
 
