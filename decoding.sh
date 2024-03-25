@@ -1550,12 +1550,13 @@ function decoding_daemon() {
                         wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
-                    nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out
+                    nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
                     local ret_code=$?
                     local c2_fft_nl
-                    c2_fft_nl=$(< ${c2_filename}.out)
-                    if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}"
+                    if [[ ${ret_code} -eq 0 ]]; then
+                        c2_fft_nl=$(< ${c2_filename}.out)
+                    else
+                        wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}:\n$(< ${c2_filename}.stderr)"
                         c2_fft_nl=0
                     fi
                     fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
