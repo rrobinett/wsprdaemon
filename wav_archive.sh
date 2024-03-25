@@ -147,7 +147,7 @@ function wd_archive_wavs()
         return 0
     fi
 
-    wd_logger 1 "Starting to compress and archive wav files"
+    wd_logger 1 "Starting to compress and archive ${#wav_file_list[@]} wav files"
 
     local wav_file_name
     for wav_file_path in ${wav_file_list[@]} ; do
@@ -178,6 +178,28 @@ function wd_archive_wavs()
             continue
         fi
         mv ${flac_file_path} ${dest_flac_path}
+        rc=$?
+         if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'mv ${flac_file_path} ${dest_file_dir}' => ${rc}"
+            continue
+        fi
     done
     return 0
+}
+
+### Spawned by watchdog daemon at startup and every odd minute it looks for wav files to compress and archive 
+function wav_archive_daemon() {
+    local root_dir=$1
+
+    mkdir -p ${root_dir}
+    cd ${root_dir}
+    wd_logger 1 "Starting in $PWD"
+
+    setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
+    while true; do
+        local sleep_seconds=$(seconds_until_next_odd_minute)
+        wd_logger 1 "Sleeping ${sleep_seconds} in order to wake up at the next odd minute"
+        wd_sleep  ${sleep_seconds}
+        wd_archive_wavs
+    done
 }
