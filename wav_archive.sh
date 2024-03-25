@@ -1,9 +1,23 @@
 #!/bin/bash
 
-declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR=${WAV_FILE_ARCHIVE_TMP_ROOT_DIR-${WSPRDAEMON_TMP_DIR}/wav-archive.d} ### Move the wav files here.  Both source and dest directories need to be on the same file system (i.e /dev/shm/...)
+declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR="/mnt/wav-archive.d"  ### Move the wav files here from the recording.d/... directories.  The wav_archive_daemon will compress and move them into the permanent storage
+declare WAV_FILE_ARCHIVE_TMP_ROOT_DIR_SIZE="1G"
+
 declare WAV_FILE_ARCHIVE_ROOT_DIR=${WAV_FILE_ARCHIVE_ROOT_DIR-${WSPRDAEMON_ROOT_DIR}/wav-archive.d}        ### Store the compressed archive of them here. This should be an SSD or HD
 declare MAX_WAV_FILE_SYSTEM_PERCENT=${MAX_WAV_FILE_SYSTEM_PERCENT-75}                                      ### Limit the usage of that file system
 declare MIN_WAV_ARCHIVE_FILE_COUNT=${MIN_WAV_ARCHIVE_FILE_COUNT-10}
+
+### Execute this once at WD start
+function wav_archive_init() {
+    if !  create_tmpfs ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR_SIZE} ; then
+        wd_logger 1 "ERROR: can't create tmpfs ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}"
+        exit 1
+    fi
+}
+if ! wav_archive_init ; then
+    wd_logger 1 "ERROR: init failed"
+    exit 1
+fi
 
 function get_wav_archive_queue_directory()
 {
