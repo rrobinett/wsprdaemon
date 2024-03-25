@@ -105,7 +105,7 @@ while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
             ;;
         A)
             if [[ ${WD_STARTUP_DELAY_SECS-0} -gt 0 ]]; then
-                echo "Wssprdeeamon is delaying startup for ${WD_STARTUP_DELAY_SECS} seconds"
+                echo "Wsprdaemon is delaying startup for ${WD_STARTUP_DELAY_SECS} seconds"
                 wd_sleep ${WD_STARTUP_DELAY_SECS}
             fi
             watchdog_cmd a
