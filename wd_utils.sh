@@ -786,3 +786,26 @@ function wd_mutex_unlock() {
     wd_logger 2 "Unlocked ${mutex_lock_dir_name}"
     return 0
 }
+
+function create_tmpfs() {
+    local mount_point=$1
+    local tmpfs_size=$2
+
+    local rc
+    if [[ ! -d ${mount_point} ]]; then
+        umask 022
+        sudo mkdir -p ${mount_point}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: can't create directory for tmpfs mount point '${mount_point}'"
+            return ${rc}
+        fi
+        wd_logger 1 "Created new ${mount_point}"
+        sudo chown ${USER}:$(id -gn)  ${mount_point}
+        sudo chmod 777 ${mount_point}
+    fi
+    if ! mountpoint -q ${mount_point} ; then
+        sudo mount -t tmpfs -o size=${tmpfs_size} tmpfs ${mount_point}
+    fi
+    return 0
+}
