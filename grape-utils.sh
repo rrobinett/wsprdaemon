@@ -783,21 +783,13 @@ function grape_init() {
         wd_logger 2 "This WD server is not configured to upload to the HamSCI GRAPE server"
         return 0
     fi
+
     local rc
-    if [[ ! -d ${GRAPE_TMP_DIR} ]]; then
-        umask 022
-        sudo mkdir -p ${GRAPE_TMP_DIR}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: can't create grape tmp directory '${GRAPE_TMP_DIR}'"
-            return ${rc}
-        fi
-        wd_logger 1 "Created new ${GRAPE_TMP_DIR}"
-        sudo chown ${USER}:$(id -gn)  ${GRAPE_TMP_DIR}
-        sudo chmod 777 ${GRAPE_TMP_DIR}
-    fi
-    if ! mountpoint -q ${GRAPE_TMP_DIR} ; then
-        sudo mount -t tmpfs -o size=${GRAPE_TMP_DIR_SIZE} tmpfs ${GRAPE_TMP_DIR}
+    create_tmpfs ${GRAPE_TMP_DIR} ${GRAPE_TMP_DIR_SIZE}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't create  ${GRAPE_TMP_DIR} "
+        return ${rc}
     fi
 
     local grape_python_package_list=( "digital_rf" "soundfile" )
