@@ -32,8 +32,6 @@ function watchdog_daemon()
             check_kiwi_rx_channels
             check_kiwi_gps
             print_new_ov_lines 
-            wd_archive_wavs
-            grape_upload_service
             wd_logger 2 "Finished odd minute processing"
         fi
         last_minute=${current_minute}
@@ -55,15 +53,12 @@ function kill_watchdog_daemon()
     kill_upload_daemons
 }
 
-############## Top level which spawns/kill/shows status of all of the watchdog daemons
+############## Top level which spawns/kill/shows status of all of the top level daemons
 declare watchdog_daemon_list=(
    "watchdog_daemon         ${WSPRDAEMON_ROOT_DIR}"
+   "wav_archive_daemon      ${WAV_FILE_ARCHIVE_ROOT_DIR}"
+   "grape_upload_daemon     ${WAV_FILE_ARCHIVE_ROOT_DIR}"
 )
-
-### '-w l cmd runs this
-function tail_watchdog_log() {
-    less +F ${PATH_WATCHDOG_LOG}
-}
 
 #### -w [a,z,s,l] command
 function watchdog_cmd() {
