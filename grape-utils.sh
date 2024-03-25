@@ -141,6 +141,11 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
+        if ! [[ "${psws_station_id}" =~ @ ]]; then
+            wd_logger 1 "ERROR: directory ${receiver_dir} doens't contain the '@' which is part of a PSWS ID, so skip uploading it"
+            continue
+        fi
+
         wd_logger 1  "Checking and cleaning up the band directories for receiver ${receiver_dir}"
         wd_logger 2  "date: ${wav_date}- site: ${reporter_id} - receiver_name: $receiver_name - psws_station_id: $psws_station_id - psws_instrument_id: $psws_instrument_id"
 
@@ -701,6 +706,24 @@ function grape_uploader() {
     return ${rc}
 }
 
+### Spawned by watchdog daemon at startup and every odd minute it looks for wav files to compress and archive 
+function grape_upload_daemon() {
+    local root_dir=$1
+
+    mkdir -p ${root_dir}
+    cd ${root_dir}
+
+    wd_logger 1 "Starting in $PWD"
+
+    setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
+    while true; do
+        grape_uploader
+        local sleep_seconds=$(seconds_until_next_odd_minute)
+        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
+        wd_sleep  ${sleep_seconds}
+    done
+}
+
 ### Calculate the semitones needed by sox to change freqeuncies in a file:  "soc in.wav out.wav pitch PITCH_CHANGE_IN_CENTS"
 ### Where PITCH_CHANGE_IN_CENTS can be computed by:  'bc -l <<< "l(NEW_FREQ/OLD_FREQ) / l(2) * 12 *100 "'
 ### But I don't know if soc can change the pitch of 800 to 10 hz.
@@ -825,5 +848,4 @@ function grape_init() {
 
 if ! grape_init ; then
     wd_logger 1 "ERROR: grape_init => $?"
-    exit 1
 fi
