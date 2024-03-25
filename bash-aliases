@@ -948,7 +948,7 @@ declare -A KA9Q_band_freq=(
      [6]="50293000"
 )
 
-function wd-9c()
+function wd-radiod-control()
 {
     local band=${1-20}
     local tuning_freq=${KA9Q_band_freq[${band}]}
@@ -967,7 +967,8 @@ function wd-9c()
 
     control -s ${tuning_freq} ${mc_url}
 }
-alias wd9c=wd-9c
+alias wd9c=wd-radiod-control
+alias wdrc=wd-radiod-control
 
 function wd-9m()
 {
@@ -1075,8 +1076,8 @@ function wd-ssh-to-wdclient() {
 alias wdssr=wd-ssh-to-wdclient
 
 ###  Reloads these functions and aliases into the users running bash (must be an alias)
-alias wd-rc='source ~/wsprdaemon/bash-aliases'
-alias wdrc='wd-rc'
+alias wd-bash_aliases='source ~/wsprdaemon/bash-aliases'
+alias wdba='wd-bash_aliases'
 
 function wd-help()
 {
