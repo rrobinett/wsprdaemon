@@ -141,8 +141,8 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
-        if ! [[ "${psws_station_id}" =~ @ ]]; then
-            wd_logger 1 "ERROR: directory ${receiver_dir} doens't contain the '@' which is part of a PSWS ID, so skip uploading it"
+        if [[ ! "${receiver_info}" =~ @ ]] || [[ -z "${psws_station_id}" ]] || [[ -z "${psws_instrument_id}" ]]; then
+            wd_logger 1 "ERROR: directory ${receiver_dir} doesn't contain the '@' which is part of a PSWS ID OR the psws_station_id or the psws_instrument_id couldn't be extracted from it, so skip uploading of it"
             continue
         fi
 
