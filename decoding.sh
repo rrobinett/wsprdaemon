@@ -353,7 +353,7 @@ function decode_wspr_wav_file() {
         timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
+            wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
             # return ${ret_code}
         fi
         sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
