@@ -636,7 +636,7 @@ function grape_create_all_24_hour_wavs(){
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         local rc
         if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
-            wd_logger 1 "Skipping grape_create_24_hour_wavs for current UTC day ${current_date}"
+            wd_logger 2 "Skipping grape_create_24_hour_wavs for current UTC day ${current_date}"
             rc=0
         else
             grape_create_24_hour_wavs ${wav_archive_date}
@@ -719,7 +719,7 @@ function grape_upload_daemon() {
     while true; do
         grape_uploader
         local sleep_seconds=$(seconds_until_next_odd_minute)
-        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
+        wd_logger 2 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
         wd_sleep  ${sleep_seconds}
     done
 }
