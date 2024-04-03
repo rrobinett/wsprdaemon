@@ -856,7 +856,7 @@ function ka9q_setup()
     else
         wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof1620000 cof36480 cob19200 cob1920 cob1200 cob960 cob800 cob600 cob480 cob320 cob300 cob200 cob160
+        time fftwf-wisdom -v -T 1 -o nwisdom rof1620000 cob1920 cob1200 cob960 cob800 cob600 cob480 cob400 cob320 cob300 cob200 cob160 cob150
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
