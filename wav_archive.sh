@@ -94,7 +94,8 @@ function queue_wav_file()
     ### Since the source and destination directories are on the same file system, we can 'mv' the wav file
     ### Also, 'mv' performas no CPU intensive file copying, and it is an atomic operation and thus there is no race with the tar archiver
     if ! mv ${source_wav_file_path} ${archive_file_path} ; then
-        wd_logger 1 "ERROR: 'mv ${source_wav_file_path} ${archive_file_path}' => $?"
+        wd_logger 1 "ERROR: 'mv ${source_wav_file_path} ${archive_file_path}' => $?, so flush that wav file"
+        wd_rm  ${source_wav_file_path}
         return 1
     fi
 
@@ -168,7 +169,8 @@ function wd_archive_wavs()
         flac --silent --delete-input-file ${wav_file_path}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: ' flac --silent --delete-input-file ${wav_file_path}' => ${rc}"
+            wd_logger 1 "ERROR: ' flac --silent --delete-input-file ${wav_file_path}' => ${rc}, so flush that wav file"
+            wd_rm ${wav_file_path}
             continue
         fi
         mkdir -p ${dest_file_dir}
