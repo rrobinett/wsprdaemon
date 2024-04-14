@@ -862,7 +862,7 @@ alias wdws='wd-wd-status'
 
 ### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
 function wd-radiod-bw-check() {
-    local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/radiod.*conf/{print $NF}' )
+    local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/\/etc\/radio\/radiod.*conf/{print $NF}' )
     if [[ -z "${running_radiod_conf_file}" ]]; then
         wd_logger 1 "radiod is not configured to run on this server"
         return 0
