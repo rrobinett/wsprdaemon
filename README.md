@@ -1,28 +1,12 @@
-# wsprdaemon (WD) 3.0.9
+# wsprdaemon (WD) 3.1.5  (Under extensive revision)
 
-New WD users should skip down to the "Greenfield" section below for installation instructions.
-
-For exisiting WD users, WD 3.0.8 is now running on almost all top spotting sites.  Since WD 2.x generates spots with corrupt fields and earlier versions of WD 3.0 are not entirely compatible with recent mode fields changes in WSJT-x 2.6.x, I encourage all WD users to upgrade WD using the procedure described below.  It is a major upgrade from 2.10, but is backwards compatible with 2.10 wsprdaemon.conf files.  For more information and help goto:  https://groups.io/g/wsprdaemon
-
-For existing WD 2.10 users:
-
-cd ~/wsprdaemon
-
-./wsprdaemon.sh -z        
-
-git checkout master
-
-git pull
-
-./wsprdaemon.sh -a
-
-Wsprdaemon is a large bash script which utilizes [kiwirecorder.py](https://github.com/jks-prv/kiwiclient) and other library and utility commands to record WSPR spots from one or more [Kiwis](http://kiwisdr.com), audio adapters and (for VHF/UHF) [RTL-SDRs](https://www.rtl-sdr.com/about-rtl-sdr/) and *reliably* post them to [wsprnet.org](http://wsprnet.org).
+Wsprdaemon is a large bash script which decodes WSPR and FST4W spots from one or more [Kiwis](http://kiwisdr.com)n and/or RX888 SDRs and *reliably* posts them to [wsprnet.org](http://wsprnet.org).
 
 Schedules can be configured to switch between bands at different hours of the day, or at sunrise/sunset-relative times.
 
 Signals obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).
 
-In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprnet.org](http://graphs.wsprnet.org).
+In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprdaemon.org](http://graphs.wsprnet.org).
 
 WD can run on almost any Debian Linux system and is tested on the Buster OS for Raspberry Pi 3 and 4, and Ubuntu 22.04 LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decode 30+ bands.
 
