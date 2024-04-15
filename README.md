@@ -1,20 +1,14 @@
-# wsprdaemon (WD) 3.1.5  (Under extensive revision)
+# WsprDaemon (WD) 3.1.5  (This page is in the midst of a much-needed extensive revision)
 
-Wsprdaemon is a large bash script which decodes WSPR and FST4W spots from one or more [Kiwis](http://kiwisdr.com)n and/or RX888 SDRs and *reliably* posts them to [wsprnet.org](http://wsprnet.org).
+Wsprdaemon (WD) is Linux service which decodes WSPR and FST4W spots from one or more [Kiwis](http://kiwisdr.com) and/or RX888 SDRs and *reliably* posts them to [wsprnet.org](http://wsprnet.org).  It includes many features not found in WSJT-x, including multiple band and/or multiple receiver support.  WD also records additional information about spots like doppler shift and background noise level which permit much deeper understanding of propagation conditions.  For systems like the KiwiSDR which have a limited number of receive channels, schedules can be configured to switch between bands at different hours of the day or at sunrise/sunset-relative times. Spots obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).  WD can be configured to create graphs of the background noise level for display locally and/or at [graphs.wsprdaemon.org](http://graphs.wsprnet.org).
 
-Schedules can be configured to switch between bands at different hours of the day, or at sunrise/sunset-relative times.
+After configuration, WD is designed to run like a home appliance: it recovers on its own from power and Internet outages and caches all spots and other data it gathers until it is confirmed delivered by wsprnet.org and/or wsprdaemon.net.  Most of the 20+ 'top spotting' sites at http://wspr.rocks/topspotters/ are running WD, and in aggregate they report about 33% of the 7+M spots recorded each day at wsprnet.org. 
 
-Signals obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).
-
-In addition WD can be configured to, at the same time, create graphs of the background noise level for display on the computer running WD and/or at [graphs.wsprdaemon.org](http://graphs.wsprnet.org).
-
-WD can run on almost any Debian Linux system and is tested on the Buster OS for Raspberry Pi 3 and 4, and Ubuntu 22.04 LTS on x86. A Pi 3b can decode 14+ bands; a Pi 4 can decode 30+ bands.
+WD runs on almost any Debian Linux system running Ubuntu 22.04 LTS on x86  Although WD on a Pi 4 can decode 10+ bands, most sites run WD on a x86 CPU.
 
 ## Greenfield Installation
 
-On a Raspberry Pi running Buster, install as the default user 'pi'.
-
-On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page. 
+On other Debian/Ubuntu servers, create a `wsprdaemon` user to install and run WD on your system.  That user will need `sudo` access for installation, and auto sudo permissions is needed if WD is configured to display graphics on the server's own web page.   On a Raspberry Pi running the Buster OS, install as the default user 'pi'.
 
 To configure user 'wsprdaemon' to sudo:
 ```bash
