@@ -19,7 +19,7 @@ Size: 757MB
 
 Raspberry Pi Imager : choose file from disk
 
-Put file with name ssh in root folder of SD card
+Put a new file with name ssh in root folder of SD card so we can later ssh into the Raspberry Pi
 
 eject card reader / disk system
 
@@ -65,7 +65,7 @@ source ~/wsprdaemon/.wd_bash_aliases
 wd-rci
 wd-help
 
-An we are on after :
+And we are on after :
 wda
 wds
 

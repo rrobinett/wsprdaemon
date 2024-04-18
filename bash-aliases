@@ -1,8 +1,8 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/bash-aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/bash-aliases  includes funtions and aliases which are helpful in running and debugging WD systems
 
 ### Emulate WD's wd_logger() function when these functions are run from the linux cmd line
-### When this file is sourced by wsprdaemon.sh this function will be redfined in wd-utils.sh to the full wd_logger() used by WD
+### When this file is sourced by wsprdaemon.sh this function will be redefined in wd-utils.sh to the full wd_logger() used by WD
 function wd_logger(){
     local verbosity_printing_level=${1:-1}
     local printout_string="${2:-Missing printout string}"
@@ -93,7 +93,7 @@ function wd-spreading-disable(){
          echo "ERROR: failed to 'mv${spreading_file}  ${disabled_spreading_file}"
         return 2
     fi
-    echo "WSPR-2 spreading reporting is now diabled on this server"
+    echo "WSPR-2 spreading reporting is now disabled on this server"
     return 0
 }
 
@@ -107,7 +107,7 @@ function wd-spreading-status() {
         return 1
     fi
     if [[ -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is ensabled"
+        echo "WSPR-2 spreading reporting is enabled"
     else
         echo "WSPR-2 spreading reporting is disabled"
     fi
@@ -220,7 +220,7 @@ function wd-kiwi-status()
         else
             local rx_ip=${rx_ip_port/:*/};
             if ! ping -c 1 -W 1 ${rx_ip} > /dev/null; then
-                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't repond to pings";
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings";
             else
                 kiwi_list+=(${rx_name},${rx_ip_port});
                 [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}";
@@ -322,7 +322,7 @@ alias wdrci='wd-rci'
 alias wd-rcc='source ~/.bash_aliases'
 alias wd-rcc='wd-rcc'
 
-### Common usasges of linux commands
+### Common usages of Linux commands
 alias l='ls -CF'
 alias ll='ls -l'
 alias lrt='ls -lrt'
@@ -417,7 +417,7 @@ function setup-ubuntu() {
     fi
     scp -p ~/.ssh/authorized_keys ${remote_ip}:.ssh/
     scp -p ~/.vimrc ~/.bash_aliases ${remote_ip}:
-    ### In an interactive login session:  run visudo to setup NOPASSWD:, install vim, disable VNC encrytion so RealVNC clients can login
+    ### In an interactive login session:  run visudo to setup NOPASSWD:, install vim, disable VNC encryption so RealVNC clients can login
     ssh ${remote_ip} "echo 'sudo visudo
     sudo apt update 
     sudo apt install vim -y
@@ -452,7 +452,7 @@ function kiwi-stats(){
         else
             local rx_ip=${rx_ip_port/:*/}
             if ! ping -c 1 -W 1 ${rx_ip} > /dev/null ; then
-                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't repond to pings"
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings"
             else
                 kiwi_list+=(${rx_name},${rx_ip_port})
                 [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}"
@@ -515,7 +515,7 @@ alias wdz='wd -z'
 alias wds='wd -s'
 alias wdv='wd -V'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
-alias wddd='wd -D'       ### Decrement
+alias wddd='wd -D'      ### Decrement
 
 function wd-merged() {
 local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log) )
@@ -573,7 +573,7 @@ function wd-wav-clean() {
     for wav_archive_root_dir in ${wav_archive_root_dir_list[@]} ; do
         local flat_file_list=( $(find ${wav_archive_root_dir} -type f | sort) )  
         if [[ ${#flat_file_list[@]} -eq 0 ]]; then
-            read -p "wav file root dir ${wav_archive_root_dir} conatins only directory files, so delete it? [Yn] => "
+            read -p "wav file root dir ${wav_archive_root_dir} contains only directory files, so delete it? [Yn] => "
             if [[ "${REPLY:-y}" == "y" ]]; then
                 rm -r ${wav_archive_root_dir}
             fi
@@ -589,11 +589,11 @@ alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/ws
 function wd-wav-archive-fix(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directcories"
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
         return 0
     fi
     if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
-        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the the expected format 'Snnnn_nnn'"
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
         return 0
     fi
     local date_dir
@@ -609,7 +609,7 @@ function wd-wav-archive-fix(){
                     read -p "Fix ${receiver_dir} to become ${receiver_dir}_${GRAPE_PSWS_ID#*_}? "
                     mv  ${receiver_dir} ${receiver_dir}_${GRAPE_PSWS_ID#*_}
                 elif ! [[ ${receiver_dir} =~ "@" ]]; then
-                   read -p  "Fix receiver directory ${receiver_dir} by renamaing it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
+                   read -p  "Fix receiver directory ${receiver_dir} by renaming it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
                    mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
                 fi
             done
@@ -621,11 +621,11 @@ alias wdwaf=wd-wav-archive-fix
 function wd-ssh-psws(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directcories"
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
         return 0
     fi
     if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
-        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the the expected format 'Snnnn_nnn'"
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
         return 0
     fi
     wd_logger 1 "Executing: 'ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu'"
@@ -867,7 +867,7 @@ function wd-radiod-bw-check() {
         wd_logger 1 "radiod is not configured to run on this server"
         return 0
     fi
-    local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurance of '^low' and '^high' is in the [WSPR] section
+    local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurence of '^low' and '^high' is in the [WSPR] section
     local rx_audio_high=$( awk '/^high =/{print $3;exit}' ${running_radiod_conf_file})
     wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
 
@@ -1037,12 +1037,12 @@ function  wd-git-to-ssh(){
     git config --global user.name "Rob Robinett"
     git remote set-url origin ${new_repo_url}
     if ! [[ -d ~/.ssh ]]; then
-        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to genreate one.  Press <CR> to accept all of its defaults:"
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to generate one.  Press <CR> to accept all of its defaults:"
         ssh-keygen
     fi
     local public_key_file=$(find ~/.ssh -type f -name '*pub')
     if [[ -z "${public_key_file}" ]]; then
-        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to genreate one.  Press <CR> to accept all of its defaults:"
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to generate one.  Press <CR> to accept all of its defaults:"
         ssh-keygen
     fi
     public_key_file=$(find ~/.ssh -type f -name '*pub')
@@ -1057,7 +1057,7 @@ function  wd-git-to-ssh(){
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
-alias wd-watch-wavs='watch "ls -lr *.wav"'  ### watch for wd-record or kwirecorder to create wav files in cwd
+alias wd-watch-wavs='watch "ls -lr *.wav"'  ### watch for wd-record or kiwirecorder to create wav files in cwd
 alias wdww='wd-watch-wavs'
 alias wdps='ps aux | grep wd-record | grep -v grep'
 
@@ -1082,7 +1082,7 @@ alias wdba='wd-bash_aliases'
 function wd-help()
 {
     echo "Programs which print information about Wsprdaemon (WD) system:
-Command       Can also be executed by   Description
+Command       Can also be executed by    Description
 wd-help       wd-h wd-                   Prints this help message
 wd-start      wd-a wda                   Start or keep running WD
 wd-stop       wd-z wdz                   Stop WD if it is running
