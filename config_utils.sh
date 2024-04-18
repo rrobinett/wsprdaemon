@@ -31,7 +31,7 @@
 ### The format of each entry is "BAND  TUNING_FREQUENCY DEFAULT_DECODE_MODES" where DEFAULT_DECODE_MODES is a colon-separated list of mode W (legacy WSPR) or F (FST4W) + packet length in minutes. 
 ###       e.g. "W2" == classic WSPR decode by the wsprd of a 2 minute long wav file
 
-declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 I1 )
+declare VALID_MODE_LIST=( W0 W2 F2 F5 F15 F30 I1 J1 K1)
 
 ### This is a list of the tuning frequencies for each band
 ### WSPR bands tune 1500 hertz below the center of the WSPR transmit band
@@ -68,6 +68,13 @@ declare WSPR_BAND_LIST=(
 "CHU_3   3330.0   W0"
 "CHU_7   7850.0   W0"
 "CHU_14 14670.0   W0"
+"SUPERDARN_9   9120.0  J1"
+"SUPERDARN_11 11070.0  J1"
+"SUPERDARN_14 14650.0  J1"
+"SUPERDARN_16 16120.0  J1"
+"N6NC_5        5154.3  K1"
+"N6NC_7_3      7039.3  K1"
+"N6NC_7_4      7039.4  K1"
 )
 
 ### Get the current value of a variable stored in the wsprdaemon.conf file without perturbing any currently defined .conf file variables in the calling function

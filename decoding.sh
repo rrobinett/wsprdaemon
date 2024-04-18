@@ -1399,7 +1399,7 @@ function decoding_daemon() {
             wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
             ### End of diagnostic code
 
-            if [[ ${receiver_modes_list[0]} == "I1" ]]; then
+            if [[ ${receiver_modes_list[0]} =~ ^[IJK] ]]; then
                 wd_logger 1 "We are configured to only record and archive IQ files"
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
@@ -1409,8 +1409,8 @@ function decoding_daemon() {
                 ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
                 local iq_file_name=${wav_file_list[0]/_usb.wav/_iq.wav}
                 mv ${wav_file_list[0]} ${iq_file_name}
-                local wav_file_stat_list=( $(sox  ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
-                local wav_file_stats_list=( $(sox  ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
+                local wav_file_stat_list=( $(sox ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
+                local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
                 local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
                 local wav_file_peak_dBFS_value=${wav_file_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
                 local wav_file_RMS_dBFS_value=${wav_file_stats_list[1]}    ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
@@ -1418,8 +1418,26 @@ function decoding_daemon() {
 
                 wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} 16 bit samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
 
-                if [[ ${wav_file_samples} -ne ${WWV_IQ_SAMPLES_PER_MINUTE-1920000} ]]; then
-                    wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${WWV_IQ_SAMPLES_PER_MINUTE-1920000} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
+                local expected_samples
+                case ${receiver_modes_list[0]} in
+                    I1)
+                        expected_samples=${WWV_IQ_SAMPLES_PER_MINUTE-1920000}          ### mode I1 is 16000 sps which is used to record WWV and CHU
+                        ;;
+                    J1)
+                        expected_samples=5760000                                       ### mode J1 is 100000 sps which is used to record SUPERDARN signals
+                        ;;
+                    K1)
+                        expected_samples=1440000                                       ### mode K1 is 12000 sps which is used to record N6NC signals
+                        ;;
+                    *)
+                        wd_logger 1 "ERROR: invalid mode ${receiver_modes_list[0]} was specified"
+                        wd_rm ${iq_file_name}
+                        continue
+                        ;;
+                esac
+
+                if [[ ${wav_file_samples} -ne ${expected_samples} ]]; then
+                    wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${expected_samples} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
                     wd_logger 2 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
