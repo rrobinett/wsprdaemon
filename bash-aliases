@@ -518,13 +518,52 @@ alias wdd='wd -d'       ### Increment the verbosity level of all running daemons
 alias wddd='wd -D'      ### Decrement
 
 function wd-merged() {
-local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log) )
+    local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log  | sort -t / -k 7nr ) )
+    local merged_file_count=${#merged_file_list[@]}
     if [[ ${#merged_file_list[@]} -eq 0 ]]; then
         echo "There are no 'merged.log' files"
-    else
-        echo "Found ${#merged_file_list[@]} 'merged.log' files:"
-        ls -lrt `find ${WD_TMP_ROOT}/ -name merged.log`
+        return 0
     fi
+    echo "Found ${#merged_file_list[@]} 'merged.log' files:"
+    local i
+    for  (( i = 0; i < ${merged_file_count}; ++i )); do
+        #set -x
+        local file_line_list=( $(ls -l ${merged_file_list[${i}]}) )
+        local merge_log_line_count=$( wc -l < ${merged_file_list[${i}]} )
+        printf "%2d:  %-70s %s %2s %s %6s bytes = %4d lines\n" ${i} ${file_line_list[-1]} ${file_line_list[-4]}  ${file_line_list[-3]}  ${file_line_list[-2]}  ${file_line_list[-5]} ${merge_log_line_count}
+    done
+    if [[ "${1}" == "-k" ]]; then
+         wd-merged-kfs -n
+    fi
+    return 0
+}
+
+function wd-merged-kfs() {
+    local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log | sort -t / -k 7nr) )      ### sort by ascending band freqeuncy
+    local merged_file_count=${#merged_file_list[@]}
+    if [[ ${merged_file_count} -eq 0 ]]; then
+        echo "There are no 'merged.log' files"
+        return 0
+     fi
+     [[ "${1}" != "-n" ]] && echo "Found ${merged_file_count} 'merged.log' files:"
+     local default_index=0
+     local i
+     for  (( i = 0; i < ${merged_file_count}; ++i )); do
+         local file_path_list=( ${merged_file_list[${i}]//\// } )
+         if [[ "${file_path_list[-2]}" == "20" ]]; then
+             default_index=${i}
+         fi
+         [[ "${1}" != "-n" ]] && printf "%2s: %s\n" ${i}   ${merged_file_list[${i}]}
+     done
+
+     local merge_log_file
+     read -p "Select merged file to examine [0-${merged_file_count}], default = ${default_index} ? => "
+     if [[ -z "${REPLY}" ]]; then
+         REPLY=${default_index}
+     fi
+     local merged_log_file=${merged_file_list[${REPLY}]}
+     echo "Examining  merged_log_file  ${merged_log_file} "
+     awk '{printf "%s %s %s %s %s %s %10s %8s %10s   %9s %11s     %10s %10s     %10s %10s     %10s %10s       %10s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $17, $13, $16, $12, $15, $11, $14, $10, $18}' ${merged_log_file} | less
 }
 
 
