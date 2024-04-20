@@ -65,8 +65,21 @@ if [[ $USER == "root" ]]; then
     exit 1
 fi
 
+### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands so they know where to look for *.pid files
+################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
+declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
+mkdir -p /dev/shm/wsprdaemon
+if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
+    ### The user has configured a TMP dir
+    wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
+elif df /tmp/wspr-captures > /dev/null 2>&1; then
+    ### Legacy name for /tmp file system.  Leave it alone
+    WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+elif df /tmp/wsprdaemon > /dev/null 2>&1; then
+    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
+fi
 
 cd ${WSPRDAEMON_ROOT_DIR}
 

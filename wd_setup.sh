@@ -1,4 +1,23 @@
 #!/bin/bash
+### The previous line signals to the vim editor that it should use its 'bash' editing mode when editing this file
+
+###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
+
+###    Copyright (C) 2020-2024  Robert S. Robinett
+###
+###    This program is free software: you can redistribute it and/or modify
+###    it under the terms of the GNU General Public License as published by
+###    the Free Software Foundation, either version 3 of the License, or
+###    (at your option) any later version.
+###
+###    This program is distributed in the hope that it will be useful,
+###    but WITHOUT ANY WARRANTY; without even the implied warranty of
+###    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+###    GNU General Public License for more details.
+###
+###    You should have received a copy of the GNU General Public License
+###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 
 declare -i verbosity=${verbosity:-1}
 
@@ -8,19 +27,6 @@ declare -r WSPRDAEMON_CONFIG_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/wd_template.co
 
 ### This is used by two .sh files, so it need to be declared here
 declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_graphs_reporter_index_template.html    ### This is put into each reporter's www/html/graphs/REPORTER directory
-
-################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
-declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
-mkdir -p /dev/shm/wsprdaemon
-if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
-    ### The user has configured a TMP dir
-    wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
-elif df /tmp/wspr-captures > /dev/null 2>&1; then
-    ### Legacy name for /tmp file system.  Leave it alone
-    WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
-elif df /tmp/wsprdaemon > /dev/null 2>&1; then
-    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
-fi
 
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
@@ -311,78 +317,6 @@ declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
 declare JT9_DECODE_ENABLED=${JT9_DECODE_ENABLED:-no}
 
 declare INSTALLED_DEBIAN_PACKAGES=$(${DPKG_CMD} -l)
-declare APT_GET_UPDATE_HAS_RUN="no"
-
-function install_debian_package(){
-    local package_name=$1
-    local ret_code
-
-    wd_logger 2 "Check that package ${package_name} is installed"
-
-    #if [[ " ${INSTALLED_DEBIAN_PACKAGES} " =~  " ${package_name} " ]]; then
-    if dpkg -l ${package_name} >& /dev/null ; then
-        wd_logger 2 "Package ${package_name} has already been installed"
-        return 0
-    fi
-    wd_logger 1 "Package ${package_name} needs to be installed"
-    if [[ ${APT_GET_UPDATE_HAS_RUN} == "no" ]]; then
-        wd_logger 1 "'apt-get update' needs to be run"
-        sudo apt-get update --allow-releaseinfo-change
-        ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'sudo apt-get update' => ${ret_code}"
-            return ${ret_code}
-        fi
-        APT_GET_UPDATE_HAS_RUN="yes"
-    fi
-    sudo apt-get install ${package_name} --assume-yes
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sudo apt-get install ${package_name}' => ${ret_code}"
-        return ${ret_code}
-    fi
-    wd_logger 1 "Installed ${package_name}"
-    return 0
-}
-
-function install_python_package()
-{
-    local pip_package=$1
-
-    wd_logger 2 "Verifying or Installing package ${pip_package}"
-    if python3 -c "import ${pip_package}" 2> /dev/null; then
-        wd_logger 2 "Found that package ${pip_package} is installed"
-        return 0
-    fi
-    wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
-    if ! pip3 -V > /dev/null 2>&1 ; then
-        wd_logger 1 "Installing pip3"
-        if ! sudo apt install python3-pip -y ; then
-            wd_logger 1 "ERROR: can't install pip3:  'sudo apt install python3-pip -y' => $?"
-            exit 1
-        fi
-    fi
-    wd_logger 1 "Having pip3 install package ${pip_package} "
-    if [[ ${pip_package} == "psycopg2" ]]; then
-        wd_logger 1 "'pip3 install ${pip_package}' requires 'apt install python3-dev libpq-dev'"
-        sudo apt install python3-dev libpq-dev
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'sudo apt install python3-dev libpq-dev'  => ${rc}"
-            exit ${rc}
-        fi
-    fi
-    local pip3_extra_args=""
-    if [[ ${os_release} == "12" ]]; then
-        pip3_extra_args="--break-system-packages"
-    fi
-    if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then
-        wd_logger 1 "ERROR: 'sudo pip3 ${pip_package}' => $?"
-        exit 2
-    fi
-    wd_logger 1 "Installed Python package ${pip_package}"
-    return 0
-}
 
 ############### Timescale database #######################
 #### For writing and reading spots scraped from the Wsprnet.org spot database: TimeScale (TS) Wsprnet (WN) Write Only (WO) and Read Only (RO) defines
@@ -613,7 +547,6 @@ function check_for_needed_utilities()
     done
     wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
     load_wsjtx_commands
-    wd_logger 2 "Setting up noise graphing"
 }
 
 ### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
