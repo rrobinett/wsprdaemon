@@ -3,7 +3,7 @@
 
 ###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
 
-###    Copyright (C) 2020-2022  Robert S. Robinett
+###    Copyright (C) 2020-2024  Robert S. Robinett
 ###
 ###    This program is free software: you can redistribute it and/or modify
 ###    it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-[[ ${v:-no} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020-2022  Robert S. Robinett
+[[ ${v:-no} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020-2024  Robert S. Robinett
 This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
 This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
 wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
@@ -72,6 +72,7 @@ cd ${WSPRDAEMON_ROOT_DIR}
 
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
