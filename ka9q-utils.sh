@@ -224,7 +224,6 @@ function ka9q_setup()
             fi
             if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
                 wd_logger 1 "KA9Q software wasn't 'git pulled'  and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
-                exit
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
@@ -319,7 +318,7 @@ function ka9q_setup()
 #    wd_logger  1 "Finished validating and updating the KA9Q installation"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
-        exit
+        exit 1
     fi
     wd_logger 1 "Found a RX888 MkII attached to a USB port"
  
