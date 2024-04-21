@@ -1035,19 +1035,51 @@ function wd-9m()
 }
 alias wd9m=wd-9m
 
-### tmux aliases
-alias tm='tmux'
-alias tml='tmux ls'
-alias tm0='tmux a -t 0'
-alias tm1='tmux a -t 1'
-alias tm2='tmux a -t 2'
-alias tm3='tmux a -t 3'
-alias tm4='tmux a -t 4'
-alias tm5='tmux a -t 5'
-alias tm6='tmux a -t 6'
-alias tm7='tmux a -t 7'
-alias tm8='tmux a -t 8'
-alias tm9='tmux a -t 9'
+### tmux alias
+function tm() {
+    # set -x
+    local tm_arg=$1
+    local tm_list=( $(tmux ls 2> /dev/null | awk -F : '{print $1}') )
+    local tm_list_count=${#tm_list[@]}
+
+    if [[ -z "${tm_arg}" ]]; then
+        #set +x && return
+        if [[ ${tm_list_count} -eq 0 ]]; then
+            tmux
+            return 0
+        fi
+        if [[ ${tm_list_count} -eq 1 ]]; then
+            tmux a -t ${tm_list[0]}
+            return 0
+        fi
+    fi
+
+    printf "There are ${tm_list_count} active tmux sessions:\n"
+    readarray -t tm_list <  <(tmux ls)
+    local i
+    for (( i = 0; i < ${#tm_list[@]}; ++i )); do
+        local tm_session="${tm_list[${i}]}"
+        printf "#%s\n" "${tm_session}"
+    done
+    if [[ "${tm_arg}" == "-l" ]]; then
+        return 0
+    fi
+    local tm_default_id=$(echo "${tm_list[0]}"  | awk -F : '{print $1}')
+    read -p "Select tmux session id # (default = ${tm_default_id})? => "
+    if [[ -z "${REPLY}" ]]; then
+        REPLY="${tm_default_id}"
+    fi
+    for (( i = 0; i < ${#tm_list[@]}; ++i )); do
+        local tm_session="${tm_list[${i}]}"
+        local tm_session_id=$( echo "${tm_session}" | awk -F : '{print $1}' )
+        if [[ "${tm_session_id}" == "${REPLY}" ]]; then
+            tmux a -t ${tm_session_id} 
+            return 0
+        fi
+    done
+    echo "${REPLY} is not a valid id"
+    return 0
+}
 
 function wd-wait-for_wspr-gap(){
    printf "Starting at %(%M-%S)T and waiting for the next gap in the WSPR-2 packets\n" -1
