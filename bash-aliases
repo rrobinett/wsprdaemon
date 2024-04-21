@@ -841,7 +841,7 @@ function wd-wavs() {
 ###
 function wd-get_ka9q-conf_file-base_name() {
     source ~/wsprdaemon/wsprdaemon.conf
-    local conf_base_name=${KA9Q_CONF_FILE:-rx888-wsprdaemon}
+    local conf_base_name=${KA9Q_CONF_NAME:-rx888-wsprdaemon}
     echo "${conf_base_name}"
 }
 

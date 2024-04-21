@@ -55,7 +55,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                        ### Add support for WSPR ansd WWV IQ file recording into compressed files in a series of tar archives
 #declare VERSION=3.1.3                 ### Add support for WSPR-2 spectral spreading reports 
 #declare VERSION=3.1.4                 ### Add support for the GRAPE system
-declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
+#declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
+declare VERSION=3.1.6                 ### Install 4/19/24 KA9Q-radio
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
@@ -72,8 +73,9 @@ declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands s
 declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
 mkdir -p /dev/shm/wsprdaemon
 if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
+    true
     ### The user has configured a TMP dir
-    wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
+    #wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
 elif df /tmp/wspr-captures > /dev/null 2>&1; then
     ### Legacy name for /tmp file system.  Leave it alone
     WSPRDAEMON_TMP_DIR=/tmp/wspr-captures

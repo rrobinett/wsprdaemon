@@ -24,20 +24,8 @@ declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
-declare KA9Q_RADIOD_SERVICE_BASE='radiod@*'                ### used in calling systemctl
-declare WD_CONF_BASE_NAME="${KA9Q_CONF_FILE-rx888-wsprdaemon}"
-declare WD_KA9Q_SERVICE_NAME="radiod@${WD_CONF_BASE_NAME}"  ### the argument givien to systemctl
-
-declare KA9Q_WSPRDAEMON_CONF_FILE="${WD_KA9Q_SERVICE_NAME}.conf"      ### Customized radiod conf file found in ~/wsprdaemon directory
-declare KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE="radiod@${WD_CONF_BASE_NAME}-template.conf"   ### Template found in WD's git package
-
-
-declare WD_KA9Q_CONF_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}"                      ### Full path to conf which Can be cutomized by the user
-declare WD_KA9Q_CONF_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/${KA9Q_WSPRDAEMON_CONF_TEMPLATE_FILE}"    ### Full path to template with defautls for KA9Q RX-888 installatons
-
+declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
-declare KA9Q_RADIOD_WD_CONF_FILE=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_WSPRDAEMON_CONF_FILE}                ### radiod looks in /etc/radio/... for conf files
-
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
@@ -48,7 +36,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-707842bb35f8634a888c9dc2b898730571638d5c}"   ### Default to 1/2/24 which includes the enhanced wd-record.c
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-0c2be11d27ecd644748171fa2ba90d524324a012}"   ### Default to 4/19/24 with many Phil enhancements
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 function get_current_commit_sha() {
@@ -132,6 +120,45 @@ function pull_commit(){
     return 1
 }
 
+### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
+function ka9q_conf_file_bw_check() {
+    local conf_name=$1
+
+    local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/\/etc\/radio\/radiod.*conf/{print $NF}' | grep "${conf_name}" )
+    if [[ -z "${running_radiod_conf_file}" ]]; then
+        wd_logger 1 "radiod@${conf_name} is not running  on this server"
+        return 0
+    fi
+    local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurence of '^low' and '^high' is in the [WSPR] section
+    local rx_audio_high=$( awk '/^high =/{print $3;exit}' ${running_radiod_conf_file})
+    wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
+
+    if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
+        wd_logger 1 "ERROR: can't find the expected low and/or high settings in  ${running_radiod_conf_file}"
+        return 1
+    fi
+    local rx_needs_restart="no"
+    if [[ "${rx_audio_low}" != "1300" ]]; then
+        wd_logger 1 "WARNING: found low = ${rx_audio_low}, so changing it to the desired value of 1300"
+        sed -i "0, /^low =/{s/low = ${rx_audio_low}/low = 1300/}"  ${running_radiod_conf_file}      ### Only change the first 'low = ' line in the conf file
+        rx_needs_restart="yes"
+    fi
+    if [[ "${rx_audio_high}" != "1700" ]]; then
+        wd_logger 1 "WARNING: found high = ${rx_audio_high}, so changing it to the desired value of 1700"
+        sed -i "0, /^high/{s/high = ${rx_audio_high}/high = 1700/}"  ${running_radiod_conf_file}
+        rx_needs_restart="yes"
+    fi
+    if [[ ${rx_needs_restart} == "no" ]]; then
+        wd_logger 2 "No changes needed"
+    else
+        wd_logger 1 "Restarting the radiod service"
+        local radiod_service_name=${running_radiod_conf_file##*/}
+        radiod_service_name=${radiod_service_name/.conf/.service}
+        sudo systemctl restart ${radiod_service_name}
+    fi
+    return 0
+}
+
 function ka9q_setup()
 {
     local rc
@@ -181,12 +208,26 @@ function ka9q_setup()
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
         else
             ### There is a local RX888.  Ensure it is properly configured and running
-            wd-radiod-bw-check
-            if sudo systemctl status ${WD_KA9Q_SERVICE_NAME} > /dev/null ; then
-                wd_logger 2 "KA9Q software wasn't updated and the radiod service is running, so KA9Q is setup and running"
+            local ka9q_conf_name
+            get_config_file_variable  ka9q_conf_name "KA9Q_CONF_NAME"
+            if [[ -n "${ka9q_conf_name}" ]]; then
+                 wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
+             else
+                 ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
+                 wd_logger 1 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
+            fi
+            local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
+            local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
+            if [[ ! -f ${ka9q_conf_file_path} ]]; then
+                wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+                exit 1
+            fi
+            if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
+                wd_logger 1 "KA9Q software wasn't 'git pulled'  and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                exit
                 return 0
             fi
-            wd_logger 1 "KA9Q software wasn't updated but the needed local radiod service is not running, so compile and install all of KA9Q"
+            wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
         fi
     fi
 
@@ -257,25 +298,25 @@ function ka9q_setup()
      wd_logger 1 "${FFTW_WISDOMF} is current"
 
     wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
-    sudo systemctl stop  "${KA9Q_RADIOD_SERVICE_BASE}" > /dev/null
+    sudo systemctl stop  "radiod@" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "'sudo systemctl stop  ${KA9Q_RADIOD_SERVICE_BASE}' => ${rc}, so no radiod was running.  Proceed to start it"
+        wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
     fi
-    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    fi
-    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
-        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    fi
-    wd_logger  1 "Finished validating and updating the KA9Q installation"
+#    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
+#        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
+#        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
+#   fi
+#    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+#        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
+#        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+#    fi
+#    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+#        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
+#        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
+#        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+#    fi
+#    wd_logger  1 "Finished validating and updating the KA9Q installation"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit
@@ -283,14 +324,14 @@ function ka9q_setup()
     wd_logger 1 "Found a RX888 MkII attached to a USB port"
  
     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
-    wd-radiod-bw-check
+    ka9q_conf_file_bw_check ${ka9q_conf_name}
 
-    sudo systemctl start  "${WD_KA9Q_SERVICE_NAME}" > /dev/null
+    sudo systemctl start  radiod@${ka9q_conf_name} > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sudo systemctl start  ${WD_KA9Q_SERVICE_NAME}' => ${rc}, so failed to start radiod"
+        wd_logger 1 "ERROR: 'sudo systemctl start radiod@${ka9q_conf_name}' => ${rc}, so failed to start radiod"
     fi
-    sudo systemctl is-active "${WD_KA9Q_SERVICE_NAME}" > /dev/null
+    sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: after an otherwise successful installation of KA9Q its 'radiod' is not active"
@@ -299,6 +340,3 @@ function ka9q_setup()
     wd_logger 1 "after a successful installation of KA9Q its 'radiod' is active"
     return 0
 }
-
-### Execute this once at WD start time
-#ka9q_setup
