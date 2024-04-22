@@ -163,7 +163,7 @@ function ka9q_setup()
 {
     local rc
     
-    if ! install_dpkg_list avahi-utils ; then
+    if ! install_dpkg_list libnss-mdns mdns-scan avahi-utils avahi-discover ; then
         wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
         exit 1
     fi
