@@ -1427,7 +1427,7 @@ function decoding_daemon() {
                         expected_samples=5760000                                       ### mode J1 is 100000 sps which is used to record SUPERDARN signals
                         ;;
                     K1)
-                        expected_samples=1440000                                       ### mode K1 is 12000 sps which is used to record N6NC signals
+                        expected_samples=960000                                       ### mode K1 is 12000 sps which is used to record N6NC signals
                         ;;
                     *)
                         wd_logger 1 "ERROR: invalid mode ${receiver_modes_list[0]} was specified"
