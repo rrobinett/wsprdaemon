@@ -32,13 +32,14 @@ declare -r PSWS_URL="pswsnetwork.caps.ua.edu"
 
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
-declare -r GRAPE_ERROR_RETURN_BASE=240
-declare -r GRAPE_ERROR_RETURN_NO_FLACS=$(( ${GRAPE_ERROR_RETURN_BASE} + 0 ))
-declare -r GRAPE_ERROR_RETURN_BAND=$(( ${GRAPE_ERROR_RETURN_BASE} + 1 ))
-declare -r GRAPE_ERROR_REPAIR_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 2 ))
-declare -r GRAPE_ERROR_FLAC_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 3 ))
-declare -r GRAPE_ERROR_SOX_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 4 ))
-declare -r GRAPE_ERROR_RETURN_MAX=$(( ${GRAPE_ERROR_RETURN_BASE} + 10 ))
+declare -r          GRAPE_ERROR_RETURN_BASE=240
+declare -r G     RAPE_ERROR_RETURN_NO_FLACS=$(( ${GRAPE_ERROR_RETURN_BASE} + 0 ))
+declare -r          GRAPE_ERROR_RETURN_BAND=$(( ${GRAPE_ERROR_RETURN_BASE} + 1 ))
+declare -r        GRAPE_ERROR_REPAIR_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 2 ))
+declare -r          GRAPE_ERROR_FLAC_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 3 ))
+declare -r           GRAPE_ERROR_SOX_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 4 ))
+declare -r GRAPE_ERROR_RETURN_REPAIR_FAILED=$(( ${GRAPE_ERROR_RETURN_BASE} + 5 ))
+declare -r           GRAPE_ERROR_RETURN_MAX=$(( ${GRAPE_ERROR_RETURN_BASE} + 10 ))
 
 function grape_return_code_is_error() {
     if [[ $1 -ge  ${GRAPE_ERROR_RETURN_BASE} && $1 -le  ${GRAPE_ERROR_RETURN_MAX} ]]; then
@@ -236,7 +237,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         fi
     done
     touch "${reporter_upload_complete_file_name}"
-    wd_logger 1  "Indicate that uploads have been successful by creating '${reporter_upload_complete_file_name}'"
+    wd_logger 1  "Upload was successful, so create '${reporter_upload_complete_file_name}'"
 }
 
 function grape_test_ssh_auto_login() {
@@ -409,8 +410,8 @@ function grape_repair_band_flacs() {
             local expected_file_path=${band_dir}/${expected_file_name}
             # if [[ ! -f ${expected_file_path} ]]; then
             if [[ ! "${flac_file_list[@]}" =~ ${expected_file_path} ]]; then
-                wd_logger 2 "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
-                ln ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
+                wd_logger 1 "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
+                ln -s ${WD_SILENT_FLAC_FILE_PATH}  ${expected_file_path}
                 silence_file_list+=( ${expected_file_path##*/} )
             else
                 wd_logger 2 "Found expected IQ file ${expected_file_path}"
