@@ -36,7 +36,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-0c2be11d27ecd644748171fa2ba90d524324a012}"   ### Default to 4/19/24 with many Phil enhancements
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-ac86efc30a3610a153eaadd354351155d3f8ba18}"   ### Default to 4/22/24 with many Phil enhancements
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 function get_current_commit_sha() {
@@ -162,7 +162,7 @@ function ka9q_conf_file_bw_check() {
 function ka9q_setup()
 {
     local rc
-    
+
     if ! install_dpkg_list libnss-mdns mdns-scan avahi-utils avahi-discover ; then
         wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
         exit 1
@@ -197,6 +197,15 @@ function ka9q_setup()
         fi
     fi
 
+    local ka9q_conf_name
+    get_config_file_variable  ka9q_conf_name "KA9Q_CONF_NAME"
+    if [[ -n "${ka9q_conf_name}" ]]; then
+        wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
+    else
+        ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
+        wd_logger 1 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
+    fi
+
     if [[ ${ka9q_make_needed} == "no" ]]; then
         local ka9q_runs_only_remotely
         get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
@@ -208,14 +217,6 @@ function ka9q_setup()
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
         else
             ### There is a local RX888.  Ensure it is properly configured and running
-            local ka9q_conf_name
-            get_config_file_variable  ka9q_conf_name "KA9Q_CONF_NAME"
-            if [[ -n "${ka9q_conf_name}" ]]; then
-                 wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
-             else
-                 ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
-                 wd_logger 1 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
-            fi
             local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
             local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
             if [[ ! -f ${ka9q_conf_file_path} ]]; then
@@ -256,8 +257,8 @@ function ka9q_setup()
         return 1
     fi
 
-     if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
-         ### WD is not configured to install and confiugre a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
+        ### WD is not configured to install and confiugre a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
         wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So WD doesn't need to configure or start radiod"
         return 0
     fi
@@ -294,7 +295,7 @@ function ka9q_setup()
         sudo chown ${dir_user_group} ${FFTW_WISDOMF}
         wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
     fi
-     wd_logger 1 "${FFTW_WISDOMF} is current"
+    wd_logger 1 "${FFTW_WISDOMF} is current"
 
     wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
     sudo systemctl stop  "radiod@" > /dev/null
@@ -302,26 +303,26 @@ function ka9q_setup()
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
     fi
-#    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-#        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-#        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-#   fi
-#    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-#        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-#        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-#    fi
-#    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-#        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
-#        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-#        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-#    fi
-#    wd_logger  1 "Finished validating and updating the KA9Q installation"
+    #    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
+    #        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
+    #        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
+    #   fi
+    #    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+    #        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
+    #        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    #    fi
+    #    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
+    #        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
+    #        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
+    #        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
+    #    fi
+    #    wd_logger  1 "Finished validating and updating the KA9Q installation"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit 1
     fi
     wd_logger 1 "Found a RX888 MkII attached to a USB port"
- 
+
     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
     ka9q_conf_file_bw_check ${ka9q_conf_name}
 
