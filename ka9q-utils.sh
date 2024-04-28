@@ -195,6 +195,14 @@ function ka9q_setup()
             wd_logger 1 "ERROR: git could not update KA9Q software"
             exit 1
         fi
+        if [[ ! -L  ${KA9Q_RADIO_DIR}/Makefile ]]; then
+            if [[ -f  ${KA9Q_RADIO_DIR}/Makefile ]]; then
+                wd_logger 1 "ERROR:  ${KA9Q_RADIO_DIR}/Makefile doesn't exist or isn't a symbolic link to  ${KA9Q_RADIO_DIR}/Makefile.linux"
+                rm -f ${KA9Q_RADIO_DIR}/Makefile
+            fi
+            wd_logger 1 "Creating a symbolic link from ${KA9Q_RADIO_DIR}/Makefile.linux to ${KA9Q_RADIO_DIR}/Makefile" 
+            ln -s ${KA9Q_RADIO_DIR}/Makefile.linux ${KA9Q_RADIO_DIR}/Makefile
+        fi
     fi
 
     local ka9q_conf_name
@@ -239,9 +247,10 @@ function ka9q_setup()
         return 1
     fi
     cd ${KA9Q_RADIO_DIR}
-    if [[ ! -f Makefile ]]; then
-        cp -p Makefile.linux Makefile
+    if [[ ! -L Makefile ]]; then
+        ln -s Makefile.linux Makefile
     fi
+    make clean > /dev/null
     make  > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
@@ -298,7 +307,7 @@ function ka9q_setup()
     wd_logger 1 "${FFTW_WISDOMF} is current"
 
     wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
-    sudo systemctl stop  "radiod@" > /dev/null
+    sudo systemctl stop  "radiod@*" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
