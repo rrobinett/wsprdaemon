@@ -226,8 +226,8 @@ function get_receiver_khz_offset_list_from_name() {
 
 ### Validation requires we check the time specified for each job
 ####  Input is HH:MM or {sunrise,sunset}{+,-}HH:MM
-declare -r SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes  ### cache sunrise HH:MM and sunset HH:MM for Receiver's Maidenhead grid
-declare -r MAX_SUNTIMES_FILE_AGE_SECS=86400               ### refresh that cache file once a day
+declare  SUNTIMES_FILE=${WSPRDAEMON_ROOT_DIR}/suntimes  ### cache sunrise HH:MM and sunset HH:MM for Receiver's Maidenhead grid
+declare  MAX_SUNTIMES_FILE_AGE_SECS=86400               ### refresh that cache file once a day
 
 ###   Adds or subtracts two: HH:MM  +/- HH:MM
 function time_math() {
