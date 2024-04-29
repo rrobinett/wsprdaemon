@@ -20,6 +20,7 @@
 
 ### Default to getting Phl's 9/2/23 18:00 PDT sources
 declare KA9Q_RADIO_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
+declare KA9Q_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/radiod@rx888-wsprdaemon-template.conf"
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
@@ -228,8 +229,13 @@ function ka9q_setup()
             local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
             local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
             if [[ ! -f ${ka9q_conf_file_path} ]]; then
-                wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
-                exit 1
+                if [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+                    wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
+                    cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+                else
+                    wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+                    exit 1
+                fi
             fi
             if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
                 wd_logger 1 "KA9Q software wasn't 'git pulled'  and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
