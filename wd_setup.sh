@@ -52,6 +52,7 @@ else
     ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
     declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
     declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
+    declare LIB_QT5_CORE_UBUNTU_24_04="libqt5core5t64"
     declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
     declare LIB_QT5_DEFAULT_AMD64="qt5-default:amd64"
     declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
@@ -81,9 +82,11 @@ case ${CPU_ARCH} in
         ;;
     x86_64)
         wd_logger 2 "Installing on Ubuntu ${os_release}"
-        if [[ "${os_release}" =~ 2..04 || "${os_release}" == "12" || "${os_release}" =~ 21.. ]]; then
+        if [[ "${os_release}" =~ 2[02].04 || "${os_release}" == "12" || "${os_release}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
+        elif [[ "${os_release}" =~ 24.04 ]]; then
+            PACKAGE_NEEDED_LIST+=(  libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi
@@ -93,6 +96,57 @@ case ${CPU_ARCH} in
         exit 1
         ;;
 esac
+#### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
+###           To get around that bug, have WD spawn a ssh session to itself
+function setup_wd_auto_ssh()
+{
+    if [[ ${WD_NEEDS_SSH-no} =~ [Nn][Oo] ]]; then           ### Matches 'no', 'No', 'NO', and 'nO'
+        wd_logger 2 "WD_NEEDS_SSH=\"${WD_NEEDS_SSH-no}\", so not configured to start the Linux bug patch which runs an auto-ssh session"
+        return 0
+    fi
+    if [[ ! -d ~/.ssh ]]; then
+        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
+        return 1
+    fi
+    if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
+        return 2
+    fi
+    local my_ssh_pub_key=$(< ~/.ssh/id_rsa.pub)
+    if [[ ! -f ~/.ssh/authorized_keys ]] || ! grep -q "${my_ssh_pub_key}" ~/.ssh/authorized_keys; then
+        wd_logger 1 "Adding my ssh public key to my ~/.ssh/authorized_keys file"
+        echo "${my_ssh_pub_key}" >> ~/.ssh/authorized_keys
+    fi
+    local wd_auto_ssh_pid=$(ps aux | grep "ssh \-fN" | awk '{print $2}')
+    if [[ -n "${wd_auto_ssh_pid}" ]]; then
+        wd_logger 2 "Auto ssh session is running with PID ${wd_auto_ssh_pid}"
+    else
+        wd_logger 1 "Spawning a new auto ssh session by running 'ssh -fN localhost'"
+        ssh -fN localhost
+    fi
+    return 0
+}
+setup_wd_auto_ssh
+
+function install_needed_dpkgs()
+{
+    wd_logger 2 "Starting"
+
+    local package_needed
+    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        wd_logger 2 "Checking for package ${package_needed}"
+        if ! install_debian_package ${package_needed} ; then
+            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
+            exit 1
+        fi
+    done
+    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
+}
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
+if ! install_needed_dpkgs ; then
+    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
+    exit 1
+fi
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
@@ -498,62 +552,7 @@ function load_wsjtx_commands()
         rm -r ${dpkg_tmp_dir}
     fi
 }
-
-### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
-###           To get around that bug, have WD spawn a ssh session to itself
-function setup_wd_auto_ssh()
-{
-    if [[ ${WD_NEEDS_SSH-no} =~ [Nn][Oo] ]]; then           ### Matches 'no', 'No', 'NO', and 'nO'
-        wd_logger 2 "WD_NEEDS_SSH=\"${WD_NEEDS_SSH-no}\", so not configured to start the Linux bug patch which runs an auto-ssh session"
-        return 0
-    fi
-    if [[ ! -d ~/.ssh ]]; then
-        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh' directory.  Run 'ssh-keygen' to create and populate it"
-        return 1
-    fi
-    if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-        wd_logger 1 "ERROR: 'WD_NEEDS_SSH=\"${WD_NEEDS_SSH}\" in WD.conf configures WD to start the Linux bug patch which runs an auto-ssh session, but there is no '~/.ssh/id_rsa.pub' file.  Run 'ssh-keygen' to create it"
-        return 2
-    fi
-    local my_ssh_pub_key=$(< ~/.ssh/id_rsa.pub)
-    if [[ ! -f ~/.ssh/authorized_keys ]] || ! grep -q "${my_ssh_pub_key}" ~/.ssh/authorized_keys; then
-        wd_logger 1 "Adding my ssh public key to my ~/.ssh/authorized_keys file"
-        echo "${my_ssh_pub_key}" >> ~/.ssh/authorized_keys
-    fi
-    local wd_auto_ssh_pid=$(ps aux | grep "ssh \-fN" | awk '{print $2}')
-    if [[ -n "${wd_auto_ssh_pid}" ]]; then
-        wd_logger 2 "Auto ssh session is running with PID ${wd_auto_ssh_pid}"
-    else
-        wd_logger 1 "Spawning a new auto ssh session by running 'ssh -fN localhost'"
-        ssh -fN localhost
-    fi
-    return 0
-}
-
-### This is called once at startup
-function check_for_needed_utilities()
-{
-    wd_logger 2 "Starting"
-
-    setup_wd_auto_ssh
-
-    local package_needed
-    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
-        wd_logger 2 "Checking for package ${package_needed}"
-        if ! install_debian_package ${package_needed} ; then
-            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
-            exit 1
-        fi
-    done
-    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
-    load_wsjtx_commands
-}
-
-### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
-if ! check_for_needed_utilities ; then
-    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
-    exit 1
-fi
+load_wsjtx_commands
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
