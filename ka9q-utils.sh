@@ -212,7 +212,7 @@ function ka9q_setup()
         wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
     else
         ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
-        wd_logger 1 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
+        wd_logger 2 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
     fi
 
     if [[ ${ka9q_make_needed} == "no" ]]; then
@@ -238,7 +238,7 @@ function ka9q_setup()
                 fi
             fi
             if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 1 "KA9Q software wasn't 'git pulled'  and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
