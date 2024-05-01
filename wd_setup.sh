@@ -195,6 +195,11 @@ WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
+if [[ -z "${SIGNAL_LEVEL_UPLOAD-}" ]]; then
+    if [[ -n "${SIGNAL_LEVEL_UPLOAD_MODE-}" ]]; then
+        SIGNAL_LEVEL_UPLOAD="${SIGNAL_LEVEL_UPLOAD_MODE}"
+    fi
+fi
 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
 if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
