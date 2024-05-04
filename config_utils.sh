@@ -80,12 +80,12 @@ declare WSPR_BAND_LIST=(
 ### Get the current value of a variable stored in the wsprdaemon.conf file without perturbing any currently defined .conf file variables in the calling function
 function get_config_file_variable()
 {
-    local __return_varaiable=$1
+    local __return_variable=$1
     local _variable_name=$2
 
     local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
 
-    eval ${__return_varaiable}=\${conf_file_value}
+    eval ${__return_variable}=\${conf_file_value}
 }
 
 
