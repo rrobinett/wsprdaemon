@@ -679,7 +679,7 @@ function daemons_list_action()
 ### into a tmp file, and then source only that tmp file
 function get_file_variable()
 {
-    local __return_varaiable=$1
+    local __return_variable=$1
     local _variable_name=$2
     local source_file=$3
 
@@ -687,5 +687,5 @@ function get_file_variable()
     grep "${_variable_name}=" ${source_file} > ${get_file_variable_tmp_file}
     local value_in_file=$( shopt -u -o nounset; source ${get_file_variable_tmp_file}; eval echo \${${_variable_name}} )
 
-    eval ${__return_varaiable}=\${value_in_file}
+    eval ${__return_variable}=\${value_in_file}
 }
