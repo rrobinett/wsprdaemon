@@ -238,7 +238,11 @@ function ka9q_setup()
                 fi
             fi
             if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                return 0
+            fi
+            if sudo systemctl start radiod@${ka9q_conf_name}  > /dev/null ; then
+                wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
@@ -278,7 +282,7 @@ function ka9q_setup()
         return 0
     fi
 
-    wd_logger 1 "There is a local RX888, so KA9Q's radiod service needs to run"
+    wd_logger 1 "WD is configured to get wav files from a loalRX888, so KA9Q's radiod service needs to run"
 
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
         wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
@@ -312,7 +316,7 @@ function ka9q_setup()
     fi
     wd_logger 1 "${FFTW_WISDOMF} is current"
 
-    wd_logger 1 "Stop any currently running instance of radiod so this newly built version will be started"
+    wd_logger 1 "Stop any currently running instance of radiod in case there is a newly built version to be started"
     sudo systemctl stop  "radiod@*" > /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then

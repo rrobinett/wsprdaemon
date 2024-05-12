@@ -613,9 +613,9 @@ function validate_configuration_file()
    if [[ "${active_receivers}" =~ KA9Q ]]; then
         if ! ka9q_setup ; then
             wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE"
-            exit 1
+        else
+            wd_logger 2 "The KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE is running"
         fi
-        wd_logger 2 "The KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE is running"
     fi
     return 0
 }
