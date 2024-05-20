@@ -858,8 +858,9 @@ function wd-get-ka9q-conf-file-path () {
 
 #alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
 function wd-rl() {
+    local rl_args=${@--n 40}
     local base_name=$(wd-get_ka9q-conf_file-base_name)
-    sudo journalctl -u radiod@${base_name} $1
+    sudo journalctl -u radiod@${base_name} -f ${rl_args}
 }
 alias wdrl='wd-rl'
 
