@@ -3,7 +3,7 @@
 
 ###  Wsprdaemon:   A robust  decoding and reporting system for  WSPR 
 
-###    Copyright (C) 2020-2022  Robert S. Robinett
+###    Copyright (C) 2020-2024  Robert S. Robinett
 ###
 ###    This program is free software: you can redistribute it and/or modify
 ###    it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-[[ ${v:-no} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020-2022  Robert S. Robinett
+[[ ${v:-no} == "yes" ]] && echo "wsprdaemon.sh Copyright (C) 2020-2024  Robert S. Robinett
 This program comes with ABSOLUTELY NO WARRANTY; for details type './wsprdaemon.sh -h'
 This is free software, and you are welcome to redistribute it under certain conditions.  execute'./wsprdaemon.sh -h' for details.
 wsprdaemon depends heavily upon the 'wsprd' program and other technologies developed by Joe Taylor K1JT and others, to whom we are grateful.
@@ -55,7 +55,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
                                        ### Add support for WSPR ansd WWV IQ file recording into compressed files in a series of tar archives
 #declare VERSION=3.1.3                 ### Add support for WSPR-2 spectral spreading reports 
 #declare VERSION=3.1.4                 ### Add support for the GRAPE system
-declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
+#declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
+declare VERSION=3.1.6                 ### Install 4/19/24 KA9Q-radio
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
@@ -65,13 +66,29 @@ if [[ $USER == "root" ]]; then
     exit 1
 fi
 
+### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands so they know where to look for *.pid files
+################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
+declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
+mkdir -p /dev/shm/wsprdaemon
+if [[ -n "${WSPRDAEMON_TMP_DIR-}" && -d ${WSPRDAEMON_TMP_DIR} ]] ; then
+    true
+    ### The user has configured a TMP dir
+    #wd_logger 2 "Using user configured TMP dir ${WSPRDAEMON_TMP_DIR}"
+elif df /tmp/wspr-captures > /dev/null 2>&1; then
+    ### Legacy name for /tmp file system.  Leave it alone
+    WSPRDAEMON_TMP_DIR=/tmp/wspr-captures
+elif df /tmp/wsprdaemon > /dev/null 2>&1; then
+    WSPRDAEMON_TMP_DIR=/tmp/wsprdaemon
+fi
 
 cd ${WSPRDAEMON_ROOT_DIR}
 
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/config_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
