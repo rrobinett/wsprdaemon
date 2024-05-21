@@ -226,6 +226,11 @@ function ka9q_setup()
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
         else
             ### There is a local RX888.  Ensure it is properly configured and running
+            if [[ ! $(groups) =~ radio ]]; then
+                sudo adduser --quiet --system --group radio
+                sudo usermod -aG radio ${USER}
+                wd_logger 1 "Added ${USER} to the group radioi, so logout/login is needed before RX888/KA9Q installation can proceed"
+            fi
             local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
             local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
             if [[ ! -f ${ka9q_conf_file_path} ]]; then
