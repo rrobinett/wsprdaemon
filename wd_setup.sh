@@ -86,7 +86,7 @@ case ${CPU_ARCH} in
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${os_release}" =~ 24.04 ]]; then
-            PACKAGE_NEEDED_LIST+=(  libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi
