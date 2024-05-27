@@ -27,6 +27,7 @@ declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
+declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
@@ -229,14 +230,15 @@ function ka9q_setup()
             if [[ ! $(groups) =~ radio ]]; then
                 sudo adduser --quiet --system --group radio
                 sudo usermod -aG radio ${USER}
-                wd_logger 1 "Added ${USER} to the group radioi, so logout/login is needed before RX888/KA9Q installation can proceed"
+                wd_logger 1 "Added ${USER} to the group radio, so logout/login is needed before RX888/KA9Q installation can proceed"
             fi
             local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
             local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
             if [[ ! -f ${ka9q_conf_file_path} ]]; then
                 if [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
                     wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
-                    cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+                    sudo cp -p ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+                    sudo chown --reference ${KA9Q_RADIOD_CONF_DIR} ${ka9q_conf_file_path}
                 else
                     wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
                     exit 1
@@ -246,6 +248,11 @@ function ka9q_setup()
                 wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
                 return 0
             fi
+            wd_logger 1 "Giving radiod permissions to access the RX888 in the udev USB system"
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger
+            sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
+
             if sudo systemctl start radiod@${ka9q_conf_name}  > /dev/null ; then
                 wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
                 return 0
@@ -327,20 +334,6 @@ function ka9q_setup()
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
     fi
-    #    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-    #        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-    #        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    #   fi
-    #    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-    #        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-    #        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    #    fi
-    #    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-    #        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
-    #        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-    #        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    #    fi
-    #    wd_logger  1 "Finished validating and updating the KA9Q installation"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit 1
@@ -349,6 +342,12 @@ function ka9q_setup()
 
     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
     ka9q_conf_file_bw_check ${ka9q_conf_name}
+
+    ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
+    wd_logger 1 "Instructing the udev system to give radiod permissions to access the RS888"
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     sudo systemctl start  radiod@${ka9q_conf_name} > /dev/null
     rc=$?
