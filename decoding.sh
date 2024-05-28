@@ -339,29 +339,20 @@ function decode_wspr_wav_file() {
     comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp
     wd_logger 1 "wsprd added $(wc -l < ALL_WSPR.TXT.new.tmp) spots to ALL_WSPR.txt and we saved those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp)"
 
-    local wsprd_with_spreading_cmd=""
-    local cpu_arch=$(uname -m)
-    if [[ ${cpu_arch}  == "x86_64"  && -x ${WSPRD_X86_SPREADING_CMD} ]]; then
-        wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
-    elif [[ ${cpu_arch}  == "aarch64" && -x ${WSPRD_ARM_SPREADING_CMD} ]]; then
-        wsprd_with_spreading_cmd="${WSPRD_X86_SPREADING_CMD}"
+    ### Start with the original ALL_WSPR.TXT and see what spots are reported by  wsprd.spreading 
+    wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
+    cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
+    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
+        # return ${ret_code}
     fi
-    if [[ -n "${wsprd_with_spreading_cmd}" ]]; then
-        ### Start with the original ALL_WSPR.TXT and see what spots are reported by  wsprd.spreading 
-        wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
-        cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
-        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${wsprd_with_spreading_cmd} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
-            # return ${ret_code}
-        fi
-        sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
-        mv sort.tmp ALL_WSPR.TXT
-        comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp.spreading
-        wd_logger 1 "wsprd.spreading added $(wc -l < ALL_WSPR.TXT.new.tmp.spreading) spots to ALL_WSPR.txt and added those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp.spreading)"
-        cat  ALL_WSPR.TXT.new.tmp.spreading  >> ALL_WSPR.TXT.new.tmp
-    fi
+    sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
+    mv sort.tmp ALL_WSPR.TXT
+    comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp.spreading
+    wd_logger 1 "wsprd.spreading added $(wc -l < ALL_WSPR.TXT.new.tmp.spreading) spots to ALL_WSPR.txt and added those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp.spreading)"
+    cat  ALL_WSPR.TXT.new.tmp.spreading  >> ALL_WSPR.TXT.new.tmp
     ### Restore ALL_WSPR.TXT to its state before either of the decodes added spots
     mv   ALL_WSPR.TXT.save  ALL_WSPR.TXT
 
@@ -375,14 +366,12 @@ function decode_wspr_wav_file() {
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
-declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
 declare WSPRD_X86_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.x86
 declare WSPRD_ARM_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.arm
 declare AWK_FIND_BEST_SPOT_LINES=${WSPRDAEMON_ROOT_DIR}/best_spots.awk
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
-declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
-declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
+
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
 declare RAW_FILE_FULL_SIZE=1440000                       ### Approximate number of bytes in a full size one minute long raw or wav file
