@@ -314,7 +314,8 @@ function decode_wspr_wav_file() {
     local wspr_decode_capture_freq_hz=$2
     local rx_khz_offset=$3
     local stdout_file=$4
-    local wsprd_cmd_flags="$5"        ### ${WSPRD_CMD_FLAGS}
+    local wsprd_cmd_flags="$5"                  ### ${WSPRD_CMD_FLAGS}
+    local wsprd_spreading_cmd_flags="$6"        ### ${WSPRD_CMD_FLAGS}
 
     wd_logger 2 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}, wsprd_cmd_flags='${wsprd_cmd_flags}'"
     local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
@@ -342,16 +343,16 @@ function decode_wspr_wav_file() {
     ### Start with the original ALL_WSPR.TXT and see what spots are reported by  wsprd.spreading 
     wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
     cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
-    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
     local rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
+        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
         # return ${ret_code}
     fi
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
     mv sort.tmp ALL_WSPR.TXT
     comm --nocheck-order -13 ALL_WSPR.TXT.save ALL_WSPR.TXT | sort -k 1,2 -k 5,5 > ALL_WSPR.TXT.new.tmp.spreading
-    wd_logger 1 "wsprd.spreading added $(wc -l < ALL_WSPR.TXT.new.tmp.spreading) spots to ALL_WSPR.txt and added those new spots in ALL_WSPR.TXT.new.tmp:\n$(<  ALL_WSPR.TXT.new.tmp.spreading)"
+    wd_logger 1 "wsprd.spreading added $(wc -l < ALL_WSPR.TXT.new.tmp.spreading) spots to ALL_WSPR.txt and added those new spots in ALL_WSPR.TXT.nspreading_ew.tmp:\n$(<  ALL_WSPR.TXT.new.tmp.spreading)"
     cat  ALL_WSPR.TXT.new.tmp.spreading  >> ALL_WSPR.TXT.new.tmp
     ### Restore ALL_WSPR.TXT to its state before either of the decodes added spots
     mv   ALL_WSPR.TXT.save  ALL_WSPR.TXT
@@ -1520,10 +1521,15 @@ function decoding_daemon() {
                 ### - H - Do not use the hash table
                 declare DEFAULT_WO_WSPSRD_CMD_FLAGS="-o 0 -q -s -H"
 
-                local wsprd_flags=${WSPRD_CMD_FLAGS}
+                local wsprd_flags="${WSPRD_CMD_FLAGS}"
+                local wsprd_spreading_flags="${wsprd_flags}"
                 if [[ ${#receiver_modes_list[@]} -eq 1 && ${receiver_modes_list[0]} == "W0" ]]; then
                     wsprd_flags="${WO_WSPSRD_CMD_FLAGS-${DEFAULT_WO_WSPSRD_CMD_FLAGS}}"
+                    wsprd_spreading_flags="${wsprd_flags}"
                     wd_logger 1 "Decoding mode W0, so run 'wsprd ${wsprd_flags}"
+                elif [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
+                    ### Reduce the CPU burden produced by too intense 'wsprd' decodes
+                    wsprd_flags="-C 100 -o 2 -d"
                 fi
 
                 cd ${decode_dir}
@@ -1532,7 +1538,7 @@ function decoding_daemon() {
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
                 local start_time=${SECONDS}
-                decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}"
+                decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}" "${wsprd_spreading_flags}"
                 local ret_code=$?
 
                 rm  ${decoder_input_wav_filename}

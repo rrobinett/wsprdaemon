@@ -48,9 +48,7 @@ get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
 
-wd_logger 1 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
-
-
+wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
 
 declare    PACKAGE_NEEDED_LIST=( at bc curl host flac postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \

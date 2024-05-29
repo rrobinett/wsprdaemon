@@ -56,7 +56,8 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare VERSION=3.1.3                 ### Add support for WSPR-2 spectral spreading reports 
 #declare VERSION=3.1.4                 ### Add support for the GRAPE system
 #declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
-declare VERSION=3.1.6                 ### Install 4/19/24 KA9Q-radio
+#declare VERSION=3.1.6                 ### Install 4/19/24 KA9Q-radio
+declare VERSION=3.2.0                 ### Add all weprd and jt9 binaries.  Installs on Pi 5
                                      ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
                                      ### TODO: Add highest WF frequency bins to kiwi_ovs.log
                                      ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
