@@ -1192,7 +1192,7 @@ function wd-wav-capture() {
     echo -n "$(date): Waiting for the 2 minute long wav file to appear after the next even 2 minutes: "
     while ! wav_file=$(ls 2?????_*.wav 2> /dev/null ); do 
          echo -n "."
-         sleep 1
+         sleep .25
      done
      cp ${wav_file} /tmp/
      echo 
