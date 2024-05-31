@@ -1186,3 +1186,15 @@ function wddu() {
     du -s ${files}  | awk '{print $2 ":  " $1}'
 }
 
+### Copy a 2 minute wav file to /tmp
+function wd-wav-capture() {
+    local wav_file
+    echo -n "$(date): Waiting for the 2 minute long wav file to appear after the next even 2 minutes: "
+    while ! wav_file=$(ls 2?????_*.wav 2> /dev/null ); do 
+         echo -n "."
+         sleep 1
+     done
+     cp ${wav_file} /tmp/
+     echo 
+     echo "$(date): Captured /tmp/${wav_file}"
+ }
