@@ -7,7 +7,7 @@ declare MAX_WAV_TMP_FILE_SYSTEM_USED_PERCENT=$(( 100 - ${MIN_WAV_TMP_FILE_SYSTEM
 
 declare WAV_FILE_ARCHIVE_ROOT_DIR=${WAV_FILE_ARCHIVE_ROOT_DIR-${WSPRDAEMON_ROOT_DIR}/wav-archive.d}        ### Store the compressed archive of them here. This should be an SSD or HD
 declare FLAC_FILE_ARCHIVE_ROOT_DIR=${WAV_FILE_ARCHIVE_ROOT_DIR}
-declare MIN_FLAC_FILE_SYSTEM_FREE_PERCENT=25                                       ### Limit the usage of that file system
+declare MIN_FLAC_FILE_SYSTEM_FREE_PERCENT=${MIN_FLAC_FILE_SYSTEM_FREE_PERCENT-25}                           ### Limit the usage of that file system
 declare MAX_FLAC_FILE_SYSTEM_USED_PERCENT=$(( 100 - ${MIN_FLAC_FILE_SYSTEM_FREE_PERCENT} ))
 
 declare MIN_FLAC_ARCHIVE_FILE_COUNT=${MIN_FLAC_ARCHIVE_FILE_COUNT-10}
