@@ -387,15 +387,15 @@ function start_systemctl_daemon() {
     sudo systemctl is-enabled wsprdaemon.service >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "wsprdaemon.servicd is not enabled, so enabled it"
+        wd_logger 1 "wsprdaemon.service is not enabled, so enabled it"
         sudo systemctl enable wsprdaemon.service
     fi
     sudo systemctl start wsprdaemon.service >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "wsprdaemon.servicd is already running, so nothing to do"
+        wd_logger 1 "wsprdaemon.service is already running, so nothing to do"
     else
-        wd_logger 1 "wsprdaemon.servicd is not running, so start the watchdog daemon"
+        wd_logger 1 "wsprdaemon.service is not running, so start the watchdog daemon"
         sudo systemctl enable wsprdaemon.service
     fi
     return 0
