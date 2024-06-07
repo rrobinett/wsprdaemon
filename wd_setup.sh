@@ -476,7 +476,7 @@ function find_wsjtx_commands()
         wd_logger 1 "ERROR: couldn't find JT9_CMD"
         exit 1
     fi
-    wd_logger 2 "Found all three of the wsprd/jt9 executables are on this server"
+    wd_logger 2 "Found all three of the wsprd/jt9 executables are on this server:\nWSPRD_CMD=${WSPRD_CMD}\nWSPRD_SPREADING_CMD=${WSPRD_SPREADING_CMD}\nJT9_CMD=${JT9_CMD}"
 }
 find_wsjtx_commands
 
