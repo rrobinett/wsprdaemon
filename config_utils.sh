@@ -730,7 +730,7 @@ function install_python_package()
         fi
     fi
     local pip3_extra_args=""
-    if [[ ${os_release} == "12" ]]; then
+    if [[ ${OS_RELEASE} == "12" || ${OS_RELEASE} == "24.04" ]]; then
         pip3_extra_args="--break-system-packages"
     fi
     if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then
