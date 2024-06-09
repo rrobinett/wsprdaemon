@@ -344,7 +344,8 @@ function decode_wspr_wav_file() {
     wd_logger 2 "Decoding WSPR a second time to obtain spreading information"
     cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
     local n_arg="-n"
-    if [[ ${VERSION_ID} =~ 20.04 ]]; then
+
+    if [[ ${OS_RELEASE} =~ 20.04 ]]; then
         n_arg=""    ## until we get a wsprd.spreading for U 20.04
     fi
     timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
