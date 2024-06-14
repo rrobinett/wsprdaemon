@@ -68,7 +68,7 @@ function get_frpc_ini_values() {
       if [[ ${#rac_port_line_list[@]} -ne 3 ]]; then 
           [[ ${verbosity} -gt 0  ]] && echo "ERROR: can't find valid 'remote_port' line" 1>&2
           echo ""
-          return3
+          return 3
       fi
       local remote_port=${rac_port_line_list[2]}
 
