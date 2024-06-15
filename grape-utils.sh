@@ -696,8 +696,8 @@ function grape_uploader() {
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
     if [[ ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+        wd_logger 1 "Skipping upload at current HHMM = ${current_hhmm}, LAST_HHMM = ${LAST_HHMM}"
         LAST_HHMM=${current_hhmm}
-        wd_logger 1 "Skipping upload at HHMM =  ${current_hhmm}"
         return 0
     fi
     LAST_HHMM=${current_hhmm}
