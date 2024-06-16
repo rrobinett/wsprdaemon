@@ -1,13 +1,16 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+shopt -s -o nounset
+
 ### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
 ### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
 declare WD_BASH_HELP_LIST=()
+declare WD_BASH_HELP_HEADER_LINE_LIST=( "FUNCTION"  "ALIAS(es)"  "DESCRIPTION" )
 
 function wd-print-help-strings() {
-    local max_function_name_length=0
-    local max_function_alias_names_length=9
+    local function_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[0]}
+    local alias_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[1]}
     local help_string_index
 
     ### Calculate the width of fields which will be printed
@@ -16,16 +19,17 @@ function wd-print-help-strings() {
         local help_string_list=( ${help_string} )
 
         local function_name="${help_string_list[0]}"
-        if [[ ${#function_name} -gt ${max_function_name_length} ]]; then
-            max_function_name_length=${#function_name}
+        if [[ ${#function_name} -gt ${function_name_field_width} ]]; then
+            function_name_field_width=${#function_name}
         fi
         local alias_names="${help_string_list[1]}"
-        if [[ ${#alias_names} -gt ${max_function_alias_length} ]]; then
-            max_function_alias_names_length=${#alias_names}
+        if [[ ${#alias_names} -gt ${alias_name_field_width} ]]; then
+            alias_name_field_width=${#alias_names}
         fi
     done
 
-    printf "%${max_function_name_length}s: %${max_function_alias_names_length}s %s\n" "FUNCTION"  "ALIAS(ES)"   "DESCRIPTION"
+    printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" \
+               "${WD_BASH_HELP_HEADER_LINE_LIST[0]}" "${WD_BASH_HELP_HEADER_LINE_LIST[1]}" "${WD_BASH_HELP_HEADER_LINE_LIST[2]}"
 
     for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
         local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
@@ -35,11 +39,11 @@ function wd-print-help-strings() {
         local alias_names="${help_string_list[1]}"
         local description_string="${help_string_list[@]:2}"
 
-        printf "%${max_function_name_length}s %${max_function_alias_names_length}s %s\n" "${function_name}" "${alias_names}" "${description_string=}"
+        printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" "${function_name}" "${alias_names}" "${description_string}"
     done
 }
 
-WD_BASH_HELP_LIST=( "wd_logger:  wdl  Emulate WD's wd_logger() function when these functions are run from the linux cmd line" )
+WD_BASH_HELP_LIST=( "wd_logger  wdl  Emulate WD's wd_logger() function when these functions are run from the linux cmd line" )
 
 ### When this file is sourced by wsprdaemon.sh this function will be redefined in wd-utils.sh to the full wd_logger() used by WD
 function wd_logger(){
@@ -51,7 +55,7 @@ function wd_logger(){
     fi
 }
 
-WD_BASH_HELP_LIST+=( "wd-machine_name: executes 'uname -m'" )
+WD_BASH_HELP_LIST+=( "wd-machine_name - Executes 'uname -m'" )
 function wd-machine-name() {
     echo $(uname -m)
 }
