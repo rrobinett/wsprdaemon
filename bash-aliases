@@ -1,7 +1,46 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/bash-aliases  includes funtions and aliases which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
-### Emulate WD's wd_logger() function when these functions are run from the linux cmd line
+### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
+### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
+declare WD_BASH_HELP_LIST=()
+
+function wd-print-help-strings() {
+    local max_function_name_length=0
+    local max_function_alias_names_length=9
+    local help_string_index
+
+    ### Calculate the width of fields which will be printed
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        if [[ ${#function_name} -gt ${max_function_name_length} ]]; then
+            max_function_name_length=${#function_name}
+        fi
+        local alias_names="${help_string_list[1]}"
+        if [[ ${#alias_names} -gt ${max_function_alias_length} ]]; then
+            max_function_alias_names_length=${#alias_names}
+        fi
+    done
+
+    printf "%${max_function_name_length}s: %${max_function_alias_names_length}s %s\n" "FUNCTION"  "ALIAS(ES)"   "DESCRIPTION"
+
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        local alias_names="${help_string_list[1]}"
+        local description_string="${help_string_list[@]:2}"
+
+        printf "%${max_function_name_length}s %${max_function_alias_names_length}s %s\n" "${function_name}" "${alias_names}" "${description_string=}"
+    done
+}
+
+WD_BASH_HELP_LIST=( "wd_logger:  wdl  Emulate WD's wd_logger() function when these functions are run from the linux cmd line" )
+
 ### When this file is sourced by wsprdaemon.sh this function will be redefined in wd-utils.sh to the full wd_logger() used by WD
 function wd_logger(){
     local verbosity_printing_level=${1:-1}
@@ -12,126 +51,9 @@ function wd_logger(){
     fi
 }
 
+WD_BASH_HELP_LIST+=( "wd-machine_name: executes 'uname -m'" )
 function wd-machine-name() {
     echo $(uname -m)
-}
-
-declare WD_ALIAS_BIN_DIR=~/wsprdaemon/bin
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.aarch64"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
-
-### Returns the full path to where the wsprd.spread.. file should be
-function wd-wsprd-report-spreading-file(){
-    local spreading_file=""
-    local machine_name=$(uname -m)
-    case ${machine_name} in
-        x86_64)
-            spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86}
-            ;;
-        ##aarch64)
-        ##    spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64}
-        ##     ;;
-         *)
-             echo "WSPR-2 frequency spreading is not supported on this ${machine_name} CPU server" 1>&2 
-             return 1
-             ;;
-    esac
-    if [[ -n "${spreading_file}" ]]; then
-        spreading_path=$(realpath ${spreading_file})
-    fi
-    echo ${spreading_path}
-    return 0
-}
-
-function wd-spreading-enable(){
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is already enabled"
-        return 0
-    fi
-    local disabled_spreading_file="${spreading_file}.disabled"
-    if [[ ! -x ${disabled_spreading_file} ]]; then
-        echo "ERROR: missing the expected saved WSPR-2 spreading reporting file"
-        return 2
-    fi
-    cp -p ${disabled_spreading_file} ${spreading_file}
-    rc=$?
-     if [[ ${rc} -ne 0 ]]; then
-         echo "ERROR: failed to restore the saved spreading command ${disabled_spreading_file}"
-        return 3
-    fi
-    echo "WSPR-2 spreading reporting is enabled on this server"
-    return 0
-}
-
-function wd-spreading-disable(){
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ ! -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is already disabled"
-        return 0
-    fi
-    local disabled_spreading_file="${spreading_file}.disabled"
-    mv ${spreading_file} ${disabled_spreading_file} 
-    rc=$?
-     if [[ ${rc} -ne 0 ]]; then
-         echo "ERROR: failed to 'mv${spreading_file}  ${disabled_spreading_file}"
-        return 2
-    fi
-    echo "WSPR-2 spreading reporting is now disabled on this server"
-    return 0
-}
-
-function wd-spreading-status() {
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is enabled"
-    else
-        echo "WSPR-2 spreading reporting is disabled"
-    fi
-    return 0
-}
-
-function wd-spreading() {
-    if [[ ${#@} -eq 0 ]]; then
-        wd-spreading-status
-        echo "usage: wd-spreading [on|off]"
-        return
-    fi
-    case $1 in
-        on)
-            wd-spreading-enable
-            ;;
-        off)
-            wd-spreading-disable
-            ;;
-        *)
-            echo "ERROR: '$1' is not a valid argument"
-            ;;
-    esac
-    return 0
 }
 
 function wd-flush-empty-dirs() {
@@ -1197,4 +1119,5 @@ function wd-wav-capture() {
      cp ${wav_file} /tmp/
      echo 
      echo "$(date): Captured /tmp/${wav_file}"
- }
+}
+
