@@ -3,6 +3,15 @@
 
 shopt -s -o nounset
 
+export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
+
+if [[ -d /dev/shm/wsprdaemon ]]; then
+    WD_TMP_ROOT=/dev/shm/wsprdaemon
+else
+    WD_TMP_ROOT=/tmp/wsprdaemon
+fi
+
+
 ### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
 ### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
 declare WD_BASH_HELP_LIST=()
@@ -60,6 +69,7 @@ function wd-machine-name() {
     echo $(uname -m)
 }
 
+WD_BASH_HELP_LIST+=( "wd-flush-empty-dirs - Flush any empty directories under CWD" )
 function wd-flush-empty-dirs() {
     for dir in * ;  do 
         if [[ -d $dir ]]; then
@@ -72,6 +82,7 @@ function wd-flush-empty-dirs() {
     done
 }
 
+WD_BASH_HELP_LIST+=( "wd-find-functions - Find all bash functions in \$1 and print all usage of them" )
 function wd-find-functions() {
    local bash_file=$1
 
@@ -84,14 +95,6 @@ function wd-find-functions() {
        read
    done
 }
-
-export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
-
-if [[ -d /dev/shm/wsprdaemon ]]; then
-    WD_TMP_ROOT=/dev/shm/wsprdaemon
-else
-    WD_TMP_ROOT=/tmp/wsprdaemon
-fi
 
 ### To speed debugging of the WD upload daemons, kill just the watchdog and upload daemons.  You can then 'wda' and watch the upload log as the WD uploader starts to work immediately
 function wd-kill-uploader()
@@ -965,7 +968,7 @@ alias wd9m=wd-9m
 ### tmux alias
 function tm() {
     # set -x
-    local tm_arg=$1
+    local tm_arg=${1-}
     local tm_list=( $(tmux ls 2> /dev/null | awk -F : '{print $1}') )
     local tm_list_count=${#tm_list[@]}
 
