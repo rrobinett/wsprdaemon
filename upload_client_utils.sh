@@ -307,32 +307,34 @@ function upload_to_wsprnet_daemon() {
                 continue
             fi
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
-            if [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
+            if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > grep.log; then
+                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots whicg we attempted to upload:\n$(< grep.log)"
+            elif [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
                 wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}) So presume spots were recorded and flush them from our cache"
-                wd_rm ${upload_spots_file_list[@]}
-            else
+            else 
                 local spots_xfered=${spot_xfer_counts[0]}
                 local spots_offered=${spot_xfer_counts[1]}
-                wd_logger 1 "After ${curl_exec_seconds} seconds, wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
-                if [[ ${spots_offered} -ne ${spots_to_xfer} ]]; then
-                    wd_logger 1 "ERROR: Spots offered '${spots_offered}' reported by curl doesn't match the number of spots in our upload file '${spots_to_xfer}'"
-                fi
-                local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
-                if [[ ${spots_xfered} -eq 0 ]]; then
-                    wd_logger 1 "The curl upload was successful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
+                if ! is_uint ${spots_xfered} || ! is_uint  ${spots_offered} ; then
+                    wd_logger 1 "WARNING: failed to parse two integer numbers: spots_xfered=${spots_xfered}, spots_offered=${spots_offered}, So flush the files which contain the spots whicg we attempted to upload"
                 else
-                    ### wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
-                    ### Assume we are done attempting to transfer those spots
-                    #local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
-                    if [[ ${spots_xfered} -ne ${spots_offered} ]]; then
-                        wd_logger 1 "INFO: Successful curl upload has completed, but only ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org"
+                    wd_logger 1 "After ${curl_exec_seconds} seconds, wsprnet reported ${spots_xfered} of the ${spots_offered} offered spots were added"
+                    local curl_msecs=$(awk '/milliseconds/{print $3}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})
+                    if [[ ${spots_xfered} -eq 0 ]]; then
+                        wd_logger 1 "WARNING: The curl upload was successful in ${curl_msecs} msecs, but 0 spots were added. Don't try them again"
+                    else
+                        ### wsprnet responded with a message which includes the number of spots we are attempting to transfer,  
+                        ### Assume we are done attempting to transfer those spots
+                        #local wd_arg=$(printf "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$(cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE})")
+                        if [[ ${spots_xfered} -ne ${spots_offered} ]]; then
+                            wd_logger 1 "INFO: Successful curl upload has completed, but only ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org"
+                        fi
+                        wd_logger 1 "Successful curl upload has completed and all of the ${spots_xfered} offered spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                     fi
-                    wd_logger 1 "Successful curl upload has completed. ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
+                    wd_logger 1 "After a ${curl_exec_seconds} second long upload, flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that the spots they contain have been uploaded"
+                    wd_logger 2 "\n${upload_spots_file_list[*]}"
                 fi
-                wd_logger 1 "After a ${curl_exec_seconds} second long upload, flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that the spots they contain have been uploaded"
-                wd_logger 2 "\n${upload_spots_file_list[*]}"
-                wd_rm ${upload_spots_file_list[@]}
             fi
+            wd_rm ${upload_spots_file_list[@]}
         done
    done
 }
