@@ -965,7 +965,7 @@ alias wd9m=wd-9m
 ### tmux alias
 function tm() {
     # set -x
-    local tm_arg=$1
+    local tm_arg=${1-}
     local tm_list=( $(tmux ls 2> /dev/null | awk -F : '{print $1}') )
     local tm_list_count=${#tm_list[@]}
 
