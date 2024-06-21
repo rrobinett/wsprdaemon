@@ -563,7 +563,7 @@ function wd-merged-kfs() {
      fi
      local merged_log_file=${merged_file_list[${REPLY}]}
      echo "Examining  merged_log_file  ${merged_log_file} "
-     awk '{printf "%s %s %s %s %s %s %10s %8s %10s   %9s %11s     %10s %10s     %10s %10s     %10s %10s       %10s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $17, $13, $16, $12, $15, $11, $14, $10, $18}' ${merged_log_file} | less
+     sed 's/KA9Q_AIRSPYKA9Q_SDRPLAY/KA9Q_AIRSPY KA9Q_SDRPLAY/;s/TOTAL.*//'  ${merged_log_file} | awk '{printf "%s %s %s %s %s %s %10s %8s %10s:   %10s %10s %10s %10s      %10s %10s %10s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $16, $12, $10, $11, $15, $14, $13}' | less
 }
 
 
