@@ -1,5 +1,5 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and alieaes which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and aliases which are helpful in running and debugging WD systems
 
 if [[ -d /dev/shm/wsprdaemon ]]; then
     WD_TMP_ROOT=/dev/shm/wsprdaemon
@@ -362,7 +362,7 @@ function wd-overloads()
 {
 : <<"comment_out"
     local log_file_list=( $(find /dev/shm/wsprdaemon/ -name wav_status.log | sort ) )
-    #printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECIEVER/BAND/log_file"
+    #printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECEIVER/BAND/log_file"
 
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'wav_status.log' files, so this must be an older version of WD"
