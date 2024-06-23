@@ -1,5 +1,5 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/.wd_bash_aliases  includes funtions and aliases which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/.wd_bash_aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
 if [[ -d /dev/shm/wsprdaemon ]]; then
     WD_TMP_ROOT=/dev/shm/wsprdaemon
@@ -150,7 +150,7 @@ fi
 }
 alias wdrci='wd-rci'
 
-### Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
+### Reload the local bash aliases and functions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
 alias wd-rcc='source ~/.bash_aliases'
 alias wd-rcc='wd-rcc'
 
