@@ -24,11 +24,12 @@
 ###   in the upload_to_wsprnet_daemon() and I would rather work on VHF/UHF support
 
 ### The spot and noise data is saved in permanent file systems, while temp files are not saved 
-declare UPLOADS_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads.d           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
-declare UPLOADS_TMP_ROOT_DIR=${WSPRDAEMON_TMP_DIR}/uploads.d        ### Put under here all files which can or should be flushed when the system is started
+declare UPLOADS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/uploads.d"           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
+declare UPLOADS_WSPRDAEMON_ROOT_DIR="${UPLOADS_ROOT_DIR}/wsprdaemon.d"
 
-declare UPLOADS_WSPRDAEMON_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprdaemon.d
-declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d
+declare UPLOADS_TMP_ROOT_DIR="${WSPRDAEMON_TMP_DIR}/uploads.d"        ### Put under here all files which can or should be flushed when the system is started
+declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR="${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d"
+declare UPLOADS_GREP_LOG_FILE="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/grep.log"       ### Since there is only one upload daemon, there needs to be only one grep.log file
 
 ### spots.logs.wsprdaemon.org
 declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/spots.d
@@ -307,8 +308,8 @@ function upload_to_wsprnet_daemon() {
                 continue
             fi
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
-            if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > grep.log; then
-                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots whicg we attempted to upload:\n$(< grep.log)"
+            if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
+                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots whicg we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
             elif [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
                 wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}) So presume spots were recorded and flush them from our cache"
             else 
