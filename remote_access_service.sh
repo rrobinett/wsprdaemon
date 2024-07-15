@@ -1,5 +1,16 @@
 #!/bin/bash
 
+### This WD module implemewnts WD's Remote Access Channel service which allows WD admins with access to ports on the wd0.wsprdaemon.org server to ssh to 
+### WD devices running the Linux wsprdaemon_remote_access.serice
+###
+### ED sites enable access by adding two lines to their wsprdaemon.conf file:
+#
+### REMOTE_ACCESS_CHANNEL=1           ### Defaults to "".  When it is an integer in the range 0-1000, allow the wsprdemon.org administrator ssh access to this WD server if you also provide a user/password on this server
+### REMOTE_ACCESS_ID="KPH-Beelink-1"
+#
+# Hosts with names which start with "WSPRSONDE-" are gateways connected to Wsprsonde8 beacons, and those hosts are automatically set up to log on to this RAC service
+
+set +x
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
 declare WD_FRPS_URL=${WD_FRPS_URL-wd0.wsprdaemon.org}
@@ -7,9 +18,15 @@ declare WD_FRPS_PORT=35735
 declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}    ### Default to use FRP version 0.36.2
 declare FRPC_INI_FILE=${FRPC_CMD}_wd.ini
 declare WD_REMOTE_ACCESS_SERVICE_NAME="wd_remote_access"
-declare RAC_ID_MAX=1000
-declare RAC_IP_PORT_BASE=35800
-declare RAC_IP_PORT_MAX=$(( ${RAC_IP_PORT_BASE} + ${RAC_ID_MAX} ))
+
+declare RAC_IP_PORT_BASE=35800    ### Don't change this!  As of 7/9/24 many WD servers have IDs which start here
+declare RAC_IP_PORT_MAX=39999
+declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} % 1000 )  + 3000 ))    ## The WS gateways RAC_IDs start at 3000
+
+declare WSPRSONDE_ID_BASE=$(( ${WSPRSONDE_IP_PORT_BASE} - ${RAC_IP_PORT_BASE} ))
+declare RAC_ID_MAX=$(( ${WSPRSONDE_ID_BASE} - 1 ))                                    ### Max RAC_ID is 2199, which should be plenty
+declare WSPRSONDE_ID_MAX=$(( ${RAC_IP_PORT_MAX} - ${WSPRSONDE_IP_PORT_BASE} ))        ### Max WPSRSONDE_ID in 1999, which should be plenty
+set +x
 
 function execute_sysctl_command()
 {
@@ -163,6 +180,16 @@ function remote_access_connection_status() {
 ### Else, if the ${WD_REMOTE_ACCESS_SERVICE_NAME} is not already running,  configure, enqble and start it
 function wd_remote_access_service_manager() {
     local rc
+
+    if [[ -z "${REMOTE_ACCESS_CHANNEL-}" && ${HOSTNAME} =~ ^WSPRSONDE-GW- ]]; then
+        ### Hostnames which start with "WSPSRSONDE-GW-nnn" are (typically) a Raspberry Pi 3b connected to the USB port of a Wspsrsonde-8
+        ### Those Pi 3bs provoide a remote access gateway for mointoring and control of the WS-8 and only the wdremoteaccess service is automatically run on them, WD isn't running
+        local ws_gw_number=${HOSTNAME#WSPRSONDE-GW-}
+        local rac_channel=$(( ${WSPRSONDE_ID_BASE} + ${ws_gw_number} ))
+        REMOTE_ACCESS_CHANNEL=${rac_channel}
+        REMOTE_ACCESS_ID="${HOSTNAME}"
+        wd_logger 1 "Automatically configuring WD's RAC on channel #${REMOTE_ACCESS_CHANNEL} => IP Port $(( ${RAC_IP_PORT_BASE} + ${REMOTE_ACCESS_CHANNEL} )) on a host named ${REMOTE_ACCESS_ID}"
+    fi
 
     remote_access_connection_status
     rc=$?
