@@ -75,12 +75,14 @@ function grape_upload_all_local_wavs() {
     fi
     wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
 
-    local date_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )
+    local date_dir_list=( $( find -L -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )   ## Follow symbolic link to /mnt/wd-archive/...
     local date_dir
     for date_dir in ${date_dir_list[@]} ; do
-        local site_dir_list=( $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
+        wd_logger 2 "Checking date_dir ${date_dir}"
+        local site_dir_list=( $( find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
         for site_dir in ${site_dir_list[@]} ; do
+            wd_logger 2 "Checking site_dir ${site_dir}"
             upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
@@ -130,7 +132,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 
     ### Search each receiver for wav files
     local receiver_dir
-    local receiver_dir_list=( $(find "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d | sort ) )
+    local receiver_dir_list=( $( find -L "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d | sort ) )
     if [[ ${#receiver_dir_list[@]} -eq 0 ]]; then
         wd_logger 1  "There are no receiver dirs under ${reporter_wav_root_dir}"
         return 1
@@ -153,7 +155,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         ### Cleanup the flacs and create 24hour.wavs in all the bands
         local wav_file_count=0
         local band_dir
-        for band_dir in $( find ${receiver_dir} -mindepth 1 -type d ); do
+        for band_dir in $( find -L ${receiver_dir} -mindepth 1 -type d ); do
             if [[ ! "${band_dir}" =~ WWV|CHU ]]; then
                 wd_logger 2 "Band '${band_dir}' is not a WWV or CHU band, so skip to next band"
                 continue
@@ -294,11 +296,11 @@ function grape_get_date_status() {
         return 1
     fi
     local rc=0
-    local band_dir_list=( $(find ${date_root_dir} -mindepth 3 -type d) )
+    local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d) )
     wd_logger 1 "Found ${#band_dir_list[@]} bands for UTC date ${date}"
     for band_dir in ${band_dir_list[@]} ; do
-        local flac_file_list=( $( find ${band_dir} -name '*.flac') )
-        local silent_flac_file_list=( $( find ${band_dir} -type l -name '*.flac') )
+        local flac_file_list=( $( find -L ${band_dir} -name '*.flac') )
+        local silent_flac_file_list=( $( find -L ${band_dir} -type l -name '*.flac') )
         printf "In %-90s found ${#flac_file_list[@]} flac files"  ${band_dir}
         if [[ ${#silent_flac_file_list[@]} -gt 0 ]]; then
             printf ", of which ${#silent_flac_file_list[@]} are silence files"
@@ -310,7 +312,7 @@ function grape_get_date_status() {
 
 ### '-t' 
 function grape_show_all_dates_status(){
-    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         grape_get_date_status ${wav_archive_date}
@@ -319,10 +321,10 @@ function grape_show_all_dates_status(){
 
 ### '-p' 
 function grape_purge_all_empty_date_trees(){
-    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
-        local date_files_list=( $( find ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date} -type f ) )
+        local date_files_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date} -type f ) )
         if [[ ${#date_files_list[@]} -eq 0 ]]; then
             wd_logger 1 "Purging empty date  tree ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}"
             rm -r ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date}
@@ -341,7 +343,7 @@ function grape_repair_band_flacs() {
         wd_logger 1 "Band '${band_dir}' is not a WWV or CHU band, so skip repairing"
         return 0
     fi
-    local flac_file_list=( $( find ${band_dir} -name '*.flac' | sort) )
+    local flac_file_list=( $( find -L ${band_dir} -name '*.flac' | sort) )
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "There are no flac files in ${band_dir}, so returning an this as an error"
         return 1
@@ -455,7 +457,7 @@ function grape_repair_date_flacs() {
         wd_logger 1 "Can't find ${date_root_dir}"
         return 1
     fi
-    local band_dir_list=( $( find ${date_root_dir} -mindepth 3 -type d) )
+    local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d) )
     wd_logger 1 "Found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
         grape_repair_band_flacs ${band_dir}
@@ -467,7 +469,7 @@ function grape_repair_all_dates_flacs()
 {
     local current_date
     TZ=UTC printf -v current_date "%(%Y%m%d)T"
-    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
@@ -507,7 +509,7 @@ function grape_create_wav_file()
     fi
 
     local flac_file_list=()
-    flac_file_list=( $(find ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
+    flac_file_list=( $( find -L ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'find ${flac_file_dir}  -name '*.flac' -printf '%p\n' | sort' => ${rc}"
@@ -537,7 +539,7 @@ function grape_create_wav_file()
             wd_logger 1 "grape_repair_band_flacs() reported it repaired  ${flac_file_dir} by adding ${rc} (or more) silence files"
         fi
         ### Since the repair reported success we need to recreate the flac_file_list() 
-        flac_file_list=( $( find ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )
+        flac_file_list=( $( find -L ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )
         if [[ ${#flac_file_list[@]} -ne ${MINUTES_PER_DAY}  ]]; then
             wd_logger 1 "ERROR: grape_repair_band_flacs() failed to leave ${flac_file_dir} with the expected ${MINUTES_PER_DAY} flac files"
             return  ${GRAPE_ERROR_RETURN_REPAIR_FAILED}
@@ -606,12 +608,12 @@ function grape_create_24_hour_wavs() {
     local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${archive_date}"
 
     if [[  ! -d ${date_root_dir} ]]; then
-        wd_logger 1 "ERROR: can't find ${date_root_dir}"
+        wd_logger 1 "ERROR: can't find -L ${date_root_dir}"
         return -2
     fi
     local new_wav_count=0
     local return_code=0
-    local band_dir_list=( $( find ${date_root_dir} -mindepth 3 -type d \( -name 'CHU*' -or -name 'WWV*' \) -printf '%p\n' | sort) )
+    local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d \( -name 'CHU*' -or -name 'WWV*' \) -printf '%p\n' | sort) )
     wd_logger 2 "found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
         wd_logger 2 "create 24 hour wav file in ${band_dir}"
@@ -647,7 +649,7 @@ function grape_create_all_24_hour_wavs(){
     local return_code=0
     local new_wav_count=0
 
-    local wav_archive_dates_dir_list=( $(find ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         local rc
