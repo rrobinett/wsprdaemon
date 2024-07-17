@@ -246,7 +246,7 @@ def main():
     grid_square = None
     receiver_name = None
 
-    inputdir_regex = re.compile('(?:.+/|^)(?P<date>\d{8})/(?P<station>(?P<site>(?P<callsign>[a-zA-Z0-9=]+)_(?P<grid_square>[a-zA-Z0-9]+))/(?P<receiver_info>((?P<receiver_name>\w+)@(?P<psws_station_id>[a-zA-Z0-9]+)_(?P<psws_instrument_id>\d+))))$')
+    inputdir_regex = re.compile('(?:.+/|^)(?P<date>\d{8})/(?P<station>(?P<site>(?P<callsign>[a-zA-Z0-9=-]+)_(?P<grid_square>[a-zA-Z0-9]+))/(?P<receiver_info>((?P<receiver_name>\w+)@(?P<psws_station_id>[a-zA-Z0-9]+)_(?P<psws_instrument_id>\d+))))$')
     m = inputdir_regex.match(inputdir)
     if m:
         if start_time is None:
