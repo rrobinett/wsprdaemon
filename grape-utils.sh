@@ -231,12 +231,13 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
 
-        local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
+        local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp_stderr.out"
+        $(>  ${sftp_stderr_file} )   ### ensure that it exists and is empty
         sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}'\n$(<${sftp_stderr_file})"
+            wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}' -> ${rc}:\n$(<${sftp_stderr_file})"
             return ${rc}
         fi
     done
