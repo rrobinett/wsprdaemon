@@ -84,4 +84,4 @@ function ka9q_status_service_test() {
     echo "A/D overrange: ${current_sd_overloads_count}"
     #less ${KA9Q_METADUMP_STATUS_FILE}
  }
- ka9q_status_service_test
+ #ka9q_status_service_test
