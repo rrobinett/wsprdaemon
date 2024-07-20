@@ -267,7 +267,7 @@ function grape_upload_public_key() {
         return 0
     fi
     wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
-    ssh-copy-id  ${station_id}@${PSWS_URL}
+    ssh-copy-id -f ${station_id}@${PSWS_URL}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_URL}' => ${rc}"
