@@ -966,7 +966,6 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     local wspr_cycle_rms_noise=$4                       ### The following fields are the same for every spot in the wspr cycle
     local wspr_cycle_fft_noise=$5
     local wspr_cycle_kiwi_overloads_count=$6
-    wd_logger 2 "wspr_cycle_kiwi_overloads_count=${wspr_cycle_kiwi_overloads_count}"
     local real_receiver_call_sign=$7                    ### For real receivers, these are taken from the conf file line
     local real_receiver_grid=$8                         ### But for MERGEd receivers, the posting daemon will change them to the call+grid of the MERGEd receiver
     local freq_adj_mhz=$9
@@ -1362,9 +1361,71 @@ function decoding_daemon() {
             sleep 1
             continue
         fi
-        mode_wav_file_list=(${mode_seconds_files})        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
+        mode_wav_file_list=( ${mode_seconds_files} )        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
+        if [[ ${#mode_wav_file_list[@]} -le 0 ]]; then
+            wd_logger 1 "ERROR: get_wav_file_list() returned no error, but it unexpectadly has returned no lists.  So sleep 1 and retry"
+            sleep 1
+            continue
+        fi
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
+        
 
+        ### We append the count of the A/D overload events in the last 2 minutes to the ad_overloads.log file and add them to the spots reported
+        local current_ad_overloads_count=0   ### What we get when we query the SDR righ tnow
+        if [[ ${receiver_name} =~ ^KA9Q ]]; then
+            wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
+            ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
+                current_ad_overloads_count=0   ## Make sure this is an integer
+            else
+                current_ad_overloads_count="${current_ad_overloads_count//[ ,]}"   ### Remove the space and commas put there by KA9Q's metsdump
+                if [[ -z "${current_ad_overloads_count}" ]] || ! is_uint ${current_ad_overloads_count} ; then
+                    wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
+                else
+                    wd_logger 1 "ka9q_get_status_value() returned the current count which is '${current_ad_overloads_count}'"
+                fi
+            fi
+        elif [[ -f  kiwi_recorder.log ]]; then
+            wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
+            get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: 'get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}'  => ${rc}"
+            else
+                wd_logger 1 "'get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}'  => ${rc}"
+            fi
+        else
+            wd_logger 1 "Not a KA9Q or KiwiSDR, so there is no overload information"
+        fi
+        local new_sdr_overloads_count=0
+        if [[ -z "${last_ad_overloads_count}" || ${last_ad_overloads_count} -eq -1 ]]; then
+            wd_logger 1 "This is the first overloads count after startup, so just set last_ad_overloads_count equal to current_ad_overloads_count=${current_ad_overloads_count}"
+            new_sdr_overloads_count=0
+        else
+            new_sdr_overloads_count=$(( ${current_ad_overloads_count} - ${last_ad_overloads_count} ))
+            wd_logger 1 "current_ad_overloads_count '${current_ad_overloads_count}' - last_ad_overloads_count '${last_ad_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
+            if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
+                wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {current_ad_overloads_count '${current_ad_overloads_count}'"
+                new_sdr_overloads_count=${current_ad_overloads_count}
+            fi
+        fi
+        ### Extract the time of the first wav file in the first list of wav files (e.e the 2 minute list) and use that time for the wav file time in the first field of the ad-overloads.log file line
+        local ov_returned_files=${mode_wav_file_list[0]}
+        local ov_comma_separated_files=${ov_returned_files#*:}        ### Chop off the SECONDS: leading the list
+        local ov_wav_file_list=( ${ov_comma_separated_files//,/ } )
+        local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
+
+        echo "${ov_first_input_wav_filename}: ${current_ad_overloads_count} ${new_sdr_overloads_count}" >> ad_overloads.log
+        truncate_file ad_overloads.log 1000000       ## limit the size of the file
+
+        wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
+
+        last_ad_overloads_count=${current_ad_overloads_count}
+
+
+        ## WIP Adjust AGC if overloads indicates it is needed
         local wav_files_ka9q_agc_val=-1 
         local wav_files_ka9q_noise_val=-1 
         if [[ "${receiver_name}" =~ KA9Q && ${GET_KA9Q_STATUS-no} == "yes" ]]; then
@@ -1467,7 +1528,6 @@ function decoding_daemon() {
 
             local sox_rms_noise_level=""
             local fft_noise_level=""
-            local new_sdr_overloads_count=0
             local rms_line=""
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
@@ -1601,55 +1661,6 @@ function decoding_daemon() {
                         wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
                         return 1
                     fi
-
-                    ### Append the count of the A/D overload events in the last 2 minutes to the ad_overloads.log file and add them to the spots reported
-                    local current_ad_overloads_count=0   ### What we get when we query the SDR righ tnow
-                    if [[ ${receiver_name} =~ ^KA9Q ]]; then
-                        wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
-                        ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
-                        rc=$?
-                        if [[ ${rc} -ne 0 ]]; then
-                            wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
-                            current_ad_overloads_count=0   ## Make sure this is an integer
-                        else
-                            current_ad_overloads_count="${current_ad_overloads_count//[ ,]}"   ### Remove the space and commas put there by KA9Q's metsdump
-                            if [[ -z "${current_ad_overloads_count}" ]] || ! is_uint ${current_ad_overloads_count} ; then
-                                wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
-                            else
-                                wd_logger 1 "ka9q_get_status_value() returned the current count which is '${current_ad_overloads_count}'"
-                            fi
-                        fi
-                    elif [[ -f  kiwi_recorder.log ]]; then
-                        wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
-                        get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
-                        rc=$?
-                        if [[ ${rc} -ne 0 ]]; then
-                            wd_logger 1 "ERROR: 'get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}'  => ${rc}"
-                        else
-                            wd_logger 1 "'get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}'  => ${rc}"
-                        fi
-                    else
-                        wd_logger 1 "Not a KA9Q or KiwiSDR, so there is no overload information"
-                    fi
-                    new_sdr_overloads_count=0
-                    if [[ -z "${last_ad_overloads_count}" || ${last_ad_overloads_count} -eq -1 ]]; then
-                        wd_logger 1 "This is the first overloads count after startup, so just set last_ad_overloads_count equal to current_ad_overloads_count=${current_ad_overloads_count}"
-                        new_sdr_overloads_count=0
-                    else
-                        new_sdr_overloads_count=$(( ${current_ad_overloads_count} - ${last_ad_overloads_count} ))
-                        wd_logger 1 "current_ad_overloads_count '${current_ad_overloads_count}' - last_ad_overloads_count '${last_ad_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
-                        if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
-                            wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {current_ad_overloads_count '${current_ad_overloads_count}'"
-                             new_sdr_overloads_count=${current_ad_overloads_count}
-                        fi
-                    fi
-
-                    echo "${decoder_input_wav_filename}: ${current_ad_overloads_count} ${new_sdr_overloads_count}" >> ad_overloads.log
-                    truncate_file ad_overloads.log 1000000       ## limit the size of the file
-
-                    wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
-
-                    last_ad_overloads_count=${current_ad_overloads_count}
 
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_sdr_overloads_count}"
