@@ -503,10 +503,9 @@ function sleep_until_raw_file_is_full() {
         ### We really need to know the IP address of the Kiwi recording this band, since this freq may be recorded by other other Kiwis in a Merged group
         local this_dir_path_list=( ${PWD//\// } )
         local kiwi_name=${this_dir_path_list[-2]}
-        local kiwi_ip_addr=$(get_receiver_ip_from_name ${kiwi_name})
         local kiwi_freq=${filename#*_}
               kiwi_freq=${kiwi_freq::3}
-        local ps_output=$(ps aux | grep "${KIWI_RECORD_COMMAND}.*${kiwi_freq}.*${kiwi_ip_addr/:*}" | grep -v grep)
+        local ps_output=$(ps aux | grep "${KIWI_RECORD_COMMAND}.*${kiwi_freq}.*${receiver_ip_address/:*}" | grep -v grep)
         local kiwirecorder_pids=( $(awk '{print $2}' <<< "${ps_output}" ) )
         if [[ ${#kiwirecorder_pids[@]} -eq 0 ]]; then
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it;\n$(soxi ${filename})"
@@ -967,6 +966,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
     local wspr_cycle_rms_noise=$4                       ### The following fields are the same for every spot in the wspr cycle
     local wspr_cycle_fft_noise=$5
     local wspr_cycle_kiwi_overloads_count=$6
+    wd_logger 2 "wspr_cycle_kiwi_overloads_count=${wspr_cycle_kiwi_overloads_count}"
     local real_receiver_call_sign=$7                    ### For real receivers, these are taken from the conf file line
     local real_receiver_grid=$8                         ### But for MERGEd receivers, the posting daemon will change them to the call+grid of the MERGEd receiver
     local freq_adj_mhz=$9
@@ -1074,7 +1074,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
 
         ### AI6VN 21 Nov 2023      add spot-sopreading to WSP=R-2 lines and copy that speading in hertz * 1000 into the metric field, then remove anty leading 0s with the 10#
         local spreading_metric=$(( 10#${spot_spreading##*.} ))   ### Instead of performing a floatin gpoint *1000.0 with 'bc', just chop off the leading 'N.' 
-        wd_logger 2 "Overwrite the metic fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
+        wd_logger 2 "Overwrite the metric fiele value field value ${spot_metric} with 1000 * the spreading value ${spot_spreading}. So spot_metric becomes  ${spreading_metric}"
         spot_metric=${spreading_metric}
 
         ### G3ZIL April 2020 V1    add azi to each spot line
@@ -1217,25 +1217,38 @@ function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
     local receiver_modes_arg=${3}
+    local ret_code
+    local rc
 
     local receiver_call
     receiver_call=$( get_receiver_call_from_name ${receiver_name} )
-    local ret_code=$?
+    ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: can't find receiver call from '${receiver_name}"
         return 1
     fi
+
+    local receiver_ip_address
+    receiver_ip_address=$(get_receiver_ip_from_name ${receiver_name})
+    ret_code=$?
+    if [[ ${ret_code} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find receiver IP from '${receiver_name}"
+        return 1
+    fi
+
     local receiver_grid
     receiver_grid=$( get_receiver_grid_from_name ${receiver_name} )
-    local ret_code=$?
+    ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: can't find receiver grid 'from ${receiver_name}"
         return 1
     fi
+
     local receiver_freq_khz=$( get_wspr_band_freq ${receiver_band} )
     local receiver_freq_hz=$( echo "scale = 0; ${receiver_freq_khz}*1000.0/1" | bc )
 
-    wd_logger 1 "Starting with args ${receiver_name} ${receiver_band} ${receiver_modes_arg}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}, receiver_freq_hz=${receiver_freq_hz}"
+    wd_logger 1 "Given ${receiver_name} ${receiver_band} ${receiver_modes_arg} => receiver_ip_address=${receiver_ip_address}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}, receiver_freq_hz=${receiver_freq_hz}"
+
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
     local receiver_modes
@@ -1454,7 +1467,7 @@ function decoding_daemon() {
 
             local sox_rms_noise_level=""
             local fft_noise_level=""
-            local new_sdr_overload_count=0
+            local new_sdr_overloads_count=0
             local rms_line=""
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
@@ -1593,13 +1606,14 @@ function decoding_daemon() {
                     local current_ad_overloads_count=0   ### What we get when we query the SDR righ tnow
                     if [[ ${receiver_name} =~ ^KA9Q ]]; then
                         wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
-                        ka9q_get_status_value current_ad_overloads_count "A/D overrange:"
+                        ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
                         rc=$?
                         if [[ ${rc} -ne 0 ]]; then
                             wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
+                            current_ad_overloads_count=0   ## Make sure this is an integer
                         else
                             current_ad_overloads_count="${current_ad_overloads_count//[ ,]}"   ### Remove the space and commas put there by KA9Q's metsdump
-                            if ! is_uint ${current_ad_overloads_count} ; then
+                            if [[ -z "${current_ad_overloads_count}" ]] || ! is_uint ${current_ad_overloads_count} ; then
                                 wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
                             else
                                 wd_logger 1 "ka9q_get_status_value() returned the current count which is '${current_ad_overloads_count}'"
@@ -1617,28 +1631,28 @@ function decoding_daemon() {
                     else
                         wd_logger 1 "Not a KA9Q or KiwiSDR, so there is no overload information"
                     fi
-                    local new_ad_overloads_count
-                    if [[ ${last_ad_overloads_count} -eq -1 ]]; then
+                    new_sdr_overloads_count=0
+                    if [[ -z "${last_ad_overloads_count}" || ${last_ad_overloads_count} -eq -1 ]]; then
                         wd_logger 1 "This is the first overloads count after startup, so just set last_ad_overloads_count equal to current_ad_overloads_count=${current_ad_overloads_count}"
-                        new_ad_overloads_count=0
+                        new_sdr_overloads_count=0
                     else
-                        new_ad_overloads_count=$(( ${current_ad_overloads_count} - ${last_ad_overloads_count} ))
-                        wd_logger 1 "current_ad_overloads_count '${current_ad_overloads_count}' - last_ad_overloads_count '${last_ad_overloads_count}' =>  new_ad_overloads_count '${new_ad_overloads_count}'"
-                        if [[ ${new_ad_overloads_count} -lt 0 ]]; then
-                            wd_logger 1 "new_ad_overloads_count '${new_ad_overloads_count}' is less than 0, so count has rolled over and just use {current_ad_overloads_count '${current_ad_overloads_count}'"
-                             new_ad_overloads_count=${current_ad_overloads_count}
+                        new_sdr_overloads_count=$(( ${current_ad_overloads_count} - ${last_ad_overloads_count} ))
+                        wd_logger 1 "current_ad_overloads_count '${current_ad_overloads_count}' - last_ad_overloads_count '${last_ad_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
+                        if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
+                            wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {current_ad_overloads_count '${current_ad_overloads_count}'"
+                             new_sdr_overloads_count=${current_ad_overloads_count}
                         fi
                     fi
 
-                    echo "${decoder_input_wav_filename}: ${current_ad_overloads_count} ${new_ad_overloads_count}" >> ad_overloads.log
+                    echo "${decoder_input_wav_filename}: ${current_ad_overloads_count} ${new_sdr_overloads_count}" >> ad_overloads.log
                     truncate_file ad_overloads.log 1000000       ## limit the size of the file
 
-                    wd_logger 1 "The SDR reported ${new_ad_overloads_count} new overload events in this 2 minute cycle"
+                    wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
 
                     last_ad_overloads_count=${current_ad_overloads_count}
 
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
-                    sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_ad_overloads_count}"
+                    sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_sdr_overloads_count}"
 
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
@@ -1931,7 +1945,7 @@ function decoding_daemon() {
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_sdr_overload_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
     done

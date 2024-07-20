@@ -40,6 +40,8 @@ declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wis
 declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-26a8015e871a6cad09a10cdb6583b204dd1e4407}"   ### Defaults to   Tue Jun 11 01:37:53 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
+###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file
+
 function get_current_commit_sha() {
     local __return_commit_sha_variable=$1
     local git_directory=$2
@@ -165,8 +167,20 @@ declare KA9Q_METADUMP_LOG_FILE="${KA9Q_METADUMP_LOG_FILE-/dev/shm/wsprdaemon/ka9
 declare KA9Q_METADUMP_STATUS_FILE="${KA9Q_STATUS_FILE-/dev/shm/wsprdaemon/ka9q.status}"            ### Parse the fields in that file into seperate lines in this file
 declare -A ka9q_status_list=()
 
+###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
 function ka9q_get_metadump() {
-     metadump -c 2 -s 14095600 hf.local > ${KA9Q_METADUMP_LOG_FILE}
+    local receiver_ip_address=$1
+    local receiver_freq_hz=$2
+    local status_log_file=$3
+
+    metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: ' metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}' => ${rc}"
+        return ${rc}
+    fi
+    wd_logger 1 "Got new status from:  'metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}'"
+    return 0
  }
 
 function ka9q_parse_metadump_file_to_status_file() {
@@ -206,27 +220,76 @@ function ka9q_parse_metadump_file_to_status_file() {
     rm -f ${metadump_status_file}.tm
 }
 
-function ka9q_get_status_value() {
-    local __return_var="$1"
-    local search_val="$2"
+function ka9q_parse_status_value() {
+    local ___return_var="$1"
+    local status_file=$2
+    local search_val="$3"
 
     ### Parsing metadump's status report lines has proved to be a RE challenge since some lines include a subset of other status report lines
     ### Also each line starts with its enum value '[xxx]' while some lines include a '/'.  This sed expression avoids problems with '/' by delimiting the 's' seach 
     ### and replace command fields with ';' which isn't found in any of the current status lines
-    local search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${KA9Q_METADUMP_STATUS_FILE} )
+    if [[ ! -f  ${status_file} ]]; then
+        wd_logger 1 "ERROR: can't find  ${status_file}"
+        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        return 1
+    fi
+    local search_results
+    search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${status_file} )
+
+    if [[ -z "${search_results}" ]]; then
+        wd_logger 1 "ERROR: can't find '${search_val}' in ${status_file}"
+        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        return 2
+    fi
     wd_logger 2 "Found search string '${search_val}' in line and returning '${search_results}'"
-    eval ${__return_var}=\""${search_results}"\"
+    eval ${___return_var}=\""${search_results}"\"
+    return 0
+}
+
+function ka9q_get_current_status_value() {
+    local __return_var="$1"
+    local receiver_ip_address=$2
+    local receiver_freq_hz=$3
+    local search_val="$4"
+    local rc
+
+    local status_log_file="./ka9q_status.log"   ### each receiver+channel will have status fields unique to it, so there needs to be a file for each of them
+    ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to get new status"
+        return ${rc}
+    fi
+
+    local value_found
+    ka9q_parse_status_value  value_found  ${status_log_file} "${search_val}"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to get new status"
+        return ${rc}
+    fi
+    
+    wd_logger 1 "Returning '${value_found}'"
+
+    eval ${__return_var}=\""${value_found}"\"
+    return 0
 }
 
 function ka9q_status_service_test() {
-    ka9q_get_metadump
-    ka9q_parse_metadump_file_to_status_file  ${KA9Q_METADUMP_LOG_FILE} ${KA9Q_METADUMP_STATUS_FILE}
-    local current_sd_overloads_count
-    ka9q_get_status_value current_sd_overloads_count "A/D overrange:"
-    echo "A/D overrange: ${current_sd_overloads_count}"
-    #less ${KA9Q_METADUMP_STATUS_FILE}
- }
- #ka9q_status_service_test
+    local ad_value
+    local rc
+
+    ka9q_get_current_status_value ad_value wspr-pcm.local 14095600  "A/D overrange:"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        printf "'ka9q_get_current_status_value (ad_value wspr-pcm.local 14095600 \"A/D overrange:\") ' => ${rc}\n"
+        exit ${rc}
+    fi
+     printf "'ka9q_get_current_status_value (ad_value wspr-pcm.local 1409660  \"A/D overrange:\") ' returned '${ad_value}'\n"
+     return -1
+}
+# ka9q_status_service_test
+# exit
 
 function ka9q_setup()
 {
