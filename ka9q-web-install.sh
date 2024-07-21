@@ -84,15 +84,40 @@ function ka9q-get-status-dns() {
 #echo "Gpt status DNS = '${test_dns}'"
 #exit
 
-declare KA9Q_WEB_PID_FILE_NAME="./ka9q-web.pid"
+declare KA9Q_WEB_CMD="/usr/local/sbin/ka9q-web"
+
+function ka9q_web_daemon() {
+    wd_logger 1 "Starting"
+
+    while true; do
+        local ka9q_radiod_status_dns
+        ka9q-get-status-dns "ka9q_radiod_status_dns"
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
+        else
+            wd_logger 1 "Running "
+            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns} 
+            rc=$?
+            local ka9q_web_pid=$!
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}'=> ${rc}"
+            fi
+        fi
+        wd_logger 1 "Sleeping for 5 seconds before restarting"
+    done
+}
+
+#function test_ka9q-web-setup() {
+#     ka9q-web-setup
+#}
+# test_ka9q-web-setup
 
 function ka9q-web-setup() {
     local rc
     wd_logger 1 "Starting"
 
-    if [[ ! -f ${KA9Q_WEB_PID_FILE_NAME} ]]; then
-        wd_logger 1 "No PID file, so install and spawn it"
-    else
+    if false && [[ -f ${KA9Q_WEB_PID_FILE_NAME} ]]; then
         local ka9q_web_pid=$(<  ${KA9Q_WEB_PID_FILE_NAME})
         wd_logger 1 "Got PID = ${ka9q_web_pid} from file  ${KA9Q_WEB_PID_FILE_NAME}"
         if ps  ${ka9q_web_pid} > /dev/null; then
@@ -101,11 +126,21 @@ function ka9q-web-setup() {
         fi
          wd_logger 1 "Found file ${KA9Q_WEB_PID_FILE_NAME} which contains PID ${ka9q_web_pid}, but that PID is not active, so flush the PID file and start it again"
          rm -f ${KA9Q_WEB_PID_FILE_NAME}
+     else
+        wd_logger 1 "No PID file, so install and spawn it"
     fi
 
     # 1. install Onion framework dependencies
-    sudo apt update
-    sudo apt install -y libgnutls28-dev libgcrypt20-dev cmake
+    local package_needed
+    for package_needed in libgnutls28-dev libgcrypt20-dev cmake; do
+        wd_logger 2 "Checking for package ${package_needed}"
+        if ! install_debian_package ${package_needed} ; then
+            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
+            exit 1
+        fi
+    done
+#    sudo apt update
+#   sudo apt install -y libgnutls28-dev libgcrypt20-dev cmake
 
     # 2. build and install Onion framework
     if [[ ! -d onion ]]; then
@@ -134,21 +169,6 @@ function ka9q-web-setup() {
         wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
         return 1
     fi
-
-    /usr/local/sbin/ka9q-web -m ${ka9q_radiod_status_dns} &
-    rc=$?
-    local ka9q_web_pid=$!
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: failed to spawn ka9q-web.  => ${rc}"
-        return 1
-    fi
-    echo ${ka9q_web_pid} > ${KA9Q_WEB_PID_FILE_NAME}
-    wd_logger 1 "Started a new ka9q-web server which has pid = ${ka9q_web_pid}"
     return 0
 }
-
-function test_ka9q-web-setup() {
-     ka9q-web-setup
- }
-
- test_ka9q-web-setup
+ka9q-web-setup
