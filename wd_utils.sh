@@ -693,14 +693,14 @@ function daemons_list_action()
         
         wd_logger 2 "Execute action '${acton_to_perform}' on daemon '${daemon_function_name}' which should run in '${daemon_home_directory}'"
         case ${acton_to_perform} in
-            a)
+            a|start)
                 spawn_daemon ${daemon_function_name} ${daemon_home_directory}
                 ;;
-            z)
+            z|stop)
                 kill_daemon ${daemon_function_name} ${daemon_home_directory}
                 ;;
 
-            s)
+            s|status)
                 get_status_of_daemon ${daemon_function_name} ${daemon_home_directory}
                 ;;
             *)
