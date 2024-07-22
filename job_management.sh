@@ -45,66 +45,6 @@ function check_for_zombie_daemon(){
     fi
 }
  
-declare CHECK_FOR_ZOMBIES_TIMEOUT=3     ### How many times to search fpid files and kill the pids recorded in them
-function wd_kill_all()
-{
-    wd_logger 1 "Force kill of all WD programs"
-
-    local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid') )
-    if [[ ${#pid_file_list[@]} -eq 0 ]]; then
-        wd_logger 1 "Found no pid files"
-    else 
-        wd_logger 2 "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'"
-        local pid_val_list=( $( cat ${pid_file_list[@]} ) )
-        if [[ ${#pid_val_list[@]} -eq 0 ]]; then
-            wd_logger 1 "ERROR: Found no pid values in any of the ${#pid_file_list[@]} pid files, so delete all those files"
-            wd_rm ${pid_file_list[*]}
-        else
-            ### Some or all of the pid files contain pid values.  So kill all those pids and delete all the pid files
-            local rc
-            kill ${pid_val_list[@]} # >& /dev/null
-            rc=$?
-            local rc2
-            wd_rm  ${pid_file_list[@]}
-            rc2=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'kill ${pid_val_list[*]}' => ${rc}"
-            fi
-            if [[ ${rc2} -ne 0 ]]; then
-                wd_logger 2 "ERROR: 'wd_rm ${pid_file_list[*]}' => ${rc2}"
-            fi
-            wd_logger 1 "Killed ${#pid_val_list[@]} pids and removed the pid files they came from"
-        fi
-    fi
-
-    ps aux > ps.log            ### Don't pipe the output.  That creates mutlilple addtional bash programs which are really zombies
-    grep "${WSPRDAEMON_ROOT_PATH}\|${KIWI_RECORD_COMMAND}" ps.log | grep -v $$ > grep.log         
-    local zombie_pid_list=( $(awk '{print $2}'  grep.log) )
-
-    if [[ ${#zombie_pid_list[@]} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Killing ${#zombie_pid_list[@]} zombie pids '${zombie_pid_list[*]}'"
-        kill ${zombie_pid_list[@]}
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: for zombie pids 'kill ${zombie_pid_list[*]}' => ${rc}"
-        fi
-    fi
-    kill_all_wd_record_jobs
-
-    active_decoding_cpus_init            ### zero the file which keeps the count of active decode jobs
-
-    echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
-    return 0
-}
-
-function kill_all_wd_record_jobs(){
-    local wd_record_pids=($(ps aux | grep wd-rec | grep -v grep | awk '{print $2}'));
-    if [[ ${#wd_record_pids[@]} -gt 0 ]]; then
-        echo "Flushing ${#wd_record_pids[@]} wd-record jobs";
-        kill ${wd_record_pids[@]};
-    fi
-}
-
 function check_for_zombies() {
     local force_kill=${1:-yes}   
     local job_index
