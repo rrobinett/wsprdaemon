@@ -460,9 +460,55 @@ function wd_rm()
     fi
 }
 
+### Returns a list of PIDs in bottom up order
+function wd_list_decendant_pids() {
+  local children=$(ps -o pid= --ppid "$1")
+
+  if [[  -z "${children}" ]]; then
+      return
+  fi
+
+  for pid in ${children}; do
+     wd_list_decendant_pids "${pid}"
+  done
+  echo "${children}"
+}
+
+function wd_list_parent_and_decenddant_pids() {
+    local root_pid_to_be_killed=$1
+    local top_down_pids_list=( $(wd_list_decendant_pids ${root_pid_to_be_killed}) )
+    echo ${root_pid_to_be_killed} ${top_down_pids_list[@]}
+}
+
+function wd_kill_pid_and_its_decendants() {
+    local pid_list=( $( wd_list_parent_and_decenddant_pids $1 ) )
+    local save_rc=0
+    local rc=0
+
+    wd_logger 2 "Killing pid $1 and all of its decendents: '${pid_list[*]}'"
+
+    local pid_to_kill
+    for pid_to_kill in ${pid_list[@]} ; do
+        wd_logger 2 "Killing pid ${pid_to_kill}"
+        kill ${pid_to_kill} >& /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 2 "INFO: 'kill ${pid_to_kill}' => ${rc}, but this frequently occurs when a process is executing a 'sleep'"
+            save_rc=${rc}
+        fi
+    done
+    if [[ ${save_rc} -ne 0 ]]; then
+        wd_logger 2 "INFO: one or more 'kill ...' commands failed"
+    fi
+    wd_logger 2 "Killed ${#pid_list[@]} pids: ${pid_list[*]}"
+    return 0
+}
+
 function wd_kill()
 {
     local kill_pid_list=($@)
+
+    wd_logger 2 "Kill pid(s):  '${kill_pid_list[*]}'"
 
     if [[ ${#kill_pid_list[@]} -eq 0 ]]; then
         wd_logger 1 "ERROR: no pid(s) were supplied"
@@ -476,10 +522,11 @@ function wd_kill()
             wd_logger 1 "ERROR: pid ${kill_pid} is not running"
             (( ++not_running_errors ))
         else
-            kill ${kill_pid}
+            wd_logger 2 "Killing pid ${kill_pid}"
+            wd_kill_pid_and_its_decendants  ${kill_pid}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sudo kill ${kill_pid}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_kill_pid_and_its_decendants  ${kill_pid}' => ${rc}"
                 (( ++kill_errors ))
             fi
         fi
@@ -490,6 +537,58 @@ function wd_kill()
     fi
     return 0
 }
+
+function wd_kill_all()
+{
+    local rc
+    local rc1
+
+    wd_logger 2 "Force kill all WD programs"
+
+    local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid') )
+    if [[ ${#pid_file_list[@]} -eq 0 ]]; then
+        wd_logger 1 "Found no pid files"
+    else 
+        wd_logger 2 "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'"
+
+        local pid_file
+        for pid_file in ${pid_file_list[@]}; do
+            local pid_val=$(< ${pid_file})
+            wd_logger 2 "Killing PID ${pid_val} found in  pid file '${pid_file}'"
+            # read -p "Kill pid ${pid_val} found in  pid file '${pid_file}'? => "
+            wd_kill ${pid_val}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to kill PID  ${pid_val} found in pid pid file '${pid_file}'"
+            fi
+            wd_rm ${pid_file}
+            rc1=$?
+            if [[ ${rc1} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to kill PID  ${pid_val} found in pid pid file '${pid_file}'"
+            fi
+        done
+   fi
+   #read -p "Done killing all pids from PID files. Proceed to search for and kill zombies? => "
+
+    ps aux > ps.log            ### Don't pipe the output.  That creates mutlilple addtional bash programs which are really zombies
+    grep "${WSPRDAEMON_ROOT_PATH}\|${KIWI_RECORD_COMMAND}" ps.log | grep -v $$ > grep.log         
+    local zombie_pid_list=( $(awk '{print $2}'  grep.log) )
+
+    if [[ ${#zombie_pid_list[@]} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Killing ${#zombie_pid_list[@]} zombie pids '${zombie_pid_list[*]}'"
+        wd_kill ${zombie_pid_list[@]}
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: for zombie pids 'kill ${zombie_pid_list[*]}' => ${rc}"
+        fi
+    fi
+
+    active_decoding_cpus_init            ### zero the file which keeps the count of active decode jobs
+
+    echo "RUNNING_JOBS=()" > ${RUNNING_JOBS_FILE}
+    return 0
+}
+
 
 ###  Given the path to a *.pid file, returns 0 if file exists and pid number is running and the PID value in the variable named in $1 
 function get_pid_from_file()
