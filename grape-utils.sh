@@ -66,14 +66,7 @@ declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
 ### '-u ' sub menu
 function grape_upload_all_local_wavs() {
-    local rc
-    grape_upload_public_key
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
-        return ${rc}
-    fi
-    wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
+   wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
 
     local date_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )
     local date_dir
@@ -229,6 +222,14 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
 
+        ### Ensure that sftp can auto-login to this server's usesr account on the PSWS server
+        grape_upload_public_key
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+            return ${rc}
+        fi
+ 
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
