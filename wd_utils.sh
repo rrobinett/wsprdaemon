@@ -519,7 +519,7 @@ function wd_kill()
     local kill_pid
     for kill_pid in ${kill_pid_list[@]}; do
         if ! ps ${kill_pid} > /dev/null ; then
-            wd_logger 1 "ERROR: pid ${kill_pid} is not running"
+            wd_logger 2 "ERROR: pid ${kill_pid} is not running"
             (( ++not_running_errors ))
         else
             wd_logger 2 "Killing pid ${kill_pid}"
@@ -531,8 +531,13 @@ function wd_kill()
             fi
         fi
     done
-    if [[ ${not_running_errors} -ne 0 || ${kill_errors} -ne 0 ]]; then
-        wd_logger 1 "ERROR: When called by ${FUNCNAME[0]} got not_running_errors=${not_running_errors}, kill_errors=${kill_errors}"
+    if [[ ${kill_errors} -ne 0 ]]; then
+        ### I wouldn't expect any 'kill to fail'
+        wd_logger 1 "ERROR: When called by ${FUNCNAME[0]} got kill_errors=${kill_errors}"
+    fi
+    if [[ ${not_running_errors} -ne 0 ]]; then
+        ### Since we now kill all children, it is common for there to pids not running 
+        wd_logger 2 "INFO When called by ${FUNCNAME[0]} got not_running_errors=${not_running_errors}"
         return 2
     fi
     return 0
@@ -559,12 +564,14 @@ function wd_kill_all()
             wd_kill ${pid_val}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: failed to kill PID  ${pid_val} found in pid pid file '${pid_file}'"
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                wd_logger 2 "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'"
             fi
             wd_rm ${pid_file}
             rc1=$?
             if [[ ${rc1} -ne 0 ]]; then
-                wd_logger 1 "ERROR: failed to kill PID  ${pid_val} found in pid pid file '${pid_file}'"
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                wd_logger 2 "INFO: failed to rm '${pid_file}'"
             fi
         done
    fi
