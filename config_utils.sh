@@ -610,7 +610,8 @@ function validate_configuration_file()
 
     local active_receivers
     get_list_of_active_real_receivers active_receivers
-   if [[ "${active_receivers}" =~ KA9Q ]]; then
+    if [[ "${active_receivers}" =~ KA9Q ]]; then
+        wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q.  Starting in ${PWD}"
         if ! ka9q_setup ; then
             wd_logger 1 "ERROR: couldn't setup the KA9Q-radio service required by an entry in the WD.conf WSPR_SCHEDULE"
         else
