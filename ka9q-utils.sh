@@ -77,9 +77,12 @@ function pull_commit(){
     local desired_git_sha=$2
     local rc
 
+    local save_pwd=${PWD}
+
     cd ${git_directory} >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
+        cd ${save_pwd}
         wd_logger 1 "ERROR: can't 'cd  ${git_directory}'"
         return 2
     fi
@@ -87,12 +90,12 @@ function pull_commit(){
     get_current_commit_sha current_commit_sha $PWD
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
+        cd ${save_pwd}
         wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${PWD}' => ${rc}"
         return 3
     fi
     if [[ "${current_commit_sha}" == "${desired_git_sha}" ]]; then
-        cd - > /dev/null
+        cd ${save_pwd}
         wd_logger 2 "Current git commit SHA in ${PWD} is the expected ${current_commit_sha}"
         return 0
     fi
@@ -100,26 +103,26 @@ function pull_commit(){
     git checkout main >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
+        cd ${save_pwd}
         wd_logger 1 "ERROR: 'git checkout origin/main' => ${rc}"
         return 4
     fi
     git pull >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
+        cd ${save_pwd}
         wd_logger 1 "ERROR: 'git pull' => ${rc}"
         return 5
     fi
     git checkout ${desired_git_sha} >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
+        cd ${save_pwd}
         wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc}"
         return 6
     fi
-    cd - > /dev/null
-    wd_logger 1 "Successfully updated the ${git_directory} directory to SHA ${desired_git_sha}"
+    cd ${save_pwd}
+    wd_logger 1 "Successfully updated the ${git_directory} directory to SHA ${desired_git_sha}.  Returned to $PWD"
     return 1
 }
 
@@ -375,7 +378,7 @@ function ka9q-get-status-dns() {
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_loogger 1 "Can't get ka9q-get-conf-file-name, so radiod  must not be running"
+        wd_logger 1 "Can't get ka9q-get-conf-file-name, so radiod  must not be running"
         return 1
     fi
     if [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
@@ -439,10 +442,10 @@ function ka9q_web_daemon() {
 ### This is implemented as something of a hack which 
 function ka9q-web-setup() {
     local rc
-    wd_logger 2 "Starting"
+    wd_logger 2 "Starting in ${PWD}"
 
     if [[ -x ${KA9Q_WEB_CMD} ]]; then
-        wd_logger 2 "Executable file '${KA9Q_WEB_CMD}' exists, so assume all of ka9q-web is insalled"
+        wd_logger 2 "Executable file '${KA9Q_WEB_CMD}' exists, so assume all of ka9q-web is installed"
         return 0
     fi
  
@@ -455,39 +458,72 @@ function ka9q-web-setup() {
 
     # 2. build and install Onion framework
     if [[ ! -d onion ]]; then
-        git clone https://github.com/davidmoreno/onion
+        wd_logger 1 "Git is cloning a new copy of the 'onion' web server"
+        git clone https://github.com/davidmoreno/onion >& ${KA9Q_WEB_SETUP_LOG_FILE}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR:  'git clone https://github.com/davidmoreno/onion ' => ${rc}:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE})"
+            return ${rc}
+        fi
+        wd_logger 1 "Git cloned a copy of the 'onion' web service"
     fi
-    (cd onion
+
+    wd_logger 1 "Starting to compile 'onion' from dir $PWD"
+
+    ( cd onion
     mkdir -p build
     cd build
     cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
     make
     sudo make install
-    sudo ldconfig) >& ${KA9Q_WEB_SETUP_LOG_FILE}        ### Trucate log file and write the build stdout and stderr to the log file
+    sudo ldconfig)     >& ${KA9Q_WEB_SETUP_LOG_FILE}        ### Trucate log file and write the build stdout and stderr to the log file
+    rc=$?
+
+     if [[ ${rc} -ne 0 ]]; then
+         wd_logger 1 "ERROR:  compile of 'onion' returned ${rc}"
+         return ${rc}
+     fi
 
     # 3. build and install ka9q-web
+    wd_logger 1 "Finished compiling 'onion'.  Now get kan9q-web installed"
+
     if [[ ! -d ka9q-web ]]; then
-        git clone https://github.com/fventuri/ka9q-web
+        git clone https://github.com/fventuri/ka9q-web >& ${KA9Q_WEB_SETUP_LOG_FILE}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR:  'git clone https://github.com/fventuri/ka9q-web ' => ${rc}:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE})"
+            return ${rc}
+        fi
+        wd_logger 1 "Git cloned a copy of the 'ka9q-web' web service"
     fi
-    (cd ka9q-web
+
+     wd_logger 1 "Starting to compile 'ka9q-web' from dir $PWD"
+    ( cd ka9q-web
     make
     sudo make install) &>>  ${KA9Q_WEB_SETUP_LOG_FILE}  ### Append stdout and stderr to the log file
+     rc=$?
+
+     if [[ ${rc} -ne 0 ]]; then
+         wd_logger 1 "ERROR:  compile of 'ka9q-web' returned ${rc}"
+         return ${rc}
+     fi
+
+    wd_logger 1 "Finished compiling ka9q-web $PWD"
 
     if [[ ! -x ${KA9Q_WEB_CMD} ]]; then
         wd_logger 1 "ERROR: failed to create '${KA9Q_WEB_CMD}.  Here are the log lines from the builds:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE}) '"
-        exit 1
+        return 1
     fi
     if ! ${KA9Q_WEB_CMD} -h |& grep -q "Usage" ; then 
         wd_logger 1 "ERROR: Created '${KA9Q_WEB_CMD}', but it fails to execute"
-        exit 2
+        return 2
     fi
 
     local ka9q_radiod_status_dns
     ka9q-get-status-dns "ka9q_radiod_status_dns"
     rc=$?
     if [[ ${rc} -ne 0  || -z "${ka9q_radiod_status_dns-}" ]]; then
-        wd_logger 1 "ERROR: failed to find the status DNS  => ${rc} OR {ka9q_radiod_status_dns is blank"
-        exit 3
+        wd_logger 1 "Warning: failed to find the status DNS  => ${rc} OR {ka9q_radiod_status_dns is blank"
     fi
     return 0
 }
@@ -495,6 +531,7 @@ function ka9q-web-setup() {
 function ka9q-radiod-setup()
 {
     local rc
+    wd_logger 2 "Starting in ${PWD}"
 
     local packages_needed="libnss-mdns mdns-scan avahi-utils avahi-discover"
     if ! install_dpkg_list ${packages_needed}; then
@@ -562,7 +599,7 @@ function ka9q-radiod-setup()
             if [[ ! $(groups) =~ radio ]]; then
                 sudo adduser --quiet --system --group radio
                 sudo usermod -aG radio ${USER}
-                wd_logger 1 "Added ${USER} to the group radioi, so logout/login is needed before RX888/KA9Q installation can proceed"
+                wd_logger 1 "NOTE: Needed to add user '${USER}' to the group 'radio', so YOU NEED TO logout/login to this server before KA9Q services can run"
             fi
             local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
             local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
@@ -576,11 +613,11 @@ function ka9q-radiod-setup()
                 fi
             fi
             if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
                 return 0
             fi
             if sudo systemctl start radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 1 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
+                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
@@ -660,20 +697,6 @@ function ka9q-radiod-setup()
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
     fi
-    #    if [[ ! -f ${WD_KA9Q_CONF_FILE} ]]; then
-    #        wd_logger 1 "Missing WD's customized '${WD_KA9Q_CONF_FILE}', so creating it from the template"
-    #        cp ${WD_KA9Q_CONF_TEMPLATE_FILE} ${WD_KA9Q_CONF_FILE}
-    #   fi
-    #    if [[ ! -f ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-    #        wd_logger 1 "Missing KA9Q's radiod conf file '${KA9Q_RADIOD_WD_CONF_FILE}', so creating it from WD's ${WD_KA9Q_CONF_FILE}"
-    #        cp -p ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    #    fi
-    #    if [[ ${WD_KA9Q_CONF_FILE} -nt ${KA9Q_RADIOD_WD_CONF_FILE} ]]; then
-    #        wd_logger 1 "${WD_KA9Q_CONF_FILE} is newer than '${KA9Q_RADIOD_WD_CONF_FILE}', so save and update ${KA9Q_RADIOD_WD_CONF_FILE}"
-    #        cp -p ${KA9Q_RADIOD_WD_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}.save 
-    #        cp ${WD_KA9Q_CONF_FILE} ${KA9Q_RADIOD_WD_CONF_FILE}
-    #    fi
-    #    wd_logger  1 "Finished validating and updating the KA9Q installation"
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
         exit 1
@@ -695,25 +718,27 @@ function ka9q-radiod-setup()
         return 1
     fi
     wd_logger 1 "after a successful installation of KA9Q its 'radiod' is active"
-    retrun 0
+    return 0
 }
 
 function ka9q_setup()
 {    
+    wd_logger 2 "Starting in ${PWD}"
+
     ka9q-radiod-setup
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR:  ka9q-radiod-setup() => ${rc}"
         return ${rc}
     fi
-    wd_logger 2 "ka9q-radiod-web is setup"
+    wd_logger 2 "ka9q-radiod-web is setup ${PWD}"
 
     ka9q-web-setup
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR:  ka9q-web-setup() => ${rc}"
-        return ${rc}
+    else
+        wd_logger 2 "Both radiod and ka9q-web are setup. Finished in $PWD"
     fi
-    wd_logger 2 "Both radiod and ka9q-web are setup"
-    return 0
+    return ${rc}
 }
