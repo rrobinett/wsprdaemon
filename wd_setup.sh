@@ -420,7 +420,7 @@ declare JT9_DECODE_ENABLED=${JT9_DECODE_ENABLED:-no}
 
 function find_wsjtx_commands()
 {
-    local bin_file_list=( $(find ${WSPRD_BIN_DIR} -maxdepth 1 -type f -executable) )
+    local bin_file_list=( $(find ${WSPRD_BIN_DIR} -maxdepth 1 -type f -executable -printf "%p\n"  | sort) )
 
     if [[ ${#bin_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "ERROR: can't find any of the expected executable files in ${WSPRD_BIN_DIR}"
@@ -441,23 +441,40 @@ function find_wsjtx_commands()
             if [[ ${bin_file} =~ bin/wsprd.spread ]]; then
                 wd_logger 2 "Found that WSPRD_SPREADING_CMD='${bin_file}' runs on this server"
                 if [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
-                    wd_logger 1 "Warning: ignaoringa second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
+                    wd_logger 1 "Warning: ignaoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
                 else
                     WSPRD_SPREADING_CMD="${bin_file}"
                 fi
             elif  [[ ${bin_file} =~ bin/wsprd ]]; then
                 wd_logger 2 "Found that WSPRD_CMD='${bin_file}' runs on this server"
-                if [[ -n "${WSPRD_CMD-}" ]]; then
-                    wd_logger 1 "Warning: ignaoring a second WSPRD_CMD='${bin_file}' which also runs on this server"
-                else
+                if [[ -z "${WSPRD_CMD-}" ]]; then
+                    wd_logger 2 "There is no 'WSPRD_CMD', so use this one '${bin_file}'"
                     WSPRD_CMD="${bin_file}"
+                else
+                    ### We have already found a 'bin/wsprd... command on this server
+                    local test_name="${WSPRD_CMD##*bin/wsprd}"
+                    if [[  -z "${test_name}" ]]; then
+                        wd_logger 2 "Found a second bin/wsprd... after first finding ''bin/wsprd', so 'wd_rm ${WSPRD_CMD}' and use this ${bin_file}"
+                        wd_rm ${WSPRD_CMD}
+                        WSPRD_CMD="${bin_file}"
+                    else
+                        wd_logger 1 "Warning: Since we have a functioning non-'bin/wsprd' command ${WSPRD_CMD}, ignoring this second one '${bin_file}"
+                    fi
                 fi
             elif [[ ${bin_file} =~ bin/jt9 ]]; then
                 wd_logger 2 "Found that JT9_CMD='${bin_file}' runs on this server"
-                if [[ -n "${JT9_CMD-}" ]]; then
-                    wd_logger 1 "Warning: ignaoring a second JT_CMD='${bin_file}' which also runs on this server"
-                else
+                if [[ -z "${JT9_CMD-}" ]]; then
+                    wd_logger 2 "There is no JT9_CMD, so use this one '${bin_file}'"
                     JT9_CMD="${bin_file}"
+                else
+                    local test_name=${JT9_CMD##*bin/jt9}        ## I gave up trying to find a regex experession which would do this
+                    if [[  -z "${test_name}" ]]; then
+                        wd_logger 2 "Found a second bin/jt9... after first finding ''bin/jt9', so 'wd_rm ${JT9_CMD}' and use this ${bin_file}"
+                        wd_rm ${JT9_CMD}
+                        JT9_CMD=${bin_file}
+                    else
+                        wd_logger 1 "Warning: Since we have a functioning non-'bin/jt9' command, ignoring this second one '${bin_file}"
+                    fi 
                 fi
             else
                 wd_logger 2 "Ignoring executble command '${bin_file}'"
