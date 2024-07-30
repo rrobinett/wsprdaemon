@@ -45,6 +45,8 @@ function execute_sysctl_command()
 }
 
 function remote_access_connection_stop_and_disable() {
+    wd_logger 2 "Stop and disable ' ${WD_REMOTE_ACCESS_SERVICE_NAME}'"
+
     if execute_sysctl_command is-enabled ${WD_REMOTE_ACCESS_SERVICE_NAME}; then
         wd_logger 1 "Disabling previously enabled ${WD_REMOTE_ACCESS_SERVICE_NAME}"
         execute_sysctl_command disable ${WD_REMOTE_ACCESS_SERVICE_NAME}
@@ -53,51 +55,52 @@ function remote_access_connection_stop_and_disable() {
         wd_logger 1 "Stopping running previously enabled and active ${WD_REMOTE_ACCESS_SERVICE_NAME}"
         execute_sysctl_command stop ${WD_REMOTE_ACCESS_SERVICE_NAME}
     fi
-    wd_logger 2 "The Remote Access Service is stopped and disnabled"
+    wd_logger 1 "The Remote Access Connection (RAC) service has been stopped and disabled"
     return 0
 }
 
 function get_frpc_ini_values() {
+    local __return_variable_name=$1
     local rac_id="none"
     local rac_channel=-1
 
-     if [[ ! -f ${FRPC_INI_FILE} ]]; then
-         echo "${rac_channel} ${rac_id}"
-         return 1
-     fi
-     local rac_id_line_list=( $(grep "^\["  ${FRPC_INI_FILE}) )
-     [[ ${verbosity} -gt 1 ]] && echo "Found ${#rac_id_line_list[@]}  '[...]' lines in  ${FRPC_INI_FILE}: ${rac_id_line_list[*]}" 1>&2
-     if [[ ${#rac_id_line_list[@]} -eq 0 ]]; then
-         [[ ${verbosity} -gt 0  ]] && echo "ERROR: Found no '[...]' lines in  ${FRPC_INI_FILE}" 1>&2
-         echo ""
-         return 1
-     fi
-     if [[ ${#rac_id_line_list[@]} -eq 1 ]]; then
-         [[ ${verbosity} -gt 0  ]] && echo "ERROR: Found only one '[...]'' line in  ${FRPC_INI_FILE}: ${rac_id_line_list[0]}" 1>&2
-         echo ""
-         return 2
-     fi
+    wd_logger 2 "Return ini values to variable ${__return_variable_name}"
 
-     local frpc_ini_id="$(echo ${rac_id_line_list[1]} | sed 's/\[//;s/\]//')"
-     [[ ${verbosity} -gt 1  ]] && echo "Found frpc_ini's RAC_ID = '${frpc_ini_id}'" 1>&2
+    if [[ ! -f ${FRPC_INI_FILE} ]]; then
+        wd_logger 1 "ERROR: found no ' ${FRPC_INI_FILE}'"
+        return 1
+    fi
+    local rac_id_line_list=( $( sed -n '/^\[/s/\].*//; /^\[/s/\[//p' ${FRPC_INI_FILE}) )   ## get lines which start with '[' and strip '[' and ']' from those lines
+    if [[ ${#rac_id_line_list[@]} -eq 0 ]]; then
+        wd_logger 1 "ERROR: Found no '[...]' lines in ${FRPC_INI_FILE}"
+        return 2
+    fi
+    wd_logger 2 "Found ${#rac_id_line_list[@]} '[...]' lines in  ${FRPC_INI_FILE}: ${rac_id_line_list[*]}"
+    if [[ ${#rac_id_line_list[@]} -eq 1 ]]; then
+        wd_logger 1 "ERROR: Found only one '[...]'' line in  ${FRPC_INI_FILE}: ${rac_id_line_list[0]}"
+        return 3
+    fi
 
-      local rac_port_line_list=( $(grep "^remote_port"  ${FRPC_INI_FILE}) )
-      if [[ ${#rac_port_line_list[@]} -ne 3 ]]; then 
-          [[ ${verbosity} -gt 0  ]] && echo "ERROR: can't find valid 'remote_port' line" 1>&2
-          echo ""
-          return3
-      fi
-      local remote_port=${rac_port_line_list[2]}
+    local frpc_ini_id="$(echo ${rac_id_line_list[1]} | sed 's/\[//;s/\]//')"
+    wd_logger 2 "Found frpc_ini's RAC_ID = '${frpc_ini_id}'"
 
-      if [[ ${remote_port} -lt ${RAC_IP_PORT_BASE} || ${remote_port} -ge ${RAC_IP_PORT_MAX} ]]; then
-          [[ ${verbosity} -gt 0  ]] && echo "ERROR: remote_port ${remote_port} found in ${FRPC_INI_FILE} is invalid" 1>&2
-          echo ""
-          return 4
-      fi
-      local frpc_ini_channel=$(( ${remote_port} - ${RAC_IP_PORT_BASE} )) 
-      [[ ${verbosity} -gt 1  ]] && echo "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22" 1>&2
-      echo "${frpc_ini_channel} ${frpc_ini_id}"
-      return 0
+    local rac_port_line_list=( $(grep "^remote_port"  ${FRPC_INI_FILE}) )
+    if [[ ${#rac_port_line_list[@]} -ne 3 ]]; then 
+        wd_logger 1 "ERROR: can't find valid 'remote_port' line"
+        return 4
+    fi
+    local remote_port=${rac_port_line_list[2]}
+
+    if [[ ${remote_port} -lt ${RAC_IP_PORT_BASE} || ${remote_port} -ge ${RAC_IP_PORT_MAX} ]]; then
+        wd_logger 1 "ERROR: remote_port ${remote_port} found in ${FRPC_INI_FILE} is invalid"
+        return 5
+    fi
+    local frpc_ini_channel=$(( ${remote_port} - ${RAC_IP_PORT_BASE} )) 
+    local return_value="${frpc_ini_channel} ${frpc_ini_id}"
+
+    wd_logger 1 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
+    eval ${__return_variable_name}="\${return_value}"
+    return 0
  }
 
 function remote_access_connection_status() {
@@ -105,6 +108,7 @@ function remote_access_connection_status() {
 
     wd_logger 2 "Starting"
     if [[ -f ${WSPRDAEMON_CONFIG_FILE} ]]; then
+        wd_logger 2 "Reading existing ${WSPRDAEMON_CONFIG_FILE}"
         conf_file=${WSPRDAEMON_CONFIG_FILE}
     elif [[ -f ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ]]; then
         wd_logger 1 "wsprdaemon.conf has not yet been configured. Edit it and run this again"
@@ -126,25 +130,35 @@ function remote_access_connection_status() {
     local wd_conf_rac_channel="${REMOTE_ACCESS_CHANNEL-}"
           wd_conf_rac_channel="${wd_conf_rac_channel-${RAC-}}"    ### accept RAC=...
     if [[ -z "${wd_conf_rac_channel-}" ]] || ! is_uint "${wd_conf_rac_channel-}"; then
-        remote_access_connection_stop_and_disable
         wd_logger 1 "REMOTE_ACCESS_CHANNEL is not defined in ${WSPRDAEMON_CONFIG_FILE}, so we have ensured it isn't running"
-        return 0
-    fi
-     local wd_conf_rac_id="${REMOTE_ACCESS_ID-}"
-           wd_conf_rac_id="${wd_conf_rac_id-${RACi_ID-}}"    ### accept RAC=...
-    if [[ -z "${wd_conf_rac_id-}" ]]; then
         remote_access_connection_stop_and_disable
-        wd_logger 1 "REMOTE_ACCESS_CHANNEL '${wd_conf_rac_channel}' is defined in ${WSPRDAEMON_CONFIG_FILE} but {REMOTE_ACCESS_ID is not defined, so we have ensured it isn't running"
         return 0
     fi
+    wd_logger 2 "Found REMOTE_ACCESS_CHANNE=${wd_conf_rac_channel}" 
+     local wd_conf_rac_id="${REMOTE_ACCESS_ID-}"
+           wd_conf_rac_id="${wd_conf_rac_id-${RAC_ID-}}"    ### accept RAC=...
+    if [[ -z "${wd_conf_rac_id-}" ]]; then
+        wd_logger 1 "REMOTE_ACCESS_CHANNEL '${wd_conf_rac_channel}' is defined in ${WSPRDAEMON_CONFIG_FILE} but REMOTE_ACCESS_ID is not defined, so we have ensured it isn't running"
+        remote_access_connection_stop_and_disable
+        return 0
+    fi
+    wd_logger 2 "Found REMOTE_ACCESS_ID=${wd_conf_rac_id}" 
 
     ### The RAC is enabled and configured in the WD.conf file. Check to see if it and the ID match the frpc_wd.ini
     ### Get the last REMOTE_ACCESS_ID or SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
-    local frpc_ini_info_list=( $(get_frpc_ini_values) )
+    local frpc_ini_info_string
+    get_frpc_ini_values "frpc_ini_info_string"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: 'get_frpc_ini_values frpc_ini_info_string' => ${rc}"
+        return ${rc}
+    fi
+    local frpc_ini_info_list=( ${frpc_ini_info_string} )
     if [[ ${#frpc_ini_info_list[@]} -ne 2 ]]; then
          wd_logger 1 "The RAC is enabled in the WD.conf file, but here is no session id and/or channel defined in the frpc_wd_file"
          return 1
     fi
+    wd_logger 2 "Got frpc_ini_info_list='${frpc_ini_info_list[*]}'"
 
     local frpc_ini_channel="${frpc_ini_info_list[0]}"
     if [[ "${frpc_ini_channel}" != "${wd_conf_rac_channel}" ]]; then
@@ -180,6 +194,8 @@ function remote_access_connection_status() {
 ### Else, if the ${WD_REMOTE_ACCESS_SERVICE_NAME} is not already running,  configure, enqble and start it
 function wd_remote_access_service_manager() {
     local rc
+
+    wd_logger 2 "Starting"
 
     if [[ -z "${REMOTE_ACCESS_CHANNEL-}" && ${HOSTNAME} =~ ^WSPRSONDE-GW- ]]; then
         ### Hostnames which start with "WSPSRSONDE-GW-nnn" are (typically) a Raspberry Pi 3b connected to the USB port of a Wspsrsonde-8
