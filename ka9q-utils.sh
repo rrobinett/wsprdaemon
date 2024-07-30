@@ -721,24 +721,325 @@ function ka9q-radiod-setup()
     return 0
 }
 
-function ka9q_setup()
-{    
+### Assumes ka9q-radio has been successfully installed and setup to run
+function get_conf_section_variable() {
+    local __return_variable_name=$1
+    local conf_file_name=$2
+    local conf_section=$3
+    local conf_variable_name=$4
+
+    if [[ ! -f ${conf_file_name} ]] ; then
+        wd_logger 1 "ERROR: '' doesn't exist"
+        return 1
+    fi
+    local section_lines=$( grep -A 40 "\[${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
+    if [[ -z "${section_lines}" ]]; then
+        wd_logger 1 "ERROR:  couldn't find section '\[${conf_section}\]' in  ${conf_file_name}"
+        return 2
+    fi
+    wd_logger 2 "Got section '\[${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
+    local section_variable_value=$( echo "${section_lines}" | awk "/${conf_variable_name} *=/ { print \$3 }" )
+    if [[ -z "${section_variable_value}" ]]; then
+        wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
+        return 3
+    fi
+    eval ${__return_variable_name}="\${section_variable_value}"
+    wd_logger 2 "Returned the value '${section_variable_value}' of variable '${conf_variable_name}' in '${conf_section}' section of config file '${conf_file_name}' to variable '${__return_variable_name}'"
+    return 0
+}
+
+#function test_get_conf_section_variable() {
+#    get_conf_section_variable "test_value" /etc/radio/radiod@rx888-wsprdaemon.conf FT8 "data"
+#}
+#declare test_value
+#test_get_conf_section_variable
+#printf "%s\n" ${test_value}
+#exit
+
+function ka9q-get-configured-radiod() {
+    local __return_radio_conf_file_name=$1
+
+    local _radiod_conf_file_name=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}')
+    if [[ -n "${_radiod_conf_file_name}" ]]; then
+        wd_logger 2 "Found radiod is running and configured by ${_radiod_conf_file_name}"
+        eval ${__return_radio_conf_file_name}="\${_radiod_conf_file_name}"
+        return 0
+    fi
+    wd_logger 1 "radiod isn't running, so find configured the conf file"
+
+    local ka9q_conf_file_name
+    if [[ -z "${KA9Q_CONF_NAME-}" ]]; then
+        wd_logger 1 "Found that KA9Q_CONF_NAME=${KA9Q_CONF_NAME} has been defined in WD.conf"
+        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_CONF_NAME}.conf
+        if [[ ! -f ${ka9q_conf_name} ]]; then
+            wd_logger 1 "ERROR: KA9Q_CONF_NAME=${KA9Q_CONF_NAME} was defined in WD.conf, but ${ka9q_conf_name} doesn't exist"
+            return 1
+        fi
+        wd_logger 1 "KA9Q_CONF_NAME=${KA9Q_CONF_NAME} was defined in WD.conf and ${ka9q_conf_yyname} does exist"
+    else
+        wd_logger 1 "No WD.conf KA9Q_NAME=... has been defined in WD.conf, so use the default"
+         ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_DEFAULT_CONF_NAME}.conf
+         if [[ ! -f ${ka9q_conf_name} ]]; then
+            wd_logger 1 "ERROR: The default KA9Q_DEFAULT_CONF_NAME=${KA9Q_DEFAULT_CONF_NAME} file ${ka9q_conf_name} doesn't exist"
+            return 1
+        fi
+        wd_logger 1 "Found the default ${ka9q_conf_name} does exist"
+    fi
+    eval ${__return_radio_conf_file_name}="\${ka9q_conf_file_name}"
+    wd_logger 1 "Assigned ${__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
+    return 0
+}
+
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/dev/shm/ka9q-radio}"
+declare KA9Q_FT_TMP_ROOT_SIZE="${KA9Q_FT_TMP_ROOT_SIZE-100M}"
+
+declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
+declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
+declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
+
+function ka9q-ft-install-decode-ft() {
+    local rc
+
+    wd_logger 1 "Starting in $PWD"
+    if [[ -x ${KA9Q_DECODE_FT_CMD} ]]; then
+        wd_logger 1 "${KA9Q_DECODE_FT_CMD}, so nothing to do"
+        return 0
+    fi
+    wd_logger 1 "'${KA9Q_DECODE_FT_CMD}, so we need to create it"
+
+    if [[ ! -d ${KA9Q_DECODE_FT8_DIR} ]]; then
+        wd_logger 1 "'${KA9Q_DECODE_FT8_DIR}' doesn't exist, so we need to 'git clone' it"
+        git clone ${KA9Q_FT8_LIB_REPO_URL}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'git clone ${KA9Q_FT8_LIB_REPO_URL}' failed -> ${rc}"
+            return ${rc}
+        fi
+        wd_logger "Cloning was successful"
+    fi
+ 
+    local start_pwd=${PWD}
+    cd  ${KA9Q_DECODE_FT8_DIR}
+    git pull
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd ${start_pwd} > /dev/null
+        wd_logger 1 "ERROR: 'git pull' => ${rc}"
+        return ${rc}
+    fi
+    make 
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd ${start_pwd} > /dev/null
+        wd_logger 1 "ERROR: 'make' => ${rc}"
+        return ${rc}
+    fi
+    sudo make install
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        cd ${start_pwd} > /dev/null
+        wd_logger 1 "ERROR: 'sudo make install' => ${rc}"
+        return ${rc}
+    fi
+     cd ${start_pwd} > /dev/null
+    if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
+        wd_logger 1 "ERROR: Can't create '${KA9Q_DECODE_FT_CMD}'"
+        return 1
+    fi
+    wd_logger 1 "Successfully created  '${KA9Q_DECODE_FT_CMD}'"
+    return 0
+}
+
+function ka9q-ft-setup() {
+    local ft_type=$1        ## can be 4 or 8
+
+    if [[ ${FT_FORCE_INIT-yes} == "no" ]]; then
+        wd_logger 1 "Checking to see if there is a running ${ft_type}"
+        if sudo systemctl status ${ft_type}-decoded.service >& /dev/null && [[ ${FT_FORCE_INIT-no} == "no" ]] ; then
+            wd_logger 1 "${ft_tpe}-decoded.service is running, so no init needed"
+            return 0
+        fi
+        wd_logger 1 "The ${ft_type}-decoded.service is not running"
+    fi
+
+    wd_logger 2 "Find the ka9q conf file"
+    local rc
+    local radiod_conf_file_name
+    ka9q-get-configured-radiod "radiod_conf_file_name"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name'"
+        return ${rc}
+    fi
+    wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
+
+    wd_logger 2 "Find the multicast  DNS name of the stream"
+    local dns_name
+    get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name'"
+        return ${rc}
+    fi
+    wd_logger 2 "Found the multicast  DNS name of the ${ft_type^^} stream is '${dns_name}'"
+
+    wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
+    if ! mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
+        wd_logger 1 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
+        if [[ ! -d ${KA9Q_FT_TMP_ROOT} ]]; then
+            wd_logger 1 "Creating ${KA9Q_FT_TMP_ROOT}"
+            sudo mkdir -p  ${KA9Q_FT_TMP_ROOT}
+            sudo chmod 777  ${KA9Q_FT_TMP_ROOT}
+        fi
+        sudo mount -t tmpfs -o size=${KA9Q_FT_TMP_ROOT_SIZE} tmpfs ${KA9Q_FT_TMP_ROOT}
+    fi
+    local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}
+    mkdir -p ${ka9q_ft_tmp_dir}
+
+    ### When WD is running KA9Q's FTx decode services it decodes the wav files with WSJT-x's 'jt9' decoder, not the 'decode-ft8' program  normally used by ka9q-radio.
+    ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
+    ### It is awkward to embed an awk script inline like this, but the alternative would be to bury it in WF directory where this 
+    local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
+    wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
+
+    # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
+    echo -n "${JT9_CMD} -${ft_type#ft} \$3 | awk -v base_freq_ghz=\$2 -v file_name=\${3##*/} "             > ${ka9q_ft_jt9_decoder}
+    echo    \''/^[0-9]/ {
+            printf "%s %3d %4s %'\''12.1f ~ %s %s %s %s\n", 20substr(file_name,1,2)"/"substr(file_name,3,2)"/"substr(file_name,5,2)" "substr(file_name,8,2)":"substr(file_name,10,2)":"substr(file_name,12,2), $2, $3,
+            ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
+    chmod +x ${ka9q_ft_jt9_decoder}
+
+    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    echo "MCAST=${dns_name}"        >  ${decoded_conf_file_name}
+    echo "DIRECTORY=${ka9q_ft_tmp_dir}" >> ${decoded_conf_file_name}
+    wd_logger 2 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
+
+    declare SYSTEMD_DIR="/etc/systemd/system"
+    local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
+    local ft_log_file_name="${ka9q_ft_tmp_dir}/${ft_type}.log"
+
+    local needs_new_service_file="no"
+    if [[ ! -f ${ft_service_file_name} ]]; then
+        wd_logger 1 "Can't find service file ${ft_service_file_name}"
+        needs_new_service_file="yes"
+    else
+        local stdout_line="StandardOutput=append:${ft_log_file_name}"
+        if ! grep -q "${stdout_line}" ${ft_service_file_name} ; then
+            wd_logger 1 "Can't find correct stdout line in ${ft_service_file_name}, so recreate it" 
+            needs_new_service_file="yes"
+        fi
+        if [[ ${ft_type} == "ft4" || ${ft_type} == "ft8" ]]; then
+            wd_logger 2 "${ft_type} packets are proceessed by the 'decode-ft' command from ka9q-radio, so the Exec:.. line in the template .service files need not be changed"
+            if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
+                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type}  spots"
+                ka9q-ft-install-decode-ft
+                rc=$?
+                if [[ ${rc} -ne 0 ]]; then
+                    wd_logger 1 "ERROR: 'ka9q-ft-install-decode-ft()' => ${rc}"
+                    return ${rc}
+                fi
+                needs_new_service_file="yes"
+                wd_logger 1 "Successfully installed  ${KA9Q_DECODE_FT_CMD}"
+            fi
+        elif [[ ${KA9Q_JT9_DECODING-no} == "yes" ]]; then
+            if ! grep -q "${JT9_CMD}" ${ft_service_file_name}; then
+                wd_logger 1 "Can't find ${JT9_CMD} in ${ft_service_file_name}, so recreate it"
+                needs_new_service_file="yes"
+            fi
+        fi
+    fi
+
+    ### Ensure that the service file appends the stdout of the jt9 decoder to a ft8.log file in the tmpfs
+    ###    and that the 
+    if [[ ${needs_new_service_file} == "yes" ]]; then
+        wd_logger 1 "Creating new service file ${ft_service_file_name}"
+        local ka9q_service_template_dir="${KA9Q_RADIO_DIR}/service"
+        local ka9q_ft_service_template_file_name="${ka9q_service_template_dir}/${ft_type}-decoded.service"
+        local ka9q_ft_service_tmp_file_name="${KA9Q_FT_TMP_ROOT}/${ft_type}-decoded.service"
+
+        cp ${ka9q_ft_service_template_file_name}                                                                                         ${ka9q_ft_service_tmp_file_name}
+        sed -i "/User=/s/=.*/=${USER}/"                                                                                                  ${ka9q_ft_service_tmp_file_name}
+        local my_primary_group=$(id -gn)
+        sed -i "/GROUP=/s/=.*/=${my_primary_group}/"                                                                                     ${ka9q_ft_service_tmp_file_name}
+        sed -i "/StandardOutput=append:/s;:.*;:${ft_log_file_name};"                                                                     ${ka9q_ft_service_tmp_file_name}
+        #sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" -x \"${ka9q_ft_jt9_decoder}\"  \$MCAST;"  ${ka9q_ft_service_tmp_file_name}
+        sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" \$MCAST;"                                 ${ka9q_ft_service_tmp_file_name}
+        
+        wd_logger 1 "Created a new service file ${ft_service_file_name} in  ${ka9q_ft_service_tmp_file_name}"
+        if [[ -f ${ft_service_file_name} ]]; then
+            sudo cp -p ${ft_service_file_name} ${ft_service_file_name}.old
+        fi
+        sudo cp  ${ka9q_ft_service_tmp_file_name} ${ft_service_file_name}
+        sudo systemctl daemon-reload
+        sudo systemctl restart ${ft_type}-decoded.service
+
+        wd_logger 1 "Created new ${ft_type}-decoded.service file, daemon-reload, and restarted it" 
+    else
+        if ! sudo systemctl status ${ft_type}-decoded.service > /dev/null ; then
+            wd_logger 1 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
+            sudo systemctl restart ${ft_type}-decoded.servic
+        else
+            wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
+        fi
+    fi
+    declare KA9Q_FT_CLEANUP_CMD="${WSPRDAEMON_ROOT_DIR}/ka9q-ft-cleanup.sh"
+    declare KA9Q_FT_CRON_JOB_FILE="ka9q-ft-cleanup"
+    declare KA9Q_FT_CRON_JOB_TMP_FILE_NAME="${KA9Q_FT_TMP_ROOT}/${KA9Q_FT_CRON_JOB_FILE}"
+    declare KA9Q_FT_CRON_JOB_FILE_NAME="/etc/cron.d/${KA9Q_FT_CRON_JOB_FILE}"
+
+    if [[ ! -f ${KA9Q_FT_CRON_JOB_FILE_NAME} ]]; then
+        echo "SHELL=/bin/sh
+PATH=/usr/bin:/bin
+10 * * * * root ${KA9Q_FT_CLEANUP_CMD}" > ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}
+        chmod 644  ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}
+        sudo cp  ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}  ${KA9Q_FT_CRON_JOB_FILE_NAME}
+        wd_logger 1 "Added cron job to keep '/dev/shm/ka9q-radio' clean"
+    fi
+
+    wd_logger 2 "Setup complete"
+}
+
+function ka9q_setup() {    
     wd_logger 2 "Starting in ${PWD}"
 
-    ka9q-radiod-setup
+    local active_receivers
+    get_list_of_active_real_receivers "active_receivers"
+    if ! [[ "${active_receivers}" =~ KA9Q ]]; then
+        wd_logger 1 "There are no KA9Q receivers in the conf file, so skip KA9Q setup"
+        return 0
+   fi
+    wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
+ 
+    ka9q-radiod-setup 
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR:  ka9q-radiod-setup() => ${rc}"
         return ${rc}
     fi
-    wd_logger 2 "ka9q-radiod-web is setup ${PWD}"
+    wd_logger 2 "ka9q-radiod is setup ${PWD}"
 
     ka9q-web-setup
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR:  ka9q-web-setup() => ${rc}"
     else
-        wd_logger 2 "Both radiod and ka9q-web are setup. Finished in $PWD"
+        wd_logger 2 "Both radiod and ka9q-web are setup"
     fi
-    return ${rc}
+
+    local save_rc=0
+    local ft_type
+    for ft_type in ft8 ft4 ; do
+        ka9q-ft-setup ${ft_type}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: ka9q-jt-setup() ${ft_type} => ${rc}"
+            save_rc=${rc}
+        else
+            wd_logger 2 "Setup of ${ft_type} service is complete"
+        fi
+    done
+    wd_logger 2 "All three ka9q services: radiod, web and ft, are setup. So finished in $PWD"
+
+    return ${save_rc}
 }
+ka9q_setup
