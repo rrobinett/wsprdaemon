@@ -98,7 +98,7 @@ function get_frpc_ini_values() {
     local frpc_ini_channel=$(( ${remote_port} - ${RAC_IP_PORT_BASE} )) 
     local return_value="${frpc_ini_channel} ${frpc_ini_id}"
 
-    wd_logger 1 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
+    wd_logger 2 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
     eval ${__return_variable_name}="\${return_value}"
     return 0
  }
