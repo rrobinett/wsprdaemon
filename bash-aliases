@@ -795,6 +795,8 @@ function wd-radiod-action(){
    local action=$1
    local base_name=$(wd-get_ka9q-conf_file-base_name)
    sudo systemctl ${action} radiod@${base_name}.service
+   sudo systemctl ${action} ft8-decoded.service
+   sudo systemctl ${action} ft4-decoded.service
 }
 
 alias wd-ra='wd-radiod-action start'  ### show it's status
@@ -818,6 +820,9 @@ function wd-radiod-conf-edit() {
 alias wdrv='wd-radiod-conf-edit'
 
 ### WD systemctl 
+alias wd-ss='sudo systemctl'
+alias wdss=wd-ss
+
 alias wd-wd-start='sudo systemctl start wsprdaemon.service'
 alias wdwa='wd-wd-start'
 
