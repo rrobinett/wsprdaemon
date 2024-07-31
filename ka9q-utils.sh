@@ -1159,6 +1159,12 @@ WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${pskreporter_systemd_service_file_na
         wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
         needs_systemctl_daemon_reload="yes"
     fi
+    if ! grep -q "Environment=" ${pskreporter_systemd_service_file_name} ; then
+       sed -i "/ExecStart=/i\\
+Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
+        wd_logger 1 "Added 'Environment=\"TZ=UTC\"' to ${pskreporter_systemd_service_file_name}"
+        needs_systemctl_daemon_reload="yes"
+    fi
     if [[ ${needs_systemctl_daemon_reload} == "yes" ]]; then
         wd_logger 1 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
         sudo systemctl daemon-reload 
