@@ -1239,12 +1239,10 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
                 return ${rc}
             fi
         fi
-        wd_logger 1 "Done checking and updating  ${psk_conf_file}"
+        wd_logger 2 "Done checking and updating  ${psk_conf_file}"
     done
-    wd_logger 1 "Finished creating or updating the ftX-pskreporter.conf files"
-exit
-
-    wd_logger 1 "Succssfully finished installation of the pskreporter upload service"
+    wd_logger 2 "Finished creating or updating the ftX-pskreporter.conf files"
+    return 0
 }
 
 function ka9q_setup() {    
