@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 # This script is run by cron ever 10 minutes to cleanup old wav files 
 # and truncate ftX.log files which have grown too large
 
