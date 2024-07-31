@@ -1006,7 +1006,7 @@ function wd_get_config_value() {
     local __return_variable_name=$1
     local return_variable_type=$2
 
-    wd_logger 1 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
+    wd_logger 2 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
 
     if ! declare -p WSPR_SCHEDULE &> /dev/null ; then
         wd_logger 1 "ERROR: the array WSPR_SCHEDULE has not been declared in the WD.conf file"
@@ -1052,12 +1052,12 @@ function wd_get_config_value() {
             case ${return_variable_type} in
                 CALLSIGN)
                     eval ${__return_variable_name}=\${receiver_call}
-                    wd_logger 1 "Assigned ${__return_variable_name}=${receiver_call}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_call}"
                     return 0
                     ;;
                 LOCATOR)
                     eval ${__return_variable_name}=\${receiver_grid}
-                    wd_logger 1 "Assigned ${__return_variable_name}=${receiver_grid}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_grid}"
                     return 0
                     ;;
                 ANTENNA)
@@ -1068,14 +1068,14 @@ function wd_get_config_value() {
                         receiver_description="${receiver_line##*#}"
                         shopt -s extglob
                         receiver_description="${receiver_description##+([[:space:]])}"    ### trim off leading white space
-                        wd_logger 1 "Found the description '${receiver_description}' in line: ${receiver_line}"
+                        wd_logger 2 "Found the description '${receiver_description}' in line: ${receiver_line}"
                     else
-                        receiver_description="No antenna information"
-                        wd_logger 1 "Can't find comments about receiver ${receiver_call}, so use 'No antenna information'"
+                        receiver_description="No_antenna_information"
+                        wd_logger 2 "Can't find comments about receiver ${receiver_call}, so use 'No antenna information'"
                     fi
 
                     eval ${__return_variable_name}="\${receiver_description}"
-                    wd_logger 1 "Assigned ${__return_variable_name}=${receiver_description}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_description}"
                     return 0
                     ;;
                 *)
@@ -1104,30 +1104,62 @@ function  ka9q-psk-reporter-setup() {
             wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}' but '${KA9Q_PSK_REPORTER_DIR}' was not created, so the github repo is broken"
             return 1
         fi
+
+        pip3 install docopt
+        rc-$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
+            return 2
+        fi
+
         wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+    fi
+
+    local pskreporter_sender_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender"           ### This template file is part of the package
+    local pskreporter_sender_bin_file_name="/usr/local/bin//pskreporter-sender"
+    if [[ ! -x ${pskreporter_sender_bin_file_name} ]]; then
+        wd_logger 1 "Copying ${pskreporter_sender_file_name} to ${pskreporter_sender_bin_file_name}"
+        sudo cp ${pskreporter_sender_file_name} ${pskreporter_sender_bin_file_name}
+        sudo chmod a+x  ${pskreporter_sender_bin_file_name}
     fi
 
     local pskreporter_service_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter@.service"         ### This template file is part of the package
     local pskreporter_systemd_service_file_name="/etc/systemd/system/pskreporter@.service"      ### It should be copied to the systemd/system/ dire\
 
-    local needs_systemctl_reload="no"  
+    local needs_systemctl_daemon_reload="no"  
+    local needs_systemctl_restart="no"  
     if [[ ! -f ${pskreporter_systemd_service_file_name} ]]; then
         wd_logger 1 "Missing ${pskreporter_systemd_service_file_name}, so creating it from ${pskreporter_service_file_name}"
         cp ${pskreporter_service_file_name} ${pskreporter_systemd_service_file_name}
-        needs_systemctl_reload="yes"
-    else
-        wd_logger 2 "${pskreporter_systemd_service_file_name} exists.  Check to see if it needs to be updated"
-        if diff ${pskreporter_systemd_service_file_name} ${pskreporter_service_file_name} > /dev/null; then
-            wd_logger 2 "${pskreporter_systemd_service_file_name} and ${pskreporter_service_file_name} are identical, so nothing to do"
-        else
-            wd_logger 1 "The template ${pskreporter_service_file_name} differs from ${pskreporter_systemd_service_file_name}, so update  ${pskreporter_systemd_service_file_name}"
-            cp ${pskreporter_service_file_name} ${pskreporter_systemd_service_file_name}
-            needs_systemctl_reload="yes"
-       fi
+        needs_systemctl_daemon_reload="yes"
     fi
+    wd_logger 2 "${pskreporter_systemd_service_file_name} exists.  Check to see if it needs to be updated"
 
-    local needs_systemctl_restart="no"
-    if [[ ${needs_systemctl_reload} == "yes" ]]; then
+    ### Phil's repo expects the PSK command to be in /usr/local/bin, but WD runs it from under the WD hoem directory
+    sed "s;/usr/local/bin;${KA9Q_PSK_REPORTER_DIR};" ${pskreporter_systemd_service_file_name} > ${pskreporter_systemd_service_file_name}.tmp
+    if ! diff ${pskreporter_systemd_service_file_name} ${pskreporter_systemd_service_file_name}.tmp > /dev/null; then
+        wd_logger 1 "${pskreporter_systemd_service_file_name} has been changed not no longer run from /usr/local/bin"
+        mv ${pskreporter_systemd_service_file_name}.tmp ${pskreporter_systemd_service_file_name}
+        needs_systemctl_daemon_reload="yes"
+   fi
+   if ! grep -q "WorkingDirectory" ${pskreporter_systemd_service_file_name} ; then
+       sed -i "/ExecStart=/i\\
+WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${pskreporter_systemd_service_file_name}
+        wd_logger 1 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${pskreporter_systemd_service_file_name}"
+        needs_systemctl_daemon_reload="yes"
+    fi
+    if grep -q "User=recordings"  ${pskreporter_systemd_service_file_name} ; then
+        sed -i "s/User=recordings/User=${USER}/"  ${pskreporter_systemd_service_file_name}
+        wd_logger 1 "'Changed 'User=recordings' to 'User=${USER}' in  ${pskreporter_systemd_service_file_name}"
+        needs_systemctl_daemon_reload="yes"
+    fi
+    if grep -q "Group=radio"  ${pskreporter_systemd_service_file_name} ; then
+        local my_group=$(id -gn)
+        sed -i "s/Group=radio/Group=${my_group}/"  ${pskreporter_systemd_service_file_name}
+        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
+        needs_systemctl_daemon_reload="yes"
+    fi
+    if [[ ${needs_systemctl_daemon_reload} == "yes" ]]; then
         wd_logger 1 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
         sudo systemctl daemon-reload 
         needs_systemctl_restart="yes"
@@ -1136,7 +1168,7 @@ function  ka9q-psk-reporter-setup() {
     local ft_type 
     for ft_type in ft4 ft8; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
-        wd_logger 1 "Checking and updating  ${psk_conf_file}"
+        wd_logger 2 "Checking and updating  ${psk_conf_file}"
         if [[ ! -f ${psk_conf_file} ]]; then
             wd_logger 1 "Creating missing ${psk_conf_file}"
             touch ${psk_conf_file}
@@ -1144,7 +1176,7 @@ function  ka9q-psk-reporter-setup() {
         local variable_line
         variable_line="MODE=${ft_type}"
         if grep -q "${variable_line}" ${psk_conf_file} ; then
-            wd_logger 1 "Found the correct 'MODE=${ft_type}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
+            wd_logger 2 "Found the correct 'MODE=${ft_type}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
         else
             grep -v "MODE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
@@ -1163,7 +1195,7 @@ function  ka9q-psk-reporter-setup() {
         fi
         variable_line="FILE=${ft_type_log_file_name}"
         if grep -q "${variable_line}" ${psk_conf_file} ; then
-            wd_logger 1 "Found the correct ${variable_line}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
+            wd_logger 2 "Found the correct ${variable_line}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
         else
             grep -v "FILE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
@@ -1183,7 +1215,7 @@ function  ka9q-psk-reporter-setup() {
             fi
             variable_line="${config_variable}=${config_value}"
             if grep -q "${variable_line}" ${psk_conf_file} ; then
-                wd_logger 1 "Found expected '${variable_line}' line in ${psk_conf_file}"
+                wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
                 echo "${variable_line}" >> ${psk_conf_file}.tmp
