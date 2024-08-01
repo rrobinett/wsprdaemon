@@ -1106,7 +1106,7 @@ function  ka9q-psk-reporter-setup() {
         fi
 
         pip3 install docopt
-        rc-$?
+        rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
             return 2
