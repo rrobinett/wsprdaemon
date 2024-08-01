@@ -732,12 +732,12 @@ function get_conf_section_variable() {
         wd_logger 1 "ERROR: '' doesn't exist"
         return 1
     fi
-    local section_lines=$( grep -A 40 "\[${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
+    local section_lines=$( grep -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
     if [[ -z "${section_lines}" ]]; then
         wd_logger 1 "ERROR:  couldn't find section '\[${conf_section}\]' in  ${conf_file_name}"
         return 2
     fi
-    wd_logger 2 "Got section '\[${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
+    wd_logger 2 "Got section '\[.*${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
     local section_variable_value=$( echo "${section_lines}" | awk "/${conf_variable_name} *=/ { print \$3 }" )
     if [[ -z "${section_variable_value}" ]]; then
         wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
@@ -1105,7 +1105,7 @@ function  ka9q-psk-reporter-setup() {
             return 1
         fi
 
-        pip3 install docopt
+        pip3 install docopt --break-system-package
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
