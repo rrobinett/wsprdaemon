@@ -1129,7 +1129,7 @@ function  ka9q-psk-reporter-setup() {
     local needs_systemctl_daemon_reload="no"  
     local needs_systemctl_restart="no"  
     if [[ ! -f ${pskreporter_systemd_service_file_name} ]]; then
-        wd_logger 1 "Missing ${pskreporter_systemd_service_file_name}, so creating it from ${pskreporter_service_file_name}"
+        wd_logger 2 "Missing ${pskreporter_systemd_service_file_name}, so creating it from ${pskreporter_service_file_name}"
         cp ${pskreporter_service_file_name} ${pskreporter_systemd_service_file_name}
         needs_systemctl_daemon_reload="yes"
     fi
@@ -1138,35 +1138,35 @@ function  ka9q-psk-reporter-setup() {
     ### Phil's repo expects the PSK command to be in /usr/local/bin, but WD runs it from under the WD hoem directory
     sed "s;/usr/local/bin;${KA9Q_PSK_REPORTER_DIR};" ${pskreporter_systemd_service_file_name} > ${pskreporter_systemd_service_file_name}.tmp
     if ! diff ${pskreporter_systemd_service_file_name} ${pskreporter_systemd_service_file_name}.tmp > /dev/null; then
-        wd_logger 1 "${pskreporter_systemd_service_file_name} has been changed not no longer run from /usr/local/bin"
+        wd_logger 2 "${pskreporter_systemd_service_file_name} has been changed not no longer run from /usr/local/bin"
         mv ${pskreporter_systemd_service_file_name}.tmp ${pskreporter_systemd_service_file_name}
         needs_systemctl_daemon_reload="yes"
    fi
    if ! grep -q "WorkingDirectory" ${pskreporter_systemd_service_file_name} ; then
        sed -i "/ExecStart=/i\\
 WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${pskreporter_systemd_service_file_name}
-        wd_logger 1 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${pskreporter_systemd_service_file_name}"
+        wd_logger 2 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${pskreporter_systemd_service_file_name}"
         needs_systemctl_daemon_reload="yes"
     fi
     if grep -q "User=recordings"  ${pskreporter_systemd_service_file_name} ; then
         sed -i "s/User=recordings/User=${USER}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 1 "'Changed 'User=recordings' to 'User=${USER}' in  ${pskreporter_systemd_service_file_name}"
+        wd_logger 2 "'Changed 'User=recordings' to 'User=${USER}' in  ${pskreporter_systemd_service_file_name}"
         needs_systemctl_daemon_reload="yes"
     fi
     if grep -q "Group=radio"  ${pskreporter_systemd_service_file_name} ; then
         local my_group=$(id -gn)
         sed -i "s/Group=radio/Group=${my_group}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
+        wd_logger 2 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
         needs_systemctl_daemon_reload="yes"
     fi
     if ! grep -q "Environment=" ${pskreporter_systemd_service_file_name} ; then
        sed -i "/ExecStart=/i\\
 Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
-        wd_logger 1 "Added 'Environment=\"TZ=UTC\"' to ${pskreporter_systemd_service_file_name}"
+        wd_logger 2 "Added 'Environment=\"TZ=UTC\"' to ${pskreporter_systemd_service_file_name}"
         needs_systemctl_daemon_reload="yes"
     fi
     if [[ ${needs_systemctl_daemon_reload} == "yes" ]]; then
-        wd_logger 1 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
+        wd_logger 2 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
         sudo systemctl daemon-reload 
         needs_systemctl_restart="yes"
     fi
@@ -1176,7 +1176,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
         wd_logger 2 "Checking and updating  ${psk_conf_file}"
         if [[ ! -f ${psk_conf_file} ]]; then
-            wd_logger 1 "Creating missing ${psk_conf_file}"
+            wd_logger 2 "Creating missing ${psk_conf_file}"
             touch ${psk_conf_file}
         fi
         local variable_line
@@ -1186,7 +1186,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "MODE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 1 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 2 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1196,7 +1196,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
 
         local ft_type_log_file_name="${ft_type_tmp_root_dir}/${ft_type}.log"
         if [[ ! -f ${ft_type_log_file_name} ]]; then
-            wd_logger 1 "Creating new ${ft_type_log_file_name}"
+            wd_logger 2 "Creating new ${ft_type_log_file_name}"
             touch ${ft_type_log_file_name}
         fi
         variable_line="FILE=${ft_type_log_file_name}"
@@ -1205,7 +1205,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "FILE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 1 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 2 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1225,21 +1225,21 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
                 echo "${variable_line}" >> ${psk_conf_file}.tmp
-                wd_logger 1 "Added or replaced invalid '${config_variable}=' line in  ${psk_conf_file} with '${variable_line}'"
+                wd_logger 2 "Added or replaced invalid '${config_variable}=' line in  ${psk_conf_file} with '${variable_line}'"
                 mv  ${psk_conf_file}.tmp  ${psk_conf_file}
                 needs_systemctl_restart="yes"
             fi
         done
 
-        sudo systemctl status pskreporter@${ft_type} > /dev/null
+        sudo systemctl sta2us pskreporter@${ft_type} > /dev/null
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
         if [[ ${needs_systemctl_restart} == "yes" ]]; then
-            wd_logger 1 "Executing a 'sudo systemctl restart "
+            wd_logger 2 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
