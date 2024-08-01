@@ -886,9 +886,9 @@ function ka9q-ft-setup() {
 
     wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
     if ! mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
-        wd_logger 1 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
+        wd_logger 2 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
         if [[ ! -d ${KA9Q_FT_TMP_ROOT} ]]; then
-            wd_logger 1 "Creating ${KA9Q_FT_TMP_ROOT}"
+            wd_logger 2 "Creating ${KA9Q_FT_TMP_ROOT}"
             sudo mkdir -p  ${KA9Q_FT_TMP_ROOT}
             sudo chmod 777  ${KA9Q_FT_TMP_ROOT}
         fi
@@ -977,7 +977,7 @@ function ka9q-ft-setup() {
         wd_logger 1 "Created new ${ft_type}-decoded.service file, daemon-reload, and restarted it" 
     else
         if ! sudo systemctl status ${ft_type}-decoded.service > /dev/null ; then
-            wd_logger 1 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
+            wd_logger 2 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
             sudo systemctl restart ${ft_type}-decoded.service
         else
             wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
