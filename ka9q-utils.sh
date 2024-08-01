@@ -1230,6 +1230,14 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
                 needs_systemctl_restart="yes"
             fi
         done
+
+        sudo systemctl status pskreporter@${ft_type} > /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            needs_systemctl_restart="yes"
+        fi
+
         if [[ ${needs_systemctl_restart} == "yes" ]]; then
             wd_logger 1 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
