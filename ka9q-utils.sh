@@ -977,7 +977,7 @@ function ka9q-ft-setup() {
     else
         if ! sudo systemctl status ${ft_type}-decoded.service > /dev/null ; then
             wd_logger 1 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
-            sudo systemctl restart ${ft_type}-decoded.servic
+            sudo systemctl restart ${ft_type}-decoded.service
         else
             wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
         fi
