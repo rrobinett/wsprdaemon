@@ -37,7 +37,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-9cf48cf436ea5dbc50795c0311bf180af94b0e3e}"   ### Defaults to   Wed Jul 24 00:45:23 2024 -070
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-005b525325879d061a20b24260a4ba95e6a519b5}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 ###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file
@@ -99,7 +99,7 @@ function pull_commit(){
         wd_logger 2 "Current git commit SHA in ${PWD} is the expected ${current_commit_sha}"
         return 0
     fi
-    wd_logger 2 "Current git commit SHA in ${PWD} is ${current_commit_sha}, not the desired SHA ${desired_git_sha}, so update the code from git"
+    wd_logger 1 "Current git commit SHA in ${PWD} is ${current_commit_sha}, not the desired SHA ${desired_git_sha}, so update the code from git"
     git checkout main >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
@@ -635,8 +635,9 @@ function ka9q-radiod-setup()
     if [[ ! -L Makefile ]]; then
         ln -s Makefile.linux Makefile
     fi
-    make clean > /dev/null
-    make  > /dev/null
+    wd_logger 1 "Compiling KA9Q-radio..."
+    make clean >& /dev/null
+    make  >& /dev/null
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         cd - > /dev/null
