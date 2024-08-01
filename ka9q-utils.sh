@@ -1231,7 +1231,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             fi
         done
 
-        sudo systemctl sta2us pskreporter@${ft_type} > /dev/null
+        sudo systemctl status pskreporter@${ft_type} > /dev/null
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
