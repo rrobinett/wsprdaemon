@@ -1106,7 +1106,11 @@ function  ka9q-psk-reporter-setup() {
             return 1
         fi
 
-        pip3 install docopt --break-system-package
+        local pip3_extra_args=""
+        if [[ "${OS_RELEASE}" == "24.04" ]]; then
+            pip3_extra_args="--break-system-package"
+        fi
+        pip3 install docopt ${pip3_extra_args}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
