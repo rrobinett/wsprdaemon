@@ -766,28 +766,30 @@ function ka9q-get-configured-radiod() {
         eval ${__return_radio_conf_file_name}="\${_radiod_conf_file_name}"
         return 0
     fi
-    wd_logger 1 "radiod isn't running, so find configured the conf file"
+    wd_logger 2 "radiod isn't running, so find the conf file to use"
 
     local ka9q_conf_file_name
     if [[ -z "${KA9Q_CONF_NAME-}" ]]; then
-        wd_logger 1 "Found that KA9Q_CONF_NAME=${KA9Q_CONF_NAME} has been defined in WD.conf"
-        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_CONF_NAME}.conf
-        if [[ ! -f ${ka9q_conf_name} ]]; then
-            wd_logger 1 "ERROR: KA9Q_CONF_NAME=${KA9Q_CONF_NAME} was defined in WD.conf, but ${ka9q_conf_name} doesn't exist"
-            return 1
+        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@rx888-wsprdaemon.conf
+        wd_logger 2 "Found that KA9Q_CONF_NAME has not been defined in WD.conf, so use the default radiod conf file ${ka9q_conf_file_name}"
+        if [[ ! -f ${ka9q_conf_file_name} ]]; then
+            wd_logger 1 "ERROR: KA9Q_CONF_NAME was not defined in WD.conf, but the default ${ka9q_conf_file_name} doesn't exist"
+            exit 1
         fi
-        wd_logger 1 "KA9Q_CONF_NAME=${KA9Q_CONF_NAME} was defined in WD.conf and ${ka9q_conf_yyname} does exist"
+        wd_logger 2 "The default radiod conf file ${ka9q_conf_file_name} has been found"
     else
-        wd_logger 1 "No WD.conf KA9Q_NAME=... has been defined in WD.conf, so use the default"
-         ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/${KA9Q_DEFAULT_CONF_NAME}.conf
-         if [[ ! -f ${ka9q_conf_name} ]]; then
-            wd_logger 1 "ERROR: The default KA9Q_DEFAULT_CONF_NAME=${KA9Q_DEFAULT_CONF_NAME} file ${ka9q_conf_name} doesn't exist"
-            return 1
+        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@${KA9Q_CONF_NAME}.conf
+        wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
+
+        if [[ ! -f ${ka9q_conf_file_name} ]]; then
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_nam} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
+            exit 1
         fi
-        wd_logger 1 "Found the default ${ka9q_conf_name} does exist"
+        wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
     fi
+
     eval ${__return_radio_conf_file_name}="\${ka9q_conf_file_name}"
-    wd_logger 1 "Assigned ${__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
+    wd_logger 2 "Assigned ${__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
     return 0
 }
 
