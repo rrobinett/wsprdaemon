@@ -272,7 +272,7 @@ alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdt='cd /dev/shm/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 alias cds='cd /etc/systemd/system'
-alias cdtt='cd /dev/shm/ka9qq-radio'
+alias cdtt='cd /mnt/ka9q-radio'
 
 ### Start 'vi' using WD's .vimrc
 function vi() 
@@ -1135,3 +1135,20 @@ function wd-wav-capture() {
      echo "$(date): Captured /tmp/${wav_file}"
 }
 
+function wd-ft-logs() {
+   for d in 4 8; do
+       local ft_log_file_name="/mnt/ka9q-radio/ft${d}/ft${d}.log"
+       echo "FT${d}: $(stat --format=%s ${ft_log_file_name}) bytes"
+       set +x
+       local ft_log_archived_file_names="$( find ${ft_log_file_name%/*} -type f -name ${ft_log_file_name##*/}.* )"
+       if [[ -n "${ft_log_archived_file_names}" ]]; then
+           echo -n "Archives: "; echo ${ft_log_archived_file_names}
+       fi
+       set +x
+       head -4  ${ft_log_file_name}
+       echo "++++++++++++++"
+       tail -4  ${ft_log_file_name}
+       echo 
+   done
+   df /mnt/ka9q-radio | grep "^tmps"
+}
