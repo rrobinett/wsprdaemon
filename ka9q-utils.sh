@@ -793,7 +793,7 @@ function ka9q-get-configured-radiod() {
     return 0
 }
 
-declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/dev/shm/ka9q-radio}"
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/mnt/ka9q-radio}"
 declare KA9Q_FT_TMP_ROOT_SIZE="${KA9Q_FT_TMP_ROOT_SIZE-100M}"
 
 declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
@@ -876,7 +876,7 @@ function ka9q-ft-setup() {
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast  DNS name of the stream"
+    wd_logger 2 "Find the multicast DNS name of the stream"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$?
@@ -884,10 +884,12 @@ function ka9q-ft-setup() {
         wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name'"
         return ${rc}
     fi
-    wd_logger 2 "Found the multicast  DNS name of the ${ft_type^^} stream is '${dns_name}'"
+    wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
     wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
-    if ! mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
+    if mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
+        wd_logger 2 "Found the needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
+    else
         wd_logger 2 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
         if [[ ! -d ${KA9Q_FT_TMP_ROOT} ]]; then
             wd_logger 2 "Creating ${KA9Q_FT_TMP_ROOT}"
@@ -899,7 +901,10 @@ function ka9q-ft-setup() {
     local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}
     mkdir -p ${ka9q_ft_tmp_dir}
 
-    ### When WD is running KA9Q's FTx decode services it decodes the wav files with WSJT-x's 'jt9' decoder, not the 'decode-ft8' program  normally used by ka9q-radio.
+    ### When WD is running KA9Q's FTx decode services it can be configured to decode the wav files with WSJT-x's 'jt9' decoder.
+    ### We create a bash script which can be run by ftX-decoded,
+    ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
+
     ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
     ### It is awkward to embed an awk script inline like this, but the alternative would be to bury it in WF directory where this 
     local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
@@ -985,18 +990,32 @@ function ka9q-ft-setup() {
             wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
         fi
     fi
-    declare KA9Q_FT_CLEANUP_CMD="${WSPRDAEMON_ROOT_DIR}/ka9q-ft-cleanup.sh"
-    declare KA9Q_FT_CRON_JOB_FILE="ka9q-ft-cleanup"
-    declare KA9Q_FT_CRON_JOB_TMP_FILE_NAME="${KA9Q_FT_TMP_ROOT}/${KA9Q_FT_CRON_JOB_FILE}"
-    declare KA9Q_FT_CRON_JOB_FILE_NAME="/etc/cron.d/${KA9Q_FT_CRON_JOB_FILE}"
 
-    if [[ ! -f ${KA9Q_FT_CRON_JOB_FILE_NAME} ]]; then
-        echo "SHELL=/bin/sh
-PATH=/usr/bin:/bin
-10 * * * * root ${KA9Q_FT_CLEANUP_CMD}" > ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}
-        chmod 644  ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}
-        sudo cp  ${KA9Q_FT_CRON_JOB_TMP_FILE_NAME}  ${KA9Q_FT_CRON_JOB_FILE_NAME}
-        wd_logger 1 "Added cron job to keep '/dev/shm/ka9q-radio' clean"
+    declare KA9Q_FT_LOGROTATE_JOB_FILE_NAME="/etc/logrotate.d/${ft_type}.rotate"
+
+    if [[ ! -f ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME} ]]; then
+        wd_logger 1 "Found no '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so create it"
+        echo "${ft_log_file_name} {
+        rotate 10
+        daily
+        missingok
+        notifempty
+        compress
+        delaycompress
+        copytruncate
+} " > ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
+        chmod 644  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
+        wd_logger 1 "Added new logrotate job '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' to keep '' clean"
+    else
+        wd_logger 2 "Found '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so check it"
+    fi
+
+    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME})
+    if [[ "${target_file}" == "${ft_log_file_name}" ]]; then
+        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so no changes are needed"
+    else
+        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}, so fix it'"
+        sudo sed -i "s;\(^/[^ ]*\).*;${ft_log_file_name};" ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
     fi
 
     wd_logger 2 "Setup complete"
