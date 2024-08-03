@@ -271,6 +271,8 @@ alias cdww='cd ~/wsprdaemon/wav-archive.d/'
 alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdt='cd /dev/shm/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
+alias cds='cd /etc/systemd/system'
+alias cdtt='cd /dev/shm/ka9qq-radio'
 
 ### Start 'vi' using WD's .vimrc
 function vi() 
