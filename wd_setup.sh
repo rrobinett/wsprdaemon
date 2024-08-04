@@ -55,6 +55,7 @@ declare    PACKAGE_NEEDED_LIST=( at bc curl host flac postgresql sox zstd avahi-
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
+declare LIB_QT5_CORE="libqt5core5a"
 declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
 declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
 declare LIB_QT5_CORE_UBUNTU_24_04="libqt5core5t64"
@@ -74,7 +75,7 @@ case ${CPU_ARCH} in
          if [[ "${OS_RELEASE}" == "12" ]]; then
             ### The 64 bit Pi 5 OS is based upon  Debian 12
             wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${OS_RELEASE}"
-            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5 ${LIB_QT5_CORE} )
         else
             ### This is a 64 bit bullseye Pi4 and the OrangePi
             PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
