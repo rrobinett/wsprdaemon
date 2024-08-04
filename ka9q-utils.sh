@@ -1128,7 +1128,7 @@ function  ka9q-psk-reporter-setup() {
         fi
 
         local pip3_extra_args=""
-        if [[ "${OS_RELEASE}" == "24.04" ]]; then
+        if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
             pip3_extra_args="--break-system-package"
         fi
         pip3 install docopt ${pip3_extra_args}
@@ -1260,7 +1260,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         sudo systemctl status pskreporter@${ft_type} > /dev/null
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
