@@ -480,7 +480,7 @@ function ka9q-web-setup() {
     rc=$?
 
      if [[ ${rc} -ne 0 ]]; then
-         wd_logger 1 "ERROR:  compile of 'onion' returned ${rc}"
+         wd_logger 1 "ERROR:  compile of 'onion' returned ${rc}:\n$( < ${KA9Q_WEB_SETUP_LOG_FILE} )"
          return ${rc}
      fi
 
@@ -504,7 +504,7 @@ function ka9q-web-setup() {
      rc=$?
 
      if [[ ${rc} -ne 0 ]]; then
-         wd_logger 1 "ERROR:  compile of 'ka9q-web' returned ${rc}"
+         wd_logger 1 "ERROR:  compile of 'ka9q-web' returned ${rc}:\n$(<${KA9Q_WEB_SETUP_LOG_FILE})"
          return ${rc}
      fi
 
