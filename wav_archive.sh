@@ -83,7 +83,7 @@ function wd_file_system_has_space()
 
     eval ${_return_percent_used_var}=\${percent_used}
     if [[ ${percent_used} -gt ${max_percent_used} ]]; then
-        wd_logger 1 "ERROR: File system containing ${file_system_path} is ${percent_used}% full, more than the  ${max_percent_used}% limit"
+        wd_logger 1 "ERROR: File system containing ${file_system_path} is ${percent_used}% full, more than the ${max_percent_used}% limit"
         return 1
     fi
     wd_logger 2 "File system used by the wav file archive is only ${percent_used}% full, so there is space for more files"
@@ -133,7 +133,7 @@ function queue_wav_file()
 {
     local file_system_percent_used
     if wd_file_system_has_space file_system_percent_used ${FLAC_FILE_ARCHIVE_ROOT_DIR} ${MAX_FLAC_FILE_SYSTEM_USED_PERCENT}; then
-        wd_logger 1 "The ${FLAC_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so it has enough space for more wav and flac files.  So there is no need to cull files"
+        wd_logger 2 "The ${FLAC_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so it has enough space for more wav and flac files.  So there is no need to cull files"
         return 0
     fi
     wd_logger 1 "The ${FLAC_FILE_ARCHIVE_ROOT_DIR} file system used by the wav file archive is ${file_system_percent_used}% full, so we need to flush some older wav files"
@@ -168,14 +168,20 @@ function wd_archive_wavs()
 {
     truncate_flac_file_archive
 
+    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.flac') )
+    if [[  ${#wav_file_list[@]} -ne 0 ]]; then
+        wd_logger 1 "ERROR: Found ${#wav_file_list[@]} zombie .flac files in ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}, so deleting them"
+        wd_rm ${wav_file_list[@]}
+    fi
+
     ### Create a list of wav files sorted by ascending time.
-    local wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.wav'  -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- ) )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
+    wav_file_list=( $(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} -type f -name '*.wav'  -printf "%T@ %p\n" | sort -n | cut -d ' ' -f 2- ) )       ### Sort by start date found in wav file name.  Assumes that find is executed in WSPRDAEMON_ROOT_DIR
     if [[ ${#wav_file_list[@]} -eq 0 ]]; then
         wd_logger 1 "Found no wav files to archive"
         return 0
     fi
 
-    wd_logger 1 "Starting to compress and archive ${#wav_file_list[@]} wav files"
+    wd_logger 1 "Compressing and archiving ${#wav_file_list[@]} wav files"
 
     ### Process the oldest wav file first
     local wav_file_name
@@ -193,13 +199,28 @@ function wd_archive_wavs()
         local dest_flac_path=${dest_file_dir}/${wav_file_name/.wav/.flac}
         wd_logger 2 "Flac compressing wav file ${wav_file_path} and archiving it to ${dest_flac_path}"
 
-        ### flac decodes in place, so there needs to be some free space in the file's file system for the wav file, which will be larger
+        ### flac compresses in place, so there needs to be some free space in the file's file system for the wav file, which will be larger
+        declare FREE_WAV_TIMEOUT_MAX=${FREE_WAV_TIMEOUT_MAX-100}
+        local free_wav_timeout=1
         local file_system_percent_used
-        if !  wd_file_system_has_space file_system_percent_used ${wav_file_path} ${MAX_WAV_TMP_FILE_SYSTEM_USED_PERCENT} ; then
-            wd_logger 1 "ERROR: the tmpfs file system containing ${wav_file_path} is ${file_system_percent_used} percent full. So delete this file and see if there is now enough free space"
-            wd_rm ${wav_file_path}
-            continue
+        while   [[ ${free_wav_timeout} -le ${FREE_WAV_TIMEOUT_MAX} ]] && ! wd_file_system_has_space file_system_percent_used ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} ${MAX_WAV_TMP_FILE_SYSTEM_USED_PERCENT} ; do
+            wd_logger 1 "ERROR: try #${free_wav_timeout}: the tmpfs file system containing ${wav_file_path} is ${file_system_percent_used} percent full. So flush the oldest file"
+            local oldest_file=$(find ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR}  -type f -exec stat --format='%Y %n' {} + | sort -n | head -n 1 | cut -d " " -f 2)
+            if [[ -z "${oldest_file}" ]]; then
+                wd_logger 1 "ERROR: unexpectedly couldn't find any flat files in the ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} file system"
+                continue
+            else
+                wd_logger 1 "Deleting the oldest file '${oldest_file}', then look again to see if there is enough free space"
+                wd_rm ${oldest_file}
+            fi
+            (( ++free_wav_timeout ))
+        done
+        if [[ ${free_wav_timeout} -gt ${FREE_WAV_TIMEOUT_MAX} ]]; then
+             wd_logger 1 "ERROR: failed to free enough space on drive containing ${wav_file_path}, so deleting it"
+             wd_rm ${wav_file_path}
+             continue
         fi
+        wd_logger 2 "There is enough free space to run 'flac'"
 
         local rc
         flac --silent --delete-input-file ${wav_file_path}
@@ -236,8 +257,11 @@ function wav_archive_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
     while true; do
         local sleep_seconds=$(seconds_until_next_odd_minute)
-        wd_logger 1 "Sleeping ${sleep_seconds} in order to wake up at the next odd minute"
+        wd_logger 2 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
         wd_sleep  ${sleep_seconds}
         wd_archive_wavs
     done
 }
+
+# wd_archive_wavs
+# exit
