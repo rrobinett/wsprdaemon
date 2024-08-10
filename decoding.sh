@@ -1383,18 +1383,9 @@ function decoding_daemon() {
                 current_ad_overloads_count="${current_ad_overloads_count//[ ,]}"   ### Remove the space and commas put there by KA9Q's metsdump
                 if [[ -z "${current_ad_overloads_count}" ]] || ! is_uint ${current_ad_overloads_count} ; then
                     wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
+                    current_ad_overloads_count=0
                 else
-                    declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
-                    if [[ ${current_ad_overloads_count} -gt ${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT} ]]; then
-                        wd_logger 1 "WARNING: current_ad_overloads_count=${current_ad_overloads_count} is greater than the MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}, so report that max value"
-                        current_ad_overloads_count=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}
-                    else
-                        if [[ ${current_ad_overloads_count} -eq 0 ]]; then
-                            wd_logger 1 "ka9q_get_status_value() reported zero new ADC overloads"
-                        else
-                            wd_logger 1 "Reporting ${current_ad_overloads_count} ADC overloads occured in this 2 minute WSPR cycle"
-                        fi
-                    fi
+                    wd_logger 1 "Metadump reports ${current_ad_overloads_count} ADC overloads occured since radiod started"
                 fi
             fi
         elif [[ -f  kiwi_recorder.log ]]; then
@@ -1414,11 +1405,16 @@ function decoding_daemon() {
             wd_logger 1 "This is the first overloads count after startup, so just set last_ad_overloads_count equal to current_ad_overloads_count=${current_ad_overloads_count}"
             new_sdr_overloads_count=0
         else
+            declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
+
             new_sdr_overloads_count=$(( ${current_ad_overloads_count} - ${last_ad_overloads_count} ))
             wd_logger 1 "current_ad_overloads_count '${current_ad_overloads_count}' - last_ad_overloads_count '${last_ad_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
             if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
                 wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {current_ad_overloads_count '${current_ad_overloads_count}'"
                 new_sdr_overloads_count=${current_ad_overloads_count}
+            elif [[  ${new_sdr_overloads_count} -gt ${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}  ]]; then
+                wd_logger 1 "WARNING: new_sdr_overloads_count=${new_sdr_overloads_count} is greater than MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}, so report that max value"
+                new_sdr_overloads_count=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}
             fi
         fi
         ### Extract the time of the first wav file in the first list of wav files (e.e the 2 minute list) and use that time for the wav file time in the first field of the ad-overloads.log file line
