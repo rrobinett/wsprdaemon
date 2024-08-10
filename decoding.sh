@@ -1384,7 +1384,7 @@ function decoding_daemon() {
                 if [[ -z "${current_ad_overloads_count}" ]] || ! is_uint ${current_ad_overloads_count} ; then
                     wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
                 else
-                    declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483647}          ### The Timescale field can't store integers larger than this
+                    declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
                     if [[ ${current_ad_overloads_count} -gt ${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT} ]]; then
                         wd_logger 1 "WARNING: current_ad_overloads_count=${current_ad_overloads_count} is greater than the MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}, so report that max value"
                         current_ad_overloads_count=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT}
