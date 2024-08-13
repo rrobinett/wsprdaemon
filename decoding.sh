@@ -58,7 +58,7 @@ function get_af_db() {
         return 0
     fi
     local af_info_list=(${af_info_field//,/ })
-    wd_logger 1 "af_info_list= ${af_info_list[*]}"
+    wd_logger 1 "af_info_list= '${af_info_list[*]}'"
     for element in ${af_info_list[@]}; do
         local fields=(${element//:/ })
         if [[ ${fields[0]} == "DEFAULT" ]]; then
@@ -70,7 +70,12 @@ function get_af_db() {
             return 0
         fi
     done
-    wd_logger 1 "Returning default value ${default_value} for receiver ${real_receiver_name}, band ${real_receiver_rx_band}"
+    if [[ -z "${default_value-}" ]]; then
+        wd_logger 1 "ERROR:  can't find af value for receiver ${real_receiver_name}, band ${real_receiver_rx_band}, AND there is no DEFAULT.  So return 0"
+        default_value=0
+    else
+        wd_logger 1 "Returning default value ${default_value} for receiver ${real_receiver_name}, band ${real_receiver_rx_band}"
+    fi
     eval ${return_variable_name}=${default_value}
     return 0
 }

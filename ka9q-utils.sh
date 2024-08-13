@@ -594,6 +594,7 @@ function ka9q-radiod-setup()
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
+            ka9q_make_needed="yes"
         else
             ### There is a local RX888.  Ensure it is properly configured and running
             if [[ ! $(groups) =~ radio ]]; then
@@ -652,8 +653,12 @@ function ka9q-radiod-setup()
         return 1
     fi
 
+    if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+        wd_logger 1 "ERROR: after making the ka9q0radio directory, can't find ${KA9Q_RADIO_WD_RECORD_CMD}"
+        return 1
+    fi
     if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
-        ### WD is not configured to install and confiugre a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
+        ### WD is not configured to install and configure a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
         wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So WD doesn't need to configure or start radiod"
         return 0
     fi
@@ -1290,7 +1295,7 @@ function ka9q_setup() {
    fi
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
-    ka9q-radiod-setup 
+    ka9q-radiod-setup
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR:  ka9q-radiod-setup() => ${rc}"
