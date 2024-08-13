@@ -286,6 +286,7 @@ function queue_noise_signal_levels_to_wsprdaemon()
     local signal_levels_log_file=$5
     local wsprdaemon_noise_directory=$6
  
+    local rc
     local noise_line="${sox_signals_rms_fft_and_overload_info}"
     local noise_line_list=( ${noise_line} )
 
@@ -300,9 +301,26 @@ function queue_noise_signal_levels_to_wsprdaemon()
     if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
         wd_logger 2 "Not configured to upload noise, so not queuing a noise file"
     else
+        if [[ ! -d ${wsprdaemon_noise_directory} ]]; then
+            ### There is a possible race condition here during startup when multiple bands are first logging noise files
+            ### But if this mkdir fails, others will succeed and subseqent calls to this function will find the directory exists
+            wd_logger 1 "Noise cache directory ${wsprdaemon_noise_directory} does not exist, so create it"
+            mkdir -p ${wsprdaemon_noise_directory}
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: couldn't create noise cache directory ${wsprdaemon_noise_directory}"
+                return 1
+            fi
+        fi
         local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
         wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
         echo "${noise_line}" > ${wsprdaemon_noise_file}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            ### I previously failed to test the return code of echo.  Now it should never fail
+            wd_logger 1 "ERROR: couldn't create noise cache directory ${wsprdaemon_noise_directory}"
+            return 1
+        fi
     fi
     return 0
 }
