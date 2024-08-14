@@ -653,7 +653,7 @@ function ka9q-radiod-setup()
         return 1
     fi
 
-    if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+    if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
         wd_logger 1 "ERROR: after making the ka9q0radio directory, can't find ${KA9Q_RADIO_WD_RECORD_CMD}"
         return 1
     fi
