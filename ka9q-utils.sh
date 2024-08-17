@@ -1007,15 +1007,17 @@ function ka9q-ft-setup() {
     if [[ ! -f ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME} ]]; then
         wd_logger 1 "Found no '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so create it"
         echo "${ft_log_file_name} {
-        rotate 10
+        maxsize 1M
+        rotate 4
         daily
         missingok
         notifempty
         compress
         delaycompress
         copytruncate
-} " > ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
-        chmod 644  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
+} " > /tmp/${ft_type}.rotate
+        sudo cp /tmp/${ft_type}.rotate ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
+        sudo chmod 644  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
         wd_logger 1 "Added new logrotate job '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' to keep '' clean"
     else
         wd_logger 2 "Found '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so check it"
