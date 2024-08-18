@@ -226,9 +226,13 @@ function wd-gc-ssh() {
     git config --global user.name "Rob Robinett"
 }
 
-### Reload this file
-alias wd-rc='source ~/wsprdaemon/bash-aliases'       ### Just reload this file
-alias wdrc='wd-rc'
+function wdgl() {
+    git log
+}
+
+function wdgs() {
+    git status
+}
 
 ### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
 function wd-rci() 
@@ -1138,7 +1142,7 @@ function wd-wav-capture() {
 function wd-ft-logs() {
    for d in 4 8; do
        local ft_log_file_name="/mnt/ka9q-radio/ft${d}/ft${d}.log"
-       echo "FT${d}: $(stat --format=%s ${ft_log_file_name}) bytes"
+       echo "FT${d}: ${ft_log_file_name} size if $(stat --format=%s ${ft_log_file_name}) bytes"
        local ft_log_archived_file_names="$( find ${ft_log_file_name%/*} -type f -name ${ft_log_file_name##*/}.* )"
        if [[ -n "${ft_log_archived_file_names}" ]]; then
            echo -n "Archives: "; echo ${ft_log_archived_file_names}
@@ -1149,4 +1153,12 @@ function wd-ft-logs() {
        echo 
    done
    df /mnt/ka9q-radio | grep "^tmp"
+   if [[ -n "${1-}" ]]; then
+       if [[ ! -f /mnt/ka9q-radio/ft4/ft4.log ]]; then
+           echo "There is no /mnt/ka9q-radio/ft4/ft4.log"
+       else
+           read -p "$(date): Run 'tail -f /mnt/ka9q-radio/ft4/ft4.log'? => "
+           tail -f "/mnt/ka9q-radio/ft4/ft4.log"
+       fi
+   fi
 }
