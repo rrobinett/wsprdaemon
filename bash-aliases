@@ -782,14 +782,15 @@ function wd-get_ka9q-conf_file-base_name() {
          conf_base_name="rx888-wsprdaemon"
     fi
 
-    local running_radiod_status_line_list=( $(sudo systemctl | grep radiod@) )
-    if [[ ${#running_radiod_status_line_list[@]} -gt 0 ]]; then
-        local radiod_service_name="${running_radiod_status_line_list[0]}"
-        conf_base_name="${radiod_service_name##*@}"
-        conf_base_name="${conf_base_name%.service}"
-        [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service:  ${radiod_service_name} and extracted from it the base name ${conf_base_name}" 2>&1
+    #set -x
+    local running_radiod_status_line=$(sudo systemctl status 'radiod@*' | grep '.conf' | grep -v '\\x')
+    if [[ -n "${running_radiod_status_line}" ]]; then
+        conf_base_name="${running_radiod_status_line##*@}"
+        conf_base_name="${conf_base_name%.conf*}"
+        [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
     fi
     echo "${conf_base_name}"
+    set +x
 }
 
 function wd-get-ka9q-conf-file-path () {
