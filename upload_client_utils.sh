@@ -248,7 +248,7 @@ function upload_to_wsprnet_daemon() {
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
         done
-        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and 'ps' didn't find any jobs which might create more.  Here are the top 10 jobs currently running on the system:\n$(top -b -n 1 | sed -n '7,17p') "
+        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and 'ps' didn't find any jobs which might create more.  Here are the top 10 jobs currently running on the system:\n$(top -w 256 -b -n 1 | sed -n '7,17p') "
  
         wd_logger 1 "Checking for CALL/GRID directories"
         local call_grid_dirs_list
