@@ -1374,10 +1374,10 @@ function decoding_daemon() {
         fi
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
         
-
         ### We append the count of the A/D overload events in the last 2 minutes to the ad_overloads.log file and add them to the spots reported
         local current_ad_overloads_count=0   ### What we get when we query the SDR righ tnow
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
+
             wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
             ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
             rc=$?
@@ -1392,6 +1392,26 @@ function decoding_daemon() {
                 else
                     wd_logger 1 "Metadump reports ${current_ad_overloads_count} ADC overloads occured since radiod started"
                 fi
+            fi
+
+            local channel_gain_value       ### Each WSPR channel should be set to ouput about -15 dBFS to the wav file.  Return the current gain after checkin and ajusting gain if needed
+            ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "gain"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                channel_gain_value="60 dB" ### The default in the radiod.conf file
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}'"
+            fi
+
+            local channel_output_level       ### Each WSPR channel should be set to ouput about -15 dBFS to the wav file.  Return the current gain after checkin and ajusting gain if needed
+            ka9q_get_current_status_value "channel_output_level" ${receiver_ip_address} ${receiver_freq_hz} "output level"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                channel_output_level="60 dB" ### The default in the radiod.conf file
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_output_level}'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => channel_output_level='${channel_output_level}'"
             fi
         elif [[ -f  kiwi_recorder.log ]]; then
             wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
