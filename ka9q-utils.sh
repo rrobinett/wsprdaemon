@@ -270,6 +270,10 @@ function ka9q_parse_status_value() {
     return 0
 }
 
+### To avoid executing multiple calls to 'metadump' cache its ouput in ./ka9q_status.log.  Each channel needs one of these
+declare KA9Q_METADUMP_CACHE_FILE_NAME="./ka9q_status.log"
+declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
+
 function ka9q_get_current_status_value() {
     local __return_var="$1"
     local receiver_ip_address=$2
@@ -277,12 +281,24 @@ function ka9q_get_current_status_value() {
     local search_val="$4"
     local rc
 
-    local status_log_file="./ka9q_status.log"   ### each receiver+channel will have status fields unique to it, so there needs to be a file for each of them
-    ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: failed to get new status"
-        return ${rc}
+    local status_log_file="${KA9Q_METADUMP_CACHE_FILE_NAME}"   ### each receiver+channel will have status fields unique to it, so there needs to be a file for each of them
+    local status_log_file_epoch=0
+
+    if [[ -f  ${status_log_file} ]]; then
+        status_log_file_epoch=$(stat -c %Y ${status_log_file} ) 
+    fi
+    local current_epoch=$(printf "%(%s)T")
+
+    if [[ $((  current_epoch - status_log_file_epoch )) -lt ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} ]]; then
+        wd_logger 1 "Getting value from ${KA9Q_METADUMP_CACHE_FILE_NAME} which is less than  ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} seconds old"
+    else
+        wd_logger 1 "Updating ${status_log_file}"
+        ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to update ${status_log_file}"
+            return ${rc}
+        fi
     fi
 
     local value_found
