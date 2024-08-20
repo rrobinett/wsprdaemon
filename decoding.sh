@@ -1217,6 +1217,9 @@ function get_wsprdaemon_noise_queue_directory()
 }
 
 
+declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--20.0}"             ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
+declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}         ### Don't adjust if within 6 dB of that leve         ### Don't adjust if within 6 dB of that levell
+
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
@@ -1378,10 +1381,10 @@ function decoding_daemon() {
         local current_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
         local current_adc_dbfs_float="-15.0" ### Report by radiod of measurement of ADC's dbFS which should be -15.0 or lower
         local current_ad_input_dbfs=0        ### Report by radiod of the current dbFS it measures at the ADC input
+        local channel_n0_float="-999.99"     ### Report by radio of N0 in dB/Hz
         local current_ad_overloads_count=0   ### Report by radiod of the number of OVs since radiod started, a 64 bit number
         local channel_gain_float="60.0"      ### Setting of radiod 's rx channel gain which can be changed by WD
         local channel_output_float="15.0"    ### Report by radiod of the current dbFS level in PCM output stream
-        local channel_n0_float="-999.99"     ### Report by radio of N0 in dB/Hz
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
 
@@ -1391,7 +1394,7 @@ function decoding_daemon() {
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default rf_gain='${channel_rf_gain_value}'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}'"
+                wd_logger 2 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}'"
                 channel_rf_gain_float=${channel_rf_gain_value%dB}      ### remove the trailing 'dB' returned by metadump
                 channel_rf_gain_float=${channel_rf_gain_float// /}     ### remove spaces
             fi
@@ -1402,12 +1405,12 @@ function decoding_daemon() {
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default adc_dbfs='${channel_adc_dbfs_value}'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}'"
+                wd_logger 2 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}'"
                 channel_adc_dbfs_float=${channel_adc_dbfs_value%dB}      ### remove the trailing 'dB' returned by metadump
                 channel_adc_dbfs_float=${channel_adc_dbfs_float// /}     ### remove spaces
             fi
 
-            wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
+            wd_logger 2 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
             ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
@@ -1419,7 +1422,7 @@ function decoding_daemon() {
                     wd_logger 1 "ERROR:  ka9q_get_status_value() returned '${current_ad_overloads_count}' which is not an unsigned integer"
                     current_ad_overloads_count=0
                 else
-                    wd_logger 1 "Metadump reports ${current_ad_overloads_count} ADC overloads occured since radiod started"
+                    wd_logger 2 "Metadump reports ${current_ad_overloads_count} ADC overloads occured since radiod started"
                 fi
             fi
 
@@ -1429,7 +1432,7 @@ function decoding_daemon() {
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default n0='${channel_n0_value}'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}'"
+                wd_logger 2 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}'"
                 channel_n0_float=${channel_n0_value%dB/Hz}   ### remove the trailing 'dB/Hz' returned by metadump
                 channel_n0_float=${channel_n0_float// /}     ### remove spaces
             fi
@@ -1441,7 +1444,7 @@ function decoding_daemon() {
                 channel_gain_value="60 dB" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}'"
+                wd_logger 2 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}'"
                 channel_gain_float=${channel_gain_value%dB}   ### remove the trailing ' dB' returned by metadump
                 channel_gain_float=${channel_gain_float// /}   ### remove spaces
             fi
@@ -1453,7 +1456,7 @@ function decoding_daemon() {
                 channel_output_level="60 dB" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_output_level}'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => channel_output_level='${channel_output_level}'"
+                wd_logger 2 "ka9q_get_current_status_value() => channel_output_level='${channel_output_level}'"
             fi
             channel_output_float=${channel_output_level//dB/}   ### removed the ' db" returned by metadump
             channel_output_float=${channel_output_float// /}    ### remove the spaces
@@ -1462,18 +1465,25 @@ function decoding_daemon() {
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                channel_output_level="60 dB" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so can't find ka9q_status_ip => can't change output gain with 'tune'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}"
+                wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so see if a channel gain adjustment is needed"
+                local channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${channel_output_float})/1" | bc )
+                if rc=$(echo "${channel_level_adjust#-} > ${KA9Q_CHANNEL_GAIN_ADJUST_MIN}" | bc) && [[ ${rc} -eq 0 ]]; then
+                    wd_logger 2 "No channel gain adjustment since current output level ${channel_output_float} is within ${KA9Q_CHANNEL_GAIN_ADJUST_MIN} of target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                else
+                    local new_channel_level=$(echo "scale=0; (${channel_gain_float} + ${channel_level_adjust} )/1" | bc)
+                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${channel_gain_float} to ${new_channel_level} is needed to change the current output level ${channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                    tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
+                    rc=$?
+                    if [[ ${rc} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: ' tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
+                    fi
+                fi
             fi
-
-            declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--15.0}"
-            local channel_level_adjust=$( echo " ${KA9Q_OUTPUT_DBFS_TARGET} - ${channel_output_float}" | bc )
-
-            wd_logger 1 "Found ${current_ad_overloads_count} total ADC overloads, channel_gain_float='${channel_gain_float}', and  channel_output_float=${channel_output_float}.  So adjust output gain by ${channel_level_adjust} dB"
-
+            ### End of section which monitors and controls a KA9Q-radio SDR
         elif [[ -f  kiwi_recorder.log ]]; then
+            ### Monitor a KiwiSDR
             wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
             get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
             rc=$?
@@ -1485,6 +1495,8 @@ function decoding_daemon() {
         else
             wd_logger 1 "Not a KA9Q or KiwiSDR, so there is no overload information"
         fi
+
+        ### Calculate overloads which occured during this WSPR cycle
         local new_sdr_overloads_count=0
         if [[ -z "${last_ad_overloads_count}" || ${last_ad_overloads_count} -eq -1 ]]; then
             wd_logger 1 "This is the first overloads count after startup, so just set last_ad_overloads_count equal to current_ad_overloads_count=${current_ad_overloads_count}"
@@ -1508,7 +1520,7 @@ function decoding_daemon() {
         local ov_wav_file_list=( ${ov_comma_separated_files//,/ } )
         local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
 
-        echo "${ov_first_input_wav_filename}: ${current_ad_overloads_count} ${new_sdr_overloads_count}" >> ad_overloads.log
+        printf "%s: %6d %6d %5.1f %5.1f %6.1f %5.1f %5.1f\n"  ${ov_first_input_wav_filename} ${current_ad_overloads_count} ${new_sdr_overloads_count} ${channel_rf_gain_float} ${channel_adc_dbfs_float} ${channel_n0_float} ${channel_output_float} ${channel_gain_float} >> ad_overloads.log
         truncate_file ad_overloads.log 1000000       ## limit the size of the file
 
         wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
