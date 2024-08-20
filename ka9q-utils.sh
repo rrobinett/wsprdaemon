@@ -182,7 +182,7 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 1 "Getting new status information by executing 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}'"
+        wd_logger 2 "Getting new status information by executing 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}'"
         metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -191,7 +191,7 @@ function ka9q_get_metadump() {
             local status_log_line_count=$(wc -l <  ${status_log_file} )
 
             if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
-                wd_logger 1 "Got useful status file"
+                wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
                 wd_logger 1 "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}, so try again"
@@ -202,7 +202,7 @@ function ka9q_get_metadump() {
         wd_logger 1 "ERROR: couldn't get useful status after ${KA9Q_GET_STATUS_TRIES}"
         return 1
     else
-        wd_logger 1 "Got new status from:  'metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}'"
+        wd_logger 2 "Got new status from:  'metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}'"
         return 0
     fi
  }
@@ -290,9 +290,9 @@ function ka9q_get_current_status_value() {
     local current_epoch=$(printf "%(%s)T")
 
     if [[ $((  current_epoch - status_log_file_epoch )) -lt ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} ]]; then
-        wd_logger 1 "Getting value from ${KA9Q_METADUMP_CACHE_FILE_NAME} which is less than  ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} seconds old"
+        wd_logger 2 "Getting value from ${KA9Q_METADUMP_CACHE_FILE_NAME} which is less than  ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} seconds old"
     else
-        wd_logger 1 "Updating ${status_log_file}"
+        wd_logger 2 "Updating ${status_log_file}"
         ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -309,7 +309,7 @@ function ka9q_get_current_status_value() {
         return ${rc}
     fi
     
-    wd_logger 1 "Returning '${value_found}'"
+    wd_logger 2 "Returning '${value_found}'"
 
     eval ${__return_var}=\""${value_found}"\"
     return 0
