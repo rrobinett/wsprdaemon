@@ -1375,8 +1375,37 @@ function decoding_daemon() {
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
         
         ### We append the count of the A/D overload events in the last 2 minutes to the ad_overloads.log file and add them to the spots reported
-        local current_ad_overloads_count=0   ### What we get when we query the SDR righ tnow
+        local current_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
+        local current_adc_dbfs_float="-15.0" ### Report by radiod of measurement of ADC's dbFS which should be -15.0 or lower
+        local current_ad_input_dbfs=0        ### Report by radiod of the current dbFS it measures at the ADC input
+        local current_ad_overloads_count=0   ### Report by radiod of the number of OVs since radiod started, a 64 bit number
+        local channel_gain_float="60.0"      ### Setting of radiod 's rx channel gain which can be changed by WD
+        local channel_output_float="15.0"    ### Report by radiod of the current dbFS level in PCM output stream
+        local channel_n0_float="-999.99"     ### Report by radio of N0 in dB/Hz
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
+            ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
+
+            local channel_rf_gain_value
+            ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "rf gain"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default rf_gain='${channel_rf_gain_value}'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}'"
+                channel_rf_gain_float=${channel_rf_gain_value%dB}      ### remove the trailing 'dB' returned by metadump
+                channel_rf_gain_float=${channel_rf_gain_float// /}     ### remove spaces
+            fi
+
+            local channel_adc_dbfs_value
+            ka9q_get_current_status_value "channel_adc_dbfs_value" ${receiver_ip_address} ${receiver_freq_hz} "IF pwr"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default adc_dbfs='${channel_adc_dbfs_value}'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}'"
+                channel_adc_dbfs_float=${channel_adc_dbfs_value%dB}      ### remove the trailing 'dB' returned by metadump
+                channel_adc_dbfs_float=${channel_adc_dbfs_float// /}     ### remove spaces
+            fi
 
             wd_logger 1 "Getting the new overload count value from KA9Q receiver ${receiver_name}"
             ka9q_get_current_status_value current_ad_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
@@ -1394,7 +1423,18 @@ function decoding_daemon() {
                 fi
             fi
 
-            local channel_gain_value       ### Each WSPR channel should be set to ouput about -15 dBFS to the wav file.  Return the current gain after checkin and ajusting gain if needed
+            local channel_n0_value
+            ka9q_get_current_status_value "channel_n0_value" ${receiver_ip_address} ${receiver_freq_hz} "N0"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default n0='${channel_n0_value}'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}'"
+                channel_n0_float=${channel_n0_value%dB/Hz}   ### remove the trailing 'dB/Hz' returned by metadump
+                channel_n0_float=${channel_n0_float// /}     ### remove spaces
+            fi
+
+            local channel_gain_value
             ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "gain"
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
@@ -1402,9 +1442,11 @@ function decoding_daemon() {
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
             else
                 wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}'"
+                channel_gain_float=${channel_gain_value%dB}   ### remove the trailing ' dB' returned by metadump
+                channel_gain_float=${channel_gain_float// /}   ### remove spaces
             fi
 
-            local channel_output_level       ### Each WSPR channel should be set to ouput about -15 dBFS to the wav file.  Return the current gain after checkin and ajusting gain if needed
+            local channel_output_level    ### Report of The output level to the pcm stream and thus ot the wav files.
             ka9q_get_current_status_value "channel_output_level" ${receiver_ip_address} ${receiver_freq_hz} "output level"
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
@@ -1413,6 +1455,24 @@ function decoding_daemon() {
             else
                 wd_logger 1 "ka9q_get_current_status_value() => channel_output_level='${channel_output_level}'"
             fi
+            channel_output_float=${channel_output_level//dB/}   ### removed the ' db" returned by metadump
+            channel_output_float=${channel_output_float// /}    ### remove the spaces
+
+            local ka9q_status_ip=""
+            ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                channel_output_level="60 dB" ### The default in the radiod.conf file
+                wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so can't find ka9q_status_ip => can't change output gain with 'tune'"
+            else
+                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}"
+            fi
+
+            declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--15.0}"
+            local channel_level_adjust=$( echo " ${KA9Q_OUTPUT_DBFS_TARGET} - ${channel_output_float}" | bc )
+
+            wd_logger 1 "Found ${current_ad_overloads_count} total ADC overloads, channel_gain_float='${channel_gain_float}', and  channel_output_float=${channel_output_float}.  So adjust output gain by ${channel_level_adjust} dB"
+
         elif [[ -f  kiwi_recorder.log ]]; then
             wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
             get_kiwirecorder_ov_count  current_ad_overloads_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
