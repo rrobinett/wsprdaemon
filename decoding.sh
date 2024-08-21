@@ -1476,11 +1476,16 @@ function decoding_daemon() {
                     wd_logger 2 "No channel gain adjustment since current output level ${channel_output_float} is within ${KA9Q_CHANNEL_GAIN_ADJUST_MIN} of target level ${KA9Q_OUTPUT_DBFS_TARGET}"
                 else
                     local new_channel_level=$(echo "scale=0; (${channel_gain_float} + ${channel_level_adjust} )/1" | bc)
-                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${channel_gain_float} to ${new_channel_level} is needed to change the current output level ${channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
-                    tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
-                    rc=$?
-                    if [[ ${rc} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: ' tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
+
+                    if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} != "yes" ]]; then
+                        wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${channel_gain_float} to ${new_channel_level} is needed to change the current output level ${channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}, but changes are disabled"
+                    else
+                        wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${channel_gain_float} to ${new_channel_level} is needed to change the current output level ${channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                        tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
+                        rc=$?
+                        if [[ ${rc} -ne 0 ]]; then
+                            wd_logger 1 "ERROR: ' tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
+                        fi
                     fi
                 fi
             fi
