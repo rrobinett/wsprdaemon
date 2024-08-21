@@ -1406,7 +1406,7 @@ function decoding_daemon() {
             fi
 
             local channel_rf_gain_value
-            ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "rf gain [1-9]"   ### There is also a 'rf gain cal' value in the status file
+            ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "rf gain"   ### There is also a 'rf gain cal' value in the status file
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 channel_rf_gain_value="-99.9"
