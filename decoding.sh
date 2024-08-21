@@ -484,7 +484,7 @@ function sleep_until_raw_file_is_full() {
     local wav_file_duration_hh_mm_sec_msec=$(soxi ${filename} | awk '/Duration/{print $3}')
     local wav_file_duration_integer=$(sed 's/[\.:]//g' <<< "${wav_file_duration_hh_mm_sec_msec}")
 
-    wd_logger 1 "Got wav file ${filename} header which reports durantion = ${wav_file_duration_hh_mm_sec_msec} => wav_file_duration_integer = ${wav_file_duration_integer}. WAV_FILE_MIN_HHMMSSUU=${WAV_FILE_MIN_HHMMSSUU}, WAV_FILE_MAX_HHMMSSUU=${WAV_FILE_MAX_HHMMSSUU}"
+    wd_logger 1 "Got wav file ${filename} header which reports duration = ${wav_file_duration_hh_mm_sec_msec} => wav_file_duration_integer = ${wav_file_duration_integer}. WAV_FILE_MIN_HHMMSSUU=${WAV_FILE_MIN_HHMMSSUU}, WAV_FILE_MAX_HHMMSSUU=${WAV_FILE_MAX_HHMMSSUU}"
 
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
         wd_logger 2 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
@@ -1218,7 +1218,10 @@ function get_wsprdaemon_noise_queue_directory()
 
 
 declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--20.0}"             ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
-declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}         ### Don't adjust if within 6 dB of that leve         ### Don't adjust if within 6 dB of that levell
+declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}         ### Don't adjust if within 6 dB of that level 
+declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                      ### Per channel log of overload counts and other SDR information
+declare SOX_LOG_FILE="./sox.log"
+declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"        ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1377,7 +1380,7 @@ function decoding_daemon() {
         fi
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
         
-        ### We append the count of the A/D overload events in the last 2 minutes to the ad_overloads.log file and add them to the spots reported
+        ### We append the count of the A/D overload events in the last 2 minutes to the ADC_OVERLOADS_LOG_FILE_NAME file and add them to the spots reported
         local current_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
         local current_adc_dbfs_float="-15.0" ### Report by radiod of measurement of ADC's dbFS which should be -15.0 or lower
         local current_ad_input_dbfs=0        ### Report by radiod of the current dbFS it measures at the ADC input
@@ -1520,25 +1523,12 @@ function decoding_daemon() {
         local ov_wav_file_list=( ${ov_comma_separated_files//,/ } )
         local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
 
-        printf "%s: %6d %6d %5.1f %5.1f %6.1f %5.1f %5.1f\n"  ${ov_first_input_wav_filename} ${current_ad_overloads_count} ${new_sdr_overloads_count} ${channel_rf_gain_float} ${channel_adc_dbfs_float} ${channel_n0_float} ${channel_output_float} ${channel_gain_float} >> ad_overloads.log
-        truncate_file ad_overloads.log 1000000       ## limit the size of the file
+        printf "%s: %6d %6d %5.1f %5.1f %6.1f %5.1f %5.1f\n"  ${ov_first_input_wav_filename} ${current_ad_overloads_count} ${new_sdr_overloads_count} ${channel_rf_gain_float} ${channel_adc_dbfs_float} ${channel_n0_float} ${channel_output_float} ${channel_gain_float} >> ${ADC_OVERLOADS_LOG_FILE_NAME}
+        truncate_file ${ADC_OVERLOADS_LOG_FILE_NAME} 1000000       ## limit the size of the file
 
         wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
 
         last_ad_overloads_count=${current_ad_overloads_count}
-
-
-        ## WIP Adjust AGC if overloads indicates it is needed
-        local wav_files_ka9q_agc_val=-1 
-        local wav_files_ka9q_noise_val=-1 
-        if [[ "${receiver_name}" =~ KA9Q && ${GET_KA9Q_STATUS-no} == "yes" ]]; then
-            wd_logger 1 "Check current signal level reported by radiod and adjust and report new AGC setting"
-            get_ka9q_rx_channel_report ka9q_agc_val wav_files_ka9q_noise_val ${receiver_name} ${receiver_freq_hz}
-            ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'get_ka9q_rx_channel_report ka9q_agc_val wav_files_ka9q_noise_val${receiver_name} ${receiver_band}' => ${receiver_name}"
-            fi
-        fi
 
         local returned_files
         for returned_files in ${mode_wav_file_list[@]}; do
@@ -1640,13 +1630,14 @@ function decoding_daemon() {
 
             local sox_effects="${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}"
 
-            wd_logger 1 "sox is creating a 2/5/15/30 wav files with '${sox_effects}' effects"
+            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file using '${sox_effects}' effects"
 
+            ### Concatenate the one minute files to create a single 2/5/15/30 minute file
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& sox.log
+            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sox ${wav_file_list[@]} ${decoder_input_wav_filepath}' => ${rc} (probably out of file space)"
+                wd_logger 1 "ERROR: 'sox ${wav_file_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
                     local rc1
                     wd_rm ${decoder_input_wav_filepath}
@@ -1659,10 +1650,16 @@ function decoding_daemon() {
                 continue
             fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
-            if [[ -s sox.log ]]; then
-                wd_logger 1 "ERROR: sox reported these errors while creating the minute wav file:\n$(< sox.log)"
+
+            ### Get statistics about the newly created wav file
+            sox ${decoder_input_wav_filepath} -n stats >& ${SOX_LOG_FILE}
+            local sox_peak_level_db_float=$(awk '/^Pk lev/{print $NF}' ${SOX_LOG_FILE})
+            rc=$( echo "${sox_peak_level_db_float} > ${SOX_MAX_PEAK_LEVEL}" | bc )
+            if [[ ${rc} -eq 1 ]]; then
+                wd_logger 1 "ERROR: sox reports a wav file overrange: $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
+            else
+                wd_logger 1 "sox created a wav file with these characteristics:  $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
             fi
-            wd_logger 2 "'soxi ${decoder_input_wav_filepath} ${wav_file_list[*]}':\n$(soxi ${decoder_input_wav_filepath} ${wav_file_list[@]})"
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
             local got_cpu_semaphore=""
