@@ -1217,11 +1217,13 @@ function get_wsprdaemon_noise_queue_directory()
 }
 
 
-declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--20.0}"             ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
-declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}         ### Don't adjust if within 6 dB of that level 
-declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                      ### Per channel log of overload counts and other SDR information
-declare SOX_LOG_FILE="./sox.log"
-declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"        ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
+declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--20.0}"                   ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
+declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}               ### Don't adjust if within 6 dB of that level 
+declare KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX-6}         ### By default increase the channel gain by at most  6 dB at the beginning of each WSPR cycle
+declare KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX--10}   ### By default decrease the channel gain by at most 10 dB at the beginning of each WSPR cycle
+declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                            ### Per channel log of overload counts and other SDR information
+declare SOX_LOG_FILE="./sox.log"                                                     ### The output of sox goes to this file for log printouts and wav file stats
+declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1466,22 +1468,33 @@ function decoding_daemon() {
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so can't find ka9q_status_ip => can't change output gain with 'tune'"
             else
-                wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so see if a channel gain adjustment is needed"
+                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tun' if it is needed"
                 local channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
-                if rc=$(echo "${channel_level_adjust#-} > ${KA9Q_CHANNEL_GAIN_ADJUST_MIN}" | bc) && [[ ${rc} -eq 0 ]]; then
-                    wd_logger 2 "No channel gain adjustment since current output level ${ka9q_channel_output_float} is within ${KA9Q_CHANNEL_GAIN_ADJUST_MIN} of target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
+                    ### We are processing the first WSPR packet
+                    wd_logger 1 "Applying that full channel gain adjustment channel_level_adjust=${channel_level_adjust} at startup of WD"
                 else
-                    local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
-
-                    if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} != "yes" ]]; then
-                        wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}, but changes are disabled"
+                    ### We are processing the second or subsequent WSPR packet
+                    if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
+                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
+                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}
+                    elif [[ ${channel_level_adjust} -lt 0 && ${channel_level_adjust#-} -lt ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ]]; then
+                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}, so limiting gain decrease to ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}"
+                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}
                     else
-                        wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
-                        tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
-                        rc=$?
-                        if [[ ${rc} -ne 0 ]]; then
-                            wd_logger 1 "ERROR: ' tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
-                        fi
+                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} is within the range of ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so apply it"
+                    fi
+                fi
+                local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
+
+                if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} != "yes" ]]; then
+                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}, but changes are disabled"
+                else
+                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                    tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
+                    rc=$?
+                    if [[ ${rc} -ne 0 ]]; then
+                        wd_logger 1 "ERROR: ' tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
                     fi
                 fi
             fi
