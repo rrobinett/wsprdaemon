@@ -1224,6 +1224,7 @@ declare KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX--1
 declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                            ### Per channel log of overload counts and other SDR information
 declare SOX_LOG_FILE="./sox.log"                                                     ### The output of sox goes to this file for log printouts and wav file stats
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
+declare KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT="60.0"
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1387,7 +1388,7 @@ function decoding_daemon() {
         local ka9q_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
         local ka9q_adc_dbfs_float="-15.0" ### Report by radiod of measurement of ADC's dbFS which should be -15.0 or lower
         local ka9q_n0_float="-999.99"     ### Report by radio of N0 in dB/Hz
-        local ka9q_channel_gain_float="60.0"      ### Setting of radiod 's rx channel gain which can be changed by WD
+        local ka9q_channel_gain_float="${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}"      ### Setting of radiod 's rx channel gain which can be changed by WD
         local ka9q_channel_output_float="15.0"    ### Report by radiod of the current dbFS level in PCM output stream
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
@@ -1633,8 +1634,8 @@ function decoding_daemon() {
             local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
-            local sox_rms_noise_level=""
-            local fft_noise_level=""
+            local sox_rms_noise_level_float="-999.9"
+            local fft_noise_level_float="-999.9"
             local rms_line=""
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
@@ -1749,6 +1750,12 @@ function decoding_daemon() {
                         awk -v pkt_mode=${returned_minutes} '{printf "%s %s\n", $0, pkt_mode}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt                       ### Add the wspr pkt mode (== 2 or 15 minutes) to each ALL_WSPR.TXT spot line
                     fi
 
+                    local sdr_noise_level_adjust_float=""
+                    if [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
+                        sdr_noise_level_adjust_float=$( echo "scale=1; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1" | bc )
+                        wd_logger 1 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
+                    fi
+
                     ### Output a noise line  which contains 'DATE TIME + three sets of four space-separated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
                     ###                           Pre Tx                                                        Tx                                                   Post TX
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
@@ -1757,27 +1764,41 @@ function decoding_daemon() {
                         wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
+                    local c2_fft_noise_level_float
+                    local ret_code
                     nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
-                    local ret_code=$?
-                    local c2_fft_nl
+                    ret_code=$?
                     if [[ ${ret_code} -eq 0 ]]; then
-                        c2_fft_nl=$(< ${c2_filename}.out)
-                    else
+                        c2_fft_noise_level_float=$(< ${c2_filename}.out)
+                   else
                         wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}:\n$(< ${c2_filename}.stderr)"
-                        c2_fft_nl=0
+                        c2_fft_noise_level_float="0.0"
                     fi
-                    fft_noise_level=$(bc <<< "scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};(var * 100)/100")
-                    wd_logger 2 "fft_noise_level=${fft_noise_level} which is calculated from 'local fft_noise_level=\$(bc <<< 'scale=2;var=${c2_fft_nl};var+=${fft_nl_adjust};var/=1;var')"
-
-                    get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}
-                    local ret_code=$?
+                    fft_noise_level_float=$(bc <<< "scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};(var * 100)/100")
+                    if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
+                        local corrected_fft_noise_level_float
+                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
+                        wd_logger 1 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
+                        fft_noise_level_float=${corrected_fft_noise_level_float}
+                    fi
+                    wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
+ 
+                    get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
+                    ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
+                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level_float rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
                         return 1
                     fi
+                    if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
+                        local corrected_sox_rms_noise_level_float
+                        corrected_sox_rms_noise_level_float=$( echo "scale=1;(${sox_rms_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
+                        wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
+                        sox_rms_noise_level_float=${corrected_sox_rms_noise_level_float}
+                    fi
+                    wd_logger 1 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
 
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
-                    sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level} ${new_sdr_overloads_count}"
+                    sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level_float} ${new_sdr_overloads_count}"
 
                    wd_logger 1 "After $(( SECONDS - start_time )) seconds: For mode W_${returned_seconds}: reporting sox_signals_rms_fft_and_overload_info='${sox_signals_rms_fft_and_overload_info}'"
                 fi
@@ -1843,8 +1864,8 @@ function decoding_daemon() {
                             ### This wav file was not processed by 'wsprd', so there is no sox signal_level, rms_noise, fft_noise, or ov_count data 
                             wd_logger 1 "FST4W spot lines have no noise level information from a wsprd decode, so use filler noise level values of -999.0"
                             sox_signals_rms_fft_and_overload_info="-999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 0"
-                            sox_rms_noise_level="-999.0"
-                            fft_noise_level="-999.0"
+                            sox_rms_noise_level_float="-999.0"
+                            fft_noise_level_float="-999.0"
                         fi
 
                         ### Get new high resolution spot lines appended by jt9 to fst4_decodes.dat, a log file like ALL_WSPR.TXT where jt9 appends spot lines
@@ -2070,7 +2091,7 @@ function decoding_daemon() {
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level}" "${fft_noise_level}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
     done
