@@ -159,7 +159,7 @@ function remote_access_connection_status() {
 
         local wd_conf_rac_id
         if [[ -n "${REMOTE_ACCESS_ID-}" ]]; then
-            wd_logger 1 "Found REMOTE_ACCESS_ID='${REMOTE_ACCESS_ID} in conf file"
+            wd_logger 2 "Found REMOTE_ACCESS_ID='${REMOTE_ACCESS_ID} in conf file"
             wd_conf_rac_id=${REMOTE_ACCESS_ID}
         else
             local ka9q_reporter_id
