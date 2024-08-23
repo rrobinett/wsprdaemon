@@ -37,7 +37,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-219bd3a35527eafef79c315d9cf96d2a99c1138a}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-41055775fc5bbb2d93345707214b356f6fb0c7eb}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 ###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file

@@ -1794,6 +1794,16 @@ function decoding_daemon() {
                         corrected_sox_rms_noise_level_float=$( echo "scale=1;(${sox_rms_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                         wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
                         sox_rms_noise_level_float=${corrected_sox_rms_noise_level_float}
+
+                        wd_logger 1 "Adjusting levels in rms_line='${rms_line}'"
+                        local adjusted_rms_line=""
+                        for rms_value_float in ${rms_line} ; do
+                            local adjusted_rms_value_float
+                            adjusted_rms_value_float=$(echo "scale=1;(${rms_value_float} - ${sdr_noise_level_adjust_float})/1" | bc )
+                            adjusted_rms_line="${adjusted_rms_line} ${adjusted_rms_value_float}"
+                        done
+                        wd_logger 1 "Adjusted rms_line to '${adjusted_rms_line}'"
+                        rms_line="${adjusted_rms_line}"
                     fi
                     wd_logger 1 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
 
