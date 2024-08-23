@@ -1142,7 +1142,12 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
          for (( i=0; i < ${output_field_name_list_count}; ++i )) ; do
              local field_name=${output_field_name_list[i]}
              local field_value
-             field_value=${!field_name}
+             if [[ -n "${field_name-}" ]]; then
+                 field_value="${!field_name}"
+             else
+                 wd_logger 1 "ERROR: there is no field name at output_field_name_list[${i}]"
+                 field_value="none"
+             fi
              wd_logger 2 "Output value for field '${field_name}' with expected format '${output_field_format_string_list[i]}' = ${field_value}"
              if ! printf ${output_field_format_string_list[i]} ${field_value} >& printf.log ; then
                  wd_logger 1 "ERROR: for field ${i}:, 'printf ${output_field_format_string_list[i]} ${field_value}' returned error $?:$(< printf.log)"
@@ -1795,11 +1800,11 @@ function decoding_daemon() {
                         wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
                         sox_rms_noise_level_float=${corrected_sox_rms_noise_level_float}
 
-                        wd_logger 1 "Adjusting levels in rms_line='${rms_line}'"
+                        wd_logger 1 "Sox reports rms_line '${rms_line}'"
                         local adjusted_rms_line=""
                         for rms_value_float in ${rms_line} ; do
                             local adjusted_rms_value_float
-                            adjusted_rms_value_float=$(echo "scale=1;(${rms_value_float} - ${sdr_noise_level_adjust_float})/1" | bc )
+                            adjusted_rms_value_float=$(echo "scale=2;(${rms_value_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                             adjusted_rms_line="${adjusted_rms_line} ${adjusted_rms_value_float}"
                         done
                         wd_logger 1 "Adjusted rms_line to '${adjusted_rms_line}'"
@@ -2101,7 +2106,7 @@ function decoding_daemon() {
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
-            create_enhanced_spots_file_and_queue_to_posting_daemon   decodes_cache.txt ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
+            create_enhanced_spots_file_and_queue_to_posting_daemon   "decodes_cache.txt" ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
     done

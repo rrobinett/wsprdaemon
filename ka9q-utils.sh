@@ -1289,7 +1289,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         sudo systemctl status pskreporter@${ft_type} > /dev/null
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
