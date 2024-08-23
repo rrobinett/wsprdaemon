@@ -88,7 +88,6 @@ function get_config_file_variable()
     eval ${__return_variable}=\${conf_file_value}
 }
 
-
 function is_valid_mode_list() {
     local test_mode_entry=$1
     local test_mode_entry_list=( ${test_mode_entry//:/ } )
@@ -150,7 +149,6 @@ function get_wspr_band_name_from_freq_hz() {
     echo ${band_freq_hz}
 }
 
-
 function get_wspr_band_freq(){
     local target_band=$1
 
@@ -193,6 +191,18 @@ function get_receiver_call_from_name() {
     local receiver_name=$1
     local receiver_info=( ${RECEIVER_LIST[$(get_receiver_list_index_from_name ${receiver_name})]} )
     echo ${receiver_info[2]}
+}
+
+function get_first_receiver_reporter() {
+    local __return_var_name=${1}
+
+    if [[ ${#RECEIVER_LIST[@]} -eq 0 ]]; then
+        wd_logger 1 "ERROR: RECEIVER_LIST[] is not declared in wsprdaemon.conf"
+        return 1
+    fi
+    local receiver_info=( ${RECEIVER_LIST[0]} )
+    eval ${__return_var_name}=\${receiver_info[2]}
+    return 0
 }
 
 function get_receiver_grid_from_name() {
