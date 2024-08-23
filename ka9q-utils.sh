@@ -469,7 +469,7 @@ function ka9q-web-setup() {
     local packages_needed
     if [[ ${OS_RELEASE} =~ 24.04 ]]; then
         wd_logger 1 "Installing on Ubuntu 24.04, so need to install libgnutls30t64 instead of trying to install libgnutls28-dev which is not in the repo"
-        packages_needed="libgnutls30t64 libgcrypt20" # cmake"
+        packages_needed="libgnutls30t64 libgcrypt20 cmake"
     else
         packages_needed="libgnutls28-dev libgcrypt20-dev cmake"
     fi
