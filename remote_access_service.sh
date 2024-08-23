@@ -133,11 +133,11 @@ function remote_access_connection_status() {
 
     wd_conf_rac_channel="${REMOTE_ACCESS_CHANNEL-}"
     if [[ -n "${wd_conf_rac_channel}" ]]; then
-        wd_logger 1 "Found REMOTE_ACCESS_CHANNEL = '${REMOTE_ACCESS_CHANNEL}' is defined"
+        wd_logger 2 "Found REMOTE_ACCESS_CHANNEL = '${REMOTE_ACCESS_CHANNEL}' is defined"
     else
-        wd_logger 1 "Found no REMOTE_ACCESS_CHANNEL, so see if RAC is defined"
+        wd_logger 2 "Found no REMOTE_ACCESS_CHANNEL, so see if RAC is defined"
         if [[ -n "${RAC-}" ]]; then
-            wd_logger 1 "Found RAC ='${RAC}'"
+            wd_logger 2 "Found RAC ='${RAC}'"
             wd_conf_rac_channel="${RAC}"
         fi
     fi
@@ -169,7 +169,7 @@ function remote_access_connection_status() {
                 wd_logger 1 "ERROR: couldn't find the wspr report ID of the first RECEIVER"
                 close_rac="yes"
             else
-                wd_logger 1 "Using the wspr report ID of the first RECEIVER '${ka9q_reporter_id}' as the RAC_ID"
+                wd_logger 2 "Using the wspr report ID of the first RECEIVER '${ka9q_reporter_id}' as the RAC_ID"
                 wd_conf_rac_id=${ka9q_reporter_id}
             fi
         fi
@@ -224,7 +224,7 @@ function remote_access_connection_status() {
         wd_logger 1 "The ${WD_REMOTE_ACCESS_SERVICE_NAME} is configured but returns status ${rc}"
         return 5
     fi
-    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel #${REMOTE_ACCESS_CHANNEL} is enabled and running"
+    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is enabled and running"
     return 0
 }
 
