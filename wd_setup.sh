@@ -37,8 +37,6 @@ declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.s
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-
-
 declare OS_RELEASE    ### We are not in a function, so it can't be local
 get_file_variable OS_RELEASE "VERSION_ID" /etc/os-release
 
