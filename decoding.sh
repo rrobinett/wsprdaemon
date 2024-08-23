@@ -1382,7 +1382,7 @@ function decoding_daemon() {
         fi
         mode_wav_file_list=( ${mode_seconds_files} )        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         if [[ ${#mode_wav_file_list[@]} -le 0 ]]; then
-            wd_logger 1 "ERROR: get_wav_file_list() returned no error, but it unexpectadly has returned no lists.  So sleep 1 and retry"
+            wd_logger 2 "ERROR: get_wav_file_list() returned no error, but it unexpectadly has returned no lists.  So sleep 1 and retry"
             sleep 1
             continue
         fi
