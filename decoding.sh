@@ -1493,7 +1493,7 @@ function decoding_daemon() {
                 fi
                 local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
 
-                if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} != "yes" ]]; then
+                if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" ]]; then
                     wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}, but changes are disabled"
                 else
                     wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
