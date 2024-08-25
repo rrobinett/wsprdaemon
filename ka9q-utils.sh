@@ -1020,8 +1020,15 @@ function ka9q-ft-setup() {
 
     declare KA9Q_FT_LOGROTATE_JOB_FILE_NAME="/etc/logrotate.d/${ft_type}.rotate"
 
+    local create_job_file="no"
     if [[ ! -f ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME} ]]; then
         wd_logger 1 "Found no '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so create it"
+        create_job_file="yes"
+    elif ! grep -q 'maxsize'  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}; then
+         wd_logger 1 "Job file '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' is missing the 'maxsize 1M' line, so recreate the file"
+        create_job_file="yes"
+    fi
+    if [[ ${create_job_file} == "yes" ]]; then
         echo "${ft_log_file_name} {
         maxsize 1M
         rotate 4
@@ -1034,7 +1041,7 @@ function ka9q-ft-setup() {
 } " > /tmp/${ft_type}.rotate
         sudo cp /tmp/${ft_type}.rotate ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
         sudo chmod 644  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
-        wd_logger 1 "Added new logrotate job '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' to keep '' clean"
+        wd_logger 1 "Added new logrotate job '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' to keep '${ft_log_file_name}' clean"
     else
         wd_logger 2 "Found '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so check it"
     fi
