@@ -676,7 +676,6 @@ function ka9q-radiod-setup()
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
         fi
     fi
-    exit
 
     sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES} >& apt.log
     rc=$?
