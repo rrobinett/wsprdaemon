@@ -606,8 +606,44 @@ function ka9q-radiod-setup()
         ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
         wd_logger 2 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
     fi
+    local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
+    local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
+
+    local radio_restart_needed="no"
+    if [[ ! -f ${ka9q_conf_file_path} ]]; then
+        if [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+            wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
+            cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+            radio_restart_needed="yes"
+        else
+            wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+            exit 1
+        fi
+    fi
+ 
+    ### By default WD configures radiod to enable RF AGC
+    local agc_enabled="${KA9Q_RF_AGC_ENABLED-yes}"
+    if [[ ${agc_enabled} == "yes" ]]; then
+        sed  '/^\[rx888\]/,/^\[/s/^gain/#gain/'  ${ka9q_conf_file_path} > /tmp/radiod.conf
+        if diff -q  ${ka9q_conf_file_path} /tmp/radiod.conf > /dev/null ; then
+            wd_logger 2 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is 'yes', and ${ka9q_conf_file_path} already was configured without a 'gain = ...' linei, so no radiod restart is needed"
+        else
+            wd_logger 1 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is 'yes', but ${ka9q_conf_file_path} was configured a 'gain = ...' line. So fix the conf file and restart radiod"
+            mv /tmp/radiod.conf ${ka9q_conf_file_path}
+            radio_restart_needed="yes"
+        fi
+    else
+        local rx888_section_gain_line=$(sed -n '/^\[rx888\]/,/^\[/s/^gain/#gain/p' ${ka9q_conf_file_path})
+        if [[ -z "${rx888_section_gain_line}" ]]; then
+            wd_logger 1 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is not 'yes', but there is no 'gain = NN' line in  ${ka9q_conf_file_path}.  So add that line and run WD again"
+            exit 1
+        else
+            wd_logger 2 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is not 'yes' and the needed line '${rx888_section_gain_line}' is present in  ${ka9q_conf_file_path}.  so no radiod restart is needed"
+        fi
+    fi
 
     if [[ ${ka9q_make_needed} == "no" ]]; then
+        ### KA9Q has already been installed, so see if it needs to be started or restarted
         local ka9q_runs_only_remotely
         get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
         if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
@@ -623,29 +659,24 @@ function ka9q-radiod-setup()
                 sudo adduser --quiet --system --group radio
                 sudo usermod -aG radio ${USER}
                 wd_logger 1 "NOTE: Needed to add user '${USER}' to the group 'radio', so YOU NEED TO logout/login to this server before KA9Q services can run"
+                exit 1
             fi
-            local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
-            local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
-            if [[ ! -f ${ka9q_conf_file_path} ]]; then
-                if [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
-                    wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
-                    cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
-                else
-                    wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
-                    exit 1
+           if [[  ${radio_restart_needed} == "yes" ]] ; then
+                wd_logger 1 "radiod restart is needed due to a change in the radiod.conf file"
+            else
+                if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
+                    wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
+                    return 0
                 fi
             fi
-            if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
-                return 0
-            fi
-            if sudo systemctl start radiod@${ka9q_conf_name}  > /dev/null ; then
+            if sudo systemctl restart radiod@${ka9q_conf_name}  > /dev/null ; then
                 wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
                 return 0
             fi
             wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
         fi
     fi
+    exit
 
     sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES} >& apt.log
     rc=$?
@@ -912,6 +943,7 @@ function ka9q-ft-setup() {
         return ${rc}
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
+
 
     wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
     if mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
@@ -1186,7 +1218,7 @@ function  ka9q-psk-reporter-setup() {
     fi
 
     local pskreporter_service_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter@.service"         ### This template file is part of the package
-    local pskreporter_systemd_service_file_name="/etc/systemd/system/pskreporter@.service"      ### It should be copied to the systemd/system/ dire\
+    local pskreporter_systemd_service_file_name="/etc/systemd/system/pskreporter@.service"      ### It should be copied to the /etc/systemd/system/ directory
 
     local needs_systemctl_daemon_reload="no"  
     local needs_systemctl_restart="no"  
