@@ -915,3 +915,38 @@ function create_tmpfs() {
     fi
     return 0
 }
+
+function  wd_ip_is_valid() {
+   local ip_port="${1}"   ### Strip spaces
+
+    if [[ -z "${ip_port}" ]]; then
+        wd_logger 1 "ERROR: given empty ip_port argument"
+        return 1
+    fi
+
+    if [[ "${ip_port}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$ ]]; then
+        # Split IP and PORT
+        local arg_ip="${ip_port%:*}"
+        local arg_port="${ip_port##*:}"
+
+        # Check IP address validity
+        if [[ $(echo "${arg_ip}" | awk -F. '$1<=255 && $2<=255 && $3<=255 && $4<=255') ]]; then
+            # Check Port validity (1-65535)
+            if [[ "${arg_port}" -ge 1 && "${arg_port}" -le 65535 ]]; then
+                wd_logger 1  "Got valid IP:PORT ${ip_port}"
+                return 0
+            else
+                wd_logger 1  "ERROR: Got invalid port '${arg_port}' in IP:PORT ${ip_port}"
+                return 2
+            fi
+        else
+            wd_logger 1  "ERROR: Got invalid IP '${arg_ip}' in IP:PORT ${ip_port}"
+            return 3
+        fi
+    else
+        wd_logger 1  "ERROR: Got invalid IP in IP:PORT ${ip_port}"
+        return 4
+    fi
+    wd_logger 1 "ERROR: this line should never be executed"
+    return 5
+}
