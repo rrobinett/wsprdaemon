@@ -933,7 +933,7 @@ function  wd_ip_is_valid() {
         if [[ $(echo "${arg_ip}" | awk -F. '$1<=255 && $2<=255 && $3<=255 && $4<=255') ]]; then
             # Check Port validity (1-65535)
             if [[ "${arg_port}" -ge 1 && "${arg_port}" -le 65535 ]]; then
-                wd_logger 1  "Got valid IP:PORT ${ip_port}"
+                wd_logger 2  "Got valid IP:PORT ${ip_port}"
                 return 0
             else
                 wd_logger 1  "ERROR: Got invalid port '${arg_port}' in IP:PORT ${ip_port}"
