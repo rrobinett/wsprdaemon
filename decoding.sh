@@ -1470,14 +1470,13 @@ function decoding_daemon() {
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
             rc=$?
-            receiver_ip_address="${receiver_ip_address// /}"     ### Removes any leading or trailing spaces present in the status message
-            receiver_freq_hz="${receiver_freq_hz// /}"
+            ka9q_status_ip="${ka9q_status_ip// /}"     ### Removes any leading or trailing spaces present in the status message
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so can't find ka9q_status_ip => can't change output gain with 'tune'"
             elif ! wd_ip_is_valid "${ka9q_status_ip}" ; then
                 wd_logger 1 "ERROR: got invalid IP address ka9q_get_current_status_value() => ka9q_status_ip='${ka9q_status_ip}', so can't change output gain with 'tune'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tun' if it is needed"
+                wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
                 local channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
                 if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
                     ### We are processing the first WSPR packet
