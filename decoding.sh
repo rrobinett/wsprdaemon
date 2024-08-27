@@ -1221,7 +1221,7 @@ function get_wsprdaemon_noise_queue_directory()
     return 0
 }
 
-declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--20.0}"                   ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
+declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--30.0}"                   ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
 declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}               ### Don't adjust if within 6 dB of that level 
 declare KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX-6}         ### By default increase the channel gain by at most  6 dB at the beginning of each WSPR cycle
 declare KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX--10}   ### By default decrease the channel gain by at most 10 dB at the beginning of each WSPR cycle
