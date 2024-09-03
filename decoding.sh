@@ -1142,15 +1142,15 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
          for (( i=0; i < ${output_field_name_list_count}; ++i )) ; do
              local field_name=${output_field_name_list[i]}
              local field_value
-             if [[ -n "${field_name-}" ]]; then
-                 field_value="${!field_name}"
-             else
+             if false && [[ -z ${!field_name+} ]]; then
                  wd_logger 1 "ERROR: there is no field name at output_field_name_list[${i}]"
-                 field_value="none"
-             fi
-             wd_logger 2 "Output value for field '${field_name}' with expected format '${output_field_format_string_list[i]}' = ${field_value}"
-             if ! printf ${output_field_format_string_list[i]} ${field_value} >& printf.log ; then
-                 wd_logger 1 "ERROR: for field ${i}:, 'printf ${output_field_format_string_list[i]} ${field_value}' returned error $?:$(< printf.log)"
+                 field_value="0"
+             else
+                 field_value="${!field_name}"
+                 wd_logger 2 "Output value for field '${field_name}' with expected format '${output_field_format_string_list[i]}' = ${field_value}"
+                 if ! printf ${output_field_format_string_list[i]} ${field_value} >& printf.log ; then
+                     wd_logger 1 "ERROR: for field ${i}:, 'printf ${output_field_format_string_list[i]} ${field_value}' returned error $?:$(< printf.log)"
+                 fi
              fi
              printf_values_list+=( ${field_value} )
         done
@@ -1467,6 +1467,13 @@ function decoding_daemon() {
             ka9q_channel_output_float=${ka9q_channel_output_float// /}    ### remove the spaces
             wd_logger 1 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
 
+            local peak_level_returned_files=${mode_wav_file_list[0]}
+            local peak_level_comma_separated_files=${peak_level_returned_files#*:}        ### Chop off the SECONDS: leading the list
+            local peak_level_wav_file_list=( ${peak_level_comma_separated_files//,/ } )
+            local sox_stats_list=( $(sox ${peak_level_wav_file_list[0]} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
+            local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
+            wd_logger 1 "sox reports the peak dBFS value of the most recent 1 minute wave file '${peak_level_wav_file_list[0]}' is ${sox_peak_dBFS_value}"
+ 
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
             rc=$?
