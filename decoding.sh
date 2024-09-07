@@ -1229,6 +1229,7 @@ declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                       
 declare SOX_LOG_FILE="./sox.log"                                                     ### The output of sox goes to this file for log printouts and wav file stats
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 declare KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT="60.0"
+declare SOX_OUTPUT_DBFS_TARGET=${SOX_OUTPUT_DBFS_TARGET--5.0}     ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1490,6 +1491,8 @@ function decoding_daemon() {
                     wd_logger 1 "Applying that full channel gain adjustment channel_level_adjust=${channel_level_adjust} at startup of WD"
                 else
                     ### We are processing the second or subsequent WSPR packet
+                    local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
+                    wd_logger 1 "radiod says adjust channel gain by  ${channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
                     if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
                         wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
                         channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}
