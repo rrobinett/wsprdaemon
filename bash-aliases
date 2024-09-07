@@ -970,6 +970,16 @@ function wd-radiod-control()
 alias wd9c=wd-radiod-control
 alias wdrc=wd-radiod-control
 
+function wd-rc-gain() {
+    local root_dir="/dev/shm/wsprdaemon/recording.d/KA9Q_0"
+
+    if [[ ! -d "${root_dir}" ]]; then
+        echo "${root_dir} doesn't exist"
+        return0
+    fi
+}
+alias wdrg='wd-rc-gain'
+
 function wd-9m()
 {
     local header_printed="no"
