@@ -1229,7 +1229,8 @@ declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                       
 declare SOX_LOG_FILE="./sox.log"                                                     ### The output of sox goes to this file for log printouts and wav file stats
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 declare KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT="60.0"
-declare SOX_OUTPUT_DBFS_TARGET=${SOX_OUTPUT_DBFS_TARGET--5.0}     ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
+declare SOX_OUTPUT_DBFS_TARGET=${SOX_OUTPUT_DBFS_TARGET--10.0}     ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
+declare KA9Q_PEAK_LEVEL_SOURCE="${KA9Q_PEAK_LEVEL_SOURCE-WAV}"     ### By default adjust the channel gain from the peak level in the most recent wav file, else use peak level reported by 'metadump'
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
@@ -1468,12 +1469,16 @@ function decoding_daemon() {
             ka9q_channel_output_float=${ka9q_channel_output_float// /}    ### remove the spaces
             wd_logger 1 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
 
-            local peak_level_returned_files=${mode_wav_file_list[0]}
-            local peak_level_comma_separated_files=${peak_level_returned_files#*:}        ### Chop off the SECONDS: leading the list
-            local peak_level_wav_file_list=( ${peak_level_comma_separated_files//,/ } )
-            local sox_stats_list=( $(sox ${peak_level_wav_file_list[0]} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
+            local first_mode_files=${mode_wav_file_list[0]}     ### each entry has the form:  <MODE_SECONDS>:<WAV_FILE_0>,<WAV_FILE_1>[,<WAV_FILE_.>]
+                  first_mode_files=${first_mode_files#*:}        ### Chop off the  <MODE_SECONDS>:
+            local first_mode_wav_files_list=( ${first_mode_files//,/ } )
+            local newest_one_minute_wav_file=${first_mode_wav_files_list[-1]}
+
+            local sox_stats_list=( $(sox ${newest_one_minute_wav_file} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
             local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
-            wd_logger 1 "sox reports the peak dBFS value of the most recent 1 minute wave file '${peak_level_wav_file_list[0]}' is ${sox_peak_dBFS_value}"
+            local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn'
+            wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
+
  
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
@@ -1485,14 +1490,22 @@ function decoding_daemon() {
                 wd_logger 1 "ERROR: got invalid IP address ka9q_get_current_status_value() => ka9q_status_ip='${ka9q_status_ip}', so can't change output gain with 'tune'"
             else
                 wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
-                local channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
+                local ka9q_channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
+                local channel_level_adjust
                 if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
                     ### We are processing the first WSPR packet
-                    wd_logger 1 "Applying that full channel gain adjustment channel_level_adjust=${channel_level_adjust} at startup of WD"
+                    wd_logger 1 "Applying the full ka9q_channel_level_adjust channel gain adjustment channel_level_adjust=${ka9q_channel_level_adjust} at startup of WD"
+                    channel_level_adjust=${ka9q_channel_level_adjust}
                 else
                     ### We are processing the second or subsequent WSPR packet
-                    local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
-                    wd_logger 1 "radiod says adjust channel gain by  ${channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
+                    wd_logger 1 "radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
+                    if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
+                        channel_level_adjust=${sox_channel_level_adjust}
+                        wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
+                    else
+                        channel_level_adjust=${ka9q_channel_level_adjust}
+                        wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
+                    fi
                     if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
                         wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
                         channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}
