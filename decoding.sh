@@ -1221,16 +1221,20 @@ function get_wsprdaemon_noise_queue_directory()
     return 0
 }
 
+declare KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT="60.0"
+
 declare KA9Q_OUTPUT_DBFS_TARGET="${KA9Q_OUTPUT_DBFS_TARGET--30.0}"                   ### For KA9Q-radio receivers, adjust the channel gain to obtain -15 dbFS in the PCM output stream
+declare SOX_OUTPUT_DBFS_TARGET=${SOX_OUTPUT_DBFS_TARGET--10.0}     ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
+declare KA9Q_PEAK_LEVEL_SOURCE="${KA9Q_PEAK_LEVEL_SOURCE-WAV}"     ### By default adjust the channel gain from the peak level in the most recent wav file, else use peak level reported by 'metadump'
+
 declare KA9Q_CHANNEL_GAIN_ADJUST_MIN=${KA9Q_CHANNEL_GAIN_ADJUST_MIN-6}               ### Don't adjust if within 6 dB of that level 
 declare KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX-6}         ### By default increase the channel gain by at most  6 dB at the beginning of each WSPR cycle
 declare KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX--10}   ### By default decrease the channel gain by at most 10 dB at the beginning of each WSPR cycle
+
 declare ADC_OVERLOADS_LOG_FILE_NAME="./adc_overloads.log"                            ### Per channel log of overload counts and other SDR information
 declare SOX_LOG_FILE="./sox.log"                                                     ### The output of sox goes to this file for log printouts and wav file stats
+
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
-declare KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT="60.0"
-declare SOX_OUTPUT_DBFS_TARGET=${SOX_OUTPUT_DBFS_TARGET--10.0}     ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn't overload the next wav file
-declare KA9Q_PEAK_LEVEL_SOURCE="${KA9Q_PEAK_LEVEL_SOURCE-WAV}"     ### By default adjust the channel gain from the peak level in the most recent wav file, else use peak level reported by 'metadump'
 
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
