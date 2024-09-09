@@ -439,10 +439,10 @@ function ka9q_web_daemon() {
             wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
         else
             wd_logger 1 "Got ka9q_radiod_status_dns='${ka9q_radiod_status_dns}'"
-            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}  >& /dev/null
+            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}  >& ka9q_web_cmd.log ##/dev/null
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}'=> ${rc}"
+                wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}'=> ${rc}:\n$(<  ka9q_web_cmd.log)"
             fi
         fi
         wd_logger 1 "Sleeping for 5 seconds before restarting"
@@ -1193,7 +1193,23 @@ function  ka9q-psk-reporter-setup() {
             wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}' but '${KA9Q_PSK_REPORTER_DIR}' was not created, so the github repo is broken"
             return 1
         fi
+         wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+    fi
 
+    if ! python3 -c "import docopt" 2> /dev/null; then
+        rc=$?
+        wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
+        if ! pip3 -h >& /dev/null ; then
+            rc=$?
+            wd_logger 1 "pip3 -h => ${rc}.  So install pipe"
+            sudo apt install python3-pip -y
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_loggger 1 "ERROR: sudo apt install python-pip -> ${rc}"
+                exit 1
+            fi
+            wd_logger 1 "apt installed pip3"
+        fi
         local pip3_extra_args=""
         if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
             pip3_extra_args="--break-system-package"
@@ -1204,8 +1220,7 @@ function  ka9q-psk-reporter-setup() {
             wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
             return 2
         fi
-
-        wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+        wd_logger 1 "Successfully ran python3 -c 'import  docopt'"
     fi
 
     local pskreporter_sender_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender"           ### This template file is part of the package
