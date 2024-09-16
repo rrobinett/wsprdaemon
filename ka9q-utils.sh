@@ -349,7 +349,7 @@ function ka9q-get-conf-file-name() {
     local __return_conf_file_var_name=$2
 
     local ka9q_ps_line
-    ka9q_ps_line=$( ps aux | grep "radiod@" | grep -v grep | head -n 14)
+    ka9q_ps_line=$( ps aux | grep "sbin/radiod .*radiod@" | grep -v grep | head -n 14)
 
     if [[ -z "${ka9q_ps_line}" ]]; then
         wd_logger 1 "The ka9q-web service is not running"
