@@ -1,7 +1,59 @@
 #!/bin/bash 
-### This file ~/wsprdaemon/bash-aliases  includes funtions and aliases which are helpful in running and debugging WD systems
+### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
-### Emulate WD's wd_logger() function when these functions are run from the linux cmd line
+shopt -s -o nounset
+
+export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
+
+if [[ -d /dev/shm/wsprdaemon ]]; then
+    WD_TMP_ROOT=/dev/shm/wsprdaemon
+else
+    WD_TMP_ROOT=/tmp/wsprdaemon
+fi
+
+
+### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
+### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
+declare WD_BASH_HELP_LIST=()
+declare WD_BASH_HELP_HEADER_LINE_LIST=( "FUNCTION"  "ALIAS(es)"  "DESCRIPTION" )
+
+function wd-print-help-strings() {
+    local function_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[0]}
+    local alias_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[1]}
+    local help_string_index
+
+    ### Calculate the width of fields which will be printed
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        if [[ ${#function_name} -gt ${function_name_field_width} ]]; then
+            function_name_field_width=${#function_name}
+        fi
+        local alias_names="${help_string_list[1]}"
+        if [[ ${#alias_names} -gt ${alias_name_field_width} ]]; then
+            alias_name_field_width=${#alias_names}
+        fi
+    done
+
+    printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" \
+               "${WD_BASH_HELP_HEADER_LINE_LIST[0]}" "${WD_BASH_HELP_HEADER_LINE_LIST[1]}" "${WD_BASH_HELP_HEADER_LINE_LIST[2]}"
+
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        local alias_names="${help_string_list[1]}"
+        local description_string="${help_string_list[@]:2}"
+
+        printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" "${function_name}" "${alias_names}" "${description_string}"
+    done
+}
+
+WD_BASH_HELP_LIST=( "wd_logger  wdl  Emulate WD's wd_logger() function when these functions are run from the linux cmd line" )
+
 ### When this file is sourced by wsprdaemon.sh this function will be redefined in wd-utils.sh to the full wd_logger() used by WD
 function wd_logger(){
     local verbosity_printing_level=${1:-1}
@@ -12,128 +64,12 @@ function wd_logger(){
     fi
 }
 
+WD_BASH_HELP_LIST+=( "wd-machine_name - Executes 'uname -m'" )
 function wd-machine-name() {
     echo $(uname -m)
 }
 
-declare WD_ALIAS_BIN_DIR=~/wsprdaemon/bin
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.aarch64"
-declare WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86_DIABLED="${WD_ALIAS_BIN_DIR}/wsprd.spread_nodrift.x86.disabled"
-
-### Returns the full path to where the wsprd.spread.. file should be
-function wd-wsprd-report-spreading-file(){
-    local spreading_file=""
-    local machine_name=$(uname -m)
-    case ${machine_name} in
-        x86_64)
-            spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_X86}
-            ;;
-        ##aarch64)
-        ##    spreading_file=${WD_ALIAS_WSPRD_REPORT_SPREAD_CMD_AARCH64}
-        ##     ;;
-         *)
-             echo "WSPR-2 frequency spreading is not supported on this ${machine_name} CPU server" 1>&2 
-             return 1
-             ;;
-    esac
-    if [[ -n "${spreading_file}" ]]; then
-        spreading_path=$(realpath ${spreading_file})
-    fi
-    echo ${spreading_path}
-    return 0
-}
-
-function wd-spreading-enable(){
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is already enabled"
-        return 0
-    fi
-    local disabled_spreading_file="${spreading_file}.disabled"
-    if [[ ! -x ${disabled_spreading_file} ]]; then
-        echo "ERROR: missing the expected saved WSPR-2 spreading reporting file"
-        return 2
-    fi
-    cp -p ${disabled_spreading_file} ${spreading_file}
-    rc=$?
-     if [[ ${rc} -ne 0 ]]; then
-         echo "ERROR: failed to restore the saved spreading command ${disabled_spreading_file}"
-        return 3
-    fi
-    echo "WSPR-2 spreading reporting is enabled on this server"
-    return 0
-}
-
-function wd-spreading-disable(){
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ ! -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is already disabled"
-        return 0
-    fi
-    local disabled_spreading_file="${spreading_file}.disabled"
-    mv ${spreading_file} ${disabled_spreading_file} 
-    rc=$?
-     if [[ ${rc} -ne 0 ]]; then
-         echo "ERROR: failed to 'mv${spreading_file}  ${disabled_spreading_file}"
-        return 2
-    fi
-    echo "WSPR-2 spreading reporting is now disabled on this server"
-    return 0
-}
-
-function wd-spreading-status() {
-    local spreading_file
-    local rc
-    spreading_file=$( wd-wsprd-report-spreading-file )
-    rc=$?
-    if [[ ${rc} -ne 0 || -z "${spreading_file}" ]]; then
-        echo "WSPR-2 spreading reporting is not supported on this server"
-        return 1
-    fi
-    if [[ -x ${spreading_file} ]]; then
-        echo "WSPR-2 spreading reporting is enabled"
-    else
-        echo "WSPR-2 spreading reporting is disabled"
-    fi
-    return 0
-}
-
-function wd-spreading() {
-    if [[ ${#@} -eq 0 ]]; then
-        wd-spreading-status
-        echo "usage: wd-spreading [on|off]"
-        return
-    fi
-    case $1 in
-        on)
-            wd-spreading-enable
-            ;;
-        off)
-            wd-spreading-disable
-            ;;
-        *)
-            echo "ERROR: '$1' is not a valid argument"
-            ;;
-    esac
-    return 0
-}
-
+WD_BASH_HELP_LIST+=( "wd-flush-empty-dirs - Flush any empty directories under CWD" )
 function wd-flush-empty-dirs() {
     for dir in * ;  do 
         if [[ -d $dir ]]; then
@@ -146,6 +82,7 @@ function wd-flush-empty-dirs() {
     done
 }
 
+WD_BASH_HELP_LIST+=( "wd-find-functions - Find all bash functions in \$1 and print all usage of them" )
 function wd-find-functions() {
    local bash_file=$1
 
@@ -158,14 +95,6 @@ function wd-find-functions() {
        read
    done
 }
-
-export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
-
-if [[ -d /dev/shm/wsprdaemon ]]; then
-    WD_TMP_ROOT=/dev/shm/wsprdaemon
-else
-    WD_TMP_ROOT=/tmp/wsprdaemon
-fi
 
 ### To speed debugging of the WD upload daemons, kill just the watchdog and upload daemons.  You can then 'wda' and watch the upload log as the WD uploader starts to work immediately
 function wd-kill-uploader()
@@ -189,7 +118,7 @@ function wd-find-kiwis()
 {
     local local_lan_list=( $(ip addr | grep -w inet | grep -v 'inet 127' | awk '{print $2}' | sed 's;\.[0-9]*/;.0/;g') )
 
-    [[ ${verbosity} -gt 0 ]] && echo "Searching the ${#local_lan_list[@]} LANs for Kiwis:  ${local_lan_list[@]}"
+    [[ ${verbosity-0} -gt 0 ]] && echo "Searching the ${#local_lan_list[@]} LANs for Kiwis:  ${local_lan_list[@]}"
     for lan in ${local_lan_list[@]} ; do
         echo "Searching LAN ${lan} for Kiwis"
         local kiwi_ip_list=( $( nmap --open -p 8073 ${lan} | awk '/Nmap scan report for/{print $5}' ) )
@@ -216,19 +145,19 @@ function wd-kiwi-status()
         local rx_name=${rx_fields[0]};
         local rx_ip_port=${rx_fields[1]};
         if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]]; then
-            [[ ${verbosity} -ge 1 ]] && echo "skipping rx ${rx_name}";
+            [[ ${verbosity-0} -ge 1 ]] && echo "skipping rx ${rx_name}";
         else
             local rx_ip=${rx_ip_port/:*/};
             if ! ping -c 1 -W 1 ${rx_ip} > /dev/null; then
                 echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings";
             else
                 kiwi_list+=(${rx_name},${rx_ip_port});
-                [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}";
+                [[ ${verbosity-0} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}";
             fi;
         fi;
     done;
-    [[ ${verbosity} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}";
-    [[ ${verbosity} -ge 1 ]] && echo;
+    [[ ${verbosity-0} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}";
+    [[ ${verbosity-0} -ge 1 ]] && echo;
     local users;
     local users_max;
     local gps_good;
@@ -244,15 +173,15 @@ function wd-kiwi-status()
         users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status});
         channels_total=$((channels_total + users_max));
         gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status});
-        [[ ${verbosity} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}";
+        [[ ${verbosity-0} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}";
         curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log;
         while read user_line; do
-            [[ ${verbosity} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+            [[ ${verbosity-0} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
             if grep --color=auto -q wsprdaemon <<< "${user_line}"; then
-                [[ ${verbosity} -ge 1 ]] && echo "skipping WD user";
+                [[ ${verbosity-0} -ge 1 ]] && echo "skipping WD user";
                 wsprdaemon_total=$((wsprdaemon_total + 1));
             else
-                [[ ${verbosity} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+                [[ ${verbosity-0} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
                 if [[ -n "${user_line:1}" ]]; then
                     eval declare $(echo "${user_line:1}" | sed '/"\([^"]*\)":/s//\1=/g');
                     [[ $? -ne 0 ]] && continue
@@ -297,9 +226,13 @@ function wd-gc-ssh() {
     git config --global user.name "Rob Robinett"
 }
 
-### Reload this file
-alias wd-rc='source ~/wsprdaemon/bash-aliases'       ### Just reload this file
-alias wdrc='wd-rc'
+function wdgl() {
+    git log
+}
+
+function wdgs() {
+    git status
+}
 
 ### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
 function wd-rci() 
@@ -342,6 +275,8 @@ alias cdww='cd ~/wsprdaemon/wav-archive.d/'
 alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdt='cd /dev/shm/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
+alias cds='cd /etc/systemd/system'
+alias cdtt='cd /mnt/ka9q-radio'
 
 ### Start 'vi' using WD's .vimrc
 function vi() 
@@ -448,19 +383,19 @@ function kiwi-stats(){
         local rx_name=${rx_fields[0]}
         local rx_ip_port=${rx_fields[1]}
         if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]] ; then
-            [[ ${verbosity} -ge 1 ]] && echo "skipping rx ${rx_name}"
+            [[ ${verbosity-0} -ge 1 ]] && echo "skipping rx ${rx_name}"
         else
             local rx_ip=${rx_ip_port/:*/}
             if ! ping -c 1 -W 1 ${rx_ip} > /dev/null ; then
                 echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings"
             else
                 kiwi_list+=(${rx_name},${rx_ip_port})
-                [[ ${verbosity} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}"
+                [[ ${verbosity-0} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}"
             fi
         fi
     done
-    [[ ${verbosity} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}"
-    [[ ${verbosity} -ge 1 ]] && echo
+    [[ ${verbosity-0} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}"
+    [[ ${verbosity-0} -ge 1 ]] && echo
 
     local users
     local users_max
@@ -476,7 +411,7 @@ function kiwi-stats(){
         users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status})
         channels_total=$((channels_total + users_max))
         gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status})
-        [[ ${verbosity} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}"
+        [[ ${verbosity-0} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}"
 
         ### I was unable to parse the curl output when it was assigned to a bash variable. After some frustration I am using the hack of
         ### piping curl's output to a /tmp file and reading and parsing it from there
@@ -484,7 +419,7 @@ function kiwi-stats(){
         curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log
         while read user_line; do
             if grep -q wsprdaemon <<< "${user_line}" ; then
-                [[ ${verbosity} -ge 1 ]] && echo "skipping WD user"
+                [[ ${verbosity-0} -ge 1 ]] && echo "skipping WD user"
                 wsprdaemon_total=$((wsprdaemon_total + 1))
             else
                 if [[ -n "${user_line:1}" ]]; then
@@ -527,7 +462,6 @@ function wd-merged() {
     echo "Found ${#merged_file_list[@]} 'merged.log' files:"
     local i
     for  (( i = 0; i < ${merged_file_count}; ++i )); do
-        #set -x
         local file_line_list=( $(ls -l ${merged_file_list[${i}]}) )
         local merge_log_line_count=$( wc -l < ${merged_file_list[${i}]} )
         printf "%2d:  %-70s %s %2s %s %6s bytes = %4d lines\n" ${i} ${file_line_list[-1]} ${file_line_list[-4]}  ${file_line_list[-3]}  ${file_line_list[-2]}  ${file_line_list[-5]} ${merge_log_line_count}
@@ -685,14 +619,14 @@ function wd-overloads()
     fi
 comment_out
 
-    log_file_list=( $(find /dev/shm/wsprdaemon/ -name kiwi_ovs.log | sort ) )
+    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
-        echo "Can't find any 'kiwi_ovs.log' files"
+        echo "Can't find any 'kiwi_ovs.log or ad_overloads.log' files"
         return
     fi
 
     if [[ $# -ne 0 && "$1" == "-f" ]]; then
-        read -p "Press <ENTER> to flush all of the ${#log_file_list[@]} kiwi_ovs.log files => "
+        read -p "Press <ENTER> to flush all of the ${#log_file_list[@]} overload..log files => "
         rm ${log_file_list[@]}
         return
     fi
@@ -700,11 +634,11 @@ comment_out
     ### Get a list of the Kiwis
     local kiwi_list=()
     local kiwi_root_path_list=()
+
     local file_path
     for file_path in ${log_file_list[@]} ; do
         local file_path_list=( ${file_path//\// } )         ### put each directory name in an element of an array
         local kiwi_name=${file_path_list[-3]-}              ### two directories up from the log file is the directory with the name of the kiwi
-        set +x
         if [[ ! " ${kiwi_list[*]} " =~ " ${kiwi_name} " ]]; then
             kiwi_list+=("${kiwi_name}")
            local temp_path_list
@@ -713,18 +647,15 @@ comment_out
            kiwi_root_path="/${kiwi_root_path// /\/}"
            #echo "kiwi_root_path = ${kiwi_root_path}"
            kiwi_root_path_list+=(${kiwi_root_path})
-           set +x
            #read -p "Next Kiwi path => "
         fi
-        set +x
     done
-    printf "Found there are ${#kiwi_list[@]} Wsprdaemon Kiwis: ${kiwi_list[*]}\n\n"
-    #echo "Found there are ${#kiwi_root_path_list[@]} Kiwi root paths: ${kiwi_root_path_list[*]}"
+    printf "Found there are ${#kiwi_list[@]} Wsprdaemon SDRs: ${kiwi_list[*]}\n\n"
 
     for kiwi_root_path in ${kiwi_root_path_list[@]} ; do
         #echo "Searching under ${kiwi_root_path}"
         local kiwi_name=${kiwi_root_path##*/}
-        log_file_list=( $(find ${kiwi_root_path}  -name kiwi_ovs.log | sort ) )
+        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
 
         local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
         local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
@@ -733,13 +664,13 @@ comment_out
 
         local most_ovs_line_list=( ${most_ovs_line} )
         if [[ ${most_ovs_line_list[2]-0} -eq 0 ]]; then
-            printf "Kiwi ${kiwi_name} reports no overload events\n\n"
+            printf "SDR ${kiwi_name} reports no overload events\n\n"
             continue
         fi
 
-        printf "For Kiwi '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
+        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
         printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
-        printf "This line which reports the most OVs:\n${most_ovs_line}\n" 
+        printf "This line reports the most OVs:\n${most_ovs_line}\n" 
 
         read -p "Press 'l + <RETURN>' to execute 'less ${newest_log_file}', then search for ${most_ovs_line_list[0]} => " user_input
         if [[ -n "${user_input}" ]]; then
@@ -841,8 +772,25 @@ function wd-wavs() {
 ###
 function wd-get_ka9q-conf_file-base_name() {
     source ~/wsprdaemon/wsprdaemon.conf
-    local conf_base_name=${KA9Q_CONF_NAME:-rx888-wsprdaemon}
+    local conf_base_name
+
+    if [[ -n "${KA9Q_CONF_NAME-}" ]]; then
+        [[ ${verbosity-0} -gt 0 ]] && echo "Using conf base name KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf" 1>&2
+        conf_base_name="${KA9Q_CONF_NAME}"
+    else
+        [[ ${verbosity-0} -gt 0 ]] && echo "Using default conf base name 'rx888-wsprsdaemon'" 1>&2
+         conf_base_name="rx888-wsprdaemon"
+    fi
+
+    #set -x
+    local running_radiod_status_line=$(sudo systemctl status 'radiod@*' | grep '.conf' | grep -v '\\x')
+    if [[ -n "${running_radiod_status_line}" ]]; then
+        conf_base_name="${running_radiod_status_line##*@}"
+        conf_base_name="${conf_base_name%.conf*}"
+        [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
+    fi
     echo "${conf_base_name}"
+    set +x
 }
 
 function wd-get-ka9q-conf-file-path () {
@@ -868,6 +816,10 @@ function wd-radiod-action(){
    local action=$1
    local base_name=$(wd-get_ka9q-conf_file-base_name)
    sudo systemctl ${action} radiod@${base_name}.service
+   sudo systemctl ${action} ft8-decoded.service
+   sudo systemctl ${action} ft4-decoded.service
+   sudo systemctl ${action} pskreporter@ft4.service
+   sudo systemctl ${action} pskreporter@ft8.service
 }
 
 alias wd-ra='wd-radiod-action start'  ### show it's status
@@ -891,6 +843,9 @@ function wd-radiod-conf-edit() {
 alias wdrv='wd-radiod-conf-edit'
 
 ### WD systemctl 
+alias wd-ss='sudo systemctl'
+alias wdss=wd-ss
+
 alias wd-wd-start='sudo systemctl start wsprdaemon.service'
 alias wdwa='wd-wd-start'
 
@@ -995,20 +950,35 @@ function wd-radiod-control()
     local mc_url
 
     local radiod_conf_base_name=$(wd-get_ka9q-conf_file-base_name)
-    if [[ "${radiod_conf_base_name}" == "rx888-wsprdaemon" ]]; then
-        mc_url="hf.local"
+    local radio_conf_file_name="/etc/radio/radiod@${radiod_conf_base_name}.conf"
+
+    if [[ ! -f "${radio_conf_file_name}" ]]; then
+        echo "Can't find the radiod configuration file '${radio_conf_file_name}'"
+        return 1
     else
-        if [[ -z "${2-}" ]]; then
-            mc_url="hf-${radiod_conf_base_name}-status.local"
+        local wspr_section_data_url="$(grep -i -A 20 '^\[.*wspr' "${radio_conf_file_name}" | grep "^data" | head -1 | cut -d ' ' -f 3)"
+        if [[ -z "${wspr_section_data_url}" ]]; then
+            echo "Can't find [wspr] data = URL in '${radio_conf_file_name}'"
+            return 2
         else
-            mc_url="hf-${2}-status.local"
+            echo "Found [wspr] data = ${wspr_section_data_url} in '${radio_conf_file_name}'"
+            control -s ${tuning_freq} ${wspr_section_data_url}
         fi
     fi
-
-    control -s ${tuning_freq} ${mc_url}
+    return 0
 }
 alias wd9c=wd-radiod-control
 alias wdrc=wd-radiod-control
+
+function wd-rc-gain() {
+    local root_dir="/dev/shm/wsprdaemon/recording.d/KA9Q_0"
+
+    if [[ ! -d "${root_dir}" ]]; then
+        echo "${root_dir} doesn't exist"
+        return0
+    fi
+}
+alias wdrg='wd-rc-gain'
 
 function wd-9m()
 {
@@ -1038,13 +1008,11 @@ alias wd9m=wd-9m
 
 ### tmux alias
 function tm() {
-    # set -x
-    local tm_arg=$1
+    local tm_arg=${1-}
     local tm_list=( $(tmux ls 2> /dev/null | awk -F : '{print $1}') )
     local tm_list_count=${#tm_list[@]}
 
     if [[ -z "${tm_arg}" ]]; then
-        #set +x && return
         if [[ ${tm_list_count} -eq 0 ]]; then
             tmux
             return 0
@@ -1186,3 +1154,39 @@ function wddu() {
     du -s ${files}  | awk '{print $2 ":  " $1}'
 }
 
+### Copy a 2 minute wav file to /tmp
+function wd-wav-capture() {
+    local wav_file
+    echo -n "$(date): Waiting for the 2 minute long wav file to appear after the next even 2 minutes: "
+    while ! wav_file=$(ls 2?????_*.wav 2> /dev/null ); do 
+         echo -n "."
+         sleep .25
+     done
+     cp ${wav_file} /tmp/
+     echo 
+     echo "$(date): Captured /tmp/${wav_file}"
+}
+
+function wd-ft-logs() {
+   for d in 4 8; do
+       local ft_log_file_name="/mnt/ka9q-radio/ft${d}/ft${d}.log"
+       echo "FT${d}: ${ft_log_file_name} size if $(stat --format=%s ${ft_log_file_name}) bytes"
+       local ft_log_archived_file_names="$( find ${ft_log_file_name%/*} -type f -name ${ft_log_file_name##*/}.* )"
+       if [[ -n "${ft_log_archived_file_names}" ]]; then
+           echo -n "Archives: "; echo ${ft_log_archived_file_names}
+       fi
+       head -4  ${ft_log_file_name}
+       echo "++++++++++++++"
+       tail -4  ${ft_log_file_name}
+       echo 
+   done
+   df /mnt/ka9q-radio | grep "^tmp"
+   if [[ -n "${1-}" ]]; then
+       if [[ ! -f /mnt/ka9q-radio/ft4/ft4.log ]]; then
+           echo "There is no /mnt/ka9q-radio/ft4/ft4.log"
+       else
+           read -p "$(date): Run 'tail -f /mnt/ka9q-radio/ft4/ft4.log'? => "
+           tail -f "/mnt/ka9q-radio/ft4/ft4.log"
+       fi
+   fi
+}

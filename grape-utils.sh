@@ -66,16 +66,9 @@ declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
 ### '-u ' sub menu
 function grape_upload_all_local_wavs() {
-    local rc
-    grape_upload_public_key
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
-        return ${rc}
-    fi
-    wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
+   wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
 
-    local date_dir_list=( $( find -L -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )   ## Follow symbolic link to /mnt/wd-archive/...
+    local date_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )   ## Follow symbolic link to /mnt/wd-archive/...
     local date_dir
     for date_dir in ${date_dir_list[@]} ; do
         wd_logger 2 "Checking date_dir ${date_dir}"
@@ -231,8 +224,15 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
 
-        local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp_stderr.out"
-        $(>  ${sftp_stderr_file} )   ### ensure that it exists and is empty
+        ### Ensure that sftp can auto-login to this server's usesr account on the PSWS server
+        grape_upload_public_key
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+            return ${rc}
+        fi
+ 
+        local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
@@ -270,7 +270,7 @@ function grape_upload_public_key() {
         return 0
     fi
     wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
-    ssh-copy-id  ${station_id}@${PSWS_URL}
+    ssh-copy-id -f ${station_id}@${PSWS_URL}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_URL}' => ${rc}"
@@ -511,7 +511,7 @@ function grape_create_wav_file()
     flac_file_list=( $( find -L ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'find ${flac_file_dir}  -name '*.flac' -printf '%p\n' | sort' => ${rc}"
+        wd_logger 1 "ERROR: 'find -L ${flac_file_dir}  -name '*.flac' -printf '%p\n' | sort' => ${rc}"
         return ${rc}
     fi
     if [[ ${#flac_file_list[@]} -eq 0 ]]; then
@@ -697,19 +697,18 @@ function grape_uploader() {
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
     if [[ ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+        wd_logger 1 "Skipping upload at current HHMM = ${current_hhmm}, LAST_HHMM = ${LAST_HHMM}"
         LAST_HHMM=${current_hhmm}
-        wd_logger 1 "Skipping upload at HHMM =  ${current_hhmm}"
-        set +x
         return 0
     fi
     LAST_HHMM=${current_hhmm}
-    wd_logger 2 "Checking for new 24h.wav files to upload"
+    wd_logger 1 "Checking for new 24h.wav files to upload"
     local rc
 
     grape_create_all_24_hour_wavs
     rc=$?
     if  [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "There were no new 24h.wav files created"
+        wd_logger 1 "There were no new 24h.wav files created"
     else
         wd_logger 1 "There were ${rc} new 24h.wav files created"
     fi
@@ -755,7 +754,7 @@ function grape_print_usage() {
     -p               Purge all empty date trees
     -r               Repair all date trees
     -t               Show status of all the date trees
-    -U               Upload all of the local 24_hour_10sps_iq.wav files to the grape@wsprdaemon.org account
+    -u               Upload all of the local 24_hour_10sps_iq.wav files to the grape@wsprdaemon.org account
     -d [a|i|z|s]     systemctl commands for daemon (a=start, i=install and enable, z=disable and stop, s=show status"
 }
 
@@ -843,7 +842,7 @@ function grape_init() {
         fi
     done
 
-    if ! [[ -d ~/.ssh ]] || ! find ~/.ssh -type f -name '*.pub' | grep -q .; then
+    if ! [[ -d ~/.ssh ]] || ! find -L ~/.ssh -type f -name '*.pub' | grep -q .; then
         wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"
         ssh-keygen
         rc=$?

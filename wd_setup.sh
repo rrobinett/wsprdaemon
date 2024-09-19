@@ -37,31 +37,30 @@ declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.s
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
+declare OS_RELEASE    ### We are not in a function, so it can't be local
+get_file_variable OS_RELEASE "VERSION_ID" /etc/os-release
+
+declare OS_CODENAME
+get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
+
+declare CPU_ARCH
+CPU_ARCH=$(uname -m)
+
+wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
+
 declare    PACKAGE_NEEDED_LIST=( at bc curl host flac postgresql sox zstd avahi-daemon libnss-mdns \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev)      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
-if false; then
-    ### Installation of the Qt5 library appears to be no longer necessary since we no longer try to install the full WSJT-x package
-    declare LIB_QT5_CORE_ARMHF=""
-    declare LIB_QT5_CORE_AMD64=""
-    declare LIB_QT5_DEFAULT_ARMHF=""
-    declare LIB_QT5_DEFAULT_AMD64=""
-    declare LIB_QT5_DEFAULT_ARM64=""
-else
-    ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
-    declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
-    declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
-    declare LIB_QT5_CORE_UBUNTU_24_04="libqt5core5t64"
-    declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
-    declare LIB_QT5_DEFAULT_AMD64="qt5-default:amd64"
-    declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
-fi
+### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
+declare LIB_QT5_CORE="libqt5core5a"
+declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
+declare LIB_QT5_CORE_AMD64="libqt5core5a:amd64"
+declare LIB_QT5_CORE_UBUNTU_24_04="libqt5core5t64"
+declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
+declare LIB_QT5_DEFAULT_AMD64="qt5-default:amd64"
+declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
 
-declare os_release    ### We are not in a function, so it can't be local
-get_file_variable os_release "VERSION_ID" /etc/os-release
-
-declare -r CPU_ARCH=$(uname -m)
 case ${CPU_ARCH} in
     armv7l)
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
@@ -71,22 +70,22 @@ case ${CPU_ARCH} in
         fi
         ;;
     aarch64)
-         if [[ "${os_release}" == "12" ]]; then
+         if [[ "${OS_RELEASE}" == "12" ]]; then
             ### The 64 bit Pi 5 OS is based upon  Debian 12
-            wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${os_release}"
-            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )
+            wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${OS_RELEASE}"
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5 ${LIB_QT5_CORE} )
         else
             ### This is a 64 bit bullseye Pi4 and the OrangePi
             PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
          fi
         ;;
     x86_64)
-        wd_logger 2 "Installing on Ubuntu ${os_release}"
-        if [[ "${os_release}" =~ 2[02].04 || "${os_release}" == "12" || "${os_release}" =~ 21.. ]]; then
+        wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
+        if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
             PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
-        elif [[ "${os_release}" =~ 24.04 ]]; then
-            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
+        elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
+            PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi
@@ -346,35 +345,6 @@ function ask_user_to_install_sw() {
     fi
 }
 
-### To avoid conflicts with wsprd from WSJT-x which may be also installed on this PC, run a WD copy of wsprd
-declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
-mkdir -p ${WSPRD_BIN_DIR}
-declare WSPRD_CMD=${WSPRD_BIN_DIR}/wsprd
-declare WSPRD_VERSION_CMD=${WSPRD_BIN_DIR}/wsprd.version
-declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
-
-### Only WSJT-x version 2.6.x runs on Pi Bullseye and Ubuntu 22.04 LTS.  On Pi Buster and Ubuntu 20.04 LTS only WSJT-x 2.5.4 runs
-declare os_release    ### We are not in a function, so it can't be local
-get_file_variable os_release "VERSION_ID" /etc/os-release
-declare os_codename
-get_file_variable os_codename "VERSION_CODENAME" /etc/os-release
-wd_logger 2 "Installing on Linux '${os_codename}',  OS version = '${os_release}'"
-
-if [[ "${os_codename}" == "buster" && "${os_release}" == "10"  ]]; then
-    ### Running wsprd and jt9 on Pi "buster" requires WSJT-x 2.5.4
-    wd_logger 2 "Installing on a Raspberry Pi running '${os_codename}', so install WSJT-x version 2.5.4"
-    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.5.4}"
-else
-    ### The Debian ID is 10 or 11 on a Raspberry Pi and 20.05 or 18.04 on older Ubuntus.  All those are supported by WSJT-x 2.5.4 
-    declare WSJTX_REQUIRED_VERSION="${WSJTX_REQUIRED_VERSION:-2.6.1}"
-fi
-wd_logger 2 "Running WSJT-x ${WSJTX_REQUIRED_VERSION} on Ubuntu ${os_release}"
-
-### 10/14/20 RR: Always install the 'jt9', but only execute it if 'JT9_CMD_EANABLED="yes"' is added to wsprdaemon.conf
-declare JT9_CMD=${WSPRD_BIN_DIR}/jt9
-declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
-declare JT9_DECODE_ENABLED=${JT9_DECODE_ENABLED:-no}
-
 declare INSTALLED_DEBIAN_PACKAGES=$(${DPKG_CMD} -l)
 
 ############### Timescale database #######################
@@ -435,129 +405,96 @@ fi
 ### On Ubuntu 20.04 we can't install the package, so we can't learn the version number from dpkg.
 ### So on Ubuntu 20.04 we assume that if wsprd is installed it is the correct version
 ### Perhaps I will save the version number of wsprd and use this process on all OSs
-    
-declare WSPRD_VERSION_CMD=${WSPRD_CMD}.version       ### Since WSJT-x wsprd doesn't have a '-V' to identify its version, save the version here
+### To avoid conflicts with wsprd from WSJT-x which may be also installed on this PC, run a WD copy of wsprd
 
-function load_wsjtx_commands()
+declare WSPRD_CMD
+declare WSPRD_SPREADING_CMD
+declare JT9_CMD
+
+declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
+mkdir -p ${WSPRD_BIN_DIR}
+declare WSPRD_CMD_FLAGS="${WSPRD_CMD_FLAGS--C 500 -o 4 -d}"
+declare JT9_CMD_FLAGS="${JT9_CMD_FLAGS:---fst4w -p 120 -L 1400 -H 1600 -d 3}"
+declare JT9_DECODE_ENABLED=${JT9_DECODE_ENABLED:-no}
+
+function find_wsjtx_commands()
 {
-    local wsprd_version=""
-    if [[ -x ${WSPRD_VERSION_CMD} ]]; then
-        wsprd_version=$( ${WSPRD_VERSION_CMD} )
-    elif false; then
-        wsprd_version=$(awk '/wsjtx /{print $3}' <<< "${dpkg_list}")
-        if [[ -n "${wsprd_version}" ]] && [[ -x ${WSPRD_CMD} ]] && [[ ! -x ${WSPRD_VERSION_CMD} ]]; then
-            sudo sh -c "echo 'echo ${wsprd_version}' > ${WSPRD_VERSION_CMD}"
-            sudo chmod +x ${WSPRD_VERSION_CMD}
-        fi
+    local bin_file_list=( $(find ${WSPRD_BIN_DIR} -maxdepth 1 -type f -executable -printf "%p\n"  | sort) )
+
+    if [[ ${#bin_file_list[@]} -eq 0 ]]; then
+        wd_logger 1 "ERROR: can't find any of the expected executable files in ${WSPRD_BIN_DIR}"
+        exit 1
     fi
+    wd_logger 2 "Found ${#bin_file_list[@]} executable files in  ${WSPRD_BIN_DIR}"
 
-    ### Now install wsprd if it doesn't exist or if it is the wrong version
-    if [[ ! -x ${WSPRD_CMD} ]] || [[ -z "${wsprd_version}" ]] || [[ ${wsprd_version} != ${WSJTX_REQUIRED_VERSION} ]]; then
-        local os_name=""
-        if [[ -f /etc/os-release ]]; then
-            ### See if we are running on Ubuntu 20.04
-            ### can't use 'source /etc/os-release' since the variable names in that conflict with variables in WD
-            os_name=$(awk -F = '/^VERSION_CODENAME=/{print $2}' /etc/os-release | sed 's/"//g')
-        fi
-
-        if [[ "${os_name}" == "bullseye" && "${CPU_ARCH}" == "aarch64" ]]; then
-            if [[ "${wsprd_version}" == "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.3.0}" ]]; then
-                wd_logger 2 "Found the expected wsprd version '${wsprd_version}' on 64 bit Pi bulleye"
-                return 0
-            fi
-            wd_logger 1 "Installing wsjtx on a 64 bit Pi bullseye from 'apt'"
-            sudo apt install wsjtx -y
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sudo apt install wsjtx' failed on 64 bit Pi 'bullseye'"
-                exit 1
-            fi
-            wsjtx_version=$( /usr/bin/wsjtx_app_version -v | awk '{print $2}' )
-            if [[ "${wsjtx_version}" == "${PI_64BIT_BULLSEYE_WSJTX_REQUIRED_VERSION-2.6.1}" ]]; then
-                mkdir -p ${WSPRD_BIN_DIR}
-                cp /usr/bin/{wsprd,jt9} ${WSPRD_BIN_DIR}
-                echo "echo ${wsjtx_version}" > ${WSPRD_VERSION_CMD}
-                chmod +x ${WSPRD_VERSION_CMD}
-                wd_logger 1 "Installed WSJT-x version ${wsjtx_version} on this 64 bit Pi bullseye"
-                return 0
-            fi
-            wd_logger 1 "ERROR: wrong wsjtx version '${wsjtx_version}' on 64 bit Pi bulleye.  So installing from WSJT-x repo"
-        fi
-        local wsjtx_pkg=""
-        case ${CPU_ARCH} in
-            x86_64)
-                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_amd64.deb
-                ;;
-            armv7l)
-                wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
-                ;;
-            aarch64)
-                if [[ ${os_release} == "12" ]]; then
-                    ### This is the WSJT-x package which runs on the Pi 5
-                    wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_armhf.deb
-                else
-                    wsjtx_pkg=wsjtx_${WSJTX_REQUIRED_VERSION}_arm64.deb
-                fi
-                ;;
-            *)
-                wd_logger 1 "ERROR: CPU architecture '${CPU_ARCH}' is not supported by this program"
-                exit 1
-                ;;
-        esac
-        ### Download WSJT-x and extract its files and copy wsprd to /usr/bin/
-        local wsjtx_dpkg_file=${WSPRDAEMON_TMP_DIR}/${wsjtx_pkg}
-        WSJTX_SERVER_URL="${WSJTX_SERVER_URL-https://sourceforge.net/projects/wsjt/files}"
-        wget ${WSJTX_SERVER_URL}/${wsjtx_pkg} -O ${wsjtx_dpkg_file}
-        local rc=$?
-        if [[ ${rc} -ne 0 || ! -f ${wsjtx_dpkg_file} ]] ; then
-            wd_logger 1 "ERROR: failed to download ${WSJTX_SERVER_URL}/${wsjtx_pkg}"
-            exit 1
-        fi
-        local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt
-        mkdir -p ${dpkg_tmp_dir}
-        dpkg-deb -x ${wsjtx_dpkg_file} ${dpkg_tmp_dir}
-        ret_code=$?
-        if [[ ${ret_code} -ne 0 ]] ; then
-            wd_logger 1 "ERROR: on ${os_name} failed to extract files from package file ${wsjtx_pkg_file}"
-            exit 1
-        fi
-        local dpkg_wsprd_file=${dpkg_tmp_dir}/usr/bin/wsprd
-        if [[ ! -x ${dpkg_wsprd_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_wsprd_file}' in the downloaded WSJT-x package"
-            exit 1
-        fi
-        cp -p ${dpkg_wsprd_file} ${WSPRD_CMD} 
-        echo "echo ${WSJTX_REQUIRED_VERSION}" > ${WSPRD_VERSION_CMD}
-        chmod +x ${WSPRD_VERSION_CMD}
-        wd_logger 1 "Installed  ${WSPRD_CMD} version ${WSJTX_REQUIRED_VERSION}"
-
-        local dpkg_jt9_file=${dpkg_tmp_dir}/usr/bin/jt9 
-        if [[ ! -x ${dpkg_jt9_file} ]]; then
-            wd_logger 1 "ERROR: failed to find executable '${dpkg_jt9_file}' in the downloaded WSJT-x package"
-            exit 1
-        fi
-        if [[  ${CPU_ARCH} == "aarch64" && ${os_release} == "12" ]]; then
-            ## libboost isn't needed on the Pi 5, and maybe nowhere, but I don't have tiem to check.   12/16/23  - RR
-            wd_logger 1 "Skipping installation of libboost-log1 which is not needed by jt9 on the Pi 5"
+    local bin_file
+    for bin_file in ${bin_file_list[@]} ; do
+        wd_logger 2 "Testing ${bin_file}"
+        local rc 
+        ${bin_file} |& grep -q "Usage" 
+        rc=$?
+        if [[ ${rc} -ne 0 ]];  then
+            wd_logger 2 "Bin file '${bin_file} fails to run on this server.  Skip to test next bin file"
         else
-            wd_logger 1 "Installing libboost-log1 (maybe) needed by jt9"
-            sudo apt install libboost-log1       ### Needed by jt9
+            wd_logger 2 "Bin file '${bin_file} runs on this server"
+            if [[ ${bin_file} =~ bin/wsprd.spread ]]; then
+                wd_logger 2 "Found that WSPRD_SPREADING_CMD='${bin_file}' runs on this server"
+                if [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
+                    wd_logger 1 "Warning: ignaoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
+                else
+                    WSPRD_SPREADING_CMD="${bin_file}"
+                fi
+            elif  [[ ${bin_file} =~ bin/wsprd ]]; then
+                wd_logger 2 "Found that WSPRD_CMD='${bin_file}' runs on this server"
+                if [[ -z "${WSPRD_CMD-}" ]]; then
+                    wd_logger 2 "There is no 'WSPRD_CMD', so use this one '${bin_file}'"
+                    WSPRD_CMD="${bin_file}"
+                else
+                    ### We have already found a 'bin/wsprd... command on this server
+                    local test_name="${WSPRD_CMD##*bin/wsprd}"
+                    if [[  -z "${test_name}" ]]; then
+                        wd_logger 2 "Found a second bin/wsprd... after first finding ''bin/wsprd', so 'wd_rm ${WSPRD_CMD}' and use this ${bin_file}"
+                        wd_rm ${WSPRD_CMD}
+                        WSPRD_CMD="${bin_file}"
+                    else
+                        wd_logger 1 "Warning: Since we have a functioning non-'bin/wsprd' command ${WSPRD_CMD}, ignoring this second one '${bin_file}"
+                    fi
+                fi
+            elif [[ ${bin_file} =~ bin/jt9 ]]; then
+                wd_logger 2 "Found that JT9_CMD='${bin_file}' runs on this server"
+                if [[ -z "${JT9_CMD-}" ]]; then
+                    wd_logger 2 "There is no JT9_CMD, so use this one '${bin_file}'"
+                    JT9_CMD="${bin_file}"
+                else
+                    local test_name=${JT9_CMD##*bin/jt9}        ## I gave up trying to find a regex experession which would do this
+                    if [[  -z "${test_name}" ]]; then
+                        wd_logger 2 "Found a second bin/jt9... after first finding ''bin/jt9', so 'wd_rm ${JT9_CMD}' and use this ${bin_file}"
+                        wd_rm ${JT9_CMD}
+                        JT9_CMD=${bin_file}
+                    else
+                        wd_logger 1 "Warning: Since we have a functioning non-'bin/jt9' command, ignoring this second one '${bin_file}"
+                    fi 
+                fi
+            else
+                wd_logger 2 "Ignoring executble command '${bin_file}'"
+            fi
         fi
-        cp -p ${dpkg_jt9_file} ${JT9_CMD} 
-        wd_logger 1 "Installed  ${JT9_CMD} version ${WSJTX_REQUIRED_VERSION}"
+    done
+    if [[ -z "${WSPRD_CMD-}" ]]; then
+        wd_logger 1 "ERROR: couldn't find WSPRD_CMD"
+        exit 1
     fi
-    local wsjtx_dpkg_file_list=( $(find ${WSPRDAEMON_TMP_DIR} -name 'wsjtx_*.deb' ) )
-    if [[ ${#wsjtx_dpkg_file_list[@]} -gt 0 ]]; then
-        wd_logger 1 "Flushing files: '${wsjtx_dpkg_file_list[*]}'"
-        wd_rm ${wsjtx_dpkg_file_list[@]}
+    if [[ -z "${WSPRD_SPREADING_CMD-}" ]]; then
+        wd_logger 1 "ERROR: couldn't find WSPRD_SPREADING_CMD"
+        exit 1
     fi
-    local dpkg_tmp_dir=${WSPRDAEMON_TMP_DIR}/dpkg_wsjt
-    if [[ -d ${dpkg_tmp_dir} ]]; then
-        wd_logger 1 "Flushing ${dpkg_tmp_dir}"
-        rm -r ${dpkg_tmp_dir}
+    if [[ -z "${JT9_CMD-}" ]]; then
+        wd_logger 1 "ERROR: couldn't find JT9_CMD"
+        exit 1
     fi
+    wd_logger 2 "Found all three of the wsprd/jt9 executables are on this server:\nWSPRD_CMD=${WSPRD_CMD}\nWSPRD_SPREADING_CMD=${WSPRD_SPREADING_CMD}\nJT9_CMD=${JT9_CMD}"
 }
-load_wsjtx_commands
+find_wsjtx_commands
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
