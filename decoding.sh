@@ -1297,7 +1297,7 @@ function decoding_daemon() {
     
     ### The noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
     local wsprdaemon_noise_queue_directory
-    get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}
+    get_wsprdaemon_noise_queue_directory  "wsprdaemon_noise_queue_directory" ${receiver_name} ${receiver_band}
     ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: can't get noise file queue directory 'get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}' => ${ret_code}"

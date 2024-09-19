@@ -57,12 +57,11 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare VERSION=3.1.4                 ### Add support for the GRAPE system
 #declare VERSION=3.1.5                 ### Revert to having Kiwi and RX888 do narrow audio filtering, not sox
 #declare VERSION=3.1.6                 ### Install 4/19/24 KA9Q-radio
+#declare VERSION=3.1.7                 ### Fix to handle changes in respones by wsprnet.org to uploads with duplicates
 #declare VERSION=3.2.0                 ### Add all weprd and jt9 binaries.  Installs on Pi 5
 #declare VERSION=3.2.1                 ### Increment version number so wspr.rocks will report which WD sites have been upgraded
-declare VERSION=3.2.2                 ### Adds ka9q-web and FT4/8 reporting 
-                                     ### TODO: Upload all of Kiwi status lines to wsprdaemon.org
-                                     ### TODO: Add highest WF frequency bins to kiwi_ovs.log
-                                     ### TODO: Enhance WD server to record WD status report table to TS DB so Arne can display active FST4W sites on Grafana map
+#declare VERSION=3.2.2                 ### Adds ka9q-web and FT4/8 reporting 
+declare VERSION=3.2.3                 ### Merge 3.2.0 branch into master
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"

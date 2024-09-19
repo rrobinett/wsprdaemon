@@ -27,6 +27,7 @@ declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_GIT_URL="https://github.com/ka9q/ka9q-radio.git"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
+declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
@@ -763,6 +764,12 @@ function ka9q-radiod-setup()
 
     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
     ka9q_conf_file_bw_check ${ka9q_conf_name}
+
+    ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
+    wd_logger 1 "Instructing the udev system to give radiod permissions to access the RS888"
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     sudo systemctl start  radiod@${ka9q_conf_name} > /dev/null
     rc=$?

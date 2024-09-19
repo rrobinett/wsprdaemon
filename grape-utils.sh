@@ -68,12 +68,14 @@ declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 function grape_upload_all_local_wavs() {
    wd_logger 2 "Upload wav files not yet uploaded to the GRAPE server"
 
-    local date_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )
+    local date_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -name '20??????' | sort ) )   ## Follow symbolic link to /mnt/wd-archive/...
     local date_dir
     for date_dir in ${date_dir_list[@]} ; do
-        local site_dir_list=( $(find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
+        wd_logger 2 "Checking date_dir ${date_dir}"
+        local site_dir_list=( $( find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
         for site_dir in ${site_dir_list[@]} ; do
+            wd_logger 2 "Checking site_dir ${site_dir}"
             upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
@@ -123,7 +125,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 
     ### Search each receiver for wav files
     local receiver_dir
-    local receiver_dir_list=( $(find -L "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d | sort ) )
+    local receiver_dir_list=( $( find -L "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d | sort ) )
     if [[ ${#receiver_dir_list[@]} -eq 0 ]]; then
         wd_logger 1  "There are no receiver dirs under ${reporter_wav_root_dir}"
         return 1
@@ -209,7 +211,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 2  "The DRF files have been created under ${receiver_tmp_dir}.  Now upload them.."
 
         local psws_trigger_dir_name="c${receiver_tmp_dir##*/}_\#${psws_instrument_id}_\#$(date -u +%Y-%m%dT%H-%M)"       ### The root directory of where our DRF file tree will go on th ePSWS server
-         wd_logger 1 "Uploading our DRF directory tree from local dir '${receiver_tmp_dir%/*}' and then creating the trigger dir '${psws_trigger_dir_name}' on our site's home dir on  the PSWS server"
+        wd_logger 1 "Uploading our DRF directory tree from local dir '${receiver_tmp_dir%/*}' and then creating the trigger dir '${psws_trigger_dir_name}' on our site's home dir on  the PSWS server"
 
         local sftp_cmds_file="${WSPRDAEMON_TMP_DIR}/sftp.cmds" 
         echo "put -r . 
@@ -217,7 +219,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         cd "${receiver_tmp_dir%/*}"
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-             cd - > /dev/null
+            cd - > /dev/null
             wd_logger 1 "ERROR: 'cd ${receiver_tmp_dir%/*}' => ${rc}"
             return ${rc}
         fi
@@ -235,7 +237,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}'\n$(<${sftp_stderr_file})"
+            wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}' -> ${rc}:\n$(<${sftp_stderr_file})"
             return ${rc}
         fi
     done
@@ -293,7 +295,7 @@ function grape_get_date_status() {
         return 1
     fi
     local rc=0
-    local band_dir_list=( $(find -L ${date_root_dir} -mindepth 3 -type d) )
+    local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d) )
     wd_logger 1 "Found ${#band_dir_list[@]} bands for UTC date ${date}"
     for band_dir in ${band_dir_list[@]} ; do
         local flac_file_list=( $( find -L ${band_dir} -name '*.flac') )
@@ -309,7 +311,7 @@ function grape_get_date_status() {
 
 ### '-t' 
 function grape_show_all_dates_status(){
-    local wav_archive_dates_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         grape_get_date_status ${wav_archive_date}
@@ -318,7 +320,7 @@ function grape_show_all_dates_status(){
 
 ### '-p' 
 function grape_purge_all_empty_date_trees(){
-    local wav_archive_dates_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         local date_files_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${wav_archive_date} -type f ) )
@@ -466,7 +468,7 @@ function grape_repair_all_dates_flacs()
 {
     local current_date
     TZ=UTC printf -v current_date "%(%Y%m%d)T"
-    local wav_archive_dates_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         if [[ ${wav_archive_date} ==  ${current_date} ]] ; then
@@ -506,7 +508,7 @@ function grape_create_wav_file()
     fi
 
     local flac_file_list=()
-    flac_file_list=( $(find -L ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
+    flac_file_list=( $( find -L ${flac_file_dir} -name '*.flac' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'find -L ${flac_file_dir}  -name '*.flac' -printf '%p\n' | sort' => ${rc}"
@@ -605,7 +607,7 @@ function grape_create_24_hour_wavs() {
     local date_root_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${archive_date}"
 
     if [[  ! -d ${date_root_dir} ]]; then
-        wd_logger 1 "ERROR: can't find ${date_root_dir}"
+        wd_logger 1 "ERROR: can't find -L ${date_root_dir}"
         return -2
     fi
     local new_wav_count=0
@@ -646,7 +648,7 @@ function grape_create_all_24_hour_wavs(){
     local return_code=0
     local new_wav_count=0
 
-    local wav_archive_dates_dir_list=( $(find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
+    local wav_archive_dates_dir_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 1 -maxdepth 1 -type d -printf '%p\n' | sort)  )
     local wav_archive_date
     for wav_archive_date in ${wav_archive_dates_dir_list[@]##*/} ; do
         local rc

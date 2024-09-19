@@ -1,4 +1,4 @@
-# WsprDaemon (WD) 3.1.5  (This page is in the midst of a much-needed extensive revision)
+# WsprDaemon (WD) 3.1.7  (This page is in the midst of a much-needed extensive revision)
 
 Wsprdaemon (WD) is Linux service which decodes WSPR and FST4W spots from one or more [Kiwis](http://kiwisdr.com) and/or RX888 SDRs and *reliably* posts them to [wsprnet.org](http://wsprnet.org).  It includes many features not found in WSJT-x, including multiple band and/or multiple receiver support.  WD also records additional information about spots like doppler shift and background noise level which permit much deeper understanding of propagation conditions.  For systems like the KiwiSDR which have a limited number of receive channels, schedules can be configured to switch between bands at different hours of the day or at sunrise/sunset-relative times. Spots obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).  WD can be configured to create graphs of the background noise level for display locally and/or at [graphs.wsprdaemon.org](http://graphs.wsprnet.org).
 
@@ -59,28 +59,6 @@ Beware : newer versions, since 3.1.5 will need to use
 source ~/wsprdaemon/bash-aliases
 ```
 
-## Installation on a system running wsprdaemon that was not installed using 'git clone'
-
-Stop WD with:  
-```bash
-'./wsprdaemon.sh -z'
-````
-Save away (i.e.rename) your existing ~/wsprdaemon directory, including its wsprdaemon.conf file:
-```bash
-mv ~/wsprdaemon/ ~/wsprdaemon.save"
-````
-Follow the instructions for "Greenfield Installation", but don't end by starting WD with 
-```bash
-'./wsprdaemon.sh -a'
-````
-Copy your saved wsprdaemon.conf file into the directory created by the clone:
-```bash
-cp ~/wsprdaemon.save/wsprdaemon.conf ~/wsprdaemon/"
-````
-Then start WD with 
-```bash
-./wsprdaemon.sh -a
-````
 ## Upgrading WD in a cloned directory to the latest master version 
 
 Execute 'git pull'
