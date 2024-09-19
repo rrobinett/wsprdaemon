@@ -61,7 +61,7 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare VERSION=3.2.0                 ### Add all weprd and jt9 binaries.  Installs on Pi 5
 #declare VERSION=3.2.1                 ### Increment version number so wspr.rocks will report which WD sites have been upgraded
 #declare VERSION=3.2.2                 ### Adds ka9q-web and FT4/8 reporting 
-declare VERSION=3.2.3                 ### Merge 3.2.0 branch into master
+declare VERSION=3.2.3                 ### Merge 3.2.0 branch into master, a second time
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
