@@ -1,4 +1,4 @@
-# WsprDaemon (WD) 3.2.3 is the current master version (This page is in the midst of a much-needed extensive revision)
+# WsprDaemon (WD) 3.2.3 is the current master version
 
 Wsprdaemon (WD) is Linux service which decodes WSPR and FST4W spots from one or more [Kiwis](http://kiwisdr.com) and/or RX888 SDRs and *reliably* posts them to [wsprnet.org](http://wsprnet.org).  It includes many features not found in WSJT-x, including multiple band and/or multiple receiver support.  WD also records additional information about spots like doppler shift and background noise level which permit much deeper understanding of propagation conditions.  For systems like the KiwiSDR which have a limited number of receive channels, schedules can be configured to switch between bands at different hours of the day or at sunrise/sunset-relative times. Spots obtained from multiple receivers on the same band ( e.g a 40M vertical and 500' Beverage ) can be merged together with only the best SNR posted to [wsprnet.org](http://wsprnet.org).  WD can be configured to create graphs of the background noise level for display locally and/or at [graphs.wsprdaemon.org](http://graphs.wsprnet.org).
 
