@@ -1758,7 +1758,7 @@ function decoding_daemon() {
                     wd_logger 1 "Decoding mode W0, so run 'wsprd ${wsprd_flags}"
                 elif [[ -n "${WSPRD_SPREADING_CMD-}" && ${WSPRD_FAST_FIRST_PASS-no} == "yes" ]] ; then
                     ### Reduce the CPU burden produced by too intense 'wsprd' decodes
-                    wsprd_flags="-C 100 -o 2 -d"
+                    wsprd_flags=""  ## -C 100 -o 2 -d"
                 fi
 
                 cd ${decode_dir}

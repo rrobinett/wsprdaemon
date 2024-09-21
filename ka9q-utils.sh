@@ -184,7 +184,7 @@ function ka9q_get_metadump() {
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
         wd_logger 2 "Getting new status information by executing 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}'"
-        timeout 5 metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
+        timeout ${KA9Q_METADUMP_TIMEOUT_SECS-5}  metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'timeout 5 metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}' => ${rc}"
