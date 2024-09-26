@@ -3,6 +3,16 @@
 
 shopt -s -o nounset
 
+### On a Wsprsonde gateway, this function simplifies opening a terminal session to the WS through a USB connection
+function wd2ws(){
+    if [[ ! -e /dev/ttyACM0 ]]; then
+        echo "ERROR: There is no USB cable on this server which is connected to a Wsprsonde"
+        return 1
+    fi
+    read -p "Connect to the WS8 by running 'screen'? (exit 'screen' by typing <CONTROL-A> + '\') => "
+    sudo screen /dev/ttyACM0
+}
+
 function wd-desnap() {
     local snaps_list=()
     local rc
