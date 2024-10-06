@@ -55,7 +55,7 @@ function remote_access_connection_stop_and_disable() {
         wd_logger 1 "Stopping running previously enabled and active ${WD_REMOTE_ACCESS_SERVICE_NAME}"
         execute_sysctl_command stop ${WD_REMOTE_ACCESS_SERVICE_NAME}
     fi
-    wd_logger 1 "The Remote Access Connection (RAC) service has been stopped and disabled"
+    wd_logger 2 "The Remote Access Connection (RAC) service has been stopped and disabled"
     return 0
 }
 
@@ -144,12 +144,12 @@ function remote_access_connection_status() {
 
     local close_rac="no"
     if [[ -z "${wd_conf_rac_channel-}" ]]; then
-        wd_logger 1 "Found that neither REMOTE_ACCESS_CHANNEL nor RAC is defined in ${WSPRDAEMON_CONFIG_FILE}, so we have ensured it isn't running"
+        wd_logger 2 "Found that neither REMOTE_ACCESS_CHANNEL nor RAC is defined in ${WSPRDAEMON_CONFIG_FILE}, so we have ensured it isn't running"
         wd_conf_rac_channel=""
         close_rac="yes"
     else
         if  ! is_uint "${wd_conf_rac_channel-}";  then
-            wd_logger 1 "The RAC or REMOTE_ACCESS_CHANNEL defined in ${WSPRDAEMON_CONFIG_FILE} is not an INREGER, so we have ensured it isn't running"
+            wd_logger 1 "ERROR: The RAC or REMOTE_ACCESS_CHANNEL defined in ${WSPRDAEMON_CONFIG_FILE} is not an INREGER, so we have ensured it isn't running"
             close_rac="yes"
         fi
     fi
@@ -175,7 +175,7 @@ function remote_access_connection_status() {
         fi
     fi
     if [[ ${close_rac} == "yes" ]]; then
-        wd_logger 1 "Ensuring that RAC is closed"
+        wd_logger 2 "Ensuring that RAC is closed"
         remote_access_connection_stop_and_disable
         return 0
     fi
