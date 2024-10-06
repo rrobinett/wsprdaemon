@@ -11,6 +11,20 @@ else
     WD_TMP_ROOT=/tmp/wsprdaemon
 fi
 
+function wd-stop-and-disable-all() {
+    wd -Z
+
+    local wd_services_list=( wsprdaemon ft4-decoded ft8-decoded pskreporter@ft4 pskreporter@ft8 )
+    local service_name
+    for  service_name in ${wd_services_list[@]} ; do
+        #read -p "Stop and disable the '${service_name}' service ? => "
+        sudo systemctl stop    ${service_name}
+        sudo systemctl disable ${service_name}
+    done
+    echo "All WD services have been stopped and disabled, but the RX-888 service radiod has not been touched"
+}
+alias wdZ='wd-stop-and-disable-all'
+
 
 ### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
 ### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
