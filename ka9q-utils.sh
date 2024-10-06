@@ -643,14 +643,14 @@ function ka9q-radiod-setup()
         exit 1
     fi
     if id -nG "${USER}" | grep -qw "radio" ; then
-        wd_logger 1 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
+        wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
     else
         sudo usermod -aG radio ${USER}
         wd_logger 1 "NOTE: Needed to add user '${USER}' to the group 'radio', so YOU NEED TO logout/login to this server before KA9Q services can run"
         exit 1
     fi
  
-    if [[ -d ${KA9Q_RADIOD_CONF_DIR} ]]; then
+    if [[ ! -d ${KA9Q_RADIOD_CONF_DIR} ]]; then
         wd_logger 1 "ERROR: can't find expected KA9Q-radio configuration directory '${KA9Q_RADIOD_CONF_DIR}'"
         exit 1
     fi
@@ -705,7 +705,7 @@ function ka9q-radiod-setup()
 
     ### Make sure the wisdomf needed for effecient execution of radiod exists
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
+        wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
     else
         wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
@@ -735,10 +735,10 @@ function ka9q-radiod-setup()
         wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
         radio_restart_needed="yes"
     fi
-    wd_logger 1 "${FFTW_WISDOMF} is current"
+    wd_logger 2 "${FFTW_WISDOMF} is current"
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
-    wd_logger 1 "Instructing the udev system to give radiod permissions to access the RS888"
+    wd_logger 2 "Instructing the udev system to give radiod permissions to access the RS888"
     sudo udevadm control --reload-rules
     sudo udevadm trigger
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
@@ -747,13 +747,13 @@ function ka9q-radiod-setup()
         wd_logger 1 "KA9Q-radio softwaare is installed and configured, but can't find a RX888 MkII attached to a USB port"
         exit 1
     fi
-    wd_logger 1 "Found a RX888 MkII attached to a USB port"
+    wd_logger 2 "Found a RX888 MkII attached to a USB port"
 
     if [[  ${radio_restart_needed} == "no" ]] ; then
         sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
         rc=$?
         if [[ ${rc} -eq 0 ]]; then
-            wd_logger 1 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
+            wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
         wd_logger 1 "The installiation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
