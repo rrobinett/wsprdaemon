@@ -1522,10 +1522,13 @@ function decoding_daemon() {
                 fi
                 local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
 
-                if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" ]]; then
+                if [[ ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" && ${last_adc_overloads_count} -ne -1 ]]; then
                     wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}, but changes are disabled"
                 else
                     wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                    if [[ ${last_adc_overloads_count} -eq -1 ]]; then
+                        wd_logger 1 "Channel AGC is disabled, but this is the first gain check after startup, so apply the full gain change to ${new_channel_level} dB which was calculated above"
+                    fi
                     timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
                     rc=$?
                     if [[ ${rc} -ne 0 ]]; then
