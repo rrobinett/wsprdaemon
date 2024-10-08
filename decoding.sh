@@ -353,11 +353,16 @@ function decode_wspr_wav_file() {
     if [[ ${OS_RELEASE} =~ 20.04 ]]; then
         n_arg=""    ## until we get a wsprd.spreading for U 20.04
     fi
-    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
-        # return ${ret_code}
+    if [[ ${WSPRD_ONE_PASS-no} == "yes" ]]; then
+        wd_logger 1 "Skipping wsprd second pass because ${WSPRD_ONE_PASS-no} == 'yes'"
+        >  ${stdout_file}.spreading
+    else
+        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+        local rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
+            # return ${ret_code}
+        fi
     fi
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
     mv sort.tmp ALL_WSPR.TXT
@@ -1761,7 +1766,7 @@ function decoding_daemon() {
                     wd_logger 1 "Decoding mode W0, so run 'wsprd ${wsprd_flags}"
                 elif [[ -n "${WSPRD_SPREADING_CMD-}" && ${WSPRD_FAST_FIRST_PASS-no} == "yes" ]] ; then
                     ### Reduce the CPU burden produced by too intense 'wsprd' decodes
-                    wsprd_flags="-C 100 -o 2 -d"
+                   wsprd_flags="${WSPRD_FAST_FIRST_PASS_FLAGS-}"  ## -C 100 -o 2 -d"
                 fi
 
                 cd ${decode_dir}
