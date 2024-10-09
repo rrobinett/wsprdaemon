@@ -30,7 +30,7 @@ declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
 declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
-declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
+declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
              libnss-mdns mdns-scan avahi-utils avahi-discover"
 
