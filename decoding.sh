@@ -1599,10 +1599,10 @@ function decoding_daemon() {
         local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
 
         if (( ${adc_overloads_print_line_count} % ${ADC_LOG_HEADER_RATE-16} == 0)) ; then
-             printf "DATE_TIME       OV_COUNT  NEW_OVs  RF_GAIN     ADC_DBFS        N0   CH_DBFS   CH_GAIN\n"  >> ${ADC_OVERLOADS_LOG_FILE_NAME}
+             printf "DATE_TIME          OV_COUNT  NEW_OVs  RF_GAIN     ADC_DBFS        N0   CH_DBFS   CH_GAIN\n"  >> ${ADC_OVERLOADS_LOG_FILE_NAME}
         fi
         (( ++adc_overloads_print_line_count ))
-        printf "%s: %7d  %7d    %5.1f        %5.1f    %6.1f     %5.1f     %5.1f\n"  ${ov_first_input_wav_filename} ${adc_overloads_count} ${new_sdr_overloads_count} ${ka9q_rf_gain_float} ${ka9q_adc_dbfs_float} ${ka9q_n0_float} ${ka9q_channel_output_float} ${ka9q_channel_gain_float} >> ${ADC_OVERLOADS_LOG_FILE_NAME}
+        printf "%s: %10d  %7d    %5.1f        %5.1f    %6.1f     %5.1f     %5.1f\n"  ${ov_first_input_wav_filename} ${adc_overloads_count} ${new_sdr_overloads_count} ${ka9q_rf_gain_float} ${ka9q_adc_dbfs_float} ${ka9q_n0_float} ${ka9q_channel_output_float} ${ka9q_channel_gain_float} >> ${ADC_OVERLOADS_LOG_FILE_NAME}
         truncate_file ${ADC_OVERLOADS_LOG_FILE_NAME} 1000000       ## limit the size of the file
 
         wd_logger 1 "The SDR reported ${new_sdr_overloads_count} new overload events in this 2 minute cycle"
