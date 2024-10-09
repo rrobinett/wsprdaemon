@@ -1488,7 +1488,6 @@ function decoding_daemon() {
             local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
             local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn'
             wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
-
  
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
@@ -1527,7 +1526,7 @@ function decoding_daemon() {
                     fi
                 fi
                 local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
-                wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} from ${ka9q_channel_gain_float} to ${new_channel_level} is needed to change the current output level ${ka9q_channel_output_float} so output is near the target level ${KA9Q_OUTPUT_DBFS_TARGET}"
+                wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} dB from ${ka9q_channel_gain_float} dB to ${new_channel_level} dB is needed"
 
                 local change_channel_gain="yes"                    ### By default Channel gain AGC is applied to all channels at the end of each WSPR cycle, including to the WWV/CHU channels at the end of the first cycle
                 if [[  ${last_adc_overloads_count} -ne -1 ]]; then
@@ -1538,8 +1537,12 @@ function decoding_daemon() {
                     fi
                     if [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
                        if [[ ${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no} == "no" ]]; then
-                           wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled after the first WSPR cycle"
-                           change_channel_gain="no"
+                           if [[ $( echo "${sox_peak_dBFS_value} > ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}" | bc ) == 1 ]]; then
+                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled, but the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} is greater than the peak allowed value ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}, so reduce the gain"
+                            else
+                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled after the first WSPR cycle and the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} shows that the wav file isn't overranging"
+                                change_channel_gain="no"
+                           fi
                        else
                            wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are enabled after the first WSPR cycle becasue WD.conf contains the line:  KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLE='${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no}"
                        fi
@@ -1548,7 +1551,7 @@ function decoding_daemon() {
                 if [[ ${change_channel_gain} == "no" ]]; then
                     wd_logger 1 "Channel gain changes are disabled"
                 else
-                    wd_logger 1 "Applying channel gain changes"
+                    wd_logger 1 "Changing channel gain to ${new_channel_level}"
                     timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
                     rc=$?
                     if [[ ${rc} -ne 0 ]]; then
