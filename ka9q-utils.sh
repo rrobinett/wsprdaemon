@@ -1205,19 +1205,19 @@ function wd_get_config_value() {
                 ANTENNA)
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
-                    local receiver_description
-                    if [[ "${receiver_line}" =~ "#" ]]; then
-                        receiver_description="${receiver_line##*#}"
+                    local antenna_description
+                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                        antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
-                        receiver_description="${receiver_description##+([[:space:]])}"    ### trim off leading white space
-                        wd_logger 2 "Found the description '${receiver_description}' in line: ${receiver_line}"
+                        antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
+                        wd_logger 2 "Found the description '${antenna_description}' in line: ${receiver_line}"
                     else
-                        receiver_description="No_antenna_information"
+                        antenna_description="No antenna information"
                         wd_logger 2 "Can't find comments about receiver ${receiver_call}, so use 'No antenna information'"
                     fi
 
-                    eval ${__return_variable_name}="\${receiver_description}"
-                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_description}"
+                    eval ${__return_variable_name}="\${antenna_description}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${antenna_description}"
                     return 0
                     ;;
                 *)
@@ -1376,10 +1376,10 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             wd_get_config_value "config_value" ${config_variable}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: ' wd_get_config_value "config_value" ${config_variable}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
                 return ${rc}
             fi
-            variable_line="${config_variable}=${config_value}"
+            local variable_line="${config_variable}=${config_value}"
             if grep -q "${variable_line}" ${psk_conf_file} ; then
                 wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
             else
