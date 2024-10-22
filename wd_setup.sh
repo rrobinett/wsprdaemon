@@ -60,6 +60,7 @@ declare LIB_QT5_CORE_UBUNTU_24_04="libqt5core5t64"
 declare LIB_QT5_DEFAULT_ARMHF="qt5-default:armhf"
 declare LIB_QT5_DEFAULT_AMD64="qt5-default:amd64"
 declare LIB_QT5_DEFAULT_ARM64="libqt5core5a:arm64"
+declare LIB_QT5_LINUX_MINT="qtbase5-dev"
 
 case ${CPU_ARCH} in
     armv7l)
@@ -86,6 +87,8 @@ case ${CPU_ARCH} in
             PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
+        elif grep -q 'Linux Mint' /etc/os-release; then
+            PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 python3-psycopg2 python3-numpy ${LIB_QT5_LINUX_MINT} )
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 ${LIB_QT5_DEFAULT_AMD64} )
         fi

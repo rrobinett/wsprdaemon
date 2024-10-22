@@ -3,6 +3,43 @@
 
 shopt -s -o nounset
 
+### On a Wsprsonde gateway, this function simplifies opening a terminal session to the WS through a USB connection
+function wd2ws(){
+    if [[ ! -e /dev/ttyACM0 ]]; then
+        echo "ERROR: There is no USB cable on this server which is connected to a Wsprsonde"
+        return 1
+    fi
+    read -p "Connect to the WS8 by running 'screen'? (exit 'screen' by typing <CONTROL-A> + '\') => "
+    sudo screen /dev/ttyACM0
+}
+
+function wd-desnap() {
+    local snaps_list=()
+    local rc
+
+    #set -x
+    while snaps_list=( $( snap list | awk '!/Name/{print $1}') ) && [[ ${#snaps_list[@]} -gt 0 ]]; do
+        local desnap_failures=0
+        local snap
+        for snap in ${snaps_list[@]} ; do
+            #read -p "Execute 'sudo snap remove --purge ${snap}' [Y,n]? => "
+            sudo snap remove --purge ${snap} >& /tmp/wd-desnap.log
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                echo "ERROR:'sudo snap remove --purge ${snap}' => ${rc}"
+                (( ++desnap_failures))
+            else
+                echo "Removed ${snap}"
+            fi
+        done
+        read -p "Finished de-smap pass with ${desnap_failures} failures.  Proceed [Y,n]? =>"
+    done
+    sudo rm -rf /var/cache/snapd/
+    sudo apt autoremove --purge snapd gnome-software-plugin-snap
+    rm -fr ~/snap
+    sudo apt autoremove --purge snapd gnome-software-plugin-
+}
+
 export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
 
 if [[ -d /dev/shm/wsprdaemon ]]; then
@@ -619,7 +656,7 @@ function wd-overloads()
     fi
 comment_out
 
-    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
+    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'kiwi_ovs.log or ad_overloads.log' files"
         return
@@ -655,7 +692,7 @@ comment_out
     for kiwi_root_path in ${kiwi_root_path_list[@]} ; do
         #echo "Searching under ${kiwi_root_path}"
         local kiwi_name=${kiwi_root_path##*/}
-        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
+        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
 
         local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
         local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
@@ -668,7 +705,7 @@ comment_out
             continue
         fi
 
-        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
+        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} '*.log' files:\n"
         printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
         printf "This line reports the most OVs:\n${most_ovs_line}\n" 
 
