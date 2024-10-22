@@ -30,15 +30,16 @@ declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
 declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
-declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses5-dev libfftw3-dev libbsd-dev libhackrf-dev \
-             libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev"
+declare KA9Q_PACKAGE_DEPENDANCIES="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses-dev libfftw3-dev libbsd-dev libhackrf-dev \
+             libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
+             libnss-mdns mdns-scan avahi-utils avahi-discover"
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is created by running fft_wisdom during the KA9Q installation
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-cc4c2a6d41c198cf96c6fa952ca435deaaafaed2}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-1a66a3a15ed86825807292efbcd412b198fae347}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 ###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file
@@ -556,13 +557,13 @@ function ka9q-radiod-setup()
     local rc
     wd_logger 2 "Starting in ${PWD}"
 
-    local packages_needed="libnss-mdns mdns-scan avahi-utils avahi-discover"
-    if ! install_dpkg_list ${packages_needed}; then
+    ### This has been called because A KA9Q rx has been configured, so we may need to install and compile ka9q-radio so that we can run the 'wd-record' command
+    if ! install_dpkg_list ${KA9Q_PACKAGE_DEPENDANCIES}; then
         wd_logger 1 "ERROR: 'install_debian_package ${packages_needed}' => $?"
         exit 1
     fi
 
-    ### This has been called because A KA9Q rx has been configured, so we may need to install and compile ka9q-radio so that we can run the 'wd-record' command
+    local ka9q_make_needed="no"
     if [[ ! -d ${KA9Q_RADIO_DIR} ]]; then
         wd_logger 1 "ka9q-radio subdirectory doesn't exist, so 'get clone' to create it and populate with source code"
         git clone ${KA9Q_GIT_URL}
@@ -571,10 +572,10 @@ function ka9q-radiod-setup()
             wd_logger 1 "ERROR: 'git clone ${KA9Q_GIT_URL}' > ${rc}"
             exit 1
         fi
+        ka9q_make_needed="yes"
     fi
 
     ### If KA9Q software was loaded or updated, then it will need to be compiled and installed
-    local ka9q_make_needed="no"
     if [[ ${KA9Q_GIT_PULL_ENABLED-yes} == "no" ]]; then
         wd_logger 1 "Configured to not 'git pull' in the ka9q-radio/ directory"
     else
@@ -591,16 +592,72 @@ function ka9q-radiod-setup()
         fi
         if [[ ! -L  ${KA9Q_RADIO_DIR}/Makefile ]]; then
             if [[ -f  ${KA9Q_RADIO_DIR}/Makefile ]]; then
-                wd_logger 1 "ERROR:  ${KA9Q_RADIO_DIR}/Makefile doesn't exist or isn't a symbolic link to  ${KA9Q_RADIO_DIR}/Makefile.linux"
+                wd_logger 1 "WARNING:  ${KA9Q_RADIO_DIR}/Makefile exists but it  isn't a symbolic link to  ${KA9Q_RADIO_DIR}/Makefile.linux"
                 rm -f ${KA9Q_RADIO_DIR}/Makefile
             fi
             wd_logger 1 "Creating a symbolic link from ${KA9Q_RADIO_DIR}/Makefile.linux to ${KA9Q_RADIO_DIR}/Makefile" 
             ln -s ${KA9Q_RADIO_DIR}/Makefile.linux ${KA9Q_RADIO_DIR}/Makefile
+            ka9q_make_needed="yes"
+        fi
+    fi
+ 
+    if [[ ${ka9q_make_needed} == "yes" || ! -x ${KA9Q_RADIO_DIR}/wd-record ]]; then
+        wd_logger 1 "Compiling KA9Q-radio..."
+        cd ${KA9Q_RADIO_DIR}
+        if [[ ! -L Makefile ]]; then
+            ln -s Makefile.linux Makefile
+        fi
+        make clean >& /dev/null
+        make  >& /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            cd - > /dev/null
+            wd_logger 1 "ERROR: failed 'make' of new KA9Q software => ${rc}"
+            return 1
+        fi
+        sudo make install > /dev/null
+        rc=$?
+        cd - > /dev/null
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
+            return 1
         fi
     fi
 
+    ### KA9Q has already been installed, so see if it needs to be started or restarted
+    local ka9q_runs_only_remotely
+    get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
+    if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
+        if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
+            return 0
+        else
+            wd_logger 1 "ERROR: KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present"
+            exit 1
+        fi
+    fi
+
+    ### We are configured to decode from a local RX888.  
+   if ! getent group "radio" > /dev/null 2>&1; then
+        wd_logger 1 "ERROR: the group 'radio' which should have been created by KA9Q-radio doesn't exist"
+        exit 1
+    fi
+    if id -nG "${USER}" | grep -qw "radio" ; then
+        wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
+    else
+        sudo usermod -aG radio ${USER}
+        wd_logger 1 "NOTE: Needed to add user '${USER}' to the group 'radio', so YOU NEED TO logout/login to this server before KA9Q services can run"
+        exit 1
+    fi
+ 
+    if [[ ! -d ${KA9Q_RADIOD_CONF_DIR} ]]; then
+        wd_logger 1 "ERROR: can't find expected KA9Q-radio configuration directory '${KA9Q_RADIOD_CONF_DIR}'"
+        exit 1
+    fi
+ 
+    ### Setup the radiod@conf files before starting or restarting  it
     local ka9q_conf_name
-    get_config_file_variable  ka9q_conf_name "KA9Q_CONF_NAME"
+    get_config_file_variable  "ka9q_conf_name" "KA9Q_CONF_NAME"
     if [[ -n "${ka9q_conf_name}" ]]; then
         wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
     else
@@ -612,16 +669,16 @@ function ka9q-radiod-setup()
 
     local radio_restart_needed="no"
     if [[ ! -f ${ka9q_conf_file_path} ]]; then
-        if [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+        if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+            wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+            exit 1
+        else
             wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
             cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
             radio_restart_needed="yes"
-        else
-            wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
-            exit 1
         fi
     fi
- 
+
     ### By default WD configures radiod to enable RF AGC
     local agc_enabled="${KA9Q_RF_AGC_ENABLED-yes}"
     if [[ ${agc_enabled} == "yes" ]]; then
@@ -643,83 +700,12 @@ function ka9q-radiod-setup()
         fi
     fi
 
-    if [[ ${ka9q_make_needed} == "no" ]]; then
-        ### KA9Q has already been installed, so see if it needs to be started or restarted
-        local ka9q_runs_only_remotely
-        get_config_file_variable ka9q_runs_only_remotely "KA9Q_RUNS_ONLY_REMOTELY"
-        if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
-            if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-                wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
-                return 0
-            fi
-            wd_logger 1 "KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present.  So compile and install all of KA9Q"
-            ka9q_make_needed="yes"
-        else
-            ### There is a local RX888.  Ensure it is properly configured and running
-            if [[ ! $(groups) =~ radio ]]; then
-                sudo adduser --quiet --system --group radio
-                sudo usermod -aG radio ${USER}
-                wd_logger 1 "NOTE: Needed to add user '${USER}' to the group 'radio', so YOU NEED TO logout/login to this server before KA9Q services can run"
-                exit 1
-            fi
-           if [[  ${radio_restart_needed} == "yes" ]] ; then
-                wd_logger 1 "radiod restart is needed due to a change in the radiod.conf file"
-            else
-                if sudo systemctl status radiod@${ka9q_conf_name}  > /dev/null ; then
-                    wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' is running, so KA9Q is setup and running"
-                    return 0
-                fi
-            fi
-            if sudo systemctl restart radiod@${ka9q_conf_name}  > /dev/null ; then
-                wd_logger 2 "KA9Q software wasn't 'git pulled' and the radiod service '${ka9q_conf_name}' was sucessfully started, so KA9Q is setup and running"
-                return 0
-            fi
-            wd_logger 1 "KA9Q software wasn't 'git pulled', but the needed local radiod service '${ka9q_conf_name}' is not running, so compile and install all of KA9Q"
-        fi
-    fi
+     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
+    ka9q_conf_file_bw_check ${ka9q_conf_name}
 
-    sudo apt install -y ${KA9Q_PACKAGE_DEPENDANCIES} >& apt.log
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: failed to install some or all of the libraries needed by ka9q-radio"
-        return 1
-    fi
-    cd ${KA9Q_RADIO_DIR}
-    if [[ ! -L Makefile ]]; then
-        ln -s Makefile.linux Makefile
-    fi
-    wd_logger 1 "Compiling KA9Q-radio..."
-    make clean >& /dev/null
-    make  >& /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        cd - > /dev/null
-        wd_logger 1 "ERROR: failed 'make' of new KA9Q software => ${rc}"
-        return 1
-    fi
-    sudo make install > /dev/null
-    rc=$?
-    cd - > /dev/null
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: failed 'sudo make install' of new KA9Q software => ${rc}"
-        return 1
-    fi
-
-    if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-        wd_logger 1 "ERROR: after making the ka9q0radio directory, can't find ${KA9Q_RADIO_WD_RECORD_CMD}"
-        return 1
-    fi
-    if [[ "${KA9Q_RUNS_ONLY_REMOTELY-no}" == "yes" ]]; then
-        ### WD is not configured to install and configure a radiod daemon to run.  WD is only coing to run wd-record which created wav files from multicast streams coming for radiod on this and/or ptjher RX888 servers
-        wd_logger 1 "WD.conf is configured to indicate that the wspr-pcm.local stream(s) all come from remote servers.  So WD doesn't need to configure or start radiod"
-        return 0
-    fi
-
-    wd_logger 1 "WD is configured to get wav files from a loalRX888, so KA9Q's radiod service needs to run"
-
+    ### Make sure the wisdomf needed for effecient execution of radiod exists
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 1 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
+        wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
     else
         wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
@@ -734,8 +720,8 @@ function ka9q-radiod-setup()
             wd_logger 1 "ERROR: can't find expected '${KA9Q_RADIO_NWSIDOM}'"
             return 3
         fi
+        wd_logger 1 "${KA9Q_RADIO_NWSIDOM} has been created"
     fi
-    wd_logger 1 "${KA9Q_RADIO_NWSIDOM} exists"
 
     if [[ ! -f ${FFTW_WISDOMF} || ${KA9Q_RADIO_NWSIDOM} -nt ${FFTW_WISDOMF} ]]; then
         if [[ -f ${FFTW_WISDOMF} ]]; then
@@ -747,43 +733,40 @@ function ka9q-radiod-setup()
         local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
         sudo chown ${dir_user_group} ${FFTW_WISDOMF}
         wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
+        radio_restart_needed="yes"
     fi
-    wd_logger 1 "${FFTW_WISDOMF} is current"
-
-    wd_logger 1 "Stop any currently running instance of radiod in case there is a newly built version to be started"
-    sudo systemctl stop  "radiod@*" > /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "'sudo systemctl stop radiod@' => ${rc}, so no radiod was running.  Proceed to start it"
-    fi
-    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
-        wd_logger 1 "Can't find a RX888 MkII attached to a USB port"
-        exit 1
-    fi
-    wd_logger 1 "Found a RX888 MkII attached to a USB port"
-
-    ### Make sure the config doesn't have the broken low = 100, high = 5000 values
-    ka9q_conf_file_bw_check ${ka9q_conf_name}
+    wd_logger 2 "${FFTW_WISDOMF} is current"
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
-    wd_logger 1 "Instructing the udev system to give radiod permissions to access the RS888"
+    wd_logger 2 "Instructing the udev system to give radiod permissions to access the RS888"
     sudo udevadm control --reload-rules
     sudo udevadm trigger
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
-    sudo systemctl start  radiod@${ka9q_conf_name} > /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sudo systemctl start radiod@${ka9q_conf_name}' => ${rc}, so failed to start radiod"
+    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
+        wd_logger 1 "KA9Q-radio softwaare is installed and configured, but can't find a RX888 MkII attached to a USB port"
+        exit 1
     fi
-    sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: after an otherwise successful installation of KA9Q its 'radiod' is not active"
-        return 1
+    wd_logger 2 "Found a RX888 MkII attached to a USB port"
+
+    if [[  ${radio_restart_needed} == "no" ]] ; then
+        sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
+            return 0
+        fi
+        wd_logger 1 "The installiation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+    else
+        wd_logger 1 "Istalliation and configuration checks made changes that require radiod to be started/restarted"
     fi
-    wd_logger 1 "after a successful installation of KA9Q its 'radiod' is active"
-    return 0
+    if sudo systemctl restart radiod@${ka9q_conf_name}  > /dev/null ; then
+        wd_logger 2 "KA9Q-radio was started"
+        return 0
+    else
+       wd_logger 2 "KA9Q-radio failed to start"
+       return 1
+    fi
 }
 
 ### Assumes ka9q-radio has been successfully installed and setup to run
@@ -857,7 +840,7 @@ function ka9q-get-configured-radiod() {
     return 0
 }
 
-declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/mnt/ka9q-radio}"
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/run}"             ### The KA9q FT decoder puts its wav files in the /tmp/ftX/... trees and logs spots to /var/log/ftX.log
 declare KA9Q_FT_TMP_ROOT_SIZE="${KA9Q_FT_TMP_ROOT_SIZE-100M}"
 
 declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
@@ -919,15 +902,7 @@ function ka9q-ft-install-decode-ft() {
 
 function ka9q-ft-setup() {
     local ft_type=$1        ## can be 4 or 8
-
-    if [[ ${FT_FORCE_INIT-yes} == "no" ]]; then
-        wd_logger 1 "Checking to see if there is a running ${ft_type}"
-        if sudo systemctl status ${ft_type}-decoded.service >& /dev/null && [[ ${FT_FORCE_INIT-no} == "no" ]] ; then
-            wd_logger 1 "${ft_tpe}-decoded.service is running, so no init needed"
-            return 0
-        fi
-        wd_logger 1 "The ${ft_type}-decoded.service is not running"
-    fi
+    local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}       ### The ftX-decoded will create this directory and put the wav files it needs in it.  We don't need to create it.
 
     wd_logger 2 "Find the ka9q conf file"
     local rc
@@ -950,23 +925,80 @@ function ka9q-ft-setup() {
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
+    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    local mcast_line="MCAST=${dns_name}"
+    local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
 
-    wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
-    if mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
-        wd_logger 2 "Found the needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
+    local needs_update="no"
+
+    if [[ ! -f ${decoded_conf_file_name} ]]; then
+        wd_logger 1 "File '${decoded_conf_file_name}' doesn't exist, so create it"
+        needs_update="yes"
+    elif ! grep -q "${mcast_line}" ${decoded_conf_file_name} ; then
+         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+        needs_update="yes"
+    elif ! grep -q "${directory_line}" ${decoded_conf_file_name} ; then
+         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
+        needs_update="yes"
     else
-        wd_logger 2 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
-        if [[ ! -d ${KA9Q_FT_TMP_ROOT} ]]; then
-            wd_logger 2 "Creating ${KA9Q_FT_TMP_ROOT}"
-            sudo mkdir -p  ${KA9Q_FT_TMP_ROOT}
-            sudo chmod 777  ${KA9Q_FT_TMP_ROOT}
-        fi
-        sudo mount -t tmpfs -o size=${KA9Q_FT_TMP_ROOT_SIZE} tmpfs ${KA9Q_FT_TMP_ROOT}
+         wd_logger 2 "File '${decoded_conf_file_name}' is correct, so no update is needed"
     fi
-    local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}
-    mkdir -p ${ka9q_ft_tmp_dir}
 
-    ### When WD is running KA9Q's FTx decode services it can be configured to decode the wav files with WSJT-x's 'jt9' decoder.
+    if [[ ${needs_update} == "yes" ]]; then
+        echo "${mcast_line}"      >  ${decoded_conf_file_name}
+        echo "${directory_line}"  >> ${decoded_conf_file_name}
+        wd_logger 1 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
+    fi
+
+    local rc
+    getent group "radio" > /dev/null 2>&1
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist"
+        return ${rc}
+    fi
+
+    local group_owner=$( stat -c "%G" ${decoded_conf_file_name} )
+    if [[ ${group_owner} != "radio" ]]; then
+        wd_logger 1 "'${decoded_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
+        sudo chgrp "radio" ${decoded_conf_file_name}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 ""
+            return ${rc}
+        fi
+    fi
+
+    local needs_restart="no"
+    local service_name="${ft_type}-decoded.service"
+
+    if [[ ${needs_update} == "yes" ]]; then
+        wd_logger 1 "We need to restart the '${service_name} because the conf file changed"
+        needs_restart="yes"
+    elif ! sudo systemctl status ${service_name}  >& /dev/null; then
+        wd_logger 1 "${service_name} is not running, so it needs to be started"
+        needs_restart="yes"
+    else
+        wd_logger 2 "${service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
+    fi
+    if [[ ${needs_restart} == "yes" ]]; then
+        local rc
+        sudo systemctl restart ${service_name}  >& /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to restart ${service_name} => ${rc}"
+            return ${rc}
+        fi
+        wd_logger 1 "Restarted service  ${service_name}"
+    fi
+    wd_logger 2 "Done"
+    return 0
+
+: << 'COMMENT_OUT_THIS_CODE'
+
+    ###  10/21/24 - RR -  Even though it is no longer used, I've left this code in a multi-line comment since it required so much work to create
+
+    ### When WD is running KA9Q's FTx decode services it cbe configured to decode the wav files with WSJT-x's 'jt9' decoder.
     ### We create a bash script which can be run by ftX-decoded,
     ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
 
@@ -982,11 +1014,7 @@ function ka9q-ft-setup() {
             ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
     chmod +x ${ka9q_ft_jt9_decoder}
 
-    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
-    echo "MCAST=${dns_name}"        >  ${decoded_conf_file_name}
-    echo "DIRECTORY=${ka9q_ft_tmp_dir}" >> ${decoded_conf_file_name}
-    wd_logger 2 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
-
+    ### Create a serivce file for the psk uploader
     declare SYSTEMD_DIR="/etc/systemd/system"
     local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
     local ft_log_file_name="${ka9q_ft_tmp_dir}/${ft_type}.log"
@@ -1004,7 +1032,7 @@ function ka9q-ft-setup() {
         if [[ ${ft_type} == "ft4" || ${ft_type} == "ft8" ]]; then
             wd_logger 2 "${ft_type} packets are proceessed by the 'decode-ft' command from ka9q-radio, so the Exec:.. line in the template .service files need not be changed"
             if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
-                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type}  spots"
+                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type} spots"
                 ka9q-ft-install-decode-ft
                 rc=$?
                 if [[ ${rc} -ne 0 ]]; then
@@ -1093,6 +1121,7 @@ function ka9q-ft-setup() {
     fi
 
     wd_logger 2 "Setup complete"
+COMMENT_OUT_THIS_CODE
 }
 
 declare KA9Q_PSK_REPORTER_URL="https://github.com/pjsg/ftlib-pskreporter.git"
@@ -1159,19 +1188,19 @@ function wd_get_config_value() {
                 ANTENNA)
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
-                    local receiver_description
-                    if [[ "${receiver_line}" =~ "#" ]]; then
-                        receiver_description="${receiver_line##*#}"
+                    local antenna_description
+                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                        antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
-                        receiver_description="${receiver_description##+([[:space:]])}"    ### trim off leading white space
-                        wd_logger 2 "Found the description '${receiver_description}' in line: ${receiver_line}"
+                        antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
+                        wd_logger 2 "Found the description '${antenna_description}' in line: ${receiver_line}"
                     else
-                        receiver_description="No_antenna_information"
+                        antenna_description="No antenna information"
                         wd_logger 2 "Can't find comments about receiver ${receiver_call}, so use 'No antenna information'"
                     fi
 
-                    eval ${__return_variable_name}="\${receiver_description}"
-                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_description}"
+                    eval ${__return_variable_name}="\${antenna_description}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${antenna_description}"
                     return 0
                     ;;
                 *)
@@ -1200,7 +1229,7 @@ function  ka9q-psk-reporter-setup() {
             wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}' but '${KA9Q_PSK_REPORTER_DIR}' was not created, so the github repo is broken"
             return 1
         fi
-         wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+         wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
     fi
 
     if ! python3 -c "import docopt" 2> /dev/null; then
@@ -1231,7 +1260,7 @@ function  ka9q-psk-reporter-setup() {
     fi
 
     local pskreporter_sender_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender"           ### This template file is part of the package
-    local pskreporter_sender_bin_file_name="/usr/local/bin//pskreporter-sender"
+    local pskreporter_sender_bin_file_name="/usr/local/bin/pskreporter-sender"
     if [[ ! -x ${pskreporter_sender_bin_file_name} ]]; then
         wd_logger 1 "Copying ${pskreporter_sender_file_name} to ${pskreporter_sender_bin_file_name}"
         sudo cp ${pskreporter_sender_file_name} ${pskreporter_sender_bin_file_name}
@@ -1305,16 +1334,15 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
-        
-        local ft_type_tmp_root_dir="${KA9Q_FT_TMP_ROOT}/${ft_type}"
-        mkdir -p ${ft_type_tmp_root_dir}
+
+        local ft_type_tmp_root_dir="/var/log"
 
         local ft_type_log_file_name="${ft_type_tmp_root_dir}/${ft_type}.log"
         if [[ ! -f ${ft_type_log_file_name} ]]; then
-            wd_logger 2 "Creating new ${ft_type_log_file_name}"
-            touch ${ft_type_log_file_name}
+            wd_logger 1 "WARNING: can't find expected file '${ft_type_log_file_name}'"
         fi
-        variable_line="FILE=${ft_type_log_file_name}"
+
+        local variable_line="FILE=${ft_type_log_file_name}"
         if grep -q "${variable_line}" ${psk_conf_file} ; then
             wd_logger 2 "Found the correct ${variable_line}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
         else
@@ -1331,10 +1359,10 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             wd_get_config_value "config_value" ${config_variable}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: ' wd_get_config_value "config_value" ${config_variable}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
                 return ${rc}
             fi
-            variable_line="${config_variable}=${config_value}"
+            local variable_line="${config_variable}=${config_value}"
             if grep -q "${variable_line}" ${psk_conf_file} ; then
                 wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
             else
@@ -1386,6 +1414,10 @@ function ka9q_setup() {
         return ${rc}
     fi
     wd_logger 2 "ka9q-radiod is setup ${PWD}"
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        wd_logger 2 "Ka9q-radio is setup but we are configured to not run radiod remotely.  So don't setup KA9Q-web"
+        return 0
+    fi
 
     ka9q-web-setup
     rc=$?

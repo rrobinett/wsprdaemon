@@ -657,7 +657,7 @@ function wd-overloads()
     fi
 comment_out
 
-    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
+    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
     if [[ ${#log_file_list[@]} -eq 0 ]]; then
         echo "Can't find any 'kiwi_ovs.log or ad_overloads.log' files"
         return
@@ -693,7 +693,7 @@ comment_out
     for kiwi_root_path in ${kiwi_root_path_list[@]} ; do
         #echo "Searching under ${kiwi_root_path}"
         local kiwi_name=${kiwi_root_path##*/}
-        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name ad_overloads.log \) -printf "%p\n" | sort ) )
+        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
 
         local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
         local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
@@ -706,7 +706,7 @@ comment_out
             continue
         fi
 
-        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} 'kiwi_ovs.log' files:\n"
+        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} '*.log' files:\n"
         printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
         printf "This line reports the most OVs:\n${most_ovs_line}\n" 
 
