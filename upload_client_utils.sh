@@ -311,8 +311,12 @@ function upload_to_wsprnet_daemon() {
             fi
 
             if [[ ! -f ${WSPR_LOG_FILE} ]]; then
-                wd_logger 1 " ${WSPR_LOG_FILE} does not exist, so create it with appropriate ownership and permissions"
+                wd_logger 1 "'${WSPR_LOG_FILE}' does not exist, so create it with appropriate ownership and permissions"
                 sudo touch ${WSPR_LOG_FILE}
+                sudo chown $(id -un):$(id -gn) ${WSPR_LOG_FILE}
+            fi
+            if [[ ! -w ${WSPR_LOG_FILE} ]]; then
+                wd_logger 1 "'${WSPR_LOG_FILE}' is not writable by this user, so change ownership"
                 sudo chown $(id -un):$(id -gn) ${WSPR_LOG_FILE}
             fi
             if [[ ! -f ${WSPR_LOGROTATE_FILE} ]]; then
