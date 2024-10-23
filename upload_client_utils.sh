@@ -48,9 +48,11 @@ declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 ### wsprnet.org upload daemon files
 declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d
 mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}
-declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/spots.txt
-declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log
+declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/spots.txt   ### The wsprnet upload daemon creates this file containing all spots ready for upload and it is uploaded by a curl command
+declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log 
 declare UPLOADS_TMP_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/successful_spot_uploads.log
+declare WSPR_LOG_FILE="/var/log/wspr.log"                        ### Phil KA9Q wants a log of all uploaded spots in this Llinux standard location
+declare WSPR_LOGROTATE_FILE="/etc/logrotate.d/wspr.rotate"       ### This file instructs logroate to keep that file from growning too large
 
 ### wsprnet.org 
 declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet.d      
@@ -307,6 +309,18 @@ function upload_to_wsprnet_daemon() {
                 wd_logger 1 "After ${curl_exec_seconds} seconds, curl returned error code => ${ret_code} and logged:\n$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
                 continue
             fi
+
+            if [[ ! -f ${WSPR_LOG_FILE} ]]; then
+                wd_logger 1 " ${WSPR_LOG_FILE} does not exist, so create it with appropriate ownership and permissions"
+                sudo touch ${WSPR_LOG_FILE}
+                sudo chown $(id -un):$(id -gn) ${WSPR_LOG_FILE}
+            fi
+            if [[ ! -f ${WSPR_LOGROTATE_FILE} ]]; then
+                wd_logger 1 " ${WSPR_LOGROTATE_FILE} does not exist, so create it with appropriate ownership and permissions"
+                sudo cp ${WSPRDAEMON_ROOT_DIR}/wspr.rotate ${WSPR_LOGROTATE_FILE}
+            fi
+            cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} >> ${WSPR_LOG_FILE}
+
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
             if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
                 wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots whicg we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
