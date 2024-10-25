@@ -39,7 +39,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-cc4c2a6d41c198cf96c6fa952ca435deaaafaed2}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-1a66a3a15ed86825807292efbcd412b198fae347}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 ###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file
@@ -840,7 +840,7 @@ function ka9q-get-configured-radiod() {
     return 0
 }
 
-declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/mnt/ka9q-radio}"
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/run}"             ### The KA9q FT decoder puts its wav files in the /tmp/ftX/... trees and logs spots to /var/log/ftX.log
 declare KA9Q_FT_TMP_ROOT_SIZE="${KA9Q_FT_TMP_ROOT_SIZE-100M}"
 
 declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
@@ -902,15 +902,7 @@ function ka9q-ft-install-decode-ft() {
 
 function ka9q-ft-setup() {
     local ft_type=$1        ## can be 4 or 8
-
-    if [[ ${FT_FORCE_INIT-yes} == "no" ]]; then
-        wd_logger 1 "Checking to see if there is a running ${ft_type}"
-        if sudo systemctl status ${ft_type}-decoded.service >& /dev/null && [[ ${FT_FORCE_INIT-no} == "no" ]] ; then
-            wd_logger 1 "${ft_tpe}-decoded.service is running, so no init needed"
-            return 0
-        fi
-        wd_logger 1 "The ${ft_type}-decoded.service is not running"
-    fi
+    local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}       ### The ftX-decoded will create this directory and put the wav files it needs in it.  We don't need to create it.
 
     wd_logger 2 "Find the ka9q conf file"
     local rc
@@ -933,23 +925,80 @@ function ka9q-ft-setup() {
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
+    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    local mcast_line="MCAST=${dns_name}"
+    local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
 
-    wd_logger 2 "Check for and, if needed, create the directory in a tmpfs for wav files"
-    if mountpoint -q ${KA9Q_FT_TMP_ROOT} ; then
-        wd_logger 2 "Found the needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
+    local needs_update="no"
+
+    if [[ ! -f ${decoded_conf_file_name} ]]; then
+        wd_logger 1 "File '${decoded_conf_file_name}' doesn't exist, so create it"
+        needs_update="yes"
+    elif ! grep -q "${mcast_line}" ${decoded_conf_file_name} ; then
+         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+        needs_update="yes"
+    elif ! grep -q "${directory_line}" ${decoded_conf_file_name} ; then
+         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
+        needs_update="yes"
     else
-        wd_logger 2 "Missing needed tmpfs file system '${KA9Q_FT_TMP_ROOT}'"
-        if [[ ! -d ${KA9Q_FT_TMP_ROOT} ]]; then
-            wd_logger 2 "Creating ${KA9Q_FT_TMP_ROOT}"
-            sudo mkdir -p  ${KA9Q_FT_TMP_ROOT}
-            sudo chmod 777  ${KA9Q_FT_TMP_ROOT}
-        fi
-        sudo mount -t tmpfs -o size=${KA9Q_FT_TMP_ROOT_SIZE} tmpfs ${KA9Q_FT_TMP_ROOT}
+         wd_logger 2 "File '${decoded_conf_file_name}' is correct, so no update is needed"
     fi
-    local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}
-    mkdir -p ${ka9q_ft_tmp_dir}
 
-    ### When WD is running KA9Q's FTx decode services it can be configured to decode the wav files with WSJT-x's 'jt9' decoder.
+    if [[ ${needs_update} == "yes" ]]; then
+        echo "${mcast_line}"      >  ${decoded_conf_file_name}
+        echo "${directory_line}"  >> ${decoded_conf_file_name}
+        wd_logger 1 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
+    fi
+
+    local rc
+    getent group "radio" > /dev/null 2>&1
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist"
+        return ${rc}
+    fi
+
+    local group_owner=$( stat -c "%G" ${decoded_conf_file_name} )
+    if [[ ${group_owner} != "radio" ]]; then
+        wd_logger 1 "'${decoded_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
+        sudo chgrp "radio" ${decoded_conf_file_name}
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 ""
+            return ${rc}
+        fi
+    fi
+
+    local needs_restart="no"
+    local service_name="${ft_type}-decoded.service"
+
+    if [[ ${needs_update} == "yes" ]]; then
+        wd_logger 1 "We need to restart the '${service_name} because the conf file changed"
+        needs_restart="yes"
+    elif ! sudo systemctl status ${service_name}  >& /dev/null; then
+        wd_logger 1 "${service_name} is not running, so it needs to be started"
+        needs_restart="yes"
+    else
+        wd_logger 2 "${service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
+    fi
+    if [[ ${needs_restart} == "yes" ]]; then
+        local rc
+        sudo systemctl restart ${service_name}  >& /dev/null
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to restart ${service_name} => ${rc}"
+            return ${rc}
+        fi
+        wd_logger 1 "Restarted service  ${service_name}"
+    fi
+    wd_logger 2 "Done"
+    return 0
+
+: << 'COMMENT_OUT_THIS_CODE'
+
+    ###  10/21/24 - RR -  Even though it is no longer used, I've left this code in a multi-line comment since it required so much work to create
+
+    ### When WD is running KA9Q's FTx decode services it cbe configured to decode the wav files with WSJT-x's 'jt9' decoder.
     ### We create a bash script which can be run by ftX-decoded,
     ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
 
@@ -965,11 +1014,7 @@ function ka9q-ft-setup() {
             ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
     chmod +x ${ka9q_ft_jt9_decoder}
 
-    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
-    echo "MCAST=${dns_name}"        >  ${decoded_conf_file_name}
-    echo "DIRECTORY=${ka9q_ft_tmp_dir}" >> ${decoded_conf_file_name}
-    wd_logger 2 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
-
+    ### Create a serivce file for the psk uploader
     declare SYSTEMD_DIR="/etc/systemd/system"
     local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
     local ft_log_file_name="${ka9q_ft_tmp_dir}/${ft_type}.log"
@@ -987,7 +1032,7 @@ function ka9q-ft-setup() {
         if [[ ${ft_type} == "ft4" || ${ft_type} == "ft8" ]]; then
             wd_logger 2 "${ft_type} packets are proceessed by the 'decode-ft' command from ka9q-radio, so the Exec:.. line in the template .service files need not be changed"
             if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
-                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type}  spots"
+                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type} spots"
                 ka9q-ft-install-decode-ft
                 rc=$?
                 if [[ ${rc} -ne 0 ]]; then
@@ -1076,6 +1121,7 @@ function ka9q-ft-setup() {
     fi
 
     wd_logger 2 "Setup complete"
+COMMENT_OUT_THIS_CODE
 }
 
 declare KA9Q_PSK_REPORTER_URL="https://github.com/pjsg/ftlib-pskreporter.git"
@@ -1142,19 +1188,19 @@ function wd_get_config_value() {
                 ANTENNA)
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
-                    local receiver_description
-                    if [[ "${receiver_line}" =~ "#" ]]; then
-                        receiver_description="${receiver_line##*#}"
+                    local antenna_description
+                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                        antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
-                        receiver_description="${receiver_description##+([[:space:]])}"    ### trim off leading white space
-                        wd_logger 2 "Found the description '${receiver_description}' in line: ${receiver_line}"
+                        antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
+                        wd_logger 2 "Found the description '${antenna_description}' in line: ${receiver_line}"
                     else
-                        receiver_description="No_antenna_information"
+                        antenna_description="No antenna information"
                         wd_logger 2 "Can't find comments about receiver ${receiver_call}, so use 'No antenna information'"
                     fi
 
-                    eval ${__return_variable_name}="\${receiver_description}"
-                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_description}"
+                    eval ${__return_variable_name}="\${antenna_description}"
+                    wd_logger 2 "Assigned ${__return_variable_name}=${antenna_description}"
                     return 0
                     ;;
                 *)
@@ -1183,7 +1229,7 @@ function  ka9q-psk-reporter-setup() {
             wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}' but '${KA9Q_PSK_REPORTER_DIR}' was not created, so the github repo is broken"
             return 1
         fi
-         wd_logger 1 "ERROR: Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+         wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
     fi
 
     if ! python3 -c "import docopt" 2> /dev/null; then
@@ -1214,7 +1260,7 @@ function  ka9q-psk-reporter-setup() {
     fi
 
     local pskreporter_sender_file_name="${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender"           ### This template file is part of the package
-    local pskreporter_sender_bin_file_name="/usr/local/bin//pskreporter-sender"
+    local pskreporter_sender_bin_file_name="/usr/local/bin/pskreporter-sender"
     if [[ ! -x ${pskreporter_sender_bin_file_name} ]]; then
         wd_logger 1 "Copying ${pskreporter_sender_file_name} to ${pskreporter_sender_bin_file_name}"
         sudo cp ${pskreporter_sender_file_name} ${pskreporter_sender_bin_file_name}
@@ -1288,16 +1334,15 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
-        
-        local ft_type_tmp_root_dir="${KA9Q_FT_TMP_ROOT}/${ft_type}"
-        mkdir -p ${ft_type_tmp_root_dir}
+
+        local ft_type_tmp_root_dir="/var/log"
 
         local ft_type_log_file_name="${ft_type_tmp_root_dir}/${ft_type}.log"
         if [[ ! -f ${ft_type_log_file_name} ]]; then
-            wd_logger 2 "Creating new ${ft_type_log_file_name}"
-            touch ${ft_type_log_file_name}
+            wd_logger 1 "WARNING: can't find expected file '${ft_type_log_file_name}'"
         fi
-        variable_line="FILE=${ft_type_log_file_name}"
+
+        local variable_line="FILE=${ft_type_log_file_name}"
         if grep -q "${variable_line}" ${psk_conf_file} ; then
             wd_logger 2 "Found the correct ${variable_line}' line in ${psk_conf_file}, so no need to change ${psk_conf_file}"
         else
@@ -1314,10 +1359,10 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             wd_get_config_value "config_value" ${config_variable}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: ' wd_get_config_value "config_value" ${config_variable}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
                 return ${rc}
             fi
-            variable_line="${config_variable}=${config_value}"
+            local variable_line="${config_variable}=${config_value}"
             if grep -q "${variable_line}" ${psk_conf_file} ; then
                 wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
             else

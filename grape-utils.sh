@@ -831,6 +831,11 @@ function grape_init() {
         return ${rc}
     fi
 
+    if ! install_debian_package "libhdf5-dev" ; then
+        wd_logger 1 "ERROR: 'install_debian_package libhdf5-dev' => $?"
+        exit 1
+    fi
+
     local grape_python_package_list=( "digital_rf" "soundfile" )
     local python_package
     for python_package in ${grape_python_package_list[@]}; do
