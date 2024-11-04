@@ -663,7 +663,7 @@ function install_debian_package(){
 
     wd_logger 2 "Check that package ${package_name} is installed"
 
-    if dpkg -l | grep -q ${package_name} ; then
+    if dpkg -l ${package_name} 2> /dev/null | grep -q ${package_name} ; then
         wd_logger 2 "Package ${package_name} has already been installed"
         return 0
     fi
