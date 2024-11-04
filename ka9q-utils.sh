@@ -1131,7 +1131,7 @@ function wd_get_config_value() {
     local __return_variable_name=$1
     local return_variable_type=$2
 
-    wd_logger 2 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
+    wd_logger 3 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
 
     if ! declare -p WSPR_SCHEDULE &> /dev/null ; then
         wd_logger 1 "ERROR: the array WSPR_SCHEDULE has not been declared in the WD.conf file"
@@ -1141,13 +1141,13 @@ function wd_get_config_value() {
     local schedule_index
     for (( schedule_index=0; schedule_index < ${#WSPR_SCHEDULE[@]}; ++schedule_index )); do
         local job_line="${WSPR_SCHEDULE[${schedule_index}]}"
-        wd_logger 2 "Getting the names and counts of radios defined for job ${schedule_index}: ${job_line}"
+        wd_logger 3 "Getting the names and counts of radios defined for job ${schedule_index}: ${job_line}"
         local job_line_list=( ${job_line} )
         local job_field
         for job_field in ${job_line_list[@]:1}; do
             local job_receiver=${job_field%%,*}
             ((receiver_reference_count_list["${job_receiver}"]++))
-            wd_logger 2 "Found receiver ${job_receiver} referenced in job ${job_field} has been referenced ${receiver_reference_count_list["${job_receiver}"]} times"
+            wd_logger 3 "Found receiver ${job_receiver} referenced in job ${job_field} has been referenced ${receiver_reference_count_list["${job_receiver}"]} times"
         done
     done
     local largest_reference_count=0
@@ -1159,7 +1159,7 @@ function wd_get_config_value() {
              most_referenced_receiver="${receiver_name}"
         fi
     done
-    wd_logger 2 "Found the most referenced receiver in the WSPR_SCHEDULE[] is '${most_referenced_receiver}' which was referenced in ${largest_reference_count} jobs"
+    wd_logger 3 "Found the most referenced receiver in the WSPR_SCHEDULE[] is '${most_referenced_receiver}' which was referenced in ${largest_reference_count} jobs"
 
     if ! declare -p RECEIVER_LIST >& /dev/null ; then
         wd_logger 1 "ERROR: the RECEIVER_LIST array is not declared in WD.conf"
@@ -1214,8 +1214,12 @@ function wd_get_config_value() {
     return 1
 }
 
-function  ka9q-psk-reporter-setup() {
+
+declare PSKREPORTER_REQUIRED_COMMIT_SHA=${PSKREPORTER_REQUIRED_COMMIT_SHA-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}           ### Default to 11/3/23 version which fixed a uploads missing problem and added wspr uploading
+
+function ka9q-psk-reporter-setup() {
     local rc
+    local psk_services_restart_needed="yes"
 
     if [[ ! -d ${KA9Q_PSK_REPORTER_DIR} ]]; then
         wd_logger 1 "No '${KA9Q_PSK_REPORTER_DIR}', so need to 'git clone to create it"
@@ -1230,6 +1234,19 @@ function  ka9q-psk-reporter-setup() {
             return 1
         fi
          wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+         psk_services_restart_needed="yes"
+    fi
+
+    pull_commit ${KA9Q_PSK_REPORTER_DIR} ${PSKREPORTER_REQUIRED_COMMIT_SHA}
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "PSKREPORTER software was current, so no restart may be needed"
+    elif [[  ${rc} -eq 1 ]]; then
+        wd_logger 1 "PSKREPORTER software was updated"
+         psk_services_restart_needed="yes"
+    else
+        wd_logger 1 "ERROR: git could not update PSKREPORTER software"
+        exit 1
     fi
 
     if ! python3 -c "import docopt" 2> /dev/null; then
@@ -1316,11 +1333,11 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
     fi
 
     local ft_type 
-    for ft_type in ft4 ft8; do
+    for ft_type in ft4 ft8 wspr; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
         wd_logger 2 "Checking and updating  ${psk_conf_file}"
         if [[ ! -f ${psk_conf_file} ]]; then
-            wd_logger 2 "Creating missing ${psk_conf_file}"
+            wd_logger 1 "Creating missing ${psk_conf_file}"
             touch ${psk_conf_file}
         fi
         local variable_line
@@ -1330,7 +1347,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "MODE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 2 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 1 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1348,7 +1365,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "FILE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 2 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 1 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1381,7 +1398,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             needs_systemctl_restart="yes"
         fi
 
-        if [[ ${needs_systemctl_restart} == "yes" ]]; then
+        if [[ ${needs_systemctl_restart} == "yes" || ${psk_services_restart_needed} == "yes" ]]; then
             wd_logger 2 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
             rc=$?
