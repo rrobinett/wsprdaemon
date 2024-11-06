@@ -171,7 +171,8 @@ function ka9q_conf_file_bw_check() {
 declare KA9Q_METADUMP_LOG_FILE="${KA9Q_METADUMP_LOG_FILE-/dev/shm/wsprdaemon/ka9q_metadump.log}"   ### Put output of metadump here
 declare KA9Q_METADUMP_STATUS_FILE="${KA9Q_STATUS_FILE-/dev/shm/wsprdaemon/ka9q.status}"            ### Parse the fields in that file into seperate lines in this file
 declare KA9Q_MIN_LINES_IN_USEFUL_STATUS=20
-declare KA9Q_GET_STATUS_TRIES=10
+declare KA9Q_GET_STATUS_TRIES=5
+declare KA9Q_METADUMP_WAIT_SECS=3       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
@@ -184,19 +185,45 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 2 "Getting new status information by executing 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}'"
-        timeout ${KA9Q_METADUMP_TIMEOUT_SECS-5}  metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'timeout 5 metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}' => ${rc}"
+        wd_logger 1 "Getting new status information by spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file} > metadump.log &'"
+
+        local metadump_pid
+        metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
+        metadump_pid=$!
+
+        local i
+        for (( i=0; i<${KA9Q_METADUMP_WAIT_SECS}; ++i)); do
+            if ! kill -0 ${metadump_pid} 2> /dev/null; then
+                wait ${metadump_pid}
+                rc=$?
+                wd_logger 2 "'metadump...&' has finished before we timed out"
+                break
+            fi
+            wd_logger 2 "Waiting another second for 'metadump...&' to finish"
+            sleep 1
+        done
+
+        if kill -0 ${metadump_pid} 2> /dev/null; then
+            rc=0
+            wd_logger 2 "'metadump..&' terminated and returned status: rc=${rc}"
         else
+            wd_logger 1 "WARNING: timing out 'metadump..&' by killing its pid ${metadump_pid}"
+            kill  ${metadump_pid} 2>/dev/null
+            rc=124
+        fi
+
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
+        else
+            sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
 
             if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
                 wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
-                wd_logger 1 "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}, so try again"
+                local wd_logger_string=$(echo "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}:\n$(< ${status_log_file})\nSo try metdump again")
+                wd_logger 1 "${wd_logger_string}\nmetadum.log:\n$(< metadump.log)"
             fi
         fi
     done
