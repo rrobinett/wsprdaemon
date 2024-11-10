@@ -185,7 +185,7 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 1 "Getting new status information by spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file} > metadump.log &'"
+        wd_logger 1 "Getting new status information by spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
 
         local metadump_pid
         metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
@@ -196,18 +196,17 @@ function ka9q_get_metadump() {
             if ! kill -0 ${metadump_pid} 2> /dev/null; then
                 wait ${metadump_pid}
                 rc=$?
-                wd_logger 2 "'metadump...&' has finished before we timed out"
+                wd_logger 1 "'metadump...&' has finished before we timed out"
                 break
             fi
             wd_logger 2 "Waiting another second for 'metadump...&' to finish"
             sleep 1
         done
 
-        if kill -0 ${metadump_pid} 2> /dev/null; then
-            rc=0
-            wd_logger 2 "'metadump..&' terminated and returned status: rc=${rc}"
+        if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
+            wd_logger 1 "'metadump..&' finished after ${i} seconds of waiting"
         else
-            wd_logger 1 "WARNING: timing out 'metadump..&' by killing its pid ${metadump_pid}"
+            wd_logger 1 "ERROR: timing out waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}"
             kill  ${metadump_pid} 2>/dev/null
             rc=124
         fi
@@ -217,6 +216,7 @@ function ka9q_get_metadump() {
         else
             sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
+            wd_logger 1 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
 
             if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
                 wd_logger 2 "Got useful status file"
