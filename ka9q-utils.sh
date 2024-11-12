@@ -171,7 +171,8 @@ function ka9q_conf_file_bw_check() {
 declare KA9Q_METADUMP_LOG_FILE="${KA9Q_METADUMP_LOG_FILE-/dev/shm/wsprdaemon/ka9q_metadump.log}"   ### Put output of metadump here
 declare KA9Q_METADUMP_STATUS_FILE="${KA9Q_STATUS_FILE-/dev/shm/wsprdaemon/ka9q.status}"            ### Parse the fields in that file into seperate lines in this file
 declare KA9Q_MIN_LINES_IN_USEFUL_STATUS=20
-declare KA9Q_GET_STATUS_TRIES=10
+declare KA9Q_GET_STATUS_TRIES=5
+declare KA9Q_METADUMP_WAIT_SECS=3       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
@@ -184,19 +185,45 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 2 "Getting new status information by executing 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}'"
-        timeout ${KA9Q_METADUMP_TIMEOUT_SECS-5}  metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  |  sed -e 's/ \[/\n[/g'  > ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'timeout 5 metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}' => ${rc}"
+        wd_logger 1 "Getting new status information by spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
+
+        local metadump_pid
+        metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
+        metadump_pid=$!
+
+        local i
+        for (( i=0; i<${KA9Q_METADUMP_WAIT_SECS}; ++i)); do
+            if ! kill -0 ${metadump_pid} 2> /dev/null; then
+                wait ${metadump_pid}
+                rc=$?
+                wd_logger 1 "'metadump...&' has finished before we timed out"
+                break
+            fi
+            wd_logger 2 "Waiting another second for 'metadump...&' to finish"
+            sleep 1
+        done
+
+        if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
+            wd_logger 1 "'metadump..&' finished after ${i} seconds of waiting"
         else
+            wd_logger 1 "ERROR: timing out waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}"
+            kill  ${metadump_pid} 2>/dev/null
+            rc=124
+        fi
+
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
+        else
+            sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
+            wd_logger 1 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
 
             if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
                 wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
-                wd_logger 1 "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}, so try again"
+                local wd_logger_string=$(echo "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}:\n$(< ${status_log_file})\nSo try metdump again")
+                wd_logger 1 "${wd_logger_string}\nmetadum.log:\n$(< metadump.log)"
             fi
         fi
     done
@@ -1131,7 +1158,7 @@ function wd_get_config_value() {
     local __return_variable_name=$1
     local return_variable_type=$2
 
-    wd_logger 2 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
+    wd_logger 3 "Find the value of the '${return_variable_type}' from the config settings in the WD.conf file"
 
     if ! declare -p WSPR_SCHEDULE &> /dev/null ; then
         wd_logger 1 "ERROR: the array WSPR_SCHEDULE has not been declared in the WD.conf file"
@@ -1141,13 +1168,13 @@ function wd_get_config_value() {
     local schedule_index
     for (( schedule_index=0; schedule_index < ${#WSPR_SCHEDULE[@]}; ++schedule_index )); do
         local job_line="${WSPR_SCHEDULE[${schedule_index}]}"
-        wd_logger 2 "Getting the names and counts of radios defined for job ${schedule_index}: ${job_line}"
+        wd_logger 3 "Getting the names and counts of radios defined for job ${schedule_index}: ${job_line}"
         local job_line_list=( ${job_line} )
         local job_field
         for job_field in ${job_line_list[@]:1}; do
             local job_receiver=${job_field%%,*}
             ((receiver_reference_count_list["${job_receiver}"]++))
-            wd_logger 2 "Found receiver ${job_receiver} referenced in job ${job_field} has been referenced ${receiver_reference_count_list["${job_receiver}"]} times"
+            wd_logger 3 "Found receiver ${job_receiver} referenced in job ${job_field} has been referenced ${receiver_reference_count_list["${job_receiver}"]} times"
         done
     done
     local largest_reference_count=0
@@ -1159,7 +1186,7 @@ function wd_get_config_value() {
              most_referenced_receiver="${receiver_name}"
         fi
     done
-    wd_logger 2 "Found the most referenced receiver in the WSPR_SCHEDULE[] is '${most_referenced_receiver}' which was referenced in ${largest_reference_count} jobs"
+    wd_logger 3 "Found the most referenced receiver in the WSPR_SCHEDULE[] is '${most_referenced_receiver}' which was referenced in ${largest_reference_count} jobs"
 
     if ! declare -p RECEIVER_LIST >& /dev/null ; then
         wd_logger 1 "ERROR: the RECEIVER_LIST array is not declared in WD.conf"
@@ -1214,8 +1241,12 @@ function wd_get_config_value() {
     return 1
 }
 
-function  ka9q-psk-reporter-setup() {
+
+declare PSKREPORTER_REQUIRED_COMMIT_SHA=${PSKREPORTER_REQUIRED_COMMIT_SHA-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}           ### Default to 11/3/23 version which fixed a uploads missing problem and added wspr uploading
+
+function ka9q-psk-reporter-setup() {
     local rc
+    local psk_services_restart_needed="yes"
 
     if [[ ! -d ${KA9Q_PSK_REPORTER_DIR} ]]; then
         wd_logger 1 "No '${KA9Q_PSK_REPORTER_DIR}', so need to 'git clone to create it"
@@ -1230,6 +1261,19 @@ function  ka9q-psk-reporter-setup() {
             return 1
         fi
          wd_logger 1 "Successfully cloned '${KA9Q_PSK_REPORTER_URL}'"
+         psk_services_restart_needed="yes"
+    fi
+
+    pull_commit ${KA9Q_PSK_REPORTER_DIR} ${PSKREPORTER_REQUIRED_COMMIT_SHA}
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "PSKREPORTER software was current, so no restart may be needed"
+    elif [[  ${rc} -eq 1 ]]; then
+        wd_logger 1 "PSKREPORTER software was updated"
+         psk_services_restart_needed="yes"
+    else
+        wd_logger 1 "ERROR: git could not update PSKREPORTER software"
+        exit 1
     fi
 
     if ! python3 -c "import docopt" 2> /dev/null; then
@@ -1316,11 +1360,11 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
     fi
 
     local ft_type 
-    for ft_type in ft4 ft8; do
+    for ft_type in ft4 ft8 wspr; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
         wd_logger 2 "Checking and updating  ${psk_conf_file}"
         if [[ ! -f ${psk_conf_file} ]]; then
-            wd_logger 2 "Creating missing ${psk_conf_file}"
+            wd_logger 1 "Creating missing ${psk_conf_file}"
             touch ${psk_conf_file}
         fi
         local variable_line
@@ -1330,7 +1374,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "MODE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 2 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 1 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1348,7 +1392,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         else
             grep -v "FILE=" ${psk_conf_file} > ${psk_conf_file}.tmp
             echo "${variable_line}" >> ${psk_conf_file}.tmp
-            wd_logger 2 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
+            wd_logger 1 "Added or replaced invalid 'FILE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
@@ -1381,7 +1425,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             needs_systemctl_restart="yes"
         fi
 
-        if [[ ${needs_systemctl_restart} == "yes" ]]; then
+        if [[ ${needs_systemctl_restart} == "yes" || ${psk_services_restart_needed} == "yes" ]]; then
             wd_logger 2 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
             rc=$?
