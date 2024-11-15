@@ -858,6 +858,7 @@ function wd-radiod-action(){
    sudo systemctl ${action} ft4-decoded.service
    sudo systemctl ${action} pskreporter@ft4.service
    sudo systemctl ${action} pskreporter@ft8.service
+   sudo systemctl ${action} pskreporter@wspr.service
 }
 
 alias wd-ra='wd-radiod-action start'  ### show it's status
