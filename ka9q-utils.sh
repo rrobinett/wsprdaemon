@@ -1018,20 +1018,16 @@ function ka9q-ft-setup() {
         fi
         wd_logger 1 "Restarted service  ${service_name}"
     fi
-    wd_logger 2 "Done"
-    return 0
 
-: << 'COMMENT_OUT_THIS_CODE'
-
-    ###  10/21/24 - RR -  Even though it is no longer used, I've left this code in a multi-line comment since it required so much work to create
-
-    ### When WD is running KA9Q's FTx decode services it cbe configured to decode the wav files with WSJT-x's 'jt9' decoder.
-    ### We create a bash script which can be run by ftX-decoded,
+    ### When WD is running KA9Q's FTx decode services it could be configured to decode the wav files with WSJT-x's 'jt9' decoder,
+    ### so create a bash script which can be run by ftX-decoded,
     ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
-
+    ### Since jt9 appears to be more sensitive than the FT4/8 decoder 'decode-ft8' specified by KA9Q-radio, create this script so that as some point in the future we can run jt9.
     ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
-    ### It is awkward to embed an awk script inline like this, but the alternative would be to bury it in WF directory where this 
+    ### It is awkward to embed an awk script inline like this, but the alternative would be to add it to WD homne directory.  When we strt using jt9 we should put it there.
+
     local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
+    sudo chmod 777 ${ka9q_ft_tmp_dir}
     wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
 
     # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
@@ -1041,10 +1037,10 @@ function ka9q-ft-setup() {
             ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
     chmod +x ${ka9q_ft_jt9_decoder}
 
-    ### Create a serivce file for the psk uploader
+    ### Create a service file for the psk uploader
     declare SYSTEMD_DIR="/etc/systemd/system"
     local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
-    local ft_log_file_name="${ka9q_ft_tmp_dir}/${ft_type}.log"
+    local ft_log_file_name="/var/log/${ft_type}.log"
 
     local needs_new_service_file="no"
     if [[ ! -f ${ft_service_file_name} ]]; then
@@ -1077,8 +1073,8 @@ function ka9q-ft-setup() {
         fi
     fi
 
-    ### Ensure that the service file appends the stdout of the jt9 decoder to a ft8.log file in the tmpfs
-    ###    and that the 
+    ### Earlier versons of WD put ft[48].log files in /dev/shm/wsprdaemon/...  Now that WD puts them in /var/log,
+    ### ensure that the service file instructs systemctl to append stdout of the FT4/8 decoder to a /var/log/ft[48].log file
     if [[ ${needs_new_service_file} == "yes" ]]; then
         wd_logger 1 "Creating new service file ${ft_service_file_name}"
         local ka9q_service_template_dir="${KA9Q_RADIO_DIR}/service"
@@ -1111,14 +1107,14 @@ function ka9q-ft-setup() {
         fi
     fi
 
-    declare KA9Q_FT_LOGROTATE_JOB_FILE_NAME="/etc/logrotate.d/${ft_type}.rotate"
-
+    ### CEnsure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
+    local logrotate_job_file_name="/etc/logrotate.d/${ft_type}.rotate"
     local create_job_file="no"
-    if [[ ! -f ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME} ]]; then
-        wd_logger 1 "Found no '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so create it"
+    if [[ ! -f ${logrotate_job_file_name} ]]; then
+        wd_logger 1 "Found no '${logrotate_job_file_name}', so create it"
         create_job_file="yes"
-    elif ! grep -q 'maxsize'  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}; then
-         wd_logger 1 "Job file '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' is missing the 'maxsize 1M' line, so recreate the file"
+    elif ! grep -q 'maxsize'  ${logrotate_job_file_name}; then
+         wd_logger 1 "Job file '${logrotate_job_file_name}' is missing the 'maxsize 1M' line, so recreate the file"
         create_job_file="yes"
     fi
     if [[ ${create_job_file} == "yes" ]]; then
@@ -1132,23 +1128,22 @@ function ka9q-ft-setup() {
         delaycompress
         copytruncate
 } " > /tmp/${ft_type}.rotate
-        sudo cp /tmp/${ft_type}.rotate ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
-        sudo chmod 644  ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
-        wd_logger 1 "Added new logrotate job '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}' to keep '${ft_log_file_name}' clean"
+        sudo cp /tmp/${ft_type}.rotate ${logrotate_job_file_name}
+        sudo chmod 644  ${logrotate_job_file_name}
+        wd_logger 1 "Added new logrotate job '${logrotate_job_file_name}' to keep '${ft_log_file_name}' clean"
     else
-        wd_logger 2 "Found '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so check it"
+        wd_logger 2 "Found '${logrotate_job_file_name}', so check it"
     fi
 
-    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME})
+    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_name})
     if [[ "${target_file}" == "${ft_log_file_name}" ]]; then
-        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}', so no changes are needed"
+        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${logrotate_job_file_name}', so no changes are needed"
     else
-        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}, so fix it'"
-        sudo sed -i "s;\(^/[^ ]*\).*;${ft_log_file_name};" ${KA9Q_FT_LOGROTATE_JOB_FILE_NAME}
+        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${logrotate_job_file_name}, so fix it'"
+        sudo sed -i "s;^/[^{]*;${ft_log_file_name} ;" ${logrotate_job_file_name}
     fi
 
     wd_logger 2 "Setup complete"
-COMMENT_OUT_THIS_CODE
 }
 
 declare KA9Q_PSK_REPORTER_URL="https://github.com/pjsg/ftlib-pskreporter.git"

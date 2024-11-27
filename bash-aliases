@@ -858,6 +858,7 @@ function wd-radiod-action(){
    sudo systemctl ${action} ft4-decoded.service
    sudo systemctl ${action} pskreporter@ft4.service
    sudo systemctl ${action} pskreporter@ft8.service
+   sudo systemctl ${action} pskreporter@wspr.service
 }
 
 alias wd-ra='wd-radiod-action start'  ### show it's status
@@ -1227,4 +1228,9 @@ function wd-ft-logs() {
            tail -f "/mnt/ka9q-radio/ft4/ft4.log"
        fi
    fi
+}
+
+### On MacOS, disable the caps lock key on a Mac keyboard
+function wd-no-capslock() {
+   hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0}]}'
 }
