@@ -353,8 +353,8 @@ function decode_wspr_wav_file() {
     if [[ ${OS_RELEASE} =~ 20.04 ]]; then
         n_arg=""    ## until we get a wsprd.spreading for U 20.04
     fi
-    if [[ ${WSPRD_ONE_PASS-no} == "yes" ]]; then
-        wd_logger 1 "Skipping wsprd second pass because ${WSPRD_ONE_PASS-no} == 'yes'"
+    if [[ ${WSPRD_TWO_PASS-no} == "no" ]]; then
+        wd_logger 2 "Skipping wsprd second pass because WSPRD_TWO_PASS == 'no'"
         >  ${stdout_file}.spreading
     else
         timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
