@@ -1,6 +1,9 @@
 #!/bin/awk
 
-### The calling command line is expected to define two awk variables:  spot_epoch
+### Filter and convert spots repored by the wsprnet.org API into a csv file which will be recorded in the TS and CH databases
+###
+### The calling command line is expected to define the awk variable spot_epoch:
+###     awk -v spot_epoch=${spot_epoch} -f ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.awk <<< "${sorted_lines}" > ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv
 
 BEGIN {
     FS = ","
@@ -25,14 +28,16 @@ BEGIN {
         }
     }
 
-    for ( i = 0; i < 60; i += 2  )  { valid_mode_1_minute[i]  = 1 }
-    for ( i = 0; i < 60; i += 15 )  { valid_mode_2_minute[i]  = 1 }
-    for ( i = 0; i < 60; i += 5 )   { valid_mode_4_minute[i]  = 1 }
-    for ( i = 0; i < 60; i += 30 )  { valid_mode_8_minute[i]  = 1 }
+    for ( i = 0; i < 60; i += 2  )  { valid_mode_1_minute[i]  = 1 }     ## WSPR-2 valid minutes
+    for ( i = 0; i < 60; i += 2  )  { valid_mode_3_minute[i]  = 1 }     ## FST4W-120 valid minutes
+    for ( i = 0; i < 60; i += 5 )   { valid_mode_4_minute[i]  = 1 }     ## FST4W-300 valid minutes
+    for ( i = 0; i < 60; i += 15 )  { valid_mode_2_minute[i]  = 1 }     ## FST4W-900 valid minutes
+    for ( i = 0; i < 60; i += 30 )  { valid_mode_8_minute[i]  = 1 }     ## FST4W-1800 valid minutes
 
     if ( valid_mode_1_minute[spot_minute] == 1 ) { is_valid_mode_1_minute = 1 }
-    if ( valid_mode_2_minute[spot_minute] == 1 ) { is_valid_mode_2_minute = 1 }
+    if ( valid_mode_3_minute[spot_minute] == 1 ) { is_valid_mode_3_minute = 1 }
     if ( valid_mode_4_minute[spot_minute] == 1 ) { is_valid_mode_4_minute = 1 }
+    if ( valid_mode_2_minute[spot_minute] == 1 ) { is_valid_mode_2_minute = 1 }
     if ( valid_mode_8_minute[spot_minute] == 1 ) { is_valid_mode_8_minute = 1 }
 }
 
@@ -40,8 +45,13 @@ $2 == spot_epoch {
     found_valid_mode = 1
     found_valid_minute = 1
     if ( $15 == 1 ) {
-        spot_length = 2   ### Mode 1 spots (2 minute long WSPR and FST4W) can happen only on even minutes
+        spot_length = 2   ### Mode 1 spots (2 minute long WSPR) can happen only on even minutes
         if ( is_valid_mode_1_minute == 0 ) {
+            found_valid_minute = 0
+        } 
+    } else if ( $15 == 3 ) {
+        spot_length = 2   ### Mode 1 spots (2 minute long FST4W-120) can happen only on even minutes
+        if ( is_valid_mode_3_minute == 0 ) {
             found_valid_minute = 0
         } 
    } else if ( $15 == 2 ) {
