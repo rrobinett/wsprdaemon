@@ -34,15 +34,13 @@ function wpsrnet_login() {
         local sessid=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/sessid/s/^.*://p' | sed 's/"//g')
         local session_name=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/session_name/s/^.*://p' | sed 's/"//g')
         if [[ -z "${sessid}" ]] || [[ -z "${session_name}" ]]; then
-            wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name}"
-            rm -f ${WSPRNET_SESSION_ID_FILE}
+            wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name} from '${WSPRNET_SESSION_ID_FILE}':\n$(< ${WSPRNET_SESSION_ID_FILE})"
             ret_code=2
         else
             wd_logger 1 "Login was successful"
         fi
     else
         wd_logger 1 "ERROR: curl login failed => ${ret_code}"
-        rm -f ${WSPRNET_SESSION_ID_FILE}
    fi
     return ${ret_code}
 }
