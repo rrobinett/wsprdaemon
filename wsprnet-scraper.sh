@@ -109,7 +109,7 @@ function wpsrnet_get_spots() {
                 ret_code=2
             else
                 local download_size=$( cat ${html_spot_file} | wc -c)
-                wd_logger 2 "curl downloaded ${download_size} bytes of spot info after ${curl_seconds} seconds"
+                wd_logger 1 "curl downloaded ${download_size} bytes of spot info after ${curl_seconds} seconds"
             fi
         fi
     fi
