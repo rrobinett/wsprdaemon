@@ -38,12 +38,13 @@ function wpsrnet_login() {
             rm -f ${WSPRNET_SESSION_ID_FILE}
             ret_code=2
         else
-            wd_logger 1 "Login was successful"
+            wd_logger 1 "Login was successful.  ${WSPRNET_SESSION_ID_FILE}:\n$(< ${WSPRNET_SESSION_ID_FILE})"
         fi
     else
-        wd_logger 1 "ERROR: curl login failed => ${ret_code}"
+        wd_logger 1 "ERROR: curl login failed => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
         rm -f ${WSPRNET_SESSION_ID_FILE}
    fi
+    wd_logger 1 "Returning ${ret_code}"
     return ${ret_code}
 }
 
@@ -67,7 +68,7 @@ function wpsrnet_get_spots() {
         ret_code=2
     fi
     local session_token="${session_name}=${sessid}"
-    wd_logger 2 "Got wsprnet session_token = ${session_token}"
+    wd_logger 1 "Got wsprnet session_token = '${session_token}'"
  
     if [[ ${WSPRNET_LAST_SPOTNUM} -eq 0 ]]; then
         ### Get the largest Spotnum from the TS DB
@@ -88,10 +89,10 @@ function wpsrnet_get_spots() {
         WSPRNET_LAST_SPOTNUM=${last_spotnum}
         wd_logger 1 "At startup using highest Spotnum ${last_spotnum} from TS, not 0"
     fi
-    wd_logger 2 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
+    wd_logger 1 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
     local start_seconds=${SECONDS}
     local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
-    curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str}  i\
+    curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str} \
                "http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0" > ${html_spot_file}
     local ret_code=$?
     local end_seconds=${SECONDS}
@@ -100,7 +101,7 @@ function wpsrnet_get_spots() {
         wd_logger 1 "ERROR: curl download failed => ${ret_code} after ${curl_seconds} seconds"
     else
         if grep -q "You are not authorized to access this page." ${html_spot_file}; then
-            wd_logger 1 "ERROR: wsprnet.org login failed and reported 'You are not authorized to access this page'"
+            wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'.  So there are no spots reported"
             rm ${WSPRNET_SESSION_ID_FILE}
             ret_code=1
         else
@@ -109,7 +110,7 @@ function wpsrnet_get_spots() {
                 ret_code=2
             else
                 local download_size=$( cat ${html_spot_file} | wc -c)
-                wd_logger 2 "curl downloaded ${download_size} bytes of spot info after ${curl_seconds} seconds"
+                wd_logger 1 "curl downloaded ${download_size} bytes of spot info after ${curl_seconds} seconds"
             fi
         fi
     fi
