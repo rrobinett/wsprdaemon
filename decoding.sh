@@ -160,7 +160,7 @@ function get_wav_levels()
         local full_wav_stats_list=( $(echo "${full_wav_stats}" | awk '{printf "%s\t", $NF }')  )      ### store them in an array
 
         if [[ ${#full_wav_stats_list[@]} -ne ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} ]]; then
-            wd_logger 1 "ERROR:  Got ${#full_wav_stats_list[@]} stats from 'sox -n stats', not the expected ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} fields"
+            wd_logger 1 "ERROR:  Got ${#full_wav_stats_list[@]} stats from 'sox -n stats', not the expected ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} fields:\n${full_wav_stats}"
         else
             local full_wav_min_level=${full_wav_stats_list[1]}
             local full_wav_max_level=${full_wav_stats_list[2]}
@@ -231,7 +231,7 @@ function is_valid_wav_file()
         wd_logger 1 "ERROR: zero length wav file ${wav_filename}"
         return 1
     fi
-    local wav_stats=$(sox ${wav_filename} -n stats 2>&1 )
+    local wav_stats=$(sox ${wav_filename} -n stats 2>&1 )    ### Don't add ' --keep-foreign-metadata"
     local ret_code=$?    
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' => ${ret_code}"
@@ -2368,4 +2368,3 @@ function free_cpu()
     fi
     ### Should neveer get here
 }
-
