@@ -39,7 +39,7 @@ declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is crea
 declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
 declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
 
-declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-1a66a3a15ed86825807292efbcd412b198fae347}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
+declare KA9Q_REQUIRED_COMMIT_SHA="${KA8Q_REQUIRED_COMMIT_SHA-3f4e93292526c3a1a8a037e0531e0457e6ebf9ae}"   ### Defaults to   Thu Aug 1 10:33:45 2024 -0700
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
 ###  function wd_logger() { echo $@; }        ### Only for use when unit testing this file
@@ -172,7 +172,7 @@ declare KA9Q_METADUMP_LOG_FILE="${KA9Q_METADUMP_LOG_FILE-/dev/shm/wsprdaemon/ka9
 declare KA9Q_METADUMP_STATUS_FILE="${KA9Q_STATUS_FILE-/dev/shm/wsprdaemon/ka9q.status}"            ### Parse the fields in that file into seperate lines in this file
 declare KA9Q_MIN_LINES_IN_USEFUL_STATUS=20
 declare KA9Q_GET_STATUS_TRIES=5
-declare KA9Q_METADUMP_WAIT_SECS=3       ### low long to wait for a 'metadump...&' to complete
+declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-5}       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
@@ -185,7 +185,7 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 1 "Getting new status information by spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
+        wd_logger 1 "Spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
 
         local metadump_pid
         metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
