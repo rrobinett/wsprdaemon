@@ -484,99 +484,141 @@ function ka9q_web_daemon() {
 #}
 # test_ka9q-web-setup
 
-### This is implemented as something of a hack which 
-function ka9q-web-setup() {
-    local rc
-    wd_logger 2 "Starting in ${PWD}"
+function install_github_project() {
+    local project_subdir="$1"
+    local project_libs="${2//,/ }"
+    local project_url="$3"
+    local project_sha="$4"
+    local project_build_function="$5"
 
-    if [[ -x ${KA9Q_WEB_CMD} ]]; then
-        wd_logger 2 "Executable file '${KA9Q_WEB_CMD}' exists, so assume all of ka9q-web is installed"
-        return 0
-    fi
- 
-   # 1. install Onion framework dependencies
-    local packages_needed
-    if [[ ${OS_RELEASE} =~ 24.04 ]]; then
-        wd_logger 1 "Installing on Ubuntu 24.04, so need to install libgnutls30t64 instead of trying to install libgnutls28-dev which is not in the repo"
-        packages_needed="libgnutls28-dev libgcrypt20-dev libgnutls30t64 libgcrypt20 cmake"
-    else
-        packages_needed="libgnutls28-dev libgcrypt20-dev cmake"
-    fi
-    if ! install_dpkg_list ${packages_needed}; then
-        wd_logger 1 "ERROR: 'install_debian_package ${packages_needed}' => $?"
+    wd_logger 2 "In subdir '${project_subdir}' install libs '${project_libs}' and then ensure installation of '${project_url}' with commit SHA '${project_sha}'"
+
+    if [[ ${project_libs} != "NONE" ]] && ! install_dpkg_list ${project_libs}; then
+        wd_logger 1 "ERROR: 'install_dpkg_list ${project_libs}' => $?"
         exit 1
     fi
 
-    # 2. build and install Onion framework
-    if [[ ! -d onion ]]; then
-        wd_logger 1 "Git is cloning a new copy of the 'onion' web server"
-        git clone https://github.com/davidmoreno/onion >& ${KA9Q_WEB_SETUP_LOG_FILE}
+    local build_needed="no"
+    if [[ ! -d ${project_subdir} ]]; then
+        wd_logger 1 "Subdir ${project_subdir} does not exist, so 'git clone ${project_url}'"
+        git clone ${project_url} >& git.log
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR:  'git clone https://github.com/davidmoreno/onion ' => ${rc}:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE})"
-            return ${rc}
+            wd_logger 1 "ERROR: 'git clone ${project_url} >& git.log' =>  ${rc}:\n$(< git.log)"
+            exit 1
         fi
-        wd_logger 1 "Git cloned a copy of the 'onion' web service"
+         build_needed="yes"
+        wd_logger 1 "Successful 'git clone ${project_url}'"
     fi
 
-    wd_logger 1 "Starting to compile 'onion' from dir $PWD"
+    local project_real_path=$( realpath  ${project_subdir} )
+    wd_logger 2 "Ensure the correct SHA is installed 'pull_commit ${project_real_path} ${project_sha}'"
+    pull_commit ${project_real_path} ${project_sha}
+    rc=$?
+    if [[ ${rc} -eq 0 ]]; then
+        wd_logger 2 "The ${project_subdir} software was current, so compiling and installing are not needed"
+    elif [[  ${rc} -eq 1 ]]; then
+        build_needed="yes"
+        wd_logger 1 "KA9Q software was updated, so compile and install it"
+    else
+        wd_logger 1 "ERROR: git could not update KA9Q software"
+        exit 1
+    fi
 
-    ( cd onion
+    if [[ ${build_needed} == "yes" ]]; then
+        wd_logger 1 "Project ${project_subdir} was newly cloned and/or a new commit was loaded from github.  So build it"
+         if ! ${project_build_function} ${project_subdir} ; then
+            wd_logger 1 "ERROR:  ${project_build_function} ${project_subdir} => $?"
+            exit 1
+        fi
+    fi
+   return 0
+}
+
+### Not yet used...
+function build_ka9q_radio(){
+    if [[ ! -L  ${KA9Q_RADIO_DIR}/Makefile ]]; then
+            if [[ -f  ${KA9Q_RADIO_DIR}/Makefile ]]; then
+                wd_logger 1 "WARNING:  ${KA9Q_RADIO_DIR}/Makefile exists but it  isn't a symbolic link to  ${KA9Q_RADIO_DIR}/Makefile.linux"
+                rm -f ${KA9Q_RADIO_DIR}/Makefile
+            fi
+            wd_logger 1 "Creating a symbolic link from ${KA9Q_RADIO_DIR}/Makefile.linux to ${KA9Q_RADIO_DIR}/Makefile"
+            ln -s ${KA9Q_RADIO_DIR}/Makefile.linux ${KA9Q_RADIO_DIR}/Makefile
+            ka9q_make_needed="yes"
+        fi
+}
+
+declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
+if [[ ${OS_RELEASE} =~ 24.04 ]]; then
+     ONION_LIBS_NEEDED=="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
+fi
+
+function build_onion() {
+    local project_subdir=$1
+    local project_logfile="${project_subdir}-build.log"
+
+    wd_logger 1 "Building ${project_subdir}"
+    (
+    cd ${project_subdir}
     mkdir -p build
     cd build
     cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
     make
     sudo make install
-    sudo ldconfig)     >& ${KA9Q_WEB_SETUP_LOG_FILE}        ### Trucate log file and write the build stdout and stderr to the log file
+    sudo ldconfig
+    )     >& ${project_logfile}
     rc=$?
-
-     if [[ ${rc} -ne 0 ]]; then
-         wd_logger 1 "ERROR:  compile of 'onion' returned ${rc}:\n$( < ${KA9Q_WEB_SETUP_LOG_FILE} )"
-         return ${rc}
+    if [[ ${rc} -ne 0 ]]; then
+         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$( < ${project_logfile} )"
+         exit 1
      fi
-
-    # 3. build and install ka9q-web
-    wd_logger 1 "Finished compiling 'onion'.  Now get kan9q-web installed"
-
-    if [[ ! -d ka9q-web ]]; then
-        git clone https://github.com/fventuri/ka9q-web >& ${KA9Q_WEB_SETUP_LOG_FILE}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR:  'git clone https://github.com/fventuri/ka9q-web ' => ${rc}:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE})"
-            return ${rc}
-        fi
-        wd_logger 1 "Git cloned a copy of the 'ka9q-web' web service"
-    fi
-
-     wd_logger 1 "Starting to compile 'ka9q-web' from dir $PWD"
-    ( cd ka9q-web
-    make
-    sudo make install) &>>  ${KA9Q_WEB_SETUP_LOG_FILE}  ### Append stdout and stderr to the log file
-     rc=$?
-
-     if [[ ${rc} -ne 0 ]]; then
-         wd_logger 1 "ERROR:  compile of 'ka9q-web' returned ${rc}:\n$(<${KA9Q_WEB_SETUP_LOG_FILE})"
-         return ${rc}
-     fi
-
-    wd_logger 1 "Finished compiling ka9q-web $PWD"
-
-    if [[ ! -x ${KA9Q_WEB_CMD} ]]; then
-        wd_logger 1 "ERROR: failed to create '${KA9Q_WEB_CMD}.  Here are the log lines from the builds:\n$(< ${KA9Q_WEB_SETUP_LOG_FILE}) '"
-        return 1
-    fi
-    if ! ${KA9Q_WEB_CMD} -h |& grep -q "Usage" ; then 
-        wd_logger 1 "ERROR: Created '${KA9Q_WEB_CMD}', but it fails to execute"
-        return 2
-    fi
-
-    local ka9q_radiod_status_dns
-    ka9q-get-status-dns "ka9q_radiod_status_dns"
-    rc=$?
-    if [[ ${rc} -ne 0  || -z "${ka9q_radiod_status_dns-}" ]]; then
-        wd_logger 1 "Warning: failed to find the status DNS  => ${rc} OR {ka9q_radiod_status_dns is blank"
-    fi
+     wd_logger 1 "Done"
     return 0
+}
+
+function build_ka9q_web() {
+    local project_subdir=$1
+    local project_logfile="${project_subdir}_build.log"
+
+    wd_logger 1 "Building ${project_subdir}"
+    (
+    cd  ${project_subdir}
+    make
+    sudo make install
+    ) >&  ${project_logfile}
+    rc=$?
+
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: compile of 'ka9q-web' returned ${rc}:\n$(< ${project_logfile})"
+        exit 1
+    fi
+    wd_logger 1 "Done"
+    return 0
+}
+
+# declare KA9Q_WEB_REPO="https://github.com/fventuri/ka9q-web 24af60d4895f4a0f6be0d6178664762389f91619"      ### 'URL <COMMIT_SHA>' From Franco/Phil  Fri Jul 19 15:46:12 2024 -0700
+# declare KA9Q_WEB_GITHUB_INFO="ka9q-web https://github.com/scottnewell/ka9q-web e8d289952a7a25e7b35521f6791e58e9cd41b299"     ### 'URL <COMMIT_SHA>' From Scott Tue Dec 3 00:49:13 2024 +0000
+declare GITHUB_PROJECTS_LIST=(
+    "onion    ${ONION_LIBS_NEEDED// /,}    https://github.com/davidmoreno/onion    ${ONION_SHA-de8ea938342b36c28024fd8393ebc27b8442a161}    build_onion"
+    "ka9q-web NONE                         https://github.com/scottnewell/ka9q-web ${KA9Q_WEB_SHA-e8d289952a7a25e7b35521f6791e58e9cd41b299} build_ka9q_web"
+)
+
+###
+function ka9q-web-setup() {
+    local rc
+    wd_logger 2 "Starting in ${PWD}"
+
+    local index
+    for (( index=0; index < ${#GITHUB_PROJECTS_LIST[@]}; ++index))  ; do
+        local project_info="${GITHUB_PROJECTS_LIST[index]}"
+        wd_logger 2 "Setup project '${project_info}'"
+        if ! install_github_project ${project_info} ; then
+            wd_logger 1 "ERROR: 'install_dpkg_list ${project_info}' => $?"
+            exit 1
+        fi
+    done
+    wd_logger 2 "Done in ${PWD}"
+   return 0
 }
 
 function ka9q-radiod-setup()
