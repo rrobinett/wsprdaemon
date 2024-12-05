@@ -550,7 +550,7 @@ function build_ka9q_radio(){
 
 declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
 if [[ ${OS_RELEASE} =~ 24.04 ]]; then
-     ONION_LIBS_NEEDED=="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
+    ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
 
 function build_onion() {
