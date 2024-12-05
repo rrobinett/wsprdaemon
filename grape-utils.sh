@@ -149,7 +149,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local wav_file_count=0
         local band_dir
         for band_dir in $( find -L ${receiver_dir} -mindepth 1 -type d ); do
-            if [[ ! "${band_dir}" =~ WWV|CHU ]]; then
+            if [[ ! "${band_dir}" =~ WWV|CHU|K_BEACON ]]; then
                 wd_logger 2 "Band '${band_dir}' is not a WWV or CHU band, so skip to next band"
                 continue
             fi

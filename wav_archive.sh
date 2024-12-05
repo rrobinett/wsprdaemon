@@ -222,8 +222,14 @@ function wd_archive_wavs()
         fi
         wd_logger 2 "There is enough free space to run 'flac'"
 
+        local flac_extra_args=""
+
+        if flac --version | grep -q 1\.4\.3; then
+            flac_extra_args="--keep-foreign-metadata-if-present"     ### Only flac 1.4.3 understands the wav file header metadata added by the 32 float version of wd-record 
+        fi
+
         local rc
-        flac --silent --delete-input-file ${wav_file_path}
+        flac ${flac_extra_args} --delete-input-file ${wav_file_path} >& flac.log
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: ' flac --silent --delete-input-file ${wav_file_path}' => ${rc}, so flush that wav file"

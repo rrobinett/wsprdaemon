@@ -72,9 +72,9 @@ declare WSPR_BAND_LIST=(
 "SUPERDARN_11 11070.0  J1"
 "SUPERDARN_14 14650.0  J1"
 "SUPERDARN_16 16120.0  J1"
-"N6NC_5        5154.3  K1"
-"N6NC_7_3      7039.3  K1"
-"N6NC_7_4      7039.4  K1"
+"K_BEACON_5        5154.3  K1"
+"K_BEACON_7_3      7039.3  K1"
+"K_BEACON_7_4      7039.4  K1"
 )
 
 ### Get the current value of a variable stored in the wsprdaemon.conf file without perturbing any currently defined .conf file variables in the calling function
