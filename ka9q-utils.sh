@@ -490,6 +490,7 @@ function install_github_project() {
     local project_url="$3"
     local project_sha="$4"
     local project_build_function="$5"
+    local project_commit_check="$6"    ## should be yes byut default, but can be defined in WD.conf
 
     wd_logger 2 "In subdir '${project_subdir}' install libs '${project_libs}' and then ensure installation of '${project_url}' with commit SHA '${project_sha}'"
 
@@ -522,18 +523,22 @@ function install_github_project() {
         wd_logger 1 "Successful 'git clone ${project_url}'"
     fi
 
-    local project_real_path=$( realpath  ${project_subdir} )
-    wd_logger 2 "Ensure the correct SHA is installed 'pull_commit ${project_real_path} ${project_sha}'"
-    pull_commit ${project_real_path} ${project_sha}
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
-        wd_logger 2 "The ${project_subdir} software was current, so compiling and installing are not needed"
-    elif [[  ${rc} -eq 1 ]]; then
-        build_needed="yes"
-        wd_logger 1 "KA9Q software was updated, so compile and install it"
+    if [[ ${project_commit_check} != "yes" ]]; then
+        wd_logger 1 "Skipping commit check for ${project_subdir}"
     else
-        wd_logger 1 "ERROR: git could not update KA9Q software"
-        exit 1
+        local project_real_path=$( realpath  ${project_subdir} )
+        wd_logger 2 "Ensure the correct SHA is installed 'pull_commit ${project_real_path} ${project_sha}'"
+        pull_commit ${project_real_path} ${project_sha}
+        rc=$?
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 2 "The ${project_subdir} software was current, so compiling and installing are not needed"
+        elif [[  ${rc} -eq 1 ]]; then
+            build_needed="yes"
+            wd_logger 1 "KA9Q software was updated, so compile and install it"
+        else
+            wd_logger 1 "ERROR: git could not update KA9Q software"
+            exit 1
+        fi
     fi
 
     if [[ ${build_needed} == "yes" ]]; then
@@ -610,8 +615,8 @@ function build_ka9q_web() {
 # declare KA9Q_WEB_REPO="https://github.com/fventuri/ka9q-web 24af60d4895f4a0f6be0d6178664762389f91619"      ### 'URL <COMMIT_SHA>' From Franco/Phil  Fri Jul 19 15:46:12 2024 -0700
 # declare KA9Q_WEB_GITHUB_INFO="ka9q-web https://github.com/scottnewell/ka9q-web e8d289952a7a25e7b35521f6791e58e9cd41b299"     ### 'URL <COMMIT_SHA>' From Scott Tue Dec 3 00:49:13 2024 +0000
 declare GITHUB_PROJECTS_LIST=(
-    "onion    ${ONION_LIBS_NEEDED// /,}    https://github.com/davidmoreno/onion    ${ONION_SHA-de8ea938342b36c28024fd8393ebc27b8442a161}    build_onion"
-    "ka9q-web NONE                         https://github.com/scottnewell/ka9q-web ${KA9Q_WEB_SHA-ab0fb0c60d90e0d53ec6202486dd243d51d01335} build_ka9q_web"
+    "onion    ${ONION_LIBS_NEEDED// /,}    https://github.com/davidmoreno/onion    ${ONION_SHA-de8ea938342b36c28024fd8393ebc27b8442a161}    build_onion      ${ONION_COMMIT_CHECK-yes}"
+    "ka9q-web NONE                         https://github.com/scottnewell/ka9q-web ${KA9Q_WEB_SHA-ab0fb0c60d90e0d53ec6202486dd243d51d01335} build_ka9q_web   ${KA9Q_WEB_COMMIT_CHECK-yes}"
 )
 
 ###
