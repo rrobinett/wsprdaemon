@@ -611,7 +611,7 @@ function build_ka9q_web() {
 # declare KA9Q_WEB_GITHUB_INFO="ka9q-web https://github.com/scottnewell/ka9q-web e8d289952a7a25e7b35521f6791e58e9cd41b299"     ### 'URL <COMMIT_SHA>' From Scott Tue Dec 3 00:49:13 2024 +0000
 declare GITHUB_PROJECTS_LIST=(
     "onion    ${ONION_LIBS_NEEDED// /,}    https://github.com/davidmoreno/onion    ${ONION_SHA-de8ea938342b36c28024fd8393ebc27b8442a161}    build_onion"
-    "ka9q-web NONE                         https://github.com/scottnewell/ka9q-web ${KA9Q_WEB_SHA-e8d289952a7a25e7b35521f6791e58e9cd41b299} build_ka9q_web"
+    "ka9q-web NONE                         https://github.com/scottnewell/ka9q-web ${KA9Q_WEB_SHA-ab0fb0c60d90e0d53ec6202486dd243d51d01335} build_ka9q_web"
 )
 
 ###
