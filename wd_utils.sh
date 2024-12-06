@@ -732,7 +732,7 @@ function kill_daemon() {
             wd_kill ${daemon_pid}
             local ret_code=$?
             if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'wd_kill ${daemon_pid}' => ${rc} == failed to kill an active pid ${daemon_pid}"
+                wd_logger 1 "ERROR: 'wd_kill ${daemon_pid}' => ${ret_code} == failed to kill an active pid ${daemon_pid}"
                 return 4
             else
                 wd_logger 2 "'wd_kill ${daemon_pid}' was successful"
