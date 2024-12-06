@@ -499,6 +499,17 @@ function install_github_project() {
     fi
 
     local build_needed="no"
+    if [[ -d  ${project_subdir} ]]; then
+        local rc
+        ( cd ${project_subdir}; git remote -v | grep -q "${project_url}" )   ### Run in a subshell which returnes the status returned by grep
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            echo wd_logger 1 "The clone of ${project_subdir} doesn't come from the configured ' ${project_url}', so delete the '${project_subdir}' directory so it will be re-cloned"
+            rm -rf ${project_subdir}
+            build_needed="yes"
+        fi
+    fi
+
     if [[ ! -d ${project_subdir} ]]; then
         wd_logger 1 "Subdir ${project_subdir} does not exist, so 'git clone ${project_url}'"
         git clone ${project_url} >& git.log
