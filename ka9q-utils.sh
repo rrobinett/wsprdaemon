@@ -47,12 +47,34 @@ declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 function pull_commit(){
     local git_directory=$1
     local desired_git_sha=$2
+    local git_project=${git_directory##*/}
     local rc
 
     if [[ ! -d ${git_directory} ]]; then
-        wd_logger 1 "ERROR: '${git_directory}' does not exist"
+        wd_logger 1 "ERROR: project '${git_directory}' does not exist"
         return 2
     fi
+
+    if [[ ${desired_git_sha} =~ main|master ]]; then
+        wd_logger 2 "Loading the most recent COMMIT for project ${git_project}"
+        rc=0
+        if [[ "$(cd ${git_directory}; git rev-parse HEAD)" == "$( cd ${git_directory}; git fetch origin && git rev-parse origin/${desired_git_sha})" ]]; then
+            wd_logger 2 "You have asked for and are on the latest commit of the main branch"
+        else
+            wd_logger 1 "You have asked for but are not on the latest commit of the main branch, so update the local copy of the code"
+            ( cd ${git_directory}; git fetch origin && git checkout origin/${desired_git_sha} ) >& git.log
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                wd_logger 1 "ERROR: failed to update to latest commit:\n$(< git.log)"
+            else
+                 wd_logger 1 "Updated to latest commit"
+            fi
+        fi
+        return ${rc}
+    fi
+
+    ### desired COMMIT SHA was specified
+    local git_root="main"  ### Now github's default.  older projects like wsprdaemon have the root 'master'
     local current_commit_sha
     get_current_commit_sha current_commit_sha ${git_directory}
     rc=$?
@@ -65,11 +87,11 @@ function pull_commit(){
         return 0
     fi
     wd_logger 1 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
-    wd_logger 1 "First 'git checkout main'"
-    ( cd ${git_directory}; git checkout main ) >& git.log
+    wd_logger 1 "First 'git checkout ${git_root}'"
+    ( cd ${git_directory}; git checkout ${git_root} ) >& git.log
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'git checkout origin/main' => ${rc}.  git.log:\n $(< git.log)"
+        wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
         return 4
     fi
     wd_logger 1 "Then 'git pull' to be sure the code is current"
@@ -90,7 +112,7 @@ function pull_commit(){
     return 1
 }
 
-
+##############
 function wd_get_config_value() {
     local __return_variable_name=$1
     local return_variable_type=$2
@@ -1328,22 +1350,34 @@ function install_github_project() {
         wd_logger 1 "Successful 'git clone ${project_url}'"
     fi
 
-    if [[ ${project_commit_check} != "yes" ]]; then
-        wd_logger 1 "Skipping commit check for project '${project_subdir}'"
-    else
-        local project_real_path=$( realpath  ${project_subdir} )
-        wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
-        pull_commit ${project_real_path} ${project_sha}
-        rc=$?
-        if [[ ${rc} -eq 0 ]]; then
-            wd_logger 2 "The ${project_subdir} software was current"
-        elif [[  ${rc} -eq 1 ]]; then
-            wd_logger 1 "KA9Q software was updated, so compile and install it"
-        else
-            wd_logger 1 "ERROR: git could not update KA9Q software"
-            exit 1
-        fi
-    fi
+    case ${project_commit_check} in
+        no)
+            wd_logger 1 "Skipping commit check for project '${project_subdir}'"
+            ;;
+        yes|main|master)
+            local pull_commit_target=${project_sha}
+            if [[ ${project_commit_check} != "yes" ]]; then
+                 pull_commit_target=${project_commit_check}
+                 wd_logger 1 "Project ${project_subdir} has been configured to load the latest ${pull_commit_target} branch commit"
+            fi
+            local project_real_path=$( realpath  ${project_subdir} )
+            wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
+            pull_commit ${project_real_path} ${pull_commit_target}
+            rc=$?
+            if [[ ${rc} -eq 0 ]]; then
+                wd_logger 2 "The ${project_subdir} software was current"
+            elif [[  ${rc} -eq 1 ]]; then
+                wd_logger 1 "KA9Q software was updated, so compile and install it"
+            else
+                wd_logger 1 "ERROR: git could not update KA9Q software"
+                exit 1
+            fi
+            ;;
+        *)
+            wd_logger 1 "ERROR: ${project_commit_check}=${project_commit_check}"
+            exit
+            ;;
+    esac
 
     wd_logger 2 "Run ${project_build_function}() in ${project_subdir}"
     if ! ${project_build_function} ${project_subdir} ; then
