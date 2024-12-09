@@ -3,6 +3,26 @@
 
 shopt -s -o nounset
 
+function wd-restart-web() {
+    local ka9q_web_pid_file=~/wsprdaemon/ka9q_web_daemon.pid
+
+    if [[ ! -f  ${ka9q_web_pid_file} ]]; then
+        echo "There is no file ${ka9q_web_pid_file}, so KA9Q-web server is not running"
+        return 0
+    fi
+    local ka9q_web_pid=$(<  ${ka9q_web_pid_file} )
+    echo "Killing the KA9Q-web server with PID = ${ka9q_web_pid}"
+    kill ${ka9q_web_pid}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo "WARNING: found stale pid  ${ka9q_web_pid} in ${ka9q_web_pid_file} since  kill ${ka9q_web_pid} => ${rc}"
+    fi
+    rm ${ka9q_web_pid_file}
+    echo "Starting the  KA9Q-web server (and any other WD services which aren't running)"
+    ~/wsprdaemon/wsprdaemon.sh -A
+}
+
+
 ### On a Wsprsonde gateway, this function simplifies opening a terminal session to the WS through a USB connection
 function wd2ws(){
     if [[ ! -e /dev/ttyACM0 ]]; then
@@ -345,6 +365,7 @@ alias g='git'
 alias gc='git commit'
 alias gd='git diff'
 alias gs='git status'
+alias gl='git log'
 
 ### Get pub file for a copy/past to remote server's .ssh/authorized_keys file
 alias catss='cat ~/.ssh/*pub'
