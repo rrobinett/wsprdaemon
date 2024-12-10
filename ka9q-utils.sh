@@ -639,8 +639,9 @@ function ka9q_web_daemon() {
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
         else
-            wd_logger 1 "Got ka9q_radiod_status_dns='${ka9q_radiod_status_dns}'"
-            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}  >& ka9q_web_cmd.log ##/dev/null
+            local ka9q_ip_port=${KA9Q_WEB_IP_PORT-8081}
+            wd_logger 1 "Got ka9q_radiod_status_dns='${ka9q_radiod_status_dns}',, IP port = ${ka9q_ip_port}"
+            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns} -p ${ka9q_ip_port} >& ka9q_web_cmd.log ##/dev/null
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}'=> ${rc}:\n$(<  ka9q_web_cmd.log)"
