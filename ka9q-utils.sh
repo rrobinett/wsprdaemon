@@ -581,8 +581,26 @@ function ka9q-get-status-dns() {
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "Can't get ka9q-get-conf-file-name, so radiod  must not be running"
-        return 1
+        local status_dns=${KA9Q_WEB_STATUS_DNS-hf.local}
+        wd_logger 1 "Can't get ka9q-get-conf-file-name, so radiod  must not be running. See if radiod is running remotely"
+        ping -c 1 -W 1 ${status_dns} >& /dev/null
+        rc=$?
+        case ${rc} in
+            0)
+                wd_logger 1 "WARNING: unexpected success of response to 'ping -c 1 -W 1 ${status_dns}', but anyway return it as a valid DNS"
+                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
+                 return 0
+                 ;;
+             1)
+                 wd_logger 1 "'ping -c 1 -W 1 ${status_dns}' found the IP of ${status_dns}, so there must be an active radiod service running remotely"
+                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
+                 return 0
+                 ;;
+             *)
+                 wd_logger 1 "'ping -c 1 -W 1 ${status_dns}' didn't find an IP for  ${status_dns}, so there is no radiod service running on the LAN"
+                 return 1
+                 ;;
+         esac
     fi
     if [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
         wd_logger 1 "Cant' find the conf file '${conf_file}' for radiod"
