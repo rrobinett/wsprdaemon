@@ -151,7 +151,6 @@ function wd_get_config_value() {
         wd_logger 1 "ERROR: the RECEIVER_LIST array is not declared in WD.conf"
         return 2
     fi
-    set +x
     local receiver_index
     for (( receiver_index=0; receiver_index < ${#RECEIVER_LIST[@]}; ++receiver_index )); do
         local receiver_line_list=( ${RECEIVER_LIST[${receiver_index}]} )
@@ -195,7 +194,6 @@ function wd_get_config_value() {
             esac
         fi
     done
-    set +x
     wd_logger 1 "ERROR: can't find ${return_variable_type} config information"
     return 1
 }
