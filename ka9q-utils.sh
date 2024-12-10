@@ -581,23 +581,22 @@ function ka9q-get-status-dns() {
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        local status_dns=${KA9Q_WEB_STATUS_DNS-hf.local}
-        wd_logger 1 "Can't get ka9q-get-conf-file-name, so radiod  must not be running. See if radiod is running remotely"
-        ping -c 1 -W 1 ${status_dns} >& /dev/null
-        rc=$?
-        case ${rc} in
+        wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
+        avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
+        local hf_locals_count=$(wc -l < avahi-browse.log)
+        local status_dns=$( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log )
+        case ${hf_locals_count} in
             0)
-                wd_logger 1 "WARNING: unexpected success of response to 'ping -c 1 -W 1 ${status_dns}', but anyway return it as a valid DNS"
-                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
-                 return 0
+                wd_logger 1 "Can't find any hf...local streams"
+                 return 1
                  ;;
              1)
-                 wd_logger 1 "'ping -c 1 -W 1 ${status_dns}' found the IP of ${status_dns}, so there must be an active radiod service running remotely"
+                 wd_logger 1 "Found one radiod outputing ${status_dns}, so there must be an active radiod service running remotely"
                  eval ${___return_status_dns_var_name}=\"${status_dns}\"
                  return 0
                  ;;
              *)
-                 wd_logger 1 "'ping -c 1 -W 1 ${status_dns}' didn't find an IP for  ${status_dns}, so there is no radiod service running on the LAN"
+                 wd_logger 1 "Found ${hf_locals_count} radiod iservers running on this LAN.  Chose which to listen to by adding a line to wsprdaemon.conf:\n$(<  avahi-browse.log)"
                  return 1
                  ;;
          esac
