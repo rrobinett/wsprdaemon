@@ -485,11 +485,36 @@ function find_wsjtx_commands()
     done
     if [[ -z "${WSPRD_CMD-}" ]]; then
         wd_logger 1 "ERROR: couldn't find WSPRD_CMD"
-        exit 1
+        local rc
+        sudo apt install wsjtx -y
+        rc=$?
+        if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "Couldn't install wsprd: 'sudo apt install wsjtx -y' => ${rc}"
+            exit 1
+        fi
+        local dpkg_wsprd_file_name="/usr/bin/wsprd"
+        if [[ ! -x ${dpkg_wsprd_file_name} ]]; then
+            wd_logger 1 "ERROR: after ' sudo apt install wsjtx -y' failed to find ${dpkg_wsprd_file_name}"
+            exit 1
+        fi
+        cp ${dpkg_wsprd_file_name} bin/
+        rc=$?
+         if [[ ${rc} -ne 0 ]]; then
+            wd_logger 1 "Couldn't 'cp ${dpkg_wsprd_file_name} bin/' => ${rc}"
+            exit 1
+        fi
+        WSPRD_CMD=$(realpath bin/wsprd)
+        wd_logger 1 "Installed missing bin/wspsrd from the 'wsjtx' package"
     fi
     if [[ -z "${WSPRD_SPREADING_CMD-}" ]]; then
-        wd_logger 1 "ERROR: couldn't find WSPRD_SPREADING_CMD"
-        exit 1
+        if grep -q "Ubuntu 20" /etc/os-release ; then
+            wd_logger 1 "On Ubuntu 20 installting bin/wsprd as wsprd.spread.ubuntu.20.x86"
+            cp bin/wsprd bin/wsprd.spread.ubuntu.20.x86
+            WSPRD_SPREADING_CMD=$(realpath bin/wsprd.spread.ubuntu.20.x86)
+        else
+            wd_logger 1 "ERROR: couldn't find WSPRD_SPREADING_CMD"
+            exit 1
+        fi
     fi
     if [[ -z "${JT9_CMD-}" ]]; then
         wd_logger 1 "ERROR: couldn't find JT9_CMD"
