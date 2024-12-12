@@ -621,7 +621,39 @@ function ka9q-get-status-dns() {
 
 declare KA9Q_WEB_CMD="/usr/local/sbin/ka9q-web"
 
+
+declare ka9q_service_daemons_list=(
+    "hf1.local 8081 WW0WWV"
+)
+
+### This is called by the watchdog daemon and needs to be extended to support multiple RX888 servers at a site.
 function ka9q_web_daemon() {
+    wd_logger 1 "Starting loop by checking for DNS of status stream"
+
+    local ka9q_radiod_status_dns
+    ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
+    else
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} 8081 ${KA9Q_WEB_TITLE-RX888}"         ### This is hack to get this one service imlmewntationb working
+
+        local i
+        for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
+            local  ka9q_service_daemon_info="${ka9q_service_daemons_list[i]}"
+
+            wd_logger 1 "Running 'ka9q_web_service_daemon '${ka9q_service_daemon_info}'"
+            ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
+            sleep 1
+        done
+    fi
+ }
+
+function ka9q_web_service_daemon() {
+
+    local status_dns_name=$1      ### Where to get the spectrum stream (e.g. hf.local)
+    local server_ip_port=$2       ### On what IP port to offer the UI
+    local server_description="$3" ### The description string at the top of the UI page
 
     while true; do
         if [[ ! -x ${KA9Q_WEB_CMD} ]]; then
@@ -630,22 +662,12 @@ function ka9q_web_daemon() {
             wd_sleep 3
             continue
         fi
-
-       wd_logger 1 "Starting loop by checking for DNS of status stream"
-
-        local ka9q_radiod_status_dns
-        ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
+        local daemon_log_file="ka9q_web_service_${server_ip_port}.log"
+        wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}"
+        ${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}   ### DANGER: nothing limits the size of this log file!!!
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
-        else
-            local ka9q_ip_port=${KA9Q_WEB_IP_PORT-8081}
-            wd_logger 1 "Got ka9q_radiod_status_dns='${ka9q_radiod_status_dns}',, IP port = ${ka9q_ip_port}"
-            ${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns} -p ${ka9q_ip_port} >& ka9q_web_cmd.log ##/dev/null
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${ka9q_radiod_status_dns}'=> ${rc}:\n$(<  ka9q_web_cmd.log)"
-            fi
+            wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${server_description}' => ${rc}:\n$(<  ${daemon_log_file})"
         fi
         wd_logger 1 "Sleeping for 5 seconds before restarting"
         wd_sleep 5
@@ -964,6 +986,7 @@ function ka9q-ft-setup() {
     wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
 
     # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
+    sudo rm -f ${ka9q_ft_jt9_decoder}
     echo -n "${JT9_CMD} -${ft_type#ft} \$3 | awk -v base_freq_ghz=\$2 -v file_name=\${3##*/} "             > ${ka9q_ft_jt9_decoder}
     echo    \''/^[0-9]/ {
             printf "%s %3d %4s %'\''12.1f ~ %s %s %s %s\n", 20substr(file_name,1,2)"/"substr(file_name,3,2)"/"substr(file_name,5,2)" "substr(file_name,8,2)":"substr(file_name,10,2)":"substr(file_name,12,2), $2, $3,
