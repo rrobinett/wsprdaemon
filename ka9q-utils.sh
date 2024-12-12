@@ -958,8 +958,9 @@ function ka9q-ft-setup() {
     ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
     ### It is awkward to embed an awk script inline like this, but the alternative would be to add it to WD homne directory.  When we strt using jt9 we should put it there.
 
-    local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
+    sudo mkdir -p ${ka9q_ft_tmp_dir}
     sudo chmod 777 ${ka9q_ft_tmp_dir}
+    local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
     wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
 
     # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
