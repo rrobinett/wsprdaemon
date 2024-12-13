@@ -62,7 +62,6 @@ shopt -s -o nounset          ### bash stops with error if undeclared variable is
 #declare VERSION=3.2.1                 ### Increment version number so wspr.rocks will report which WD sites have been upgraded
 #declare VERSION=3.2.2                 ### Adds ka9q-web and FT4/8 reporting 
 #declare VERSION=3.2.3                 ### Merge 3.2.0 branch into master, a second time
-VERSION=$(git describe --tags --abbrev=0)-$(git rev-list --count HEAD)
 
 if [[ $USER == "root" ]]; then
     echo "ERROR: This command '$0' should NOT be run as user 'root' or non-root users will experience file permissions problems"
@@ -71,6 +70,8 @@ fi
 
 ### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+declare -r VERSION=$(cd ${WSPRDAEMON_ROOT_DIR}; git describe --tags --abbrev=0)-$(cd ${WSPRDAEMON_ROOT_DIR}; git rev-list --count HEAD)
+
 declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands so they know where to look for *.pid files
 ################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
 declare WSPRDAEMON_TMP_DIR=/dev/shm/wsprdaemon
