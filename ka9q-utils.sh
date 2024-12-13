@@ -1398,7 +1398,7 @@ function install_github_project() {
             local pull_commit_target=${project_sha}
             if [[ ${project_commit_check} != "yes" ]]; then
                  pull_commit_target=${project_commit_check}
-                 wd_logger 1 "Project ${project_subdir} has been configured to load the latest ${pull_commit_target} branch commit"
+                 wd_logger 1 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
             fi
             local project_real_path=$( realpath  ${project_subdir} )
             wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
