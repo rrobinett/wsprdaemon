@@ -149,7 +149,7 @@ function get_wspr_band_name_from_freq_hz() {
     echo ${band_freq_hz}
 }
 
-function get_wspr_band_freq(){
+function get_wspr_band_freq_khz(){
     local target_band=$1
 
     local i
@@ -159,9 +159,24 @@ function get_wspr_band_freq(){
         local this_freq_khz=${band_info[1]}
         if [[ ${target_band} == ${this_band} ]]; then
             echo ${this_freq_khz} 
-            return
+            return 0
         fi
     done
+    wd_logger 1 "ERROR: unknown band ${target_band}"
+    exit 1
+}
+
+function get_wspr_band_freq_hz(){
+    local target_band=$1
+    local freq_khz=$(get_wspr_band_freq_khz ${target_band} )
+    local rc
+
+    freq_khz=$(get_wspr_band_freq_khz ${target_band} )
+    ### Only gets here if target_band is valid
+    local freq_hz
+    freq_hz=$(bc <<< "scale = 0; (${freq_khz} * 1000)/1.0"
+    echo ${freq_hz}
+    return 0
 }
 
 ### Validation requires that we have a list of valid RECEIVERs
@@ -464,7 +479,7 @@ function validate_configured_schedule()
                found_error="yes"
             fi
             local job_band=${job_elements[1]}
-            band_freq=$(get_wspr_band_freq ${job_band})
+            band_freq=$(get_wspr_band_freq_khz ${job_band})
             if [[ -z "${band_freq}" ]]; then
                 wd_logger 1  "ERROR: in WSPR_SCHEDULE line '${sched_line[*]}', job '${job}' specifies band '${job_band}' not found in WSPR_BAND_LIST"
                found_error="yes"
