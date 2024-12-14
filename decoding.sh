@@ -85,7 +85,7 @@ function calculate_nl_adjustments() {
     local return_fft_corrections_variable_name=$2
     local receiver_band=$3
 
-    local wspr_band_freq_khz=$(get_wspr_band_freq ${receiver_band})
+    local wspr_band_freq_khz=$(get_wspr_band_freq_khz ${receiver_band})
     local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
     local wspr_band_freq_hz=$(                     bc <<< "scale = 0; ${wspr_band_freq_khz}*1000.0/1" )
 
@@ -1273,7 +1273,7 @@ function decoding_daemon() {
         return 1
     fi
 
-    local receiver_freq_khz=$( get_wspr_band_freq ${receiver_band} )
+    local receiver_freq_khz=$( get_wspr_band_freq_khz ${receiver_band} )
     local receiver_freq_hz=$( echo "scale = 0; ${receiver_freq_khz}*1000.0/1" | bc )
 
     wd_logger 1 "Given ${receiver_name} ${receiver_band} ${receiver_modes_arg} => receiver_ip_address=${receiver_ip_address}, receiver_call=${receiver_call} receiver_grid=${receiver_grid}, receiver_freq_hz=${receiver_freq_hz}"

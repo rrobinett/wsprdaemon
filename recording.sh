@@ -401,7 +401,7 @@ function spawn_wav_recording_daemon() {
     fi
     local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
     local receiver_ip=${receiver_list_element[1]}
-    local receiver_rx_freq_khz=$(get_wspr_band_freq ${receiver_rx_band})
+    local receiver_rx_freq_khz=$(get_wspr_band_freq_khz ${receiver_rx_band})
     local receiver_rx_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${receiver_rx_freq_khz}/1000.0" ) )
     local my_receiver_password=${receiver_list_element[4]}
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
