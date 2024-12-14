@@ -174,7 +174,7 @@ function get_wspr_band_freq_hz(){
     freq_khz=$(get_wspr_band_freq_khz ${target_band} )
     ### Only gets here if target_band is valid
     local freq_hz
-    freq_hz=$(bc <<< "scale = 0; (${freq_khz} * 1000)/1.0"
+    freq_hz=$(bc <<< "scale = 0; (${freq_khz} * 1000)/1.0")
     echo ${freq_hz}
     return 0
 }
