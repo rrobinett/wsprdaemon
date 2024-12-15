@@ -125,12 +125,28 @@ function list_bands() {
 function get_recording_dir_path(){
     local receiver_name=$1
     local receiver_rx_band=$2
-    local receiver_recording_path="${WSPRDAEMON_TMP_DIR}/recording.d/${receiver_name}/${receiver_rx_band}"
+    local receiver_recording_path
 
+    if [[ ${receiver_name} =~ ^KA9Q ]]; then
+        receiver_recording_path="${WSPRDAEMON_TMP_DIR}/recording.d/${receiver_name}"   ### pcmrecord creates all wav files in the 
+    else
+        receiver_recording_path="${WSPRDAEMON_TMP_DIR}/recording.d/${receiver_name}/${receiver_rx_band}"
+    fi
     echo ${receiver_recording_path}
+    return 0
 }
 
-#############################################################
+function get_decoding_dir_path(){
+    local receiver_name=$1
+    local receiver_rx_band=$2
+    local receiver_recording_path
+
+    receiver_recording_path="${WSPRDAEMON_TMP_DIR}/recording.d/${receiver_name}/${receiver_rx_band}"
+    echo ${receiver_recording_path}
+    return 0
+}
+
+############################################################
 
 ###
 ### Actually sleep until 1 second before the next even two minutes
@@ -297,27 +313,9 @@ function print_new_ov_lines() {
 
 function ka9q_recording_daemon()
 { 
-    local rc
     local receiver_ip=$1                 ### The multicast IP address from wsprdaemon.conf
-    if [[ "${1}" == "localhost:rx888-wsprdaemon" ]]; then
-        receiver_ip="wspr-pcm.local"     ### Supports compatibility with legacy 3.0.1 config files
-    fi
-    local receiver_rx_freq_khz=$2
-    local receiver_rx_freq_hz=$( echo "(${receiver_rx_freq_khz} * 1000)/1" | bc )
+    local rc
 
-    if [[ ${receiver_ip} =~ wspr.*-pcm\.wav ]]; then
-        ### When there is a WSPR pcm stream the wd-record listening freqeuncy is the tuning frequncy spec in WD's table
-         wd_logger 1 "Instructing wd-record to listen on the tuning freq ${receiver_rx_freq_hz} for WSPR and FST4W packets"
-    elif [[ ${receiver_ip} =~ -iq\. ]]; then
-        if [[ ${receiver_ip} =~ wspr ]]; then
-            ### When there is a WSPR pcm stream and a WSPR IQ strean on the same band, radiod increments the SSID of the IQ stream by 1 Hz
-            (( ++receiver_rx_freq_hz ))
-            wd_logger 1 "Adjusting rx frequency of WSPR IQ stream '${receiver_ip}' up by 1 Hz to ${receiver_rx_freq_hz}"
-        else
-            wd_logger 1 "Instructing  wd-record to listen on the tuning freq ${receiver_rx_freq_hz} for non-WSPR IQ recording"
-        fi
-    fi
- 
     if [[ ! -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
         wd_logger 1 "ERROR: KA9Q_RADIO_WD_RECORD_CMD is not installed"
         return 1
@@ -325,9 +323,9 @@ function ka9q_recording_daemon()
 
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
-    wd_logger 1 "Start reecording pcm wav files from ${receiver_ip} on ${receiver_rx_freq_khz} KHz = ${receiver_rx_freq_hz} HZ"
+    wd_logger 1 "Start reecording pcm wav files from ${receiver_ip}"
     local running_jobs_pid_list=()
-    while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
+    while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
           && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
 
          wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
@@ -341,13 +339,13 @@ function ka9q_recording_daemon()
 
      local verbosity_args_list=( -v -v -v -v )
      local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
-     wd_logger 1 "Starting a new ' ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobi in ${PWD}"
-     ${KA9Q_RADIO_WD_RECORD_CMD} ${ka9q_verbosity_args} -s ${receiver_rx_freq_hz} ${receiver_ip} > wd-record.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
+     wd_logger 1 "Starting '${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}' in ${PWD}"
+     ${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip} > wd-record.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
      rc=$?
      if [[ ${rc} -eq 0 ]]; then
-         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' terminated with no error"
+         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}' terminated with no error"
      else
-         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} ${KA9Q_RADIO_WD_RECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' => ${rc}"
+         wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}' => ${rc}"
      fi
      return 1
 }
@@ -393,25 +391,23 @@ declare WAV_RECORDING_DAEMON_LOG_FILE="wav_recording_daemon.log"
 function spawn_wav_recording_daemon() {
     source ${WSPRDAEMON_CONFIG_FILE}   ### Get RECEIVER_LIST[*]
     local receiver_name=$1
-    local receiver_rx_band=$2
+    local receiver_rx_band=$2   ### Ignored now that we use pcmrecord
+
+    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
+    local rc
+
     local receiver_list_index=$(get_receiver_list_index_from_name ${receiver_name})
     if [[ -z "${receiver_list_index}" ]]; then
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
     fi
-    local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
-    local receiver_ip=${receiver_list_element[1]}
-    local receiver_rx_freq_khz=$(get_wspr_band_freq ${receiver_rx_band})
-    local receiver_rx_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${receiver_rx_freq_khz}/1000.0" ) )
-    local my_receiver_password=${receiver_list_element[4]}
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
-    local rc
-
+    
     mkdir -p ${recording_dir}
-    cd ${recording_dir}
 
     local wav_recording_mutex_name="wav_recorder"
+
     wd_logger 2 "Locking mutex ${wav_recording_mutex_name} in ${recording_dir}"
+
     wd_mutex_lock ${wav_recording_mutex_name} ${recording_dir}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
@@ -420,36 +416,48 @@ function spawn_wav_recording_daemon() {
     fi
     wd_logger 2 "Locked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
 
-    if [[ -f ${WAV_RECORDING_DAEMON_PID_FILE}  ]] ; then
-        local recording_pid=$(< ${WAV_RECORDING_DAEMON_PID_FILE} )
+    local pid_file=${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
+    if [[ -f ${pid_file}  ]] ; then
+        local recording_pid=$(< ${pid_file} )
         local ps_output
         if ps_output=$(ps ${recording_pid}); then
-            wd_logger 2 "A recording job with pid ${recording_pid} is already running"
+            cd - > /dev/null
+            wd_logger 2 "A recording job in ${recording_dir} with pid ${recording_pid} is already running"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
                 return 1
             fi
-            wd_logger 2 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir}"
-            cd - > /dev/null
+            wd_logger 2 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir} and returning without spawning new job"
             return 0
         else
+            wd_rm ${pid_file}
             wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
-            wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}
         fi
     fi
 
     ### No wav_recording daemon is running
-    wd_logger 1 "Starting ${receiver_name}"
+    local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
+    local receiver_ip=${receiver_list_element[1]}
     if [[ ${receiver_name} =~ ^KA9Q ]]; then
-        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip} ${receiver_rx_freq_khz} &
+        wd_logger 1 "Spawning a KA9Q pcmrecorder daemon for receiver '${receiver_name}' in directory ${recording_dir}"
+        cd  ${recording_dir}
+        WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  ka9q_recording_daemon ${receiver_ip}  &    ### Once instance of pcmrecord outputs all the bands in the stream to a series of wav files
+        cd - > /dev/null
     else
+        local receiver_rx_freq_khz=$(get_wspr_band_freq_khz ${receiver_rx_band})
+        local receiver_rx_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${receiver_rx_freq_khz}/1000.0" ) )
+        local my_receiver_password=${receiver_list_element[4]}
+
+        wd_logger 1 "Spawning a kiwirecorder daemon for receiver '${receiver_name}' in directory ${recording_dir}"
+        cd  ${recording_dir}
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_name} ${receiver_ip}  ${receiver_rx_freq_khz} ${my_receiver_password} &
+        cd - > /dev/null
     fi
     local rc1=$?
     if [[ ${rc1} -eq 0 ]]; then
-        echo $! > ${WAV_RECORDING_DAEMON_PID_FILE}
+        echo $! >  ${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
         wd_logger 1 "Spawned wav_recorder for receiver '${receiver_name}' which has PID = $!"
     else
         wd_logger 1 "ERROR: Failed to spwan wav_recorder for '${receiver_name}' => ${rc1}"
@@ -461,7 +469,6 @@ function spawn_wav_recording_daemon() {
         wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
     fi
 
-    cd - > /dev/null
     return ${rc1}
 }
 
