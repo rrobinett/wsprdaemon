@@ -340,7 +340,7 @@ function ka9q_recording_daemon()
      local verbosity_args_list=( -v -v -v -v )
      local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
      wd_logger 1 "Starting '${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}' in ${PWD}"
-     ${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip} > wd-record.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
+     ${KA9Q_RADIO_WD_RECORD_CMD} -L 60 --jt ${receiver_ip} > wd-record.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
      rc=$?
      if [[ ${rc} -eq 0 ]]; then
          wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -L 60 ${receiver_ip}' terminated with no error"
