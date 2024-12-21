@@ -394,7 +394,6 @@ function spawn_wav_recording_daemon() {
     local receiver_rx_band=$2   ### Ignored now that we use pcmrecord
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
-    local rc
 
     local receiver_list_index=$(get_receiver_list_index_from_name ${receiver_name})
     if [[ -z "${receiver_list_index}" ]]; then
@@ -408,6 +407,7 @@ function spawn_wav_recording_daemon() {
 
     wd_logger 2 "Locking mutex ${wav_recording_mutex_name} in ${recording_dir}"
 
+    local rc
     wd_mutex_lock ${wav_recording_mutex_name} ${recording_dir}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
@@ -419,9 +419,7 @@ function spawn_wav_recording_daemon() {
     local pid_file=${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
     if [[ -f ${pid_file}  ]] ; then
         local recording_pid=$(< ${pid_file} )
-        local ps_output
-        if ps_output=$(ps ${recording_pid}); then
-            cd - > /dev/null
+        if ps -e -o pid | grep -q ${recording_pid}; then         ## 'ps  ${recording_pid}' would block for many seconds.  This never blocks
             wd_logger 2 "A recording job in ${recording_dir} with pid ${recording_pid} is already running"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$?
@@ -433,7 +431,7 @@ function spawn_wav_recording_daemon() {
             return 0
         else
             wd_rm ${pid_file}
-            wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}'"
+            wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}', so we need to spawn one"
         fi
     fi
 
@@ -450,7 +448,7 @@ function spawn_wav_recording_daemon() {
         local receiver_rx_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${receiver_rx_freq_khz}/1000.0" ) )
         local my_receiver_password=${receiver_list_element[4]}
 
-        wd_logger 1 "Spawning a kiwirecorder daemon for receiver '${receiver_name}' in directory ${recording_dir}"
+        wd_logger 2 "Spawning a kiwirecorder daemon for receiver '${receiver_name}' in directory ${recording_dir}"
         cd  ${recording_dir}
         WD_LOGFILE=${WAV_RECORDING_DAEMON_LOG_FILE}  kiwirecorder_manager_daemon ${receiver_name} ${receiver_ip}  ${receiver_rx_freq_khz} ${my_receiver_password} &
         cd - > /dev/null
@@ -458,7 +456,7 @@ function spawn_wav_recording_daemon() {
     local rc1=$?
     if [[ ${rc1} -eq 0 ]]; then
         echo $! >  ${recording_dir}/${WAV_RECORDING_DAEMON_PID_FILE}
-        wd_logger 1 "Spawned wav_recorder for receiver '${receiver_name}' which has PID = $!"
+        wd_logger 2 "Spawned wav_recorder for receiver '${receiver_name}' which has PID = $!"
     else
         wd_logger 1 "ERROR: Failed to spwan wav_recorder for '${receiver_name}' => ${rc1}"
     fi
@@ -466,7 +464,9 @@ function spawn_wav_recording_daemon() {
     wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
+        wd_logger 1 "ERROR: Spawned wav_recorder for receiver '${receiver_name}' which has PID = $! but failed to unload mutex"
+    else
+        wd_logger 1 "Spawned wav_recorder for receiver '${receiver_name}' which has PID = $! and unlocked mutex"
     fi
 
     return ${rc1}
