@@ -879,7 +879,6 @@ function get_wav_file_list() {
         fi
         if (( checked_files_count < 2 )); then
             wd_logger 1 "After checking found only ${checked_files_count} files, so search again"
-wd_logger 1 "Diags sleeping 600 seconds ..."; sleep 600
             sleep 1
             continue
         fi
@@ -888,11 +887,11 @@ wd_logger 1 "Diags sleeping 600 seconds ..."; sleep 600
         ### See if any previously unreported list of 2/5/15/30 minute files can be found in this list
 
        ### For each 2/5/15/30 minute wav file we have been asked to return, serach for earliest run of one minute wav files which satisfy the needed run of needed minute wav files
-       local epoch_of_oldest_checked_file=$( stat --format=%Y  ${checked_files_list[0]} )
+       local epoch_of_oldest_checked_file=$( epoch_from_filename ${checked_files_list[0]} ) ## instead of stat --format=%Y  ${checked_files_list[0]} )
        local minute_of_oldest_checked_file
        minute_of_oldest_checked_file=${checked_files_list[0]##*/}
        minute_of_oldest_checked_file=${minute_of_oldest_checked_file:11:2}
-       local epoch_of_newest_checked_file=$( stat --format=%Y ${checked_files_list[-1]} )
+       local epoch_of_newest_checked_file=$( epoch_from_filename ${checked_files_list[-1]} )  ## instead of stat --format=%Y ${checked_files_list[-1]} )
        local minute_of_newest_checked_file
        minute_of_newest_checked_file=${checked_files_list[-1]##*/}
        minute_of_newest_checked_file=${minute_of_newest_checked_file:11:2}
@@ -903,74 +902,59 @@ wd_logger 1 "Diags sleeping 600 seconds ..."; sleep 600
 
        local seconds_in_wspr_pkt
        for seconds_in_wspr_pkt in ${target_seconds_list[@]} ; do
-           local minutes_in_wspr_pkt=$(( ${seconds_in_wspr_pkt} / 60 ))
-           local seconds_into_wspr_pkt_of_oldest_checked_file=$(( ${epoch_of_oldest_checked_file} % ${seconds_in_wspr_pkt} ))
-           local index_of_first_file_of_this_pkt=$(( ${seconds_into_wspr_pkt_of_oldest_checked_file} / 60  ))
-           local index_of_last_file_of_this_pkt=$(( index_of_first_file_of_this_pkt + minutes_in_wspr_pkt - 1 ))
+           local minutes_in_wspr_pkt=$(( seconds_in_wspr_pkt / 60 ))
+           local seconds_into_wspr_pkt_of_oldest_checked_file=$(( epoch_of_oldest_checked_file % seconds_in_wspr_pkt ))
+           local pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length=$(( seconds_into_wspr_pkt_of_oldest_checked_file / 60 ))
 
-           wd_logger 1 "checked_files_list[0] contains ${checked_files_list[0]##*/} which is the minute ${index_of_first_file_of_this_pkt} of a ${minutes_in_wspr_pkt} minute long WSPR packet"
-           wd_logger 1 "============== Checking for ${seconds_in_wspr_pkt} second = ${minutes_in_wspr_pkt} minute wspr long packet which will start at checked_files_list[${index_of_first_file_of_this_pkt}] which contains the minute ${minute_of_oldest_checked_file} file ${checked_files_list[${index_of_first_file_of_this_pkt}]##*/} =============="
+           wd_logger 1 "============== Checked_files_list[0] contains ${#checked_files_list[@]} elements, the first of which is the minute ${pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length} of a ${minutes_in_wspr_pkt} minute long WSPR packet"
 
-           ### Find where to start searching for a start file in the checked_files_list[]. 
            ### Check to see if we have returned some of these files in a previous call to this function
            ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
+           local index_of_first_minute_of_wspr_pkt
+           local index_of_last_minute_of_wspr_pkt
            local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r ) ) 
-           local epoch_of_first_unreported_wspr_packet
-           if [[ ${#wav_checked_pkt_sec_list[@]} -eq 0 ]]; then
-               ### There are no previosuly reported wspr packets. So the file at any index could be the start of a new packet
-               epoch_of_first_unreported_wspr_packet=$(( epoch_of_oldest_checked_file + ( 60 *  index_of_first_file_of_this_pkt ) ))
-               wd_logger 1 "Found no previously reported ${minutes_in_wspr_pkt} minute wav files and wspr packet starts at checked_files_list[${index_of_first_file_of_this_pkt}], so epoch_of_first_unreported_wspr_packet=${epoch_of_first_unreported_wspr_packet}"
+           if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
+               ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
+               index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
+               if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+                   wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element is $(( ${#checked_files_list[@]} - 1 ))"
+                   continue
+               fi
+               index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
+               if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+                   wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+                   continue
+               fi
+               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}] and the last element ${index_of_last_minute_of_wspr_pkt} is in checked_files_list[${#checked_files_list[@]}]. So there is a full pkt to return"
            else
-               ### We have previously reported a wspr file for this wspr pkt length
+               ### We have previously reported a wspr file for this wspr pkt length, so we are looking for the end of the wspr pkt which follows that one to be in the checked_files_list[]
                local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
-               epoch_of_first_unreported_wspr_packet=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
-               wd_logger 1 "We previously reported a wspr packet that started at epoch ${epoch_of_previously_reported_wspr_pkt} so we are now looking for a raw wav list file which starts at epoch ${epoch_of_first_unreported_wspr_packet}"
+               local epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
+               local epoch_of_iast_file_of_the_wanted_pkt=$(( epoch_of_pkt_we_want  + seconds_in_wspr_pkt - 60 ))
+               if (( epoch_of_newest_checked_file <  epoch_of_iast_file_of_the_wanted_pkt )); then
+                   wd_logger 1 "We have reeturned the pkt which starts with ${wav_checked_pkt_sec_list[0]##*/} and can't find in checked_files_list[] the file which ends the unreported pkt which follows it.  So skip to search for the next pk tlength"
+                   continue
+               fi
+               index_of_first_minute_of_wspr_pkt=$(( (epoch_of_pkt_we_want - epoch_of_oldest_checked_file) / 60 ))
+               index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))
+               wd_logger 1 "checked_files_list[${#checked_files_list[@]}] contains a complete unreported packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends with checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
            fi
+           wd_logger 1 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
 
-           if [[ ${epoch_of_first_unreported_wspr_packet} -gt ${epoch_of_newest_checked_file} ]]; then
-               ### The start of an unreported wspr pkt can't be found in the current raw file list
-               wd_logger 1 "Next unreported wspr pkt will start at epoch ${epoch_of_first_unreported_wspr_packet}, but epoch_of_newest_checked_file=${epoch_of_newest_checked_file} so start of new wspr pkt isn't in raw file list. So skip to next wspr pkt length"
-               continue
-           fi
-           wd_logger 1 "For ${minutes_in_wspr_pkt} minute long wspr packet, the first checked wav file is at index_of_first_file_of_this_pkt=${index_of_first_file_of_this_pkt}"
-
-           if (( index_of_first_file_of_this_pkt <  index_of_last_file_which_should_be_flushed )); then
+           if (( index_of_first_minute_of_wspr_pkt <  index_of_last_file_which_should_be_flushed )); then
                ### Don't flush this wspr start file from checked wav file list
-               local new_index_of_last_file_which_should_be_flushed=$(( index_of_first_file_of_this_pkt - 1 ))
-               wd_logger 1 "Found start of an unreported wspr pkt is in checked_files_list[${index_of_first_file_of_this_pkt}] which is less than index_of_last_file_which_should_be_flushed=${index_of_last_file_which_should_be_flushed}, so change last flush index to ${new_index_of_last_file_which_should_be_flushed}"
+               local new_index_of_last_file_which_should_be_flushed=$(( index_of_first_minute_of_wspr_pkt - 1 ))
+               wd_logger 1 "Found start of an unreported wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}] which is less than index_of_last_file_which_should_be_flushed=${index_of_last_file_which_should_be_flushed}, so change last flush index to ${new_index_of_last_file_which_should_be_flushed}"
                index_of_last_file_which_should_be_flushed=${new_index_of_last_file_which_should_be_flushed}
            fi
 
-           wd_logger 1 "So the index of the last file in this wspr packet should be in checked_files_list[${index_of_last_file_of_this_pkt}]"
-           if (( index_of_last_file_of_this_pkt > index_of_last_file_in_checked_files_list )); then
-               ### Can't find full length wspr packet, so ensure that first unreported raw wav file is preserved
-               wd_logger 1 "A wspr packet starts in checked_files_list[${index_of_first_file_of_this_pkt}] so its last file should be in checked_files_list[${index_of_last_file_of_this_pkt}], but the last element is checked_files_list[${index_of_last_file_in_checked_files_list}]. So go check for the next pkt length"
-               continue
-           fi
-           wd_logger 1 "A wspr packet starts in checked_files_list[${index_of_first_file_of_this_pkt}] so its last file is in checked_files_list[${index_of_last_file_of_this_pkt}], which is less than or equal to the last element checked_files_list[${index_of_last_file_of_this_pkt}]"
-
-           if false; then
-           ### This is a redundant check which I think can be removed
-set +x
-           local epoch_of_last_file_of_unreported_wspr_pkt=$( epoch_from_filename ${checked_files_list[${index_of_last_file_of_this_pkt}]} )
-           local epoch_expected_of_last_file_of_unreported_wspr_pkt=$(( epoch_of_first_unreported_wspr_packet + seconds_in_wspr_pkt ))
-           if (( epoch_of_last_file_of_unreported_wspr_pkt != epoch_expected_of_last_file_of_unreported_wspr_pkt )); then
-set +x
-               wd_logger 1 "ERROR: epoch_of_last_file_of_unreported_wspr_pkt=${epoch_of_last_file_of_unreported_wspr_pkt} != epoch_expected_of_last_file_of_unreported_wspr_pkt=${epoch_expected_of_last_file_of_unreported_wspr_pkt} "
-wd_logger 1 "End of debug sections.  Sleep 6, then exit";               exit 1
-           fi
-set +x
-           wd_logger 1 "Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at index_of_first_file_of_this_pkt=${index_of_first_file_of_this_pkt} for time ${epoch_of_first_unreported_wspr_packet} and ends at index_of_last_file_of_this_pkt=${index_of_last_file_of_this_pkt}  for epoch ${epoch_of_last_file_of_unreported_wspr_pkt}"
-           fi
-
-           wd_logger 1 "Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_file_of_this_pkt}] and ends at checked_files_list[${index_of_last_file_of_this_pkt}]"
-           local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_file_of_this_pkt}:${minutes_in_wspr_pkt}}" )
+           local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_minute_of_wspr_pkt}:${minutes_in_wspr_pkt}}" )
            local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_checked_files}"
-           wd_logger 1 "The checked_files_list[] file ${checked_files_list[${index_of_first_file_of_this_pkt}]##*/} for minute ${epoch_of_first_unreported_wspr_packet} at index ${index_of_first_file_of_this_pkt} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
+           wd_logger 1 "The checked_files_list[] file ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]##*/} file at index ${index_of_first_minute_of_wspr_pkt} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
            return_list+=( ${add_to_return_list} )
 
-           local wav_list_returned_file=${checked_files_list[${index_of_first_file_of_this_pkt}]}.${seconds_in_wspr_pkt}-secs
-           touch -r ${checked_files_list[${index_of_first_file_of_this_pkt}]} ${wav_list_returned_file}
+           local wav_list_returned_file=${checked_files_list[${index_of_first_minute_of_wspr_pkt}]}.${seconds_in_wspr_pkt}-secs
+           touch -r ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]} ${wav_list_returned_file}
            wd_logger 1 "Created '${wav_list_returned_file##*/}' so we won't again return this list of wav files which make up this wspr pkt"
        done       ### with search for all the different wspr wav file lengths
        if (( ${#return_list[@]} == 0 )); then
@@ -1001,11 +985,10 @@ set +x
     fi
 
     eval ${return_variable_name}=\"${return_list[*]}\"
-wd_logger 1 "Reached diagnostic checkpoint; Sleeping 10 seconds...\n" ; sleep 10
     return 0
 }
 
-function flush_or_archive_raw_wav_files() {
+function flush_or_archive_checked_wav_files() {
     local wav_archive_dir=$1
     local wav_file_list=( ${@:2} )     ### Get list of variable number of arguments from $2 to last argument
     local config_archive_raw_wav_files
@@ -1073,6 +1056,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                       ### then the posting daemon will modify this last field to '1' to signal to the upload_server to forward this spot to wsprnet.org
     local cached_spots_file_name="${spot_file_date}_${spot_file_time}_spots.txt"
 
+wd_logger 1 "Reached diagnostic checkpoint; Sleeping 60 seconds...\n" ; sleep 60
     if grep -q "<...>" ${real_receiver_wspr_spots_file} ; then
         grep -v "<...>" ${real_receiver_wspr_spots_file} > no_unknown_type3_spots.txt
         wd_logger 1 "Posting 'no_unknown_type3_spots.txt' since found '<...>' calls in ${real_receiver_wspr_spots_file}"
@@ -1706,20 +1690,21 @@ function decoding_daemon() {
             local returned_minutes=$(( returned_seconds / 60 ))
             local comma_separated_files=${returned_files#*:}
             local wav_files=${comma_separated_files//,/ }
-            wav_file_list=( ${wav_files} )
-            wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
+            local wav_files_list=( ${wav_files} )
 
-            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
+            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files}'"
 
+            ### This is a block of diagnostic code 
+            local  wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_files_list[@]}") )
             if [[ "${CHECK_WAV_FILES-yes}" == "yes" ]]; then
-                ### This is a block of diagnostic code 
                 local found_all_files="yes"
                 local index
-                for (( index=0; index < ${#wav_file_list[@]}; ++index )); do
-                    local file_to_test=${wav_file_list[${index}]}
-                    wav_time_list+=( ${file_to_test:11:2} )
+                for (( index=0; index < ${#wav_files_list[@]}; ++index )); do
+                    local file_to_test=${wav_files_list[${index}]}
+                    local file_name=${file_to_test##*/}
+                    wav_time_list+=( ${file_name:11:2} )
                     if ! [[ -f ${file_to_test} ]]; then
-                        wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_file_list[${index}] does not exist"
+                        wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_files_list[${index}] does not exist"
                         found_all_files="no"
                     fi
                 done
@@ -1737,12 +1722,12 @@ function decoding_daemon() {
                 wd_logger 1 "We are configured to only record and archive IQ files"
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
-                if [[ ${#wav_file_list[@]} -ne 1 ]]; then
+                if [[ ${#wav_files_list[@]} -ne 1 ]]; then
                     wd_logger 1 "ERROR: IQ recording should return only one 1 minute long file at a time"
                 fi
                 ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
-                local iq_file_name=${wav_file_list[0]/_usb.wav/_iq.wav}
-                mv ${wav_file_list[0]} ${iq_file_name}
+                local iq_file_name=${wav_files_list[0]/_usb.wav/_iq.wav}
+                mv ${wav_files_list[0]} ${iq_file_name}
                 local wav_file_stat_list=( $(sox ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
                 local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
                 local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
@@ -1786,7 +1771,7 @@ function decoding_daemon() {
                 continue
             fi
 
-            local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
+            local wav_file_freq_hz=${wav_files_list[0]##*Z_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
             local sox_rms_noise_level_float="-999.9"
@@ -1795,19 +1780,20 @@ function decoding_daemon() {
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
             ### The 'wsprd' and 'jt9' commands require a single wav file, so use 'sox to create one from the list of one minute wav files
-            local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+            local first_wav_file_name=${wav_files_list[0]##*/}
+            local decoder_input_wav_filename="${first_wav_file_name:2:6}_${first_wav_file_name:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
             local sox_effects="${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}"
 
-            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file using '${sox_effects}' effects"
+            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file ${decoder_input_wav_filepath} using '${sox_effects}' effects"
 
             ### Concatenate the one minute files to create a single 2/5/15/30 minute file
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
+            sox ${wav_files_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sox ${wav_file_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
+                wd_logger 1 "ERROR: 'sox ${wav_files_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
                     local rc1
                     wd_rm ${decoder_input_wav_filepath}
@@ -1819,7 +1805,7 @@ function decoding_daemon() {
                 sleep 1
                 continue
             fi
-            wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
+            wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_files_list[@]} one minute wav files"
 
             ### Get statistics about the newly created wav file
             sox ${decoder_input_wav_filepath} -n stats >& ${SOX_LOG_FILE}
@@ -2240,19 +2226,23 @@ function decoding_daemon() {
             fi
 
             ### Record the 12 signal levels + rms_noise + fft_noise + new_overloads to the ../signal_levels/...csv log files
-            local wspr_decode_capture_date=${wav_file_list[0]/T*}
-                  wspr_decode_capture_date=${wspr_decode_capture_date:2:8}      ## chop off the '20' from the front
-            local wspr_decode_capture_time=${wav_file_list[0]#*T}
-                  wspr_decode_capture_time=${wspr_decode_capture_time/Z*}
+            local wspr_decode_capture_date=${wav_files_list[0]##*/}
+                  wspr_decode_capture_date=${wspr_decode_capture_date%T*}
+                  wspr_decode_capture_date=${wspr_decode_capture_date:2:6}      ## chop off the '20' from the front to get YYMMDD
+            local wspr_decode_capture_time=${wav_files_list[0]##*/}
+                  wspr_decode_capture_time=${wspr_decode_capture_time#*T}
                   wspr_decode_capture_time=${wspr_decode_capture_time:0:4}
-            local wspr_decode_capture_freq_hz=${wav_file_list[0]#*_}
-                  wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
+            local wspr_decode_capture_freq_hz=${wav_files_list[0]##*Z_}
+                  wspr_decode_capture_freq_hz=${wspr_decode_capture_freq_hz%_*}
+                  wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
 
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
+            wd_logger 2 "Execute: queue_noise_signal_levels_to_wsprdaemon  '${wspr_decode_capture_date}' '${wspr_decode_capture_time}' '${sox_signals_rms_fft_and_overload_info}' '${wspr_decode_capture_freq_hz}' '${signal_levels_log_file}' '${wsprdaemon_noise_queue_directory}'"
             queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
             ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
+            wd_logger 2 "Execute: create_enhanced_spots_file_and_queue_to_posting_daemon   'decodes_cache.txt' '${wspr_decode_capture_date}' '${wspr_decode_capture_time}' '${sox_rms_noise_level_float}' '${fft_noise_level_float}' '${new_sdr_overloads_count}' '${receiver_call}' '${receiver_grid}' '${freq_adj_mhz}'"
             create_enhanced_spots_file_and_queue_to_posting_daemon   "decodes_cache.txt" ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
