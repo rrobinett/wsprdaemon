@@ -788,7 +788,7 @@ function get_wav_file_list() {
                 inotifywait -e close ${newest_file_name} >& /dev/null
                 wd_logger 2 "File ${newest_file_name##*/} has been closed"
             done
-            wd_logger 1 "This newest file ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
+            wd_logger 1 "This newest File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
             wait_for_newest_file_to_close="no"
             sleep 1
             continue
@@ -805,7 +805,7 @@ function get_wav_file_list() {
         wd_logger 1 "After removing any open file there are now ${#find_files_list[@]} closed files: ${find_files_list[@]##*/}"
 
         if (( ${#find_files_list[@]} < 2 )); then
-            wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being writte by running 'inotifywait -e close ${newest_file_name##*/}'"
+            wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written by running 'inotifywait -e close ${newest_file_name##*/}'"
             while lsof ${newest_file_name} >& /dev/null; do
                 wd_logger 2 "Running inotifywait -e close ${newest_file_name##*/}"
                 inotifywait -e close ${newest_file_name} >& /dev/null
@@ -912,7 +912,6 @@ function get_wav_file_list() {
        minute_of_newest_checked_file=${checked_files_list[-1]##*/}
        minute_of_newest_checked_file=${minute_of_newest_checked_file:11:2}
        local index_of_last_file_in_checked_files_list=$(( ${#checked_files_list[@]} - 1 ))
-       local index_of_last_file_which_should_be_flushed=${#checked_files_list[@]}         ### By default flush all wav files
 
        wd_logger 1 "Found ${#checked_files_list[@]} contiguous and closed files starting at minute ${minute_of_oldest_checked_file} and ending at minute ${minute_of_newest_checked_file}"
 
@@ -927,46 +926,35 @@ function get_wav_file_list() {
            ### Check to see if we have returned some of these files in a previous call to this function
            ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
            local index_of_first_minute_of_wspr_pkt
-           local index_of_last_minute_of_wspr_pkt
            local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r ) ) 
            if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
                ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
                index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
-               if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
-                   wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element is $(( ${#checked_files_list[@]} - 1 ))"
-                   continue
-               fi
-               index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
-               if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
-                   wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
-                   continue
-               fi
-               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}] and the last element ${index_of_last_minute_of_wspr_pkt} is in checked_files_list[${#checked_files_list[@]}]. So there is a full pkt to return"
            else
                ### We have previously reported a wspr file for this wspr pkt length, so we are looking for the end of the wspr pkt which follows that one to be in the checked_files_list[]
                if (( ${#wav_checked_pkt_sec_list[@]} > 1 )); then
-                   wd_logger 1 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed  older files: ${wav_checked_pkt_sec_list[@]:1}"
+                   wd_logger 1 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed 'pkt has been returned' files: ${wav_checked_pkt_sec_list[@]:1}"
                    wd_rm ${wav_checked_pkt_sec_list[@]:1}
                fi
                local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
                local epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
-               local epoch_of_iast_file_of_the_wanted_pkt=$(( epoch_of_pkt_we_want  + seconds_in_wspr_pkt - 60 ))
-               if (( epoch_of_newest_checked_file <  epoch_of_iast_file_of_the_wanted_pkt )); then
-                   wd_logger 1 "We have reeturned the pkt which starts with ${wav_checked_pkt_sec_list[0]##*/} and can't find in checked_files_list[] the file which ends the unreported pkt which follows it.  So skip to search for the next pkt length"
-                   continue
-               fi
                index_of_first_minute_of_wspr_pkt=$(( (epoch_of_pkt_we_want - epoch_of_oldest_checked_file) / 60 ))
-               index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))
-               wd_logger 1 "checked_files_list[${#checked_files_list[@]}] contains a complete unreported packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends with checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
+           fi
+           if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+               wd_logger 1 "Can't find the first minute of this ${minutes_in_wspr_pkt} minute wspr pkt which would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}] because that is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               continue
+           fi
+           if (( (index_of_first_minute_of_wspr_pkt > 0 ) && (seconds_in_wspr_pkt == ${target_seconds_list[-1]}) )) ; then
+               wd_logger 1 "The longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
+               wd_rm ${checked_files_list[@]:0:${index_of_first_minute_of_wspr_pkt}} 
+           fi
+           local index_of_last_minute_of_wspr_pkt
+           index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
+           if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               continue
            fi
            wd_logger 1 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
-
-           if (( index_of_first_minute_of_wspr_pkt <  index_of_last_file_which_should_be_flushed )); then
-               ### Don't flush this wspr start file from checked wav file list
-               local new_index_of_last_file_which_should_be_flushed=$(( index_of_first_minute_of_wspr_pkt - 1 ))
-               wd_logger 1 "Found start of an unreported wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}] which is less than index_of_last_file_which_should_be_flushed=${index_of_last_file_which_should_be_flushed}, so change last flush index to ${new_index_of_last_file_which_should_be_flushed}"
-               index_of_last_file_which_should_be_flushed=${new_index_of_last_file_which_should_be_flushed}
-           fi
 
            local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_minute_of_wspr_pkt}:${minutes_in_wspr_pkt}}" )
            local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_checked_files}"
@@ -982,30 +970,10 @@ function get_wav_file_list() {
            wait_for_newest_file_to_close="yes"
        fi
    done
-   wd_logger 1 "=========== Finished search for all wspr pkts and returning ${#return_list[@]} lists ============"
 
-    if [[ ${index_of_last_file_which_should_be_flushed} -lt 0 ]] ; then
-        wd_logger 1 "INFO: No raw files should be flushed"
-    else
-        local files_to_flush_count=$(( ${index_of_last_file_which_should_be_flushed} + 1 ))
-        local rc
-        wd_logger 1 "INFO: We can flush or archive raw wav files up to index ${index_of_last_file_which_should_be_flushed}, so flushing raw_wav_file[] entries: '${checked_files_list[@]:0:${files_to_flush_count}}'"
-
-        flush_or_archive_checked_wav_files ${wav_archive_dir} ${checked_files_list[@]:0:${files_to_flush_count}}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Failed flushing or archiving  old checked_files_list[]: 'flush_or_archive_checked_wav_files ${wav_archive_dir} ${checked_files_list[@]:0:${files_to_flush_count}}' => ${rc}"
-        fi
-    fi
-    
-    if [[ ${#return_list[@]} -ne 0 ]]; then
-        wd_logger 1 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'\n"
-    else
-        wd_logger 1 "ERROR: Returning no wav file lists"
-    fi
-
-    eval ${return_variable_name}=\"${return_list[*]}\"
-    return 0
+   wd_logger 1 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'\n"
+   eval ${return_variable_name}=\"${return_list[*]}\"
+   return 0
 }
 
 function flush_or_archive_checked_wav_files() {
