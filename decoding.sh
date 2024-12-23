@@ -940,21 +940,26 @@ function get_wav_file_list() {
                local epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
                index_of_first_minute_of_wspr_pkt=$(( (epoch_of_pkt_we_want - epoch_of_oldest_checked_file) / 60 ))
            fi
+           if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+               wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index.  Sleeping 20 seconds  for diags..."; sleep 20
+               continue
+           fi
            if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
                wd_logger 1 "Can't find the first minute of this ${minutes_in_wspr_pkt} minute wspr pkt which would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}] because that is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
                continue
            fi
-           if (( (index_of_first_minute_of_wspr_pkt > 0 ) && (seconds_in_wspr_pkt == ${target_seconds_list[-1]}) )) ; then
-               wd_logger 1 "The longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
-               wd_rm ${checked_files_list[@]:0:${index_of_first_minute_of_wspr_pkt}} 
-           fi
            local index_of_last_minute_of_wspr_pkt
            index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
            if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
-               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last wanted element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
                continue
            fi
            wd_logger 1 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
+
+           if (( seconds_in_wspr_pkt == ${target_seconds_list[-1]} )) ; then
+               wd_logger 1 "We have found a complete set of minute files for the longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
+               wd_rm ${checked_files_list[@]:0:${index_of_first_minute_of_wspr_pkt}} 
+           fi
 
            local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_minute_of_wspr_pkt}:${minutes_in_wspr_pkt}}" )
            local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_checked_files}"
