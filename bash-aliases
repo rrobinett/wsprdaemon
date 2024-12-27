@@ -5,6 +5,7 @@ shopt -s -o nounset
 
 alias wdtw="test_get_wav_file_list"
 function test_get_wav_file_list() {
+    local sleep_seconds_between_creating_new_wav_files=${1-2}   ### defult to 2 seconds
 
     local testing_receiver_name="KA9Q_0"
     local testing_receiver_band="20"
@@ -42,6 +43,7 @@ function test_get_wav_file_list() {
         cp ${template_wav_file} ${test_wav_file_name}
 
         if (( skip_reads ==  0 )); then
+            echo ""
             read -p "For testing_epoch ${testing_epoch} created ${test_wav_file_name}. Create the next one minute file? => "
             if [[ "${REPLY}" =~ ^[0-9]+$ ]]; then
                 if (( REPLY > 0 )); then
@@ -50,7 +52,10 @@ function test_get_wav_file_list() {
             fi
         else
             (( --skip_reads ))
+            echo -n "Sleeping ${sleep_seconds_between_creating_new_wav_files} seconds.. "
+            sleep ${sleep_seconds_between_creating_new_wav_files}
         fi
+
 
 
     done
