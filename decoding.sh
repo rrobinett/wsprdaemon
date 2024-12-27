@@ -730,12 +730,11 @@ function get_wav_file_list() {
     local -ia target_seconds_list=( "${target_minutes_list[@]/%/*60}" ) ### Multiply the minutes of each mode by 60 to get the number of seconds of wav files needed to decode that mode  NOTE that both ' and " are needed for this to work
     local oldest_file_needed=${target_seconds_list[-1]}
 
-    wd_logger 1 ""
-    wd_logger 1 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
+    wd_logger 2 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
     if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
-        wd_logger 1 "Configured not to spawn_wav_recording_daemon()"
+        wd_logger 2 "Configured not to spawn_wav_recording_daemon()"
     else
         wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
         if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
@@ -967,7 +966,7 @@ function get_wav_file_list() {
                    wd_logger 1 "ERROR:  index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} from ${wav_checked_pkt_sec_list[0]}"
                    wd_logger 1 "ERROR:  started with epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} of ${wav_checked_pkt_sec_list[0]}"
                    wd_logger 1 "ERROR:  so the epoch of the first file we want is ${seconds_after_oldest_check_file} seconds after the epoch_of_previously_reported_wspr_pkt"
-                   wd_logger 1 "ERROR:  so the first file we want will be checked_files_list[${index_of_first_minute_of_wspr_pkt}"
+                   wd_logger 1 "ERROR:  so the first file we want will be checked_files_list[${index_of_first_minute_of_wspr_pkt}]"
                    sleep 10
                    continue
                fi
@@ -1486,7 +1485,7 @@ function decoding_daemon() {
             last_rss_epoch=${EPOCHSECONDS}
         fi
 
-        wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} 
@@ -1502,12 +1501,12 @@ function decoding_daemon() {
             sleep 1
             continue
         fi
-        wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
+        wd_logger 2 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
         if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
             local mode_seconds
             local seconds_files
             local index
-            wd_logger 1 "get_wav_file_list() returned ${#mode_wav_file_list[@]} wspr packet files lists"
+            wd_logger 2 "get_wav_file_list() returned ${#mode_wav_file_list[@]} wspr packet files lists"
             for (( index=0; index < ${#mode_wav_file_list[@]}; ++index )); do
                 local mode_seconds="${mode_wav_file_list[index]%%:*}"
                 local mode_minutes=$(( mode_seconds / 60 ))
@@ -1523,13 +1522,14 @@ function decoding_daemon() {
                 local index2
                 for (( index2=0; index2 < ${#mode_files_list[@]}; ++index2 )) ; do
                     local one_minute_file=${mode_files_list[index2]##*/}
+                    one_minute_file=${one_minute_file%00Z_*}
                     local file_minute=${one_minute_file:11:2}
-                    one_minute_list+=( ${file_minute} )
-                    file_minutes_list+=( ${mode_files_list[index2]##*/} )
+                    one_minutes_list+=( ${file_minute} )
+                    file_minutes_list+=( ${one_minute_file} )
                 done
-                wd_logger 1 "We have been given a list of one minute files which together create a ${mode_minutes} minute wspr pkt of minutes '${one_minute_list[*]}': ${file_minutes_list[*]}"
+                wd_logger 1 "We have been given a list of one minute files which together create a ${mode_minutes} minute wspr pkt of minutes '${one_minutes_list[*]}': ${file_minutes_list[*]}"
             done
-            wd_logger 1 "Report of retuned lists is complete. Go back and call get_wav_file_list() to get new lists"
+            wd_logger 2 "Report of retuned lists is complete. Go back and call get_wav_file_list() to get new lists"
             continue
         fi
  
