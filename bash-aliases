@@ -3,6 +3,60 @@
 
 shopt -s -o nounset
 
+alias wdtw="test_get_wav_file_list"
+function test_get_wav_file_list() {
+
+    local testing_receiver_name="KA9Q_0"
+    local testing_receiver_band="20"
+    #local testing_frequency=$( get_wspr_band_freq_hz ${testing_receiver_band} )
+    local testing_frequency="14095600"
+    local testing_modes="W2:F2:W5"
+    #local testing_wav_recording_dir=$(get_recording_dir_path ${testing_receiver_name} ${testing_receiver_band})
+    local testing_wav_recording_dir=" /dev/shm/wsprdaemon/recording.d/KA9Q_0"
+    local template_wav_file="${testing_wav_recording_dir%/*}/one-minute.wav"
+
+    if [[ ! -f ${template_wav_file} ]]; then
+        echo "WARNING: Can't find '${template_wav_file}', so 'cp  ~/one-minute.wav ${template_wav_file}'"
+        cp ~/one-minute.wav ${template_wav_file}
+    fi
+
+    local skip_reads=0
+
+    while true; do
+        local testing__epoch
+
+        local test_wav_file_name_list=( $( find ${testing_wav_recording_dir} -type f -name "20*Z_${testing_frequency}_usb.wav"  | sort ) )
+        if (( ${#test_wav_file_name_list[@]} == 0 )); then
+            local current_epoch=$(date +%s)
+            local first_wav_file_epoch=$(( current_epoch - (current_epoch % 3600) ))
+            testing_epoch=${first_wav_file_epoch}
+        else
+            local most_recent_file_name=${test_wav_file_name_list[-1]##*/}
+            local most_recent_file_date_format="${most_recent_file_name:0:8} ${most_recent_file_name:9:2}:${most_recent_file_name:11:2}:${most_recent_file_name:13:2}"
+            local most_recent_epoch=$(date -d "${most_recent_file_date_format}" +%s)
+            testing_epoch=$(( most_recent_epoch + 60 ))
+        fi
+
+        local test_wav_file_time=$(date -d @${testing_epoch} "+%Y%m%dT%H%M%S")
+        local test_wav_file_name="${testing_wav_recording_dir}/${test_wav_file_time}Z_${testing_frequency}_usb.wav"
+        cp ${template_wav_file} ${test_wav_file_name}
+
+        if (( skip_reads ==  0 )); then
+            read -p "For testing_epoch ${testing_epoch} created ${test_wav_file_name}. Create the next one minute file? => "
+            if [[ "${REPLY}" =~ ^[0-9]+$ ]]; then
+                if (( REPLY > 0 )); then
+                    skip_reads=$(( ${REPLY} - 1 ))
+                fi
+            fi
+        else
+            (( --skip_reads ))
+        fi
+
+
+    done
+}
+
+
 function wd-restart-web() {
     local ka9q_web_pid_file=~/wsprdaemon/ka9q_web_daemon.pid
 
