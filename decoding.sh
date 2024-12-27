@@ -587,9 +587,15 @@ function get_file_start_time_info()
 function epoch_from_filename() 
 {
     local file_name=${1##*/}  ## strip off the path leaving only the filename 
+    local rc
 
     local file_date_format="${file_name:0:8} ${file_name:9:2}:${file_name:11:2}:${file_name:13:2}"
     local file_epoch=$(date -d "${file_date_format}" +%s)
+    rc=$?
+    if (( ${rc} != 0 )); then
+        wd_1ogger 1 "ERROR: 'date -d "${file_date_format}" +%s' => ${rc}"
+        return ${rc}
+    fi
 
     echo "${file_epoch}"
     return 0
@@ -670,7 +676,7 @@ function cleanup_wav_file_list()
     
         local epoch_of_test_file=$( epoch_from_filename ${test_file_name} )
         wd_logger 2 "test_file_name=${test_file_name} = ${epoch_of_test_file} = minute $(( ( ${epoch_of_test_file} % 3600 ) / 60 ))"
-
+: <<'COMMENTED_OUT_LINES'
        ### see if it is one minute (60 second) earlier than the previous file
         local file_epoch_gap=$(( ${epoch_of_last_file} - ${epoch_of_test_file} ))
         if [[ ${file_epoch_gap} -ne 60 ]]; then
@@ -687,11 +693,13 @@ function cleanup_wav_file_list()
             (( --raw_file_index ))
             continue
         fi
+COMMENTED_OUT_LINES
         wd_logger 2 "test_file_name='${test_file_name}' from index ${raw_file_index} is clean and 60 seconds earlier the the next file in the list.  Proceed to check previous file on the list"
         epoch_of_last_file=${epoch_of_test_file}
         return_clean_files_string="${return_clean_files_string} ${test_file_name}"
         (( --raw_file_index ))
     done
+ 
     local clean_files_list=( ${return_clean_files_string} )
 
     wd_logger 2 "Given check_file_list[${#check_file_list[@]}]     ='${check_file_list[*]}'"
@@ -710,7 +718,7 @@ function get_wav_file_list() {
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
     local receiver_band=$3           
     local receiver_modes=$4
-    local wav_archive_dir=$5
+
     local     target_modes_list=( ${receiver_modes//:/ } )     ### Argument has form MODE1[:MODE2...] put it in local array
     local -ia target_minutes_list=( $( IFS=$'\n' ; echo "${target_modes_list[*]/?/}" | sort -nu ) )        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
     if [[ " ${target_minutes_list[*]} " =~ " 0 " ]] ; then
@@ -726,13 +734,17 @@ function get_wav_file_list() {
     wd_logger 1 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
-    wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
-    if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
-        local ret_code=$?
-        wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${ret_code}"
-        return ${ret_code}
+    if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
+        wd_logger 1 "Configured not to spawn_wav_recording_daemon()"
+    else
+        wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
+        if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
+            local ret_code=$?
+            wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${ret_code}"
+            return ${ret_code}
+        fi
+        wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
     fi
-    wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
 
     ### An instance of kiwirecorders run and outputs wav files in the same directory as decoding, i.e. /dev/shm/recording.d/KIWI_0/20/
     ### There is one instance of the KA9Q stream recorder which outputs all wav files from the stream in the parent directory, i.e. /dev/shm/recording.d/KA9Q_0/
@@ -772,8 +784,8 @@ function get_wav_file_list() {
         find_files_list=( $( find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" | sort -r ) )
 
         if (( ${#find_files_list[@]} < 1 )); then
-            wd_logger 1 "Found no wav files.  Sleep 1 and then search again"
-            sleep 1
+            wd_logger 2 "Found no wav files.  Sleep 5 and then search again"
+            sleep 5
             continue
         fi
         ### There is at least one file on the list
@@ -788,9 +800,9 @@ function get_wav_file_list() {
                 inotifywait -e close ${newest_file_name} >& /dev/null
                 wd_logger 2 "File ${newest_file_name##*/} has been closed"
             done
-            wd_logger 1 "This newest File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
+            wd_logger 2 "This newest File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
             wait_for_newest_file_to_close="no"
-            sleep 1
+            sleep 5
             continue
         fi
 
@@ -802,24 +814,25 @@ function get_wav_file_list() {
                 wd_logger 2 "There are no closed files on the list, so leave it to the next block of code to sleep until it is closed"
             fi
         fi
-        wd_logger 1 "After removing any open file there are now ${#find_files_list[@]} closed files: ${find_files_list[@]##*/}"
+        wd_logger 2 "After removing any open file there are now ${#find_files_list[@]} closed files: ${find_files_list[@]##*/}"
 
         if (( ${#find_files_list[@]} < 2 )); then
-            wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written by running 'inotifywait -e close ${newest_file_name##*/}'"
+            wd_logger 2 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written by running 'inotifywait -e close ${newest_file_name##*/}'"
             while lsof ${newest_file_name} >& /dev/null; do
                 wd_logger 2 "Running inotifywait -e close ${newest_file_name##*/}"
                 inotifywait -e close ${newest_file_name} >& /dev/null
                 wd_logger 2 "File ${newest_file_name##*/} has been closed"
             done
-            wd_logger 2 "File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
-            sleep 1
+            wd_logger 2 "File ${newest_file_name##*/} has been closed, so sleep 5 and then refresh the file list"
+            sleep 5
             continue
         fi
         ### ${#find_files_list[@]} has 2 or more closed files in it list
+        ### [0] is newest file
 
         ### Cleanup the file list so that it contains only a contiguous list of files, each starting one minute later than the previous file
         local find_files_count=${#find_files_list[@]}
-        wd_logger 1 "The 'find' command found ${find_files_count} closed wav files in '${wav_recording_dir}': '${find_files_list[*]##*/}'"
+        wd_logger 2 "The 'find' command found ${find_files_count} closed wav files in '${wav_recording_dir}': '${find_files_list[*]##*/}'"
         wd_logger 2 "Removing any files in the list which preceed any gap"
 
         local last_file_name="${find_files_list[0]}"
@@ -831,9 +844,9 @@ function get_wav_file_list() {
             wd_logger 2 "Checking that index=${index} with file ${checking_file_name##*/} is one minute older than ${last_file_name##*/}"
             
             ### Checking the write times of the files
-            local checking_file_epoch=$(stat --format=%Y ${checking_file_name})
-            local last_file_epoch=$(stat --format=%Y ${last_file_name})
-            wd_logger 2 "Checking that the last write time of ${checking_file_name##*/} with epoch ${checking_file_epoch} is about one minute older than ${last_file_name##*/} with epoch ${last_file_epoch}"
+            local checking_file_epoch=$(epoch_from_filename ${checking_file_name})
+            local last_file_epoch=$(epoch_from_filename ${last_file_name})
+            wd_logger 2 "Checking that the filename time of ${checking_file_name##*/} with epoch ${checking_file_epoch} is about one minute older than filename time  ${last_file_name##*/} of the next file with epoch ${last_file_epoch}"
 
             if (( checking_file_epoch > last_file_epoch )); then
                 ### This file's epoch is newer rather than the expected one minute older than the previous file in the list, so flush it and any subsequent files in the list
@@ -845,10 +858,10 @@ function get_wav_file_list() {
                 break
             fi
             local write_epoch_gap=$(( last_file_epoch - checking_file_epoch ))
-            if (( write_epoch_gap > 61  )); then
+            if (( write_epoch_gap != 60  )); then
                  ### This file's epoch is more than the expected one minute older than the previous file in the list, so flush it and any subsequent files in the list
                 local flush_files_list=( ${find_files_list[@]:index} )
-                wd_logger 1 "At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
+                wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
                 wd_logger 1 "So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
                 wd_rm ${flush_files_list[@]}
                 wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
@@ -861,21 +874,25 @@ function get_wav_file_list() {
             ### Both kiwirecorder and 'pcmrecorder --jt' create files with names with the format:
             ####    YYYYMMDDTHHMMSSZ_<FREQ_IN_HZ>_usb.wav
             local file_write_time_difference_seconds=$(( checking_file_epoch - last_file_epoch ))
+
             local last_file_minute
             last_file_minute=${last_file_name##*/}
             last_file_minute=$(( 10#${last_file_minute:11:2} ))   ### 
+
             local checking_file_minute
             checking_file_minute=${checking_file_name##*/}
             checking_file_minute=$(( 10#${checking_file_minute:11:2} ))
 
-            wd_logger 2 "Checking that minute ${checking_file_minute} file ${checking_file_name##*/} is one minute older than the previous minute ${last_file_minute} file ${last_file_name##*/}"
+            wd_logger 2 "Checking that minute '${checking_file_minute}' file ${checking_file_name##*/} is one minute older than the previous minute '${last_file_minute}' file ${last_file_name##*/}"
 
             local expected_minute
-            if (( checking_file_minute != 0 )); then
-                expected_minute=$(( last_file_minute - 1 ))
-            else
+            if (( last_file_minute == 0  )); then
                 expected_minute=59
+            else
+                expected_minute=$(( last_file_minute - 1 ))
             fi
+            wd_logger 2 "last_file_minute=${last_file_minute}, so file next file should be one minute older: expected_minute=${expected_minute}"
+
             if (( checking_file_minute != expected_minute )); then
                 local flush_files_list=( ${find_files_list[@]:index} )
                 wd_logger 1 "Found the minute ${checking_file_minute} name of file ${checking_file_name##*/} is not one minute older than the minute name ${last_file_minute} of the previous file ${last_file_name##*/}"
@@ -913,7 +930,7 @@ function get_wav_file_list() {
        minute_of_newest_checked_file=${minute_of_newest_checked_file:11:2}
        local index_of_last_file_in_checked_files_list=$(( ${#checked_files_list[@]} - 1 ))
 
-       wd_logger 1 "Found ${#checked_files_list[@]} contiguous and closed files starting at minute ${minute_of_oldest_checked_file} and ending at minute ${minute_of_newest_checked_file}"
+       wd_logger 2 "Found ${#checked_files_list[@]} contiguous and closed files starting at minute ${minute_of_oldest_checked_file} and ending at minute ${minute_of_newest_checked_file}"
 
        local seconds_in_wspr_pkt
        for seconds_in_wspr_pkt in ${target_seconds_list[@]} ; do
@@ -921,7 +938,7 @@ function get_wav_file_list() {
            local seconds_into_wspr_pkt_of_oldest_checked_file=$(( epoch_of_oldest_checked_file % seconds_in_wspr_pkt ))
            local pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length=$(( seconds_into_wspr_pkt_of_oldest_checked_file / 60 ))
 
-           wd_logger 1 "============== Checked_files_list[0] contains ${#checked_files_list[@]} elements, the first of which is the minute ${pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length} of a ${minutes_in_wspr_pkt} minute long WSPR packet"
+           wd_logger 2 "============== Checked_files_list[0] contains ${#checked_files_list[@]} elements, the first of which is the minute ${pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length} of a ${minutes_in_wspr_pkt} minute long WSPR packet"
 
            ### Check to see if we have returned some of these files in a previous call to this function
            ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
@@ -930,53 +947,64 @@ function get_wav_file_list() {
            if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
                ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
                index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
+               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+                   wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index.  Sleeping 20 seconds  for diags..."
+                   sleep 20
+                   continue
+               fi
            else
                ### We have previously reported a wspr file for this wspr pkt length, so we are looking for the end of the wspr pkt which follows that one to be in the checked_files_list[]
                if (( ${#wav_checked_pkt_sec_list[@]} > 1 )); then
-                   wd_logger 1 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed 'pkt has been returned' files: ${wav_checked_pkt_sec_list[@]:1}"
+                   wd_logger 2 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed 'pkt has been returned' files: ${wav_checked_pkt_sec_list[@]:1}"
                    wd_rm ${wav_checked_pkt_sec_list[@]:1}
                fi
                local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
                local epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
-               index_of_first_minute_of_wspr_pkt=$(( (epoch_of_pkt_we_want - epoch_of_oldest_checked_file) / 60 ))
+               local seconds_after_oldest_check_file=$(( epoch_of_pkt_we_want - epoch_of_oldest_checked_file ))
+               index_of_first_minute_of_wspr_pkt=$(( seconds_after_oldest_check_file / 60 ))
+               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+                   wd_logger 1 "ERROR: got invalid index after starting from time of last reported pkt which was saved in file  ${wav_checked_pkt_sec_list[0]##*/}"
+                   wd_logger 1 "ERROR:  index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} from ${wav_checked_pkt_sec_list[0]}"
+                   wd_logger 1 "ERROR:  started with epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} of ${wav_checked_pkt_sec_list[0]}"
+                   wd_logger 1 "ERROR:  so the epoch of the first file we want is ${seconds_after_oldest_check_file} seconds after the epoch_of_previously_reported_wspr_pkt"
+                   wd_logger 1 "ERROR:  so the first file we want will be checked_files_list[${index_of_first_minute_of_wspr_pkt}"
+                   sleep 10
+                   continue
+               fi
            fi
-           if (( index_of_first_minute_of_wspr_pkt < 0 )); then
-               wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index.  Sleeping 20 seconds  for diags..."; sleep 20
-               continue
-           fi
-           if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
-               wd_logger 1 "Can't find the first minute of this ${minutes_in_wspr_pkt} minute wspr pkt which would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}] because that is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+          if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+               wd_logger 2 "Can't find the first minute of this ${minutes_in_wspr_pkt} minute wspr pkt which would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}] because that is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
                continue
            fi
            local index_of_last_minute_of_wspr_pkt
            index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
            if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
-               wd_logger 1 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last wanted element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               wd_logger 2 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last wanted element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
                continue
            fi
-           wd_logger 1 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
+           wd_logger 2 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
 
            if (( seconds_in_wspr_pkt == ${target_seconds_list[-1]} )) ; then
-               wd_logger 1 "We have found a complete set of minute files for the longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
+               wd_logger 2 "We have found a complete set of minute files for the longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
                wd_rm ${checked_files_list[@]:0:${index_of_first_minute_of_wspr_pkt}} 
            fi
 
            local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_minute_of_wspr_pkt}:${minutes_in_wspr_pkt}}" )
            local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_checked_files}"
-           wd_logger 1 "The checked_files_list[] file ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]##*/} file at index ${index_of_first_minute_of_wspr_pkt} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
+           wd_logger 2 "The checked_files_list[] file ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]##*/} file at index ${index_of_first_minute_of_wspr_pkt} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
            return_list+=( ${add_to_return_list} )
 
            local wav_list_returned_file=${checked_files_list[${index_of_first_minute_of_wspr_pkt}]}.${seconds_in_wspr_pkt}-secs
            touch -r ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]} ${wav_list_returned_file}
-           wd_logger 1 "Created '${wav_list_returned_file##*/}' so we won't again return this list of wav files which make up this wspr pkt"
+           wd_logger 2 "Created '${wav_list_returned_file##*/}' so we won't again return this list of wav files which make up this wspr pkt"
        done       ### with search for all the different wspr wav file lengths
        if (( ${#return_list[@]} == 0 )); then
-           wd_logger 1 "return_list[] is empty, so go back to top of this search and wait for newest open file to be closed, then check again"
+           wd_logger 2 "return_list[] is empty, so go back to top of this search and wait for newest open file to be closed, then check again"
            wait_for_newest_file_to_close="yes"
        fi
    done
 
-   wd_logger 1 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'\n"
+   wd_logger 2 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'\n"
    eval ${return_variable_name}=\"${return_list[*]}\"
    return 0
 }
@@ -1461,7 +1489,7 @@ function decoding_daemon() {
         wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
-        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} ${wav_archive_dir}
+        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} 
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
@@ -1475,7 +1503,36 @@ function decoding_daemon() {
             continue
         fi
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
-        
+        if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
+            local mode_seconds
+            local seconds_files
+            local index
+            wd_logger 1 "get_wav_file_list() returned ${#mode_wav_file_list[@]} wspr packet files lists"
+            for (( index=0; index < ${#mode_wav_file_list[@]}; ++index )); do
+                local mode_seconds="${mode_wav_file_list[index]%%:*}"
+                local mode_minutes=$(( mode_seconds / 60 ))
+                local mode_files_string=${mode_wav_file_list[index]#*:}
+                local mode_files_list=( ${mode_files_string//,/ } )
+                if (( ${#mode_files_list[@]} != mode_minutes )); then
+                    wd_logger 1 "ERROR:  mode_fileslist[${#mode_files_list[@]}] != mode_minutes=${mode_minutes}, so skip to next mode"
+                    continue
+                fi
+                local file_minutes_list=()
+                local one_minutes_list=()
+                local minute
+                local index2
+                for (( index2=0; index2 < ${#mode_files_list[@]}; ++index2 )) ; do
+                    local one_minute_file=${mode_files_list[index2]##*/}
+                    local file_minute=${one_minute_file:11:2}
+                    one_minute_list+=( ${file_minute} )
+                    file_minutes_list+=( ${mode_files_list[index2]##*/} )
+                done
+                wd_logger 1 "We have been given a list of one minute files which together create a ${mode_minutes} minute wspr pkt of minutes '${one_minute_list[*]}': ${file_minutes_list[*]}"
+            done
+            wd_logger 1 "Report of retuned lists is complete. Go back and call get_wav_file_list() to get new lists"
+            continue
+        fi
+ 
         ### We append the count of the A/D overload events in the last 2 minutes to the ADC_OVERLOADS_LOG_FILE_NAME file and add them to the spots reported
         local adc_overloads_count=0        ### Report by radiod and KiwiSDR of the number of OVs since radiod started, a 64 bit number
         local ka9q_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
@@ -2243,7 +2300,7 @@ function decoding_daemon() {
             queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
-            ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
+            ### The start time and frequency of the spot lineszz will be extracted from the first wav file of the wav file list
             wd_logger 2 "Execute: create_enhanced_spots_file_and_queue_to_posting_daemon   'decodes_cache.txt' '${wspr_decode_capture_date}' '${wspr_decode_capture_time}' '${sox_rms_noise_level_float}' '${fft_noise_level_float}' '${new_sdr_overloads_count}' '${receiver_call}' '${receiver_grid}' '${freq_adj_mhz}'"
             create_enhanced_spots_file_and_queue_to_posting_daemon   "decodes_cache.txt" ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
