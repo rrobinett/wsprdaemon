@@ -344,7 +344,7 @@ function ka9q_get_metadump() {
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 1 "Spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
+        wd_logger 2 "Spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
 
         local metadump_pid
         metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
@@ -355,7 +355,7 @@ function ka9q_get_metadump() {
             if ! kill -0 ${metadump_pid} 2> /dev/null; then
                 wait ${metadump_pid}
                 rc=$?
-                wd_logger 1 "'metadump...&' has finished before we timed out"
+                wd_logger 2 "'metadump...&' has finished before we timed out"
                 break
             fi
             wd_logger 2 "Waiting another second for 'metadump...&' to finish"
@@ -363,7 +363,7 @@ function ka9q_get_metadump() {
         done
 
         if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
-            wd_logger 1 "'metadump..&' finished after ${i} seconds of waiting"
+            wd_logger 2 "'metadump..&' finished after ${i} seconds of waiting"
         else
             wd_logger 1 "ERROR: timing out waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}"
             kill  ${metadump_pid} 2>/dev/null
@@ -375,14 +375,14 @@ function ka9q_get_metadump() {
         else
             sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
-            wd_logger 1 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
+            wd_logger 2 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
 
             if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
                 wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
                 local wd_logger_string=$(echo "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}:\n$(< ${status_log_file})\nSo try metdump again")
-                wd_logger 1 "${wd_logger_string}\nmetadum.log:\n$(< metadump.log)"
+                wd_logger 1 "ERROR: not the number of expected lines in ${wd_logger_string}\nmetadum.log:\n$(< metadump.log)"
             fi
         fi
     done
