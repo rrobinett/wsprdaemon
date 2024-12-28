@@ -1567,7 +1567,7 @@ function decoding_daemon() {
             fi
             ka9q_rf_gain_float=${channel_rf_gain_value/dB*/}      ### remove the trailing 'dB' returned by metadump
             ka9q_rf_gain_float=${ka9q_rf_gain_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}' => ka9q_rf_gain_float='${ka9q_rf_gain_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}' => ka9q_rf_gain_float='${ka9q_rf_gain_float}'"
 
             local channel_adc_dbfs_value
             ka9q_get_current_status_value "channel_adc_dbfs_value" ${receiver_ip_address} ${receiver_freq_hz} "IF pwr"
@@ -1578,7 +1578,7 @@ function decoding_daemon() {
             fi
             ka9q_adc_dbfs_float=${channel_adc_dbfs_value/dB*/}      ### remove the trailing 'dB' returned by metadump
             ka9q_adc_dbfs_float=${ka9q_adc_dbfs_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}' => ka9q_adc_dbfs_float='${ka9q_adc_dbfs_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}' => ka9q_adc_dbfs_float='${ka9q_adc_dbfs_float}'"
 
             local channel_n0_value
             ka9q_get_current_status_value "channel_n0_value" ${receiver_ip_address} ${receiver_freq_hz} "N0"
@@ -1589,7 +1589,7 @@ function decoding_daemon() {
             fi
             ka9q_n0_float=${channel_n0_value/dB*/}   ### remove the trailing 'dB/Hz' returned by metadump
             ka9q_n0_float=${ka9q_n0_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}' => ka9q_n0_float='${ka9q_n0_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}' => ka9q_n0_float='${ka9q_n0_float}'"
 
             local channel_gain_value
             ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "gain"
@@ -1600,7 +1600,7 @@ function decoding_daemon() {
             fi
             ka9q_channel_gain_float=${channel_gain_value/dB*/}   ### remove the trailing ' dB' returned by metadump
             ka9q_channel_gain_float=${ka9q_channel_gain_float// /}   ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' => ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' => ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
 
             local channel_output_level_value    ### Report of The output level to the pcm stream and thus ot the wav files.
             ka9q_get_current_status_value "channel_output_level_value" ${receiver_ip_address} ${receiver_freq_hz} "output level"
@@ -1611,7 +1611,7 @@ function decoding_daemon() {
             fi
             ka9q_channel_output_float=${channel_output_level_value/dB*/}   ### removed the ' db" returned by metadump
             ka9q_channel_output_float=${ka9q_channel_output_float// /}    ### remove the spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
 
             local first_mode_files=${mode_wav_file_list[0]}     ### each entry has the form:  <MODE_SECONDS>:<WAV_FILE_0>,<WAV_FILE_1>[,<WAV_FILE_.>]
                   first_mode_files=${first_mode_files#*:}        ### Chop off the  <MODE_SECONDS>:
@@ -1621,7 +1621,10 @@ function decoding_daemon() {
             local sox_stats_list=( $(sox ${newest_one_minute_wav_file} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
             local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
             local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn'
-            wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
+
+            if (( sox_channel_level_adjust != 0 )); then
+                wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file##*/}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
+            fi
  
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
@@ -1632,7 +1635,7 @@ function decoding_daemon() {
             elif ! wd_ip_is_valid "${ka9q_status_ip}" && ! [[ "${ka9q_status_ip}" =~ \.local:[0-9] ]]; then
                 wd_logger 1 "ERROR: got invalid IP address ka9q_get_current_status_value() => ka9q_status_ip='${ka9q_status_ip}', so can't change output gain with 'tune'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
+                wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
                 local ka9q_channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
                 local channel_level_adjust
                 if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
@@ -1641,13 +1644,15 @@ function decoding_daemon() {
                     channel_level_adjust=${ka9q_channel_level_adjust}
                 else
                     ### We are processing the second or subsequent WSPR packet
-                    wd_logger 1 "radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
+                    wd_logger 2 "radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
                     if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
                         channel_level_adjust=${sox_channel_level_adjust}
                         wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
                     else
                         channel_level_adjust=${ka9q_channel_level_adjust}
-                        wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
+                        if (( channel_level_adjust != 0 )); then
+                            wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
+                        fi
                     fi
                     if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
                         wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
@@ -1660,7 +1665,9 @@ function decoding_daemon() {
                     fi
                 fi
                 local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
-                wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} dB from ${ka9q_channel_gain_float} dB to ${new_channel_level} dB is needed"
+                if (( channel_level_adjust != 0 )); then
+                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} dB from ${ka9q_channel_gain_float} dB to ${new_channel_level} dB is needed"
+                fi
 
                 local change_channel_gain="yes"                    ### By default Channel gain AGC is applied to all channels at the end of each WSPR cycle, including to the WWV/CHU channels at the end of the first cycle
                 if [[  ${last_adc_overloads_count} -ne -1 ]]; then
@@ -1684,6 +1691,8 @@ function decoding_daemon() {
                 fi
                 if [[ ${change_channel_gain} == "no" ]]; then
                     wd_logger 1 "Channel gain changes are disabled"
+                elif  (( channel_level_adjust == 0 )); then
+                    wd_logger 1 "Channel gain changes are enabled, but no change is needed"
                 else
                     wd_logger 1 "Changing channel gain to ${new_channel_level}"
                     timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
@@ -1711,13 +1720,13 @@ function decoding_daemon() {
         ### Calculate overloads which occured during this WSPR cycle
         local new_sdr_overloads_count=0
         if [[ -z "${last_adc_overloads_count}" || ${last_adc_overloads_count} -eq -1 ]]; then
-            wd_logger 1 "This is the first overloads count after startup, so just set last_adc_overloads_count equal to adc_overloads_count=${adc_overloads_count}"
+            wd_logger 2 "This is the first overloads count after startup, so just set last_adc_overloads_count equal to adc_overloads_count=${adc_overloads_count}"
             new_sdr_overloads_count=0
         else
             declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
 
             new_sdr_overloads_count=$(( ${adc_overloads_count} - ${last_adc_overloads_count} ))
-            wd_logger 1 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
+            wd_logger 2 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
             if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
                 wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {adc_overloads_count '${adc_overloads_count}'"
                 new_sdr_overloads_count=${adc_overloads_count}
@@ -1751,7 +1760,7 @@ function decoding_daemon() {
             local wav_files=${comma_separated_files//,/ }
             local wav_files_list=( ${wav_files} )
 
-            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files}'"
+            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files##*/}'"
 
             ### This is a block of diagnostic code 
             local  wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_files_list[@]}") )
@@ -1845,7 +1854,7 @@ function decoding_daemon() {
 
             local sox_effects="${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}"
 
-            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file ${decoder_input_wav_filepath} using '${sox_effects}' effects"
+            wd_logger 2 "sox is creating a 2/5/15/30 minute long wav file ${decoder_input_wav_filepath} using '${sox_effects}' effects"
 
             ### Concatenate the one minute files to create a single 2/5/15/30 minute file
             local rc
@@ -1943,14 +1952,15 @@ function decoding_daemon() {
                     if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
                         wd_logger 1 "wsprd found no spots"
                     else
-                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
+                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots"
+                        wd_logger 2 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
                         awk -v pkt_mode=${returned_minutes} '{printf "%s %s\n", $0, pkt_mode}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt                       ### Add the wspr pkt mode (== 2 or 15 minutes) to each ALL_WSPR.TXT spot line
                     fi
 
                     local sdr_noise_level_adjust_float=""
                     if [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
                         sdr_noise_level_adjust_float=$( echo "scale=1; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1" | bc )
-                        wd_logger 1 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
+                        wd_logger 2 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
                     fi
 
                     ### Output a noise line  which contains 'DATE TIME + three sets of four space-separated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
@@ -1958,7 +1968,7 @@ function decoding_daemon() {
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
                     local c2_filename="${decode_dir}/000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
                     if [[ ! -f ${C2_FFT_CMD} ]]; then
-                        wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
+                        wd_logger 1 "Can't find the '${C2_FFT_CMD}' script"
                         exit 1
                     fi
                     local c2_fft_noise_level_float
@@ -1975,10 +1985,10 @@ function decoding_daemon() {
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
                         local corrected_fft_noise_level_float
                         corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 1 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
+                        wd_logger 2 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
                         fft_noise_level_float=${corrected_fft_noise_level_float}
                     fi
-                    wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
+                    wd_logger 2 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
  
                     get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
                     ret_code=$?
@@ -1989,20 +1999,20 @@ function decoding_daemon() {
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
                         local corrected_sox_rms_noise_level_float
                         corrected_sox_rms_noise_level_float=$( echo "scale=1;(${sox_rms_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
+                        wd_logger 2 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
                         sox_rms_noise_level_float=${corrected_sox_rms_noise_level_float}
 
-                        wd_logger 1 "Sox reports rms_line '${rms_line}'"
+                        wd_logger 2 "Sox reports rms_line '${rms_line}'"
                         local adjusted_rms_line=""
                         for rms_value_float in ${rms_line} ; do
                             local adjusted_rms_value_float
                             adjusted_rms_value_float=$(echo "scale=2;(${rms_value_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                             adjusted_rms_line="${adjusted_rms_line} ${adjusted_rms_value_float}"
                         done
-                        wd_logger 1 "Adjusted rms_line to '${adjusted_rms_line}'"
+                        wd_logger 2 "Adjusted rms_line to '${adjusted_rms_line}'"
                         rms_line="${adjusted_rms_line}"
                     fi
-                    wd_logger 1 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
+                    wd_logger 2 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
 
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level_float} ${new_sdr_overloads_count}"
@@ -2058,7 +2068,7 @@ function decoding_daemon() {
                 else
                     ### jt9 succeeded 
                     if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
-                        wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
+                        wd_logger 2 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     else
                         ### jt9 found spots
                         local spot_date="${decoder_input_wav_filename:0:6}"
@@ -2066,7 +2076,7 @@ function decoding_daemon() {
                         local pkt_mode=$(( ${returned_minutes} + 1 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 3 => FST4W-120,  6 => FST4W-300, ...
                         if [[ -n "${sox_signals_rms_fft_and_overload_info}" ]]; then
                             ### This wav was processed by wsprd, so 'wsprd' created rms_noise, fft_noise and ov_count data.  But the mode field must be incremented to mark this as an FST4W spot
-                            wd_logger 1 "FST4W spot lines can include the noise level information '${sox_signals_rms_fft_and_overload_info}' which was just generated by wsprd"
+                            wd_logger 2 "FST4W spot lines can include the noise level information '${sox_signals_rms_fft_and_overload_info}' which was just generated by wsprd"
                         else
                             ### This wav file was not processed by 'wsprd', so there is no sox signal_level, rms_noise, fft_noise, or ov_count data 
                             wd_logger 1 "FST4W spot lines have no noise level information from a wsprd decode, so use filler noise level values of -999.0"
@@ -2109,7 +2119,7 @@ function decoding_daemon() {
                                 mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/new_fst4w_decodes.dat
                             fi
                             if [[ ! -s ${decode_dir_path}/new_fst4w_decodes.dat ]]; then
-                                wd_logger 1 "Found no new FST4W high res spots after filtering out '<...>' spots:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
+                                wd_logger 2 "Found no new FST4W high res spots after filtering out '<...>' spots:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
                             fi
                             ### Fields in the FST4W fst4-decodes.dat file as of October 2022 in v2.5.4
                             ### Thanks to Gwyn G3ZIL
@@ -2268,13 +2278,13 @@ function decoding_daemon() {
                 fi
             fi
             if [[ ${processed_wav_files} == "yes" ]]; then 
-                wd_logger 1 "Processed files '${wav_files}' concatenated into '${decoder_input_wav_filename}' for packet of length ${returned_seconds} seconds"
+                wd_logger 2 "Processed files '${wav_files}' concatenated into '${decoder_input_wav_filename}' for packet of length ${returned_seconds} seconds"
             else
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"
             fi
 
             ### Obtain wav and ADC overlaod information so they can be appended to the spot lines
-            wd_logger 1 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
+            wd_logger 2 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
             if [[ -f ${decoder_input_wav_filepath}.stats ]]; then
                 local rc
                 wd_rm ${decoder_input_wav_filepath}.stats
