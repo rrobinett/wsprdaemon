@@ -733,7 +733,7 @@ function get_wav_file_list() {
     wd_logger 2 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
-    if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
+    if [[ "${TEST_RECORDING_DAEMON-yes}" != "yes" ]]; then
         wd_logger 2 "Configured not to spawn_wav_recording_daemon()"
     else
         wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
@@ -1502,7 +1502,7 @@ function decoding_daemon() {
             continue
         fi
         wd_logger 2 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
-        if [[ "${SPAWN_RECORDING_DAEMON-yes}" != "yes" ]]; then
+        if [[ "${TEST_RECORDING_DAEMON-yes}" != "yes" ]]; then
             local mode_seconds
             local seconds_files
             local index
