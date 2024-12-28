@@ -323,12 +323,7 @@ function kiwirecorder_manager_daemon_kill_handler() {
             fi
         fi
     fi
-    wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_rm ${WAV_RECORDING_DAEMON_PID_FILE}' => ${rc}"
-    fi
-    exit
+   exit
 }
 
 ### This daemon spawns a kiwirecorder.py session and monitor's its stdout for 'OV' lines
