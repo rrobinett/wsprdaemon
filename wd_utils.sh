@@ -850,7 +850,7 @@ function wd_mutex_lock() {
         return 1
     fi
 
-    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     wd_logger 2 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
     local mkdir_try_count=1
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
@@ -878,7 +878,7 @@ function wd_mutex_unlock() {
         return 1
     fi
 
-    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     if [[ ! -d ${mutex_lock_dir_name} ]]; then
         wd_logger 1 "ERROR: the expected mutex directory '${mutex_dir}' doesn't exist"
         return 1
