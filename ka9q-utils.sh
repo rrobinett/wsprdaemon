@@ -22,7 +22,8 @@
 declare KA9Q_RADIO_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/radiod@rx888-wsprdaemon-template.conf"
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/pcmrecord"
+declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
+declare KA9Q_RADIO_PCMRECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/pcmrecord"
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
@@ -725,11 +726,14 @@ function build_ka9q_radio() {
     local ka9q_runs_only_remotely
     get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
     if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
-        if [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable 'wd-record' which exists. So nothing more to do"
+        if [[ ${PCMRECORD_ENABLED-no} == "yes" && -x ${KA9Q_RADIO_PCMRECORD_CMD} ]]; then
+            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_PCMRECORD_CMD}' which exists. So nothing more to do"
+            return 0
+        elif [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
+            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_WD_RECORD_CMD}' which exists. So nothing more to do"
             return 0
         else
-            wd_logger 1 "ERROR: KA9Q software wasn't updated and only needs the executable 'wd-record' but it isn't present"
+            wd_logger 1 "ERROR: KA9Q software wasn't updated and only needs the executable 'pcmrecord' or 'wd-record', but it isn't present"
             exit 1
         fi
     fi
