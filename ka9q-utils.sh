@@ -842,7 +842,7 @@ function build_ka9q_radio() {
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
-        wd_logger 1 "KA9Q-radio softwaare is installed and configured, but can't find a RX888 MkII attached to a USB port"
+        wd_logger 1 "KA9Q-radio software is installed and configured, but can't find a RX888 MkII attached to a USB port"
         exit 1
     fi
     wd_logger 2 "Found a RX888 MkII attached to a USB port"
