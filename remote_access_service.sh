@@ -10,7 +10,6 @@
 #
 # Hosts with names which start with "WSPRSONDE-" are gateways connected to Wsprsonde8 beacons, and those hosts are automatically set up to log on to this RAC service
 
-set +x
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
 declare WD_FRPS_URL=${WD_FRPS_URL-wd0.wsprdaemon.org}
@@ -26,7 +25,6 @@ declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} 
 declare WSPRSONDE_ID_BASE=$(( ${WSPRSONDE_IP_PORT_BASE} - ${RAC_IP_PORT_BASE} ))
 declare RAC_ID_MAX=$(( ${WSPRSONDE_ID_BASE} - 1 ))                                    ### Max RAC_ID is 2199, which should be plenty
 declare WSPRSONDE_ID_MAX=$(( ${RAC_IP_PORT_MAX} - ${WSPRSONDE_IP_PORT_BASE} ))        ### Max WPSRSONDE_ID in 1999, which should be plenty
-set +x
 
 function execute_sysctl_command()
 {
