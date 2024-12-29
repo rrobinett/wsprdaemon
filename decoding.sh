@@ -943,22 +943,30 @@ function get_wav_file_list() {
            ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
            local index_of_first_minute_of_wspr_pkt
            local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r ) ) 
-           if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
-               ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
-               index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
-               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
-                   wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index.  Sleeping 20 seconds  for diags..."
-                   sleep 20
-                   continue
-               fi
-           else
-               ### We have previously reported a wspr file for this wspr pkt length, so we are looking for the end of the wspr pkt which follows that one to be in the checked_files_list[]
+           local epoch_of_previously_reported_wspr_pkt
+           local epoch_of_pkt_we_want
+           if (( ${#wav_checked_pkt_sec_list[@]} > 0 )); then
                if (( ${#wav_checked_pkt_sec_list[@]} > 1 )); then
                    wd_logger 2 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed 'pkt has been returned' files: ${wav_checked_pkt_sec_list[@]:1}"
                    wd_rm ${wav_checked_pkt_sec_list[@]:1}
                fi
-               local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
-               local epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
+               epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
+               epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
+               if (( epoch_of_previously_reported_wspr_pkt < epoch_of_oldest_checked_file )); then
+                   wd_logger 1 "ERROR: Flushing wav_checked_pkt_sec_list[0]=${wav_checked_pkt_sec_list[0]##*/} since it is older than the oldest checked_files_list[-1]=${checked_files_list[-1]##*/}"
+                   wd_rm ${wav_checked_pkt_sec_list[0]}
+                   wav_checked_pkt_sec_list=()
+               fi
+           fi
+           if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
+               ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
+               index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
+               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+                   wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index. So skip to check for next packet length "
+                   continue
+               fi
+           else
+               ### There was a previously reported wspr pkt for this pkt length
                local seconds_after_oldest_check_file=$(( epoch_of_pkt_we_want - epoch_of_oldest_checked_file ))
                index_of_first_minute_of_wspr_pkt=$(( seconds_after_oldest_check_file / 60 ))
                if (( index_of_first_minute_of_wspr_pkt < 0 )); then
