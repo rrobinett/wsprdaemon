@@ -783,8 +783,8 @@ function get_wav_file_list() {
         find_files_list=( $( find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" | sort -r ) )
 
         if (( ${#find_files_list[@]} < 1 )); then
-            wd_logger 2 "Found no wav files.  Sleep 5 and then search again"
-            sleep 5
+            wd_logger 2 "Found no wav files.  Sleep 1 and then search again"
+            sleep 1
             continue
         fi
         ### There is at least one file on the list
@@ -801,7 +801,7 @@ function get_wav_file_list() {
             done
             wd_logger 2 "This newest File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
             wait_for_newest_file_to_close="no"
-            sleep 5
+            sleep 1
             continue
         fi
 
@@ -822,8 +822,8 @@ function get_wav_file_list() {
                 inotifywait -e close ${newest_file_name} >& /dev/null
                 wd_logger 2 "File ${newest_file_name##*/} has been closed"
             done
-            wd_logger 2 "File ${newest_file_name##*/} has been closed, so sleep 5 and then refresh the file list"
-            sleep 5
+            wd_logger 2 "File ${newest_file_name##*/} has been closed, so sleep 1 and then refresh the file list"
+            sleep 1
             continue
         fi
         ### ${#find_files_list[@]} has 2 or more closed files in it list
@@ -1493,7 +1493,7 @@ function decoding_daemon() {
             last_rss_epoch=${EPOCHSECONDS}
         fi
 
-        wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
+        wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
         get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} 
@@ -1791,7 +1791,7 @@ function decoding_daemon() {
             fi
 
             local wd_string="${wav_time_list[*]}"
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[@]##*/}"
             ### End of diagnostic code
 
             if [[ ${receiver_modes_list[0]} =~ ^[IJK] ]]; then
@@ -1865,8 +1865,12 @@ function decoding_daemon() {
             wd_logger 2 "sox is creating a 2/5/15/30 minute long wav file ${decoder_input_wav_filepath} using '${sox_effects}' effects"
 
             ### Concatenate the one minute files to create a single 2/5/15/30 minute file
+            ### Since WD 3.3.x pcmrecord may be reording 1 minute 32 bit float files, 
+            ### so add '-b 16 -e signed-integer' to instruct sox to alway output a 16 bit PCM file which is the format accepted by wsprd and jt9
+            ### from: chatgbt:  sox --combine concatenate file1.wav file2.wav -b 16 -e signed-integer output.wav
+
             local rc
-            sox ${wav_files_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
+            sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_files_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
