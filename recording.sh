@@ -322,6 +322,11 @@ function ka9q_recording_daemon()
     if [[ ${PCMRECORD_ENABLED-no} != "yes" ]]; then
         local receiver_rx_freq_hz=$(get_wspr_band_freq_hz ${receiver_band} )
         wd_logger 1 "Start recording pcm wav files from ${receiver_ip} ${receiver_band} using ${KA9Q_RADIO_WD_RECORD_CMD}"
+        local wd_record_args=""
+        if [[ ${WD_RECORD_FLOAT-no} == "yes" ]]; then
+            wd_record_args="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS}"
+            wd_logger 1 "Record 32bit float wav files"
+        fi
         local running_jobs_pid_list=()
         while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} .*-s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
@@ -337,7 +342,7 @@ function ka9q_recording_daemon()
         local verbosity_args_list=( -v -v -v -v )
         local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
         wd_logger 1 "Starting '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >& wd-record-${receiver_band}.log"
-        ${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >& wd-record-${receiver_band}.log    ## wd-record prints to stderr, but we want it in wd-record.log
+        ${KA9Q_RADIO_WD_RECORD_CMD} -v ${wd_record_args} -s ${receiver_rx_freq_hz} ${receiver_ip} >& wd-record-${receiver_band}.log    ## wd-record prints to stderr, but we want it in wd-record.log
         rc=$?
         if [[ ${rc} -eq 0 ]]; then
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >  >& wd-record-${receiver_band}.log' ' terminated with no error"
