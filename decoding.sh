@@ -1768,7 +1768,7 @@ function decoding_daemon() {
             local wav_files=${comma_separated_files//,/ }
             local wav_files_list=( ${wav_files} )
 
-            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files##*/}'"
+            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files_list[*]##*/}'"
 
             ### This is a block of diagnostic code 
             local  wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_files_list[@]}") )
@@ -1870,6 +1870,20 @@ function decoding_daemon() {
             ### from: chatgbt:  sox --combine concatenate file1.wav file2.wav -b 16 -e signed-integer output.wav
 
             local rc
+            sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}
+             if [[ ${rc} -ne 0 ]]; then
+                 wd_logger 1 "ERROR: while getting stats for the one minute files with 'sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}' => ${rc}:\n$(< ${SOX_LOG_FILE}i)"
+             fi
+            local max_input_float_amplitude
+            max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
+            local gain_in_db=0    ### In case we can't get the gain from sox
+            if [[ -z "${max_input_float_amplitude}" ]]; then
+                wd_logger 1 "ERROR: cant get 'Maximum amplitudee' from ${SOX_LOG_FILE}"
+            else
+                local gain_in_db=$(bc -l <<< "scale = 1; 20 * l(1/${max_input_float_amplitude}) / l(10)")
+                wd_logger 1 "Input files Maximum amplitude is ${max_input_float_amplitude}, so sox will automatically apply ${gain_in_db} dB gain while creating the 16bit PCM wav file"
+            fi
+
             sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
