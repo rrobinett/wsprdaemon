@@ -671,7 +671,7 @@ function ka9q_web_service_daemon() {
         ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}   ### DANGER: nothing limits the size of this log file!!!
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${server_description}' => ${rc}:\n$(<  ${daemon_log_file})"
+            wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${web_page_title}' => ${rc}:\n$(<  ${daemon_log_file})"
         fi
         wd_logger 1 "Sleeping for 5 seconds before restarting"
         wd_sleep 5
