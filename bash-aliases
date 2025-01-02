@@ -3,6 +3,10 @@
 
 shopt -s -o nounset
 
+function wd-flush-hash-files() {
+     find /dev/shm/wsprdaemon/ -name hashtable.txt -delete
+ }
+
 function wd-restart-web() {
     local ka9q_web_pid_file=~/wsprdaemon/ka9q_web_daemon.pid
 
