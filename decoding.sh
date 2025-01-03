@@ -1510,7 +1510,7 @@ function decoding_daemon() {
             continue
         fi
         wd_logger 2 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
-        if [[ "${TEST_RECORDING_DAEMON-yes}" != "yes" ]]; then
+        if [[ "${TEST_RECORDING_DAEMON-no}" == "yes" ]]; then
             local mode_seconds
             local seconds_files
             local index
@@ -1678,7 +1678,11 @@ function decoding_daemon() {
                 fi
 
                 local change_channel_gain="yes"                    ### By default Channel gain AGC is applied to all channels at the end of each WSPR cycle, including to the WWV/CHU channels at the end of the first cycle
-                if [[  ${last_adc_overloads_count} -ne -1 ]]; then
+                local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} | grep "Sample Encoding: 32-bit Floating Point PCM" )
+                if [[  -n "${wav_file_is_float}" ]]; then
+                    wd_logger 1 "Decoding 32 bit float wav files, so don't make any KA9Q-radio channel gain adjustements"
+                    change_channel_gain="no"
+                elif [[  ${last_adc_overloads_count} -ne -1 ]]; then
                     ### This is WSPR cycle #2 or later
                     if [[  ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" ]]; then
                          wd_logger 1 "Changes on all channels are disabled after the first WSPR cycle"
