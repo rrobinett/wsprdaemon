@@ -1606,9 +1606,9 @@ function decoding_daemon() {
                 channel_gain_value="60" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
             fi
-            ka9q_channel_gain_float=${channel_gain_value/dB*/}   ### remove the trailing ' dB' returned by metadump
-            ka9q_channel_gain_float=${ka9q_channel_gain_float// /}   ### remove spaces
-            wd_logger 2 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' => ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
+            ka9q_channel_gain_float=${channel_gain_value% dB}       ### remove the trailing ' dB' returned by metadump
+            ka9q_channel_gain_float=${ka9q_channel_gain_float##* }   ### remove everything through the last space, which should leave the float
+            wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' which we parse into ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
 
             local channel_output_level_value    ### Report of The output level to the pcm stream and thus ot the wav files.
             ka9q_get_current_status_value "channel_output_level_value" ${receiver_ip_address} ${receiver_freq_hz} "output level"
@@ -1645,72 +1645,53 @@ function decoding_daemon() {
             else
                 wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
                 local ka9q_channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
+                local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} | grep "Sample Encoding: 32-bit Floating Point PCM" )
                 local channel_level_adjust
-                if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
+                if (( last_adc_overloads_count == -1 )); then
                     ### We are processing the first WSPR packet
-                    wd_logger 1 "Applying the full ka9q_channel_level_adjust channel gain adjustment channel_level_adjust=${ka9q_channel_level_adjust} at startup of WD"
-                    channel_level_adjust=${ka9q_channel_level_adjust}
+                    if [[ -n "${wav_file_is_float}" ]]; then
+                        channel_level_adjust=$(( - $(printf "%.0f" ${ka9q_channel_gain_float}) ))
+                        wd_logger 1 "This is the first decode of 32 bit float wav files, so change the channel gain by ${channel_level_adjust} dB from its radiod setting of ${channel_gain_value} dB so gain is 0  dB"
+                    else
+                        wd_logger 1 "Applying the full ka9q_channel_level_adjust channel gain adjustment channel_level_adjust=${ka9q_channel_level_adjust} at startup of WD"
+                        channel_level_adjust=${ka9q_channel_level_adjust}
+                    fi
                 else
                     ### We are processing the second or subsequent WSPR packet
-                    wd_logger 2 "radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
-                    if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
-                        channel_level_adjust=${sox_channel_level_adjust}
-                        wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
+                    if [[ -n "${wav_file_is_float}" ]]; then
+                        wd_logger 1 "This is is the second or later float file decode leave the gain at 0"
+                        channel_level_adjust=0     ### Signal that channel gain should be left at the '0' gain programed in the first cycle
+                    elif ${receiver_band} =~ ^WWV|^CHU ]]; then
+                         wd_logger 1 "This is is the second or later int file and gain changes on this WWV/CHU channel '${receiver_band}' are disabled"
+                          channel_level_adjust=0
                     else
-                        channel_level_adjust=${ka9q_channel_level_adjust}
-                        if (( channel_level_adjust != 0 )); then
+                        wd_logger 2 "For this second or later int file decode radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
+                        if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
+                            channel_level_adjust=${sox_channel_level_adjust}
+                            wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
+                        else
+                            channel_level_adjust=${ka9q_channel_level_adjust}
                             wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
                         fi
-                    fi
-                    if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
-                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}
-                    elif [[ ${channel_level_adjust} -lt 0 && ${channel_level_adjust#-} -lt ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ]]; then
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}, so limiting gain decrease to ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}"
-                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}
-                    else
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} is within the range of ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so apply it"
+                        local limited_adjust_level=${channel_level_adjust}
+                        if ((  channel_level_adjust != 0 )); then
+                            limited_adjust_value=$((   channel_level_adjust < ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN} ? ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN} : \
+                                                     ( channel_level_adjust > ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ? ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ) ))
+                        fi
+                        if (( limited_adjust_level != channel_level_adjust )); then
+                            wd_logger 1 "Limiting the channel_adjust value by changing it from ${channel_level_adjust} to ${limited_adjust_level}"
+                            channel_level_adjust=${limited_adjust_value}
+                        fi
                     fi
                 fi
-                local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
                 if (( channel_level_adjust != 0 )); then
-                    wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} dB from ${ka9q_channel_gain_float} dB to ${new_channel_level} dB is needed"
-                fi
-
-                local change_channel_gain="yes"                    ### By default Channel gain AGC is applied to all channels at the end of each WSPR cycle, including to the WWV/CHU channels at the end of the first cycle
-                local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} | grep "Sample Encoding: 32-bit Floating Point PCM" )
-                if [[  -n "${wav_file_is_float}" ]]; then
-                    wd_logger 1 "Decoding 32 bit float wav files, so don't make any KA9Q-radio channel gain adjustements"
-                    change_channel_gain="no"
-                elif [[  ${last_adc_overloads_count} -ne -1 ]]; then
-                    ### This is WSPR cycle #2 or later
-                    if [[  ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" ]]; then
-                         wd_logger 1 "Changes on all channels are disabled after the first WSPR cycle"
-                         change_channel_gain="no"
-                    fi
-                    if [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
-                       if [[ ${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no} == "no" ]]; then
-                           if [[ $( echo "${sox_peak_dBFS_value} > ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}" | bc ) == 1 ]]; then
-                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled, but the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} is greater than the peak allowed value ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}, so reduce the gain"
-                            else
-                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled after the first WSPR cycle and the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} shows that the wav file isn't overranging"
-                                change_channel_gain="no"
-                           fi
-                       else
-                           wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are enabled after the first WSPR cycle becasue WD.conf contains the line:  KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLE='${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no}"
-                       fi
-                    fi
-                fi
-                if [[ ${change_channel_gain} == "no" ]]; then
-                    wd_logger 1 "Channel gain changes are disabled"
-                elif  (( channel_level_adjust == 0 )); then
-                    wd_logger 1 "Channel gain changes are enabled, but no change is needed"
-                else
-                    wd_logger 1 "Changing channel gain to ${new_channel_level}"
-                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
+                    local ka9q_channel_gain_int=$(printf "%.0f" ${ka9q_channel_gain_float})
+                    local new_channel_gain_dB=$(( ka9q_channel_gain_int + channel_level_adjust ))
+                    wd_logger 1 "Changing channel gain by ${channel_gain_value} dB from ${channel_gain_value} to ${new_channel_gain_dB}"
+                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}
                     rc=$?
                     if [[ ${rc} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
+                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}i ' => ${rc}"
                     fi
                 fi
             fi
@@ -1880,15 +1861,18 @@ function decoding_daemon() {
              fi
             local max_input_float_amplitude
             max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
-            local gain_in_db=0    ### In case we can't get the gain from sox
+            local gain_in_db    ### In case we can't get the gain from sox
+            local sox_normalization_dBFS=${SOX_NORMALIZATION_DBFS--1}        ### Default -1 dBFS creates 16 bit int wav file with max value 0.891251
+            local sox_normalization_linear=$(bc -l <<< "scale = 6; e(${sox_normalization_dBFS}/20 * l(10))")
             if [[ -z "${max_input_float_amplitude}" ]]; then
-                wd_logger 1 "ERROR: cant get 'Maximum amplitudee' from ${SOX_LOG_FILE}"
+                gain=0
+                wd_logger 1 "ERROR: can't get 'Maximum amplitude' of the input wav files from ${SOX_LOG_FILE}"
             else
-                local gain_in_db=$(bc -l <<< "scale = 1; 20 * l(1/${max_input_float_amplitude}) / l(10)")
-                wd_logger 1 "Input files Maximum amplitude is ${max_input_float_amplitude}, so sox will automatically apply ${gain_in_db} dB gain while creating the 16bit PCM wav file"
+                local gain_in_db=$(bc -l <<< "scale = 1; 20 * l( ${sox_normalization_linear} / ${max_input_float_amplitude} ) / l(10)")
+                wd_logger 1 "The 'Maximum amplitude' of the input files is ${max_input_float_amplitude}, so sox will automatically apply ${gain_in_db} dB gain while creating the 16bit PCM wav file"
             fi
-
-            sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
+            ### Output a 16 bit int wav file from a list of input int or float wav files and normalize the output to -1 dBFS
+            sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} --norm=${sox_normalization_dBFS}  ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: 'sox ${wav_files_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
