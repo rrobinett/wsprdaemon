@@ -3,6 +3,13 @@
 
 shopt -s -o nounset
 
+function wd-restart() {
+    wdz     ### stops radiod if it is being run as a Linux service: i.e. auto-started during boot or by 'wda' 
+    wd -Z   ### Stops WD if it had been started by 'wd -A'
+    wdrz    ### Stops radiod and the pktreporter services
+    wd -A    ### Starts WD which starts the radiod services if they are not running
+}
+
 alias wdtw="test_get_wav_file_list"
 function test_get_wav_file_list() {
     local sleep_seconds_between_creating_new_wav_files=${1-2}   ### defult to 2 seconds
