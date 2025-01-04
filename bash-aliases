@@ -3,6 +3,12 @@
 
 shopt -s -o nounset
 
+function wd-flush-hashtables() {
+    wc $(find /dev/shm/wsprdaemon/ -type f -name hashtable.txt) | sort -n
+    read -p "Flush these hashtable.txt files? => "
+    find /dev/shm/wsprdaemon/ -type f -name hashtable.txt -delete
+}
+
 function wd-restart() {
     wdz     ### stops radiod if it is being run as a Linux service: i.e. auto-started during boot or by 'wda' 
     wd -Z   ### Stops WD if it had been started by 'wd -A'
