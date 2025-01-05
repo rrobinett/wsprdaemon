@@ -713,6 +713,10 @@ COMMENTED_OUT_LINES
 
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
+
+declare MIN_ACCEPTED_GAP=59       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
+declare MAX_ACCPETED_GAP=61
+
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
@@ -858,13 +862,18 @@ function get_wav_file_list() {
             fi
             local write_epoch_gap=$(( last_file_epoch - checking_file_epoch ))
             if (( write_epoch_gap != 60  )); then
-                 ### This file's epoch is more than the expected one minute older than the previous file in the list, so flush it and any subsequent files in the list
-                local flush_files_list=( ${find_files_list[@]:index} )
-                wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
-                wd_logger 1 "So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
-                wd_rm ${flush_files_list[@]}
-                wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
-                break
+
+                ### The difference between files' epoch is not the expected one minute
+                if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCPETED_GAP )); then
+                     wd_logger 1 "Accepting a file ${checking_file_name##*/} which has a gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                 else
+                     local flush_files_list=( ${find_files_list[@]:index} )
+                     wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
+                     wd_logger 1 "So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
+                     wd_rm ${flush_files_list[@]}
+                     wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
+                     break
+                fi
             fi
 
             ### Checking the file names minutes
@@ -1991,6 +2000,7 @@ function decoding_daemon() {
                     local sdr_noise_level_adjust_float=0       ## This must be zero or a positive value
                     if [[ -n "${python_peak_level_dBFS_float}" ]]; then
                         ### When the one minute wav files are floats, then radiod was set to 0 dB gain and sox was configured to normalize the levels by (python_peak_level_dBFS_float - 1) 
+                        ### So adjust the levels by how much the normalization gain differs from the +60 dB gain assumed by the calculate_nl_adjustments()
                         sdr_noise_level_adjust_float=$( echo "scale=2; ( -(${python_peak_level_dBFS_float})  - 60  - 1)/1.0" | bc )
                         wd_logger 1 "Adjust the FFT/C2 and RMS data by ${sdr_noise_level_adjust_float} dB to compensate for the normalization by sox of the decoded wav file"
                     elif [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
