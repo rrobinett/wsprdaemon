@@ -1342,6 +1342,9 @@ declare SOX_LOG_FILE="./sox.log"                                                
 
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 
+declare GET_PEAK_WAV_SAMPLE_CMD="${WSPRDAEMON_ROOT_DIR}/get-peak-wav-sample.py"     ### A little script created by chatgbt
+declare GET_PEAK_WAV_SAMPLE_LOG_FILE="./get-peak-wav-sample.log"                     ### This file should have the peak amplitude in linear and also in dbFS
+
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
@@ -1745,6 +1748,7 @@ function decoding_daemon() {
 
         last_adc_overloads_count=${adc_overloads_count}
 
+        ### Decode each of the one or more lists of MODE:file2...., e.g. W2:file1.wav,file2.wav then F5:file1.wav,file2.wav,file3.wav,...
         local returned_files
         for returned_files in ${mode_wav_file_list[@]}; do
             local returned_seconds=${returned_files%:*}
@@ -1829,6 +1833,7 @@ function decoding_daemon() {
                         wd_logger 1 "ERROR: 'queue_wav_file ${iq_file_name}' => $?"
                     fi
                 fi
+                ### Go back and check for other modes
                 continue
             fi
 
@@ -1889,7 +1894,7 @@ function decoding_daemon() {
             fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_files_list[@]} one minute wav files"
 
-            ### Get statistics about the newly created wav file
+            ### Get statistics about the newly created wav file directly from sox
             sox ${decoder_input_wav_filepath} -n stats >& ${SOX_LOG_FILE}
             local sox_peak_level_db_float=$(awk '/^Pk lev/{print $NF}' ${SOX_LOG_FILE})
             rc=$( echo "${sox_peak_level_db_float} > ${SOX_MAX_PEAK_LEVEL}" | bc )
@@ -1897,6 +1902,18 @@ function decoding_daemon() {
                 wd_logger 1 "ERROR: sox reports a wav file overrange: $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
             else
                 wd_logger 1 "sox created a wav file with these characteristics:  $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
+            fi
+
+            ## Get statistics about the max level info directly from the input wav files
+            local python_peak_level_linear_float=0
+            local python_peak_level_dBFS_float=0
+            python3 ${GET_PEAK_WAV_SAMPLE_CMD} ${wav_files_list[@]} >& ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Dump all output to a log file so it can be printed out if there is an error
+            rc=$?
+            if (( ${rc} != 0 )); then
+                wd_logger 1 "ERROR: 'python3 ${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' => ${rc}:\n$(<${GET_PEAK_WAV_SAMPLE_LOG_FILE})"
+            else
+                { read python_peak_level_linear_float; read python_peak_level_dBFS_float; } < ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Very efficient way to extract those two lines into variables
+                wd_logger 1 "python3 '${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' reported python_peak_level_linear_float=${python_peak_level_linear_float}, python_peak_level_dBFS_float=${python_peak_level_dBFS_float}"
             fi
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
@@ -1971,10 +1988,15 @@ function decoding_daemon() {
                         awk -v pkt_mode=${returned_minutes} '{printf "%s %s\n", $0, pkt_mode}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt                       ### Add the wspr pkt mode (== 2 or 15 minutes) to each ALL_WSPR.TXT spot line
                     fi
 
-                    local sdr_noise_level_adjust_float=""
-                    if [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
-                        sdr_noise_level_adjust_float=$( echo "scale=1; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1" | bc )
-                        wd_logger 2 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
+                    local sdr_noise_level_adjust_float=0       ## This must be zero or a positive value
+                    if [[ -n "${python_peak_level_dBFS_float}" ]]; then
+                        ### When the one minute wav files are floats, then radiod was set to 0 dB gain and sox was configured to normalize the levels by (python_peak_level_dBFS_float - 1) 
+                        sdr_noise_level_adjust_float=$( echo "scale=2; ( -(${python_peak_level_dBFS_float})  - 60  - 1)/1.0" | bc )
+                        wd_logger 1 "Adjust the FFT/C2 and RMS data by ${sdr_noise_level_adjust_float} dB to compensate for the normalization by sox of the decoded wav file"
+                    elif [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
+                        ### the one minute wav files are ints
+                        sdr_noise_level_adjust_float=$( echo "scale=2; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1.0" | bc )
+                        wd_logger 1 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
                     fi
 
                     ### Output a noise line  which contains 'DATE TIME + three sets of four space-separated statistics'i followed by the two FFT values followed by the approximate number of overload events recorded by a Kiwi during this WSPR cycle:
@@ -1999,10 +2021,10 @@ function decoding_daemon() {
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
                         local corrected_fft_noise_level_float
                         corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 2 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
+                        wd_logger 1 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
                         fft_noise_level_float=${corrected_fft_noise_level_float}
                     fi
-                    wd_logger 2 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
+                    wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
  
                     get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
                     ret_code=$?
@@ -2013,20 +2035,20 @@ function decoding_daemon() {
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
                         local corrected_sox_rms_noise_level_float
                         corrected_sox_rms_noise_level_float=$( echo "scale=1;(${sox_rms_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 2 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
+                        wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
                         sox_rms_noise_level_float=${corrected_sox_rms_noise_level_float}
 
-                        wd_logger 2 "Sox reports rms_line '${rms_line}'"
+                        wd_logger 1 "Sox reports rms_line '${rms_line}'"
                         local adjusted_rms_line=""
                         for rms_value_float in ${rms_line} ; do
                             local adjusted_rms_value_float
                             adjusted_rms_value_float=$(echo "scale=2;(${rms_value_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                             adjusted_rms_line="${adjusted_rms_line} ${adjusted_rms_value_float}"
                         done
-                        wd_logger 2 "Adjusted rms_line to '${adjusted_rms_line}'"
+                        wd_logger 1 "Adjusted rms_line to '${adjusted_rms_line}'"
                         rms_line="${adjusted_rms_line}"
                     fi
-                    wd_logger 2 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
+                    wd_logger 1 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
 
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level_float} ${new_sdr_overloads_count}"
