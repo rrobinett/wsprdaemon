@@ -319,7 +319,7 @@ function ka9q_recording_daemon()
 
     setup_verbosity_traps          ## So we can increment and decrement verbosity without restarting WD
 
-    if [[ ${PCMRECORD_ENABLED-no} != "yes" ]]; then
+    if [[ ${PCMRECORD_ENABLED-yes} != "yes" ]]; then
         local receiver_rx_freq_hz=$(get_wspr_band_freq_hz ${receiver_band} )
         wd_logger 1 "Start recording pcm wav files from ${receiver_ip} ${receiver_band} using ${KA9Q_RADIO_WD_RECORD_CMD}"
         local wd_record_args=""
@@ -429,7 +429,7 @@ function spawn_wav_recording_daemon() {
 
     local wav_recording_mutex_name
     local wav_recording_pid_file
-    if [[ ${PCMRECORD_ENABLED-no} == "yes" ]]; then
+    if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
         wav_recording_mutex_name="wav-recorder-all"
         wav_recording_pid_file="wav-recorder-all.pid"
      else
@@ -473,7 +473,7 @@ function spawn_wav_recording_daemon() {
     local receiver_rx_freq_khz=$(get_wspr_band_freq_khz ${receiver_rx_band})
     local wav_record_daemon_log_filename="wav-record-daemon-${receiver_rx_band}.log"
     if [[ ${receiver_name} =~ ^KA9Q ]]; then
-        if [[ ${PCMRECORD_ENABLED-no} == "yes" ]]; then
+        if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
             wav_record_daemon_log_filename="wav-record-daemon-all.log"
         fi
         wd_logger 1 "Spawning a KA9Q wd-record daemon for receiver '${receiver_name}' in directory ${recording_dir} where it will log to ${wav_record_daemon_log_filename}"
@@ -514,7 +514,7 @@ function get_recording_status() {
 
     local recording_dir=$(get_recording_dir_path ${rx_name} ${rx_band})
     local pid_file="${recording_dir}/wav-recorder-${rx_band}.pid"
-    if [[ ${PCMRECORD_ENABLED-no} == "yes" ]]; then
+    if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
         pid_file="${recording_dir}/wav-recorder-all.pid"
     fi
 
@@ -543,7 +543,7 @@ function kill_wav_recording_daemon()
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
     local pid_file="${recording_dir}/wav-recorder-${rx_band}.pid"
-    if [[ ${PCMRECORD_ENABLED-no} == "yes" ]]; then
+    if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
         pid_file="${recording_dir}/wav-recorder-all.pid"
     fi
  

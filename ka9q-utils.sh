@@ -733,7 +733,7 @@ function build_ka9q_radio() {
     local ka9q_runs_only_remotely
     get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
     if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
-        if [[ ${PCMRECORD_ENABLED-no} == "yes" && -x ${KA9Q_RADIO_PCMRECORD_CMD} ]]; then
+        if [[ ${PCMRECORD_ENABLED-yes} == "yes" && -x ${KA9Q_RADIO_PCMRECORD_CMD} ]]; then
             wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_PCMRECORD_CMD}' which exists. So nothing more to do"
             return 0
         elif [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
