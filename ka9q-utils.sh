@@ -39,7 +39,7 @@ declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_RADIO_LIBS_NEEDED="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
-             libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile libsamplerate0-dev"
+             libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile"
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is created by running fft_wisdom during the KA9Q installation
@@ -1440,7 +1440,7 @@ function install_github_project() {
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-main}   ${KA9Q_WEB_EABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}               ${KA9Q_WEB_COMMIT-1ee42250a2d4ce42d53c9ccdca81a73301f6a9ed}"
+    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_EABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}               ${KA9Q_WEB_COMMIT-604a59eeb30e2166f4cbc366134aedef57b04337}"
     "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_EABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-66f0b5cd70d2435184b54b29459bb15214120a2c}"
     "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
     "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
