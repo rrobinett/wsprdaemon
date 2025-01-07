@@ -846,7 +846,7 @@ function get_wav_file_list() {
 
             wd_logger 2 "Checking that index=${index} with file ${checking_file_name##*/} is one minute older than ${last_file_name##*/}"
             
-            ### Checking the write times of the files
+            ### Checking the write times of the wav files differ by between 59 and 61 seconds
             local checking_file_epoch=$(epoch_from_filename ${checking_file_name})
             local last_file_epoch=$(epoch_from_filename ${last_file_name})
             wd_logger 2 "Checking that the filename time of ${checking_file_name##*/} with epoch ${checking_file_epoch} is about one minute older than filename time  ${last_file_name##*/} of the next file with epoch ${last_file_epoch}"
@@ -857,58 +857,27 @@ function get_wav_file_list() {
                 wd_logger 1 "ERROR: at index ${index} unexpected that the checking file ${checking_file_name##*/} epoch ${checking_file_epoch} is newer than the last file ${last_file_name##*/} epoch ${last_file_epoch}"
                 wd_logger 1 "ERROR: So flush it and all the rest of the ${#flush_files_list[@]} files in the rest of the find_fileslist[]: ${flush_files_list[@]##*/}"
                 wd_rm ${flush_files_list[@]}
-                wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
+                wd_logger 1 "ERROR: After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
                 break
             fi
             local write_epoch_gap=$(( last_file_epoch - checking_file_epoch ))
-            if (( write_epoch_gap != 60  )); then
-
+            if (( write_epoch_gap == 60  )); then
+                wd_logger 1 "Accepting a file ${checking_file_name##*/} which has an expected gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+            else
                 ### The difference between files' epoch is not the expected one minute
                 if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCPETED_GAP )); then
                      wd_logger 1 "Accepting a file ${checking_file_name##*/} which has a gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
                  else
                      local flush_files_list=( ${find_files_list[@]:index} )
                      wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
-                     wd_logger 1 "So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
+                     wd_logger 1 "ERROR: So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
                      wd_rm ${flush_files_list[@]}
-                     wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
+                     wd_logger 1 "ERROR: After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
                      break
                 fi
             fi
 
-            ### Checking the file names minutes
-            ### This file is older than the last file but not more than 61 seconds older
-            ### Now check the file names differ by one minute 
-            ### Both kiwirecorder and 'pcmrecorder --jt' create files with names with the format:
-            ####    YYYYMMDDTHHMMSSZ_<FREQ_IN_HZ>_usb.wav
-            local file_write_time_difference_seconds=$(( checking_file_epoch - last_file_epoch ))
-
-            local last_file_minute
-            last_file_minute=${last_file_name##*/}
-            last_file_minute=$(( 10#${last_file_minute:11:2} ))   ### 
-
-            local checking_file_minute
-            checking_file_minute=${checking_file_name##*/}
-            checking_file_minute=$(( 10#${checking_file_minute:11:2} ))
-
-            wd_logger 2 "Checking that minute '${checking_file_minute}' file ${checking_file_name##*/} is one minute older than the previous minute '${last_file_minute}' file ${last_file_name##*/}"
-
-            local expected_minute
-            if (( last_file_minute == 0  )); then
-                expected_minute=59
-            else
-                expected_minute=$(( last_file_minute - 1 ))
-            fi
-            wd_logger 2 "last_file_minute=${last_file_minute}, so file next file should be one minute older: expected_minute=${expected_minute}"
-
-            if (( checking_file_minute != expected_minute )); then
-                local flush_files_list=( ${find_files_list[@]:index} )
-                wd_logger 1 "Found the minute ${checking_file_minute} name of file ${checking_file_name##*/} is not one minute older than the minute name ${last_file_minute} of the previous file ${last_file_name##*/}"
-                wd_rm ${flush_files_list[@]}
-                wd_logger 1 "After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#find_files_list[@]} contiguous files"
-                break
-            fi
-            wd_logger 2 "Adding the checked File ${checking_file_name##*/} for minute ${checking_file_minute} to the checked_files_list[] since it preceeds ${last_file_name##*/} by one minute"
+            wd_logger 2 "Adding the checked File ${checking_file_name##*/} to the checked_files_list[] since it's write time preceeds ${last_file_name##*/} by between 59 and 61 seconds"
             last_file_name=${checking_file_name}
             checked_files_list=( ${checking_file_name} ${checked_files_list[@]} ) 
         done          ### Checking the find_files_list[] and creating a list of 2 or more contiguous files
