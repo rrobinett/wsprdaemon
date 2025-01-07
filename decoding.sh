@@ -1673,7 +1673,7 @@ function decoding_daemon() {
                     if [[ -n "${wav_file_is_float}" ]]; then
                         wd_logger 1 "This is is the second or later float file decode leave the gain at 0"
                         channel_level_adjust=0     ### Signal that channel gain should be left at the '0' gain programed in the first cycle
-                    elif ${receiver_band} =~ ^WWV|^CHU ]]; then
+                    elif [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
                          wd_logger 1 "This is is the second or later int file and gain changes on this WWV/CHU channel '${receiver_band}' are disabled"
                           channel_level_adjust=0
                     else
@@ -1685,13 +1685,13 @@ function decoding_daemon() {
                             channel_level_adjust=${ka9q_channel_level_adjust}
                             wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
                         fi
-                        local limited_adjust_level=${channel_level_adjust}
-                        if ((  channel_level_adjust != 0 )); then
-                            limited_adjust_value=$((   channel_level_adjust < ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN} ? ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN} : \
-                                                     ( channel_level_adjust > ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ? ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ) ))
+                        local limited_adjust_value=${channel_level_adjust}
+                        if (( limited_adjust_value != 0 )); then
+                            if (( limited_adjust_value < ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN--10} )); then limited_adjust_value=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN--10}; fi
+                            if (( limited_adjust_value > ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX-10}  )); then limited_adjust_value=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX-10};  fi
                         fi
-                        if (( limited_adjust_level != channel_level_adjust )); then
-                            wd_logger 1 "Limiting the channel_adjust value by changing it from ${channel_level_adjust} to ${limited_adjust_level}"
+                        if (( limited_adjust_value != channel_level_adjust )); then
+                            wd_logger 1 "Limiting the channel_adjust value by changing it from ${channel_level_adjust} to ${limited_adjust_value}"
                             channel_level_adjust=${limited_adjust_value}
                         fi
                     fi
