@@ -44,6 +44,7 @@ function get_decode_mode_list() {
     return 0
 }
 
+
 ##########
 function get_af_db() {
     local return_variable_name=$1
@@ -601,9 +602,7 @@ function epoch_from_filename()
     return 0
 }
 
- ###
 ### Get the minute from the wav filename
-
 function minute_from_filename() 
 {
     local file_name=${1##*/}  ## strip off the path leaving only the filename 
@@ -612,6 +611,46 @@ function minute_from_filename()
     return 0
 }
 
+### If filename includes second 59, then rename it to next minute second 00
+function adjust_file_named_59_seconds_to_nearest_minute() {
+    local __return_new_file_path=$1
+    local adjust_current_file_path=$2
+
+    local adjust_current_file_dir=${adjust_current_file_path%/*}
+    local adjust_current_file_name=${adjust_current_file_path##*/}
+    local adjust_current_file_minutes=${adjust_current_file_name:11:2}
+    local adjust_current_file_seconds=${adjust_current_file_name:13:2}
+    local adjust_current_file_Z_to_end="Z_${adjust_current_file_name##*Z_}"
+
+    if [[ "${adjust_current_file_seconds}" == "00" ]]; then
+        wd_logger 2 "File ${adjust_current_file_path} is named for second 0, so nothing to do"
+        eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
+        return 0
+    fi
+    if ! [[ "${adjust_current_file_seconds}" == "59" ]]; then
+        wd_logger 1 "ERROR: File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, but it isn't second 59, so the file should probably be flushed"
+        return 1
+    fi
+    ### This file is named for second 59, so rename it to second 00 of the following minute
+    local adjust_current_file_epoch=$(epoch_from_filename ${adjust_current_file_path} )
+    local nearest_minute_epoch=$(( (adjust_current_file_epoch + 30) /60 * 60 ))
+
+    if (( nearest_minute_epoch != (adjust_current_file_epoch + 1) )); then
+        wd_logger 1 "ERROR: unexpectedly, a second 59 epoch didn't round up to second 00 of the next minute"       ### This should never happen
+        return 2
+    fi
+
+    local nearest_minute_file_path=$(printf "%s/%(%Y%m%dT%H%M%S)T%s" "${adjust_current_file_dir}" "${nearest_minute_epoch}" "${adjust_current_file_Z_to_end}")
+    local rc
+    mv ${adjust_current_file_path} ${nearest_minute_file_path}
+    rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: failed ' mv ${adjust_current_file_path} ${nearest_minute_file_path}' => ${rc}"
+        return 3
+    fi
+    wd_logger 1 "File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the next minute ${nearest_minute_file_path}"
+    eval ${__return_new_file_path}=${nearest_minute_file_path}      ## By default don't rename the file
+}
 
 ### Given a list of filenames, start from the newest file, the one at the end of the list (i.e. [-1]), and work towards the front of the list
 ### Make sure that each earlier filename is 1 minute earlier.  If not, then flush all the older files from the list
@@ -844,6 +883,21 @@ function get_wav_file_list() {
         for (( index = 1; index < ${#find_files_list[@]}; ++index )); do
             local checking_file_name=${find_files_list[index]}
 
+            ### pcmrecord names some the files to second 59 aor second 61.  Rename those files to the nearest second 0
+            local rc
+            local adjusted_file_name
+            adjust_file_named_59_seconds_to_nearest_minute  "adjusted_file_name" "${checking_file_name}"
+            rc=$?
+            if (( rc )); then
+                wd_logger 1 "ERROR: 'adjust_file_named_59_seconds_to_nearest_minute  'adjusted_file_name' '${checking_file_name}' => ${rc}"
+                continue
+            fi
+            if [[ "${adjusted_file_name}" != "${checking_file_name}" ]]; then
+                wd_logger 1 "File ${checking_file_name} was renamed to ${adjusted_file_name}"
+                find_files_list[index]="${adjusted_file_name}"
+                checking_file_name="${adjusted_file_name}"
+            fi
+
             wd_logger 2 "Checking that index=${index} with file ${checking_file_name##*/} is one minute older than ${last_file_name##*/}"
             
             ### Checking the write times of the wav files differ by between 59 and 61 seconds
@@ -862,7 +916,7 @@ function get_wav_file_list() {
             fi
             local write_epoch_gap=$(( last_file_epoch - checking_file_epoch ))
             if (( write_epoch_gap == 60  )); then
-                wd_logger 1 "Accepting a file ${checking_file_name##*/} which has an expected gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                wd_logger 2 "Accepting a file ${checking_file_name##*/} which has an expected gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
             else
                 ### The difference between files' epoch is not the expected one minute
                 if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCPETED_GAP )); then
