@@ -1894,7 +1894,7 @@ function decoding_daemon() {
             local rc
             sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}
              if [[ ${rc} -ne 0 ]]; then
-                 wd_logger 1 "ERROR: while getting stats for the one minute files with 'sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}' => ${rc}:\n$(< ${SOX_LOG_FILE}i)"
+                 wd_logger 1 "ERROR: while getting stats for the one minute files with 'sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}' => ${rc}:\n$(< ${SOX_LOG_FILE})"
              fi
             local max_input_float_amplitude
             max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
