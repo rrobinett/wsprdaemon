@@ -372,19 +372,19 @@ function ka9q_get_metadump() {
         if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
             wd_logger 2 "'metadump..&' finished after ${i} seconds of waiting"
         else
-            wd_logger 1 "ERROR: timing out waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}"
+            wd_logger 2 "ERROR: timing out after ${i} seconds of waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}:\n$(< metadump.log)"
             kill  ${metadump_pid} 2>/dev/null
             rc=124
         fi
 
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &'"
+        if (( rc )); then
+            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &':\n$(< metadump.log)"
         else
             sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
             wd_logger 2 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
 
-            if [[ ${status_log_line_count} -gt ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} ]]; then
+            if (( status_log_line_count > KA9Q_MIN_LINES_IN_USEFUL_STATUS )); then
                 wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
@@ -393,8 +393,8 @@ function ka9q_get_metadump() {
             fi
         fi
     done
-    if [[  "${got_status}" == "no" ]]; then
-        wd_logger 1 "ERROR: couldn't get useful status after ${KA9Q_GET_STATUS_TRIES}"
+    if [[ "${got_status}" == "no" ]]; then
+        wd_logger 2 "ERROR: couldn't get useful status after ${KA9Q_GET_STATUS_TRIES}"
         return 1
     else
         wd_logger 2 "Got new status from:  'metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}'"
@@ -692,7 +692,17 @@ function build_ka9q_radio() {
     local project_logfile="${project_subdir}_build.log"
 
     wd_logger 2 "Starting"
+    if [[ ! -e ${project_subdir} ]]; then
+        wd_logger 1 "ERROR:  project_subdir=${project_subdir} doesn't exist"
+        return 1
+    fi
+    local rc
     find ${project_subdir}  -type f -exec stat -c "%Y %n" {} \; | sort -n > before_make.txt
+    rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'find ${project_subdir}  -type... > before_make.txt' => ${rc}"
+        return 2
+    fi
     wd_logger 2 "Building ${project_subdir}"
     (
     cd  ${project_subdir}
@@ -714,6 +724,11 @@ function build_ka9q_radio() {
     fi
 
     find ${project_subdir} -type f -exec stat -c "%Y %n" {} \; | sort -n > after_make.txt
+    rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'find ${project_subdir}  -type...' > after_make.tx  => ${rc} "
+        return 2
+    fi
     diff before_make.txt after_make.txt > diff.log
     rc=$?
     case ${rc} in
