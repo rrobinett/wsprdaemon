@@ -65,8 +65,13 @@ function get_af_db() {
             default_value=${fields[1]}
             wd_logger 1 "Found default value ${default_value}"
         elif [[ ${fields[0]} == ${real_receiver_rx_band} ]]; then
-            wd_logger 1 "Found AF value ${fields[1]} for receiver ${real_receiver_name}, band ${real_receiver_rx_band}"
-            eval ${return_variable_name}=${fields[1]}
+            if (( ${#fields[@]} < 2 )); then
+                 wd_logger 1 "ERROR: The the AF gain for receiver ${real_receiver_name}, band ${real_receiver_rx_band} is missing on the receive config file line, so default to 0"
+                 eval ${return_variable_name}=0
+             else
+                 wd_logger 1 "Found AF value ${fields[1]} for receiver ${real_receiver_name}, band ${real_receiver_rx_band}"
+                 eval ${return_variable_name}=${fields[1]}
+            fi
             return 0
         fi
     done
