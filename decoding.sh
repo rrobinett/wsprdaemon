@@ -413,10 +413,17 @@ function flush_wav_files_older_than()
     fi
     wd_logger 1 "Delete any files older than ${reference_file}"
 
+    local rc
+    find -name '*wav' >& find.log
+    rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'find -name '*wav' > find.log'=> ${rc}:\n$(< find.log)"
+        return ${rc}
+    fi
     local olders=0
     local newers=0
     local wav_file
-    for wav_file in $(find -name '*wav'); do
+    for wav_file in $(<find.log); do
         if [[ ${wav_file} -ot ${reference_file} ]]; then
             (( ++olders ))
             wd_logger 1 "Deleting older wav file '${wav_file}'"
@@ -822,8 +829,15 @@ function get_wav_file_list() {
     while (( ${#return_list[@]} == 0 )); do
         ### Get a list of all wav files for this band
         wd_logger 2 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
+        local rc
+        find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" >& find.log
+        rc=$?
+        if (( rc )); then
+            wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex} > find.log:\n$(<find.log)"
+            continue
+        fi
         local find_files_list=()
-        find_files_list=( $( find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" | sort -r ) )
+        find_files_list=( $( sort -r find.log ) )
 
         if (( ${#find_files_list[@]} < 1 )); then
             wd_logger 2 "Found no wav files.  Sleep 1 and then search again"
