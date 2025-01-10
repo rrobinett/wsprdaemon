@@ -46,7 +46,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
 
     ### Search each receiver for wav files
     local receiver_dir
-    local receiver_dir_list=( $(find "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d | sort ) )
+    local receiver_dir_list=( $(find "${reporter_wav_root_dir}" -mindepth 1 -maxdepth 1 -type d -not -name '*mutex.lock' | sort ) )
     if [[ ${#receiver_dir_list[@]} -eq 0 ]]; then
         echo "There are no receiver dirs under ${reporter_wav_root_dir}"
         return 1
