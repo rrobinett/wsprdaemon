@@ -60,8 +60,6 @@ def create_drf_dataset(inputdir, dataset_dir, subchannels, config_global, start_
     subdir_cadence_secs = int(config_global['subdir cadence secs'])
     file_cadence_millisecs = int(config_global['file cadence millisecs'])
     compression_level = int(config_global['compression level'])
-    dtype = 'i2'  # 16bit shorts
-    #dtype = 'float32'
 
     if uuid_str is None:
         uuid_str = uuid.uuid4().hex
@@ -77,6 +75,11 @@ def create_drf_dataset(inputdir, dataset_dir, subchannels, config_global, start_
     samples = [None] * len(subchannels)
     for idx, subchannel in enumerate(subchannels):
         wav_file = os.path.join(inputdir, subchannel[0], subchannel[1])
+        if sf.info(wav_file).subtype == 'PCM_16':
+            dtype = 'i2'
+        else:
+            dtype = 'float32'
+
         samples[idx], wav_sample_rate = sf.read(wav_file, dtype=dtype)
 
         # sanity checks
