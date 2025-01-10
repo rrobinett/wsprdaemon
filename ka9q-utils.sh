@@ -388,8 +388,7 @@ function ka9q_get_metadump() {
                 wd_logger 2 "Got useful status file"
                 got_status="yes"
             else
-                local wd_logger_string=$(echo "WARNING: there are only ${status_log_line_count} lines in ${status_log_file}:\n$(< ${status_log_file})\nSo try metdump again")
-                wd_logger 1 "ERROR: not the number of expected lines in ${wd_logger_string}\nmetadum.log:\n$(< metadump.log)"
+                wd_logger 1 "ERROR: There are only ${status_log_line_count} lines, not the expected ${KA9Q_MIN_LINES_IN_USEFUL_STATUS} or more lines in ${status_log_file}:\n$(< ${status_log_file})\nSo try metadump again"
             fi
         fi
     done
