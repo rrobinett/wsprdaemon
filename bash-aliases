@@ -436,7 +436,7 @@ alias tfw='tf ~/wsprdaemon/watchdog_daemon.log'
 alias g='git'
 alias gc='git commit'
 alias gd='git diff'
-alias gs='git status | head'
+alias gs='git status | grep -B 100 "Untracked files"'
 alias gl='git log | head'
 
 ### Get pub file for a copy/past to remote server's .ssh/authorized_keys file
@@ -1229,9 +1229,15 @@ function  wd-git-to-ssh(){
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
-alias wd-watch-wavs='watch "ls -lr *.wav"'  ### watch for wd-record or kiwirecorder to create wav files in cwd
+function wd-watch-wavs() {
+    local band_freq=${1-14}
+    local band_dir=${PWD##*/}
+    local ls_regex="*.wav ../*Z_${band_freq}*"
+    watch "ls -lr ${ls_regex}"  ### watch for wd-record or kiwirecorder to create wav files in cwd
+}
 alias wdww='wd-watch-wavs'
-alias wdps='ps aux | grep wd-record | grep -v grep'
+
+alias wdps='ps aux | grep "wd-record\|pcmrecord" | grep -v grep'
 
 function wd-ssh-to-wdclient() {
     local rac_id=${1:-usage}
