@@ -112,12 +112,13 @@ function queue_wav_file()
         fi
         return 1
     fi
-     wd_logger 1 "${queue_file_system_percent_used}% of the ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} file system is used, so there is space for ${source_wav_file_path}, so queue it"
+    wd_logger 1 "${queue_file_system_percent_used}% of the ${WAV_FILE_ARCHIVE_TMP_ROOT_DIR} file system is used, so there is space for ${source_wav_file_path}, so queue it"
 
     mkdir -p ${archive_dir}
 
     ### Since the source and destination directories are on the same file system, we can 'mv' the wav file
     ### Also, 'mv' performas no CPU intensive file copying, and it is an atomic operation and thus there is no race with the tar archiver
+    wd_logger 1 "mv ${source_wav_file_path} ${archive_file_path}"
     mv ${source_wav_file_path} ${archive_file_path}
     rc=$?
     if (( rc )); then
@@ -262,6 +263,7 @@ function wd_archive_wavs()
              fi
              local compressed_wav_file_name=${compressed_wav_file_path##*/}
              local dest_compressed_wav_file_path="${dest_file_dir}/${compressed_wav_file_name}"
+             wd_logger 1 "'mv ${compressed_wav_file_path} ${dest_compressed_wav_file_path}'"
              mv ${compressed_wav_file_path} ${dest_compressed_wav_file_path}
              rc=$?
              if (( rc )); then
