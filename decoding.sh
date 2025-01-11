@@ -649,6 +649,7 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
 
     local nearest_minute_file_path=$(printf "%s/%(%Y%m%dT%H%M%S)T%s" "${adjust_current_file_dir}" "${nearest_minute_epoch}" "${adjust_current_file_Z_to_end}")
     local rc
+    wd_logger 1 "mv ${adjust_current_file_path} ${nearest_minute_file_path}"
     mv ${adjust_current_file_path} ${nearest_minute_file_path}
     rc=$?
     if (( rc )); then
@@ -801,7 +802,7 @@ function get_wav_file_list() {
 
     ### The pcmrecord wav files are created with names which different from those created by kiwirecorder
     local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
-    local wav_file_regex="*_${band_freq_hz}_usb.wav"
+    local wav_file_regex="*_${band_freq_hz}*.wav"
 
     # Start:
     # Find all wav files for this band abd sort by reverse time (i.e newest in [0]
@@ -1833,12 +1834,20 @@ function decoding_daemon() {
                 wd_logger 1 "We are configured to only record and archive IQ files"
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
-                if [[ ${#wav_files_list[@]} -ne 1 ]]; then
-                    wd_logger 1 "ERROR: IQ recording should return only one 1 minute long file at a time"
+                if (( ${#wav_files_list[@]} != 1 )); then
+                    wd_logger 1 "ERROR: IQ mode records one one1 minute file at a time, but we have been given a list of ${#wav_files_list[@]} wav files. So we will be processing only the first of these:\n${wav_files_list[*]}"
+                else
+                    wd_logger 1 "Compresing and archiving ${wav_files_list[0]}"
                 fi
-                ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
-                local iq_file_name=${wav_files_list[0]/_usb.wav/_iq.wav}
-                mv ${wav_files_list[0]} ${iq_file_name}
+
+                local iq_file_name
+                if [[  ${wav_files_list[0]} =~ _usb.wav ]]; then
+                    ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
+                    iq_file_name=${wav_files_list[0]/_usb.wav/_iq.wav}
+                    mv ${wav_files_list[0]} ${iq_file_name}
+                else
+                    iq_file_name="${wav_files_list[0]}"
+                fi
                 local wav_file_stat_list=( $(sox ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
                 local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
                 local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
@@ -1846,7 +1855,7 @@ function decoding_daemon() {
                 local wav_file_RMS_dBFS_value=${wav_file_stats_list[1]}    ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
                 local wav_file_RMS_Trough_value=${wav_file_stats_list[2]}  ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
 
-                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} 16 bit samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
+                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
 
                 local expected_samples
                 case ${receiver_modes_list[0]} in
@@ -1870,11 +1879,11 @@ function decoding_daemon() {
                     wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${expected_samples} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
-                    wd_logger 2 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
+                    wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
                     queue_wav_file ${iq_file_name} ${wav_archive_dir}
                     rc=$?
                     if [[ ${rc} -eq 0 ]]; then
-                        wd_logger 1 "Archived wav file ${iq_file_name}"
+                        wd_logger 1 "Archived wav file ${iq_file_name} to  ${wav_archive_dir}"
                     else
                         wd_logger 1 "ERROR: 'queue_wav_file ${iq_file_name}' => $?"
                     fi
