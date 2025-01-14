@@ -761,8 +761,8 @@ COMMENTED_OUT_LINES
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
 
-declare MIN_ACCEPTED_GAP=59       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
-declare MAX_ACCPETED_GAP=61
+declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
+declare MAX_ACCPETED_GAP=${MAN_ACCEPTED_GAP-70}
 
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
