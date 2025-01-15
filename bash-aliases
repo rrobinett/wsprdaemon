@@ -3,6 +3,80 @@
 
 shopt -s -o nounset
 
+### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
+alias WDZ='wd-killall'
+alias WDK='wd-killall'
+alias WDD='wd-killall'
+function wd-killall() {
+    local rc
+    local rc1
+
+    ### Stop all services
+    local services_regex_list=(  radiod@rx888-* ft4-decoded.service ft8-decoded.service  pskreporter@* wspsrdaemon )
+    local service_regex
+    for service_regex in ${services_regex_list[@]}; do
+        local services_list=( $( systemctl list-units --type=service --all "${service_regex}" --no-legend | awk '/running/{print $1}') )
+        if (( ! ${#services_list[@]} )); then
+            continue
+        fi
+        printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
+
+        local service_name
+        for   service_name in ${services_list[@]}; do 
+            sudo systemctl status ${service_name} --no-pager >& /tmp/wd-killall.log
+            rc=$?
+            if (( rc )); then
+                printf "Service '${service_name}' is not being run by systemctl, but it may be running in a terminal window\n"
+            else
+                sudo systemctl stop ${service_name} >& /tmp/wd-killall.log
+                rc=$?
+                if (( rc )); then
+                    printf "Service '${service_name}' was running, but 'sudo systemctl stop ${service_name}' => ${rc}\n"
+                else
+                    printf "Service '${service_name}' was running, but 'sudo systemctl stop ${service_name}' => ${rc}\n"
+                fi
+            fi
+        done
+    done
+
+    ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
+    local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
+    if (( ! ${#pid_file_list[@]} )); then
+        (( ${verbosity-0} )) && printf "Found no pid files\n"
+    else
+        printf "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'\n"
+
+        local pid_file
+        for pid_file in ${pid_file_list[@]}; do
+            local pid_val=$(< ${pid_file})
+            printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
+            sudo kill ${pid_val}
+            rc=$?
+            if (( rc )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
+            fi
+            rm ${pid_file}
+            rc1=$?
+            if (( rc1 )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                printf "INFO: failed to rm '${pid_file}'\n"
+            fi
+            if (( ! rc && ! rc1 )); then
+                printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+            fi
+        done
+   fi
+   #read -p "Done killing all pids from PID files. Proceed to search for and kill zombies? => "
+
+    ps aux | grep 'pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local zombie_pid_list=( $( cut -d " " -f 2  /tmp/wd-killall.log ) )
+    if (( ${#zombie_pid_list[@]} )); then
+        printf "Killing ${#zombie_pid_list[@]} PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
+        sudo kill ${zombie_pid_list[@]}
+    fi
+}
+
 function wd-flush-hashtables() {
     wc $(find /dev/shm/wsprdaemon/ -type f -name hashtable.txt) | sort -n
     read -p "Flush these hashtable.txt files? => "
