@@ -670,7 +670,7 @@ function ka9q_web_service_daemon() {
         fi
         local daemon_log_file="ka9q_web_service_${server_ip_port}.log"
         wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}"
-        ${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}   ### DANGER: nothing limits the size of this log file!!!
+        ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}   ### DANGER: nothing limits the size of this log file!!!
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${server_description}' => ${rc}:\n$(<  ${daemon_log_file})"
