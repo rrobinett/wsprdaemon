@@ -643,18 +643,14 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         wd_rm ${adjust_current_file_path}
         return 1
     fi
-    ### This file is named for second 59, so rename it to second 00 of the following minute
+    ### This file is named for second 50-70, so rename it to second 00 of the nearest minute
     local adjust_current_file_epoch=$(epoch_from_filename ${adjust_current_file_path} )
     local nearest_minute_epoch=$(( (adjust_current_file_epoch + 30) /60 * 60 ))
 
-    if (( nearest_minute_epoch != (adjust_current_file_epoch + 1) )); then
-        wd_logger 1 "ERROR: unexpectedly, a second 59 epoch didn't round up to second 00 of the next minute"       ### This should never happen
-        return 2
-    fi
-
     local nearest_minute_file_path=$(printf "%s/%(%Y%m%dT%H%M%S)T%s" "${adjust_current_file_dir}" "${nearest_minute_epoch}" "${adjust_current_file_Z_to_end}")
+    wd_logger 1 "Renaming the second ${adjust_current_file_seconds} file ${adjust_current_file_path##*/} to the nearest minute ${nearest_minute_file_path##*/}"
+
     local rc
-    wd_logger 1 "mv ${adjust_current_file_path} ${nearest_minute_file_path}"
     mv ${adjust_current_file_path} ${nearest_minute_file_path}
     rc=$?
     if (( rc )); then
