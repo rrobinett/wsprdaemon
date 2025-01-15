@@ -619,6 +619,9 @@ function minute_from_filename()
 }
 
 ### If filename includes second 59, then rename it to next minute second 00
+declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
+declare MAX_ACCEPTED_GAP=${MAX_ACCEPTED_GAP-70}
+
 function adjust_file_named_59_seconds_to_nearest_minute() {
     local __return_new_file_path=$1
     local adjust_current_file_path=$2
@@ -634,8 +637,10 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
         return 0
     fi
-    if ! [[ "${adjust_current_file_seconds}" == "59" ]]; then
-        wd_logger 1 "ERROR: File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, but it isn't second 59, so the file should probably be flushed"
+    local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
+    if (( current_file_seconds_int <  MIN_ACCEPTED_GAP || current_file_seconds_int > MAX_ACCEPTED_GAP )); then
+        wd_logger 1 "ERROR: File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${MIN_ACCEPTED_GAP} to ${MAX_ACCEPTED_GAP} seconds, so dump the file"
+        wd_rm ${adjust_current_file_path}
         return 1
     fi
     ### This file is named for second 59, so rename it to second 00 of the following minute
@@ -760,9 +765,6 @@ COMMENTED_OUT_LINES
 
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
-
-declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
-declare MAX_ACCPETED_GAP=${MAN_ACCEPTED_GAP-70}
 
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
@@ -934,8 +936,12 @@ function get_wav_file_list() {
                 wd_logger 2 "Accepting a file ${checking_file_name##*/} which has an expected gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
             else
                 ### The difference between files' epoch is not the expected one minute
-                if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCPETED_GAP )); then
-                     wd_logger 1 "Accepting a file ${checking_file_name##*/} which has a gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCEPTED_GAP )); then
+                    if (( write_epoch_gap >= 59 &&  write_epoch_gap <= 61 )); then
+                        wd_logger 2 "Accepting a file ${checking_file_name##*/} which has a commonly found gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                    else
+                        wd_logger 1 "Accepting a file ${checking_file_name##*/} which has a uncommon gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                    fi
                  else
                      local flush_files_list=( ${find_files_list[@]:index} )
                      wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
