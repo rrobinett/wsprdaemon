@@ -12,14 +12,16 @@ function wd-killall() {
     local rc1
 
     ### Stop all services
-    local services_regex_list=(  radiod@rx888-* ft4-decoded.service ft8-decoded.service  pskreporter@* wspsrdaemon )
+    local services_regex_list=(  "radiod@.*" ft4-decoded.service ft8-decoded.service  "pskreporter@*" wspsrdaemon )
     local service_regex
-    for service_regex in ${services_regex_list[@]}; do
-        local services_list=( $( systemctl list-units --type=service --all "${service_regex}" --no-legend | awk '/running/{print $1}') )
+    for service_regex in "${services_regex_list[@]}"; do
+        set +x
+        local services_list=( $( systemctl list-units --type=service --no-legend --no-pager | awk -v service_regex="${service_regex}.*running" '$0 ~ service_regex{print $1}') )
+        set +x
         if (( ! ${#services_list[@]} )); then
             continue
         fi
-        printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
+        (( ${verbosity-0} )) && printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
 
         local service_name
         for   service_name in ${services_list[@]}; do 
@@ -33,7 +35,7 @@ function wd-killall() {
                 if (( rc )); then
                     printf "Service '${service_name}' was running, but 'sudo systemctl stop ${service_name}' => ${rc}\n"
                 else
-                    printf "Service '${service_name}' was running, but 'sudo systemctl stop ${service_name}' => ${rc}\n"
+                    (( ${verbosity-0} )) && printf "Service '${service_name}' was running and 'sudo systemctl stop ${service_name}' was successful\n"
                 fi
             fi
         done
@@ -44,26 +46,26 @@ function wd-killall() {
     if (( ! ${#pid_file_list[@]} )); then
         (( ${verbosity-0} )) && printf "Found no pid files\n"
     else
-        printf "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'\n"
+        (( ${verbosity-0} )) && printf "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'\n"
 
         local pid_file
         for pid_file in ${pid_file_list[@]}; do
             local pid_val=$(< ${pid_file})
-            printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
-            sudo kill ${pid_val}
+            (( ${verbosity-0} )) && printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
+            sudo kill ${pid_val} >& /tmp/wd-killall.log
             rc=$?
             if (( rc )); then
                 ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
-                printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
+                (( ${verbosity-0} )) && printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
             fi
             rm ${pid_file}
             rc1=$?
             if (( rc1 )); then
                 ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
-                printf "INFO: failed to rm '${pid_file}'\n"
+                (( ${verbosity-1} )) && printf "INFO: failed to rm '${pid_file}'\n"
             fi
             if (( ! rc && ! rc1 )); then
-                printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+                (( ${verbosity-1} )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
             fi
         done
    fi
