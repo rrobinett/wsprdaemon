@@ -71,12 +71,12 @@ function get_frpc_ini_values() {
         return 1
     fi
     local rac_id_line_list=( $( sed -n '/^\[/s/\].*//; /^\[/s/\[//p' ${FRPC_INI_FILE}) )   ## get lines which start with '[' and strip '[' and ']' from those lines
-    if [[ ${#rac_id_line_list[@]} -eq 0 ]]; then
+    if (( ! ${#rac_id_line_list[@]} )); then
         wd_logger 1 "ERROR: Found no '[...]' lines in ${FRPC_INI_FILE}"
         return 2
     fi
     wd_logger 2 "Found ${#rac_id_line_list[@]} '[...]' lines in  ${FRPC_INI_FILE}: ${rac_id_line_list[*]}"
-    if [[ ${#rac_id_line_list[@]} -eq 1 ]]; then
+    if (( ${#rac_id_line_list[@]} == 1 )); then
         wd_logger 1 "ERROR: Found only one '[...]'' line in  ${FRPC_INI_FILE}: ${rac_id_line_list[0]}"
         return 3
     fi
@@ -85,17 +85,17 @@ function get_frpc_ini_values() {
     wd_logger 2 "Found frpc_ini's RAC_ID = '${frpc_ini_id}'"
 
     local rac_port_line_list=( $(grep "^remote_port"  ${FRPC_INI_FILE}) )
-    if [[ ${#rac_port_line_list[@]} -ne 3 ]]; then 
+    if (( ${#rac_port_line_list[@]} < 3 )); then 
         wd_logger 1 "ERROR: can't find valid 'remote_port' line"
         return 4
     fi
     local remote_port=${rac_port_line_list[2]}
 
-    if [[ ${remote_port} -lt ${RAC_IP_PORT_BASE} || ${remote_port} -ge ${RAC_IP_PORT_MAX} ]]; then
+    if (( remote_port < RAC_IP_PORT_BASE  || remote_port >= RAC_IP_PORT_MAX )); then
         wd_logger 1 "ERROR: remote_port ${remote_port} found in ${FRPC_INI_FILE} is invalid"
         return 5
     fi
-    local frpc_ini_channel=$(( ${remote_port} - ${RAC_IP_PORT_BASE} )) 
+    local frpc_ini_channel=$(( remote_port - RAC_IP_PORT_BASE )) 
     local return_value="${frpc_ini_channel} ${frpc_ini_id}"
 
     wd_logger 2 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
