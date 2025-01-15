@@ -65,7 +65,7 @@ function wd-killall() {
                 (( ${verbosity-1} )) && printf "INFO: failed to rm '${pid_file}'\n"
             fi
             if (( ! rc && ! rc1 )); then
-                (( ${verbosity-1} )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+                (( ${verbosity-0} )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
             fi
         done
    fi
@@ -74,7 +74,7 @@ function wd-killall() {
     ps aux | grep 'pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( cut -d " " -f 2  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
-        printf "Killing ${#zombie_pid_list[@]} PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
+        printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
         sudo kill ${zombie_pid_list[@]}
     fi
 }
