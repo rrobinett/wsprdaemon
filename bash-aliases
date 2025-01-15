@@ -3,7 +3,42 @@
 
 shopt -s -o nounset
 
+### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
+function ka9q-web-control-usage() {
+    echo "$0:
+    -h   => print this help message
+    -a   => kill all running ka9q-web servers and start them again
+    -z   => kill all running ka9q-web servers
+    -s   => show status of running ka9q-web servers"
+}
+
+function ka9q-web-control() {
+    if [[ -z "$@" || "$@" == "-h" ]] ; then
+        ka9q-web-control-usage
+        return 0
+    fi
+
+    if [[ "${1-}" == "-s" ]]; then
+        ps aux | grep ka9q-web | grep -v 'grep\|ka9q-web-control'
+        return 0
+    fi
+
+    sudo killall ka9q-web
+
+    if [[ "${1-}" == "-k" ]]; then
+        echo "Killed all ka9q-web services"
+        return 0
+    fi
+
+    /usr/local/sbin/ka9q-web -m hf.local  -p 8081 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8081.log &
+    /usr/local/sbin/ka9q-web -m hf1.local -p 8082 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8082.log &
+
+    echo "Spawned two ka9q-web services, one on port 8081 and port 8082"
+    return 0
+}
+
 ### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
+alias WDA='wd -A'
 alias WDZ='wd-killall'
 alias WDK='wd-killall'
 alias WDD='wd-killall'
