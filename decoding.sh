@@ -1552,7 +1552,7 @@ function decoding_daemon() {
         wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local ret_code
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
-        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} 
+        get_wav_file_list "mode_seconds_files"  ${receiver_name} ${receiver_band} ${receiver_modes} 
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
@@ -1682,10 +1682,25 @@ function decoding_daemon() {
             local first_mode_wav_files_list=( ${first_mode_files//,/ } )
             local newest_one_minute_wav_file=${first_mode_wav_files_list[-1]}
 
-            local sox_stats_list=( $(sox ${newest_one_minute_wav_file} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
-            local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
-            local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn'
-
+            local sox_peak_dBFS_value=0
+            local sox_channel_level_adjust=0
+            if [[ ! -f ${newest_one_minute_wav_file} ]]; then
+                wd_logger 1 "ERROR: The newest file '${newest_one_minute_wav_file}' in the list of files in '${mode_wav_file_list[*]}' doesn't exist"
+            else
+                sox ${newest_one_minute_wav_file} -n stats >& sox-stats.log
+                rc=$?
+                if (( rc )); then
+                    wd_logger 1 "ERROR: 'sox ${newest_one_minute_wav_file}' => ${rc}:\n$(<sox-stats.log)"
+                else
+                    local sox_stats_list=( $(  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' sox-stats.log ) )
+                    if (( ${#sox_stats_list[@]} != 3 )); then
+                        wd_logger 1 "ERROR: awk didn't extract the expected three dB values from sox-stats.log:\n$(<sox-stats.log)"
+                    else
+                        sox_peak_dBFS_value=${sox_stats_list[0]}
+                        sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc )
+                    fi
+                fi
+            fi
             if (( sox_channel_level_adjust != 0 )); then
                 wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file##*/}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
             fi
