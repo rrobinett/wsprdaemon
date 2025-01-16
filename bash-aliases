@@ -106,8 +106,8 @@ function wd-killall() {
    fi
    #read -p "Done killing all pids from PID files. Proceed to search for and kill zombies? => "
 
-    ps aux | grep 'pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    local zombie_pid_list=( $( cut -d " " -f 2  /tmp/wd-killall.log ) )
+    ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
         sudo kill ${zombie_pid_list[@]}
