@@ -164,6 +164,7 @@ while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
             ;;
         g)
             grape_menu -$OPTARG
+            echo "Finished running 'grape_menu -$OPTARG' => $?"
             ;;
         v)
             ((verbosity++))
