@@ -633,13 +633,13 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
     local adjust_current_file_Z_to_end="Z_${adjust_current_file_name##*Z_}"
 
     if [[ "${adjust_current_file_seconds}" == "00" ]]; then
-        wd_logger 2 "File ${adjust_current_file_path} is named for second 0, so nothing to do"
+        wd_logger 2 "File ${adjust_current_file_path##*/} is named for second 0, so nothing to do"
         eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
         return 0
     fi
     local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
     if (( current_file_seconds_int <  MIN_ACCEPTED_GAP || current_file_seconds_int > MAX_ACCEPTED_GAP )); then
-        wd_logger 1 "ERROR: File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${MIN_ACCEPTED_GAP} to ${MAX_ACCEPTED_GAP} seconds, so dump the file"
+        wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${MIN_ACCEPTED_GAP} to ${MAX_ACCEPTED_GAP} seconds, so dump the file"
         wd_rm ${adjust_current_file_path}
         return 1
     fi
@@ -654,10 +654,10 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
     mv ${adjust_current_file_path} ${nearest_minute_file_path}
     rc=$?
     if (( rc )); then
-        wd_logger 1 "ERROR: failed ' mv ${adjust_current_file_path} ${nearest_minute_file_path}' => ${rc}"
+        wd_logger 1 "ERROR: failed ' mv ${adjust_current_file_path##*/} ${nearest_minute_file_path}' => ${rc}"
         return 3
     fi
-    wd_logger 1 "File ${adjust_current_file_path} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the next minute ${nearest_minute_file_path}"
+    wd_logger 1 "File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the next minute ${nearest_minute_file_path##*/}"
     eval ${__return_new_file_path}=${nearest_minute_file_path}      ## By default don't rename the file
 }
 
