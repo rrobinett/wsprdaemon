@@ -606,6 +606,8 @@ function minute_from_filename()
 ### If filename includes second 59, then rename it to next minute second 00
 declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
 declare MAX_ACCEPTED_GAP=${MAX_ACCEPTED_GAP-70}
+declare FILE_NAME_REJECT_SECONDS_MIN=$(( 60 - MIN_ACCEPTED_GAP ))                 ### Filenames outside the range of 50-59 an 0-10 will be rejected
+declare FILE_NAME_REJECT_SECONDS_MAX=$(( 60 - FILE_NAME_REJECT_SECONDS_MIN ))
 
 function adjust_file_named_59_seconds_to_nearest_minute() {
     local __return_new_file_path=$1
@@ -623,8 +625,8 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         return 0
     fi
     local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
-    if (( current_file_seconds_int <  MIN_ACCEPTED_GAP || current_file_seconds_int > MAX_ACCEPTED_GAP )); then
-        wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${MIN_ACCEPTED_GAP} to ${MAX_ACCEPTED_GAP} seconds, so dump the file"
+    if (( current_file_seconds_int > FILE_NAME_REJECT_SECONDS_MIN && current_file_seconds_int < FILE_NAME_REJECT_SECONDS_MAX )); then
+        wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${FILE_NAME_REJECT_SECONDS_MAX} to ${FILE_NAME_REJECT_SECONDS_MIN} seconds, so dump the file"
         wd_rm ${adjust_current_file_path}
         return 1
     fi
@@ -641,7 +643,7 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         wd_logger 1 "ERROR: failed ' mv ${adjust_current_file_path##*/} ${nearest_minute_file_path}' => ${rc}"
         return 3
     fi
-    wd_logger 1 "File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the next minute ${nearest_minute_file_path##*/}"
+    wd_logger 1 "File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the nearest minute ${nearest_minute_file_path##*/}"
     eval ${__return_new_file_path}=${nearest_minute_file_path}      ## By default don't rename the file
 }
 
