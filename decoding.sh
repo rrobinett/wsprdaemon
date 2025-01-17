@@ -1080,8 +1080,7 @@ function flush_or_archive_checked_wav_files() {
     fi
     if [[ "${config_archive_raw_wav_files}" != "yes" ]]; then
         wd_rm ${wav_file_list[@]}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Failed flushing old checked_lists_list[]: 'wd_rum ${wav_file_list[*]}' => ${rc}"
         fi
         return ${rc}
@@ -1089,19 +1088,18 @@ function flush_or_archive_checked_wav_files() {
         local rrc=0
         local raw_wav_file
         for raw_wav_file in ${wav_file_list[@]} ; do
-            queue_wav_file ${raw_wav_file} ${wav_archive_dir}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 1 "INFO: Archived wav file ${raw_wav_file}"
-            else
-                wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' => $?"
+            archive_wav_file ${raw_wav_file} ${receiver_name} ${receiver_band}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'archive_wav_file ${raw_wav_file} ${receiver_name} ${receiver_band}' => $?"
                 rrc=${rc}
+            else
+                wd_logger 1 "INFO: Archived wav file ${raw_wav_file}"
             fi
         done
-        if [[ ${rrc} -eq 0 ]]; then
-            wd_logger 1 "INFO: Archived all wav files"
+        if (( rrc )); then
+            wd_logger 1 "ERROR: 'archive_wav_file ...' failed one or more times=> ${rrc}"
         else
-            wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' failed one or more times=> $${rrc}"
+            wd_logger 1 "INFO: Archived all wav files"
         fi
         return ${rrc}
     fi
@@ -1197,7 +1195,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         local input_spot_grid_field_index=6
         local input_spot_field_name_list_count=${#input_spot_field_name_list[@]}
         local type1_field_count=${input_spot_field_name_list_count}
-        local type3_field_count=$((  ${type1_field_count} - 1 ))
+        local type3_field_count=$(( ${type1_field_count} - 1 ))
         if [[ ${spot_line_list_count} -eq ${type1_field_count} ]]; then
             wd_logger 2 "Found a spot line with the normal ${type1_field_count} fields of a type 1 spot"
         elif [[ ${spot_line_list_count} -eq ${type3_field_count} ]]; then
@@ -1892,17 +1890,16 @@ function decoding_daemon() {
                         ;;
                 esac
 
-                if [[ ${wav_file_samples} -ne ${expected_samples} ]]; then
+                if (( wav_file_samples != expected_samples )); then
                     wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${expected_samples} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
                     wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
-                    queue_wav_file ${iq_file_name} ${wav_archive_dir}
-                    rc=$?
-                    if [[ ${rc} -eq 0 ]]; then
-                        wd_logger 1 "Archived wav file ${iq_file_name} to  ${wav_archive_dir}"
+                    archive_wav_file ${iq_file_name} ${receiver_name} ${receiver_band}
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: 'archive_wav_file ${iq_file_name} ${receiver_name} ${receiver_band}' => ${rc}"
                     else
-                        wd_logger 1 "ERROR: 'queue_wav_file ${iq_file_name}' => $?"
+                        wd_logger 1 "Archived wav file ${iq_file_name}  ${receiver_name} ${receiver_band}"
                     fi
                 fi
                 ### Go back and check for other modes
@@ -2380,10 +2377,10 @@ function decoding_daemon() {
             else
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
-                if queue_wav_file ${decoder_input_wav_filepath} ${wav_archive_dir}; then
-                    wd_logger 1 "Archived wav file ${decoder_input_wav_filepath}"
+                if archive_wav_file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band} ; then
+                    wd_logger 1 "Archived wav file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band}"
                 else
-                    wd_logger 1 "ERROR: 'queue_wav_file ${decoder_input_wav_filepath}' => $?"
+                    wd_logger 1 "ERROR: 'archive_wav_file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band}' => $?"
                 fi
             fi
             if [[ ${processed_wav_files} == "yes" ]]; then 
