@@ -192,7 +192,6 @@ function upload_24hour_wavs_to_grape_drf_server() {
         ${WAV2GRAPE_PYTHON_CMD} -i "${receiver_dir}" -o "${GRAPE_TMP_DIR}" > ${wav2grape_stdout_file}  2> ${wav2grape_stderr_file}
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: '${WAV2GRAPE_PYTHON_CMD} -i $receiver_dir -o $GRAPE_TMP_DIR' =${rc}:\n$(<${wav2grape_stderr_file})"
-            exit 1
             return ${rc}
         fi
         local receiver_tmp_dir="$(<${wav2grape_stdout_file} )"
