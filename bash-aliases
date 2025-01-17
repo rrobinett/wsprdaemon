@@ -38,10 +38,6 @@ function ka9q-web-control() {
 }
 
 ### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
-alias WDA='wd -A'
-alias WDZ='wd-killall'
-alias WDK='wd-killall'
-alias WDD='wd-killall'
 function wd-killall() {
     local rc
     local rc1
@@ -687,8 +683,9 @@ alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wdld='wd -l d'
-alias wda='wd -a'
-alias wdz='wd -z'
+alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
+alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wds='wd -s'
 alias wdv='wd -V'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
