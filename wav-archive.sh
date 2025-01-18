@@ -25,7 +25,7 @@ function archive_wav_file()
     fi
     ### Linux directory names can't have the '/' character in them which is so common in ham callsigns.  So replace all those '/' with '=' characters which (I am pretty sure) are never legal
     local call_dir_name=${reporter_call_grid//\//=}
-    local grape_id="@${GRAPE_PSWS_ID-NOT_DEFINED}"     ### always add @... to the directory name so it can be easily found and updated if a GRAPE_PSWS_ID is later obtained
+    local grape_id="${GRAPE_PSWS_ID-NOT_DEFINED}"     ### always add @... to the directory name so it can be easily found and updated if a GRAPE_PSWS_ID is later obtained
     local archive_dir="${GRAPE_WAV_ARCHIVE_ROOT_PATH}/${source_file_date}/${reporter_call_grid}/${receiver_name}@${grape_id}/${receiver_band}"
 
     local source_wav_file_name="${source_wav_file_path##*/}"
