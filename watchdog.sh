@@ -56,8 +56,7 @@ function kill_watchdog_daemon()
 ############## Top level which spawns/kill/shows status of all of the top level daemons
 declare watchdog_daemon_list=(
    "watchdog_daemon         ${WSPRDAEMON_ROOT_DIR}"
-   "wav_archive_daemon      ${WAV_FILE_ARCHIVE_ROOT_DIR}"
-   "grape_upload_daemon     ${WAV_FILE_ARCHIVE_ROOT_DIR}"
+   #"grape_upload_daemon     ${WAV_FILE_ARCHIVE_ROOT_DIR}"
    "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}"
 )
 
