@@ -83,9 +83,9 @@ function get_config_file_variable()
     local __return_variable=$1
     local _variable_name=$2
 
-    local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}} )
+    local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}-} )
 
-    eval ${__return_variable}=\${conf_file_value}
+    eval ${__return_variable}=\${conf_file_value-}
 }
 
 function is_valid_mode_list() {
