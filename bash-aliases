@@ -42,6 +42,8 @@ function wd-killall() {
     local rc
     local rc1
 
+    verbosity=${verbosity-0}
+
     ### Stop all services
     local services_regex_list=(  "radiod@.*" ft4-decoded.service ft8-decoded.service  "pskreporter@*" wspsrdaemon )
     local service_regex
@@ -50,23 +52,24 @@ function wd-killall() {
         local services_list=( $( systemctl list-units --type=service --no-legend --no-pager | awk -v service_regex="${service_regex}.*running" '$0 ~ service_regex{print $1}') )
         set +x
         if (( ! ${#services_list[@]} )); then
+             (( verbosity > 1 )) && printf "Found no running '${service_regex}'\n"
             continue
         fi
-        (( ${verbosity-0} )) && printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
+        (( verbosity > 1 )) && printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
 
         local service_name
         for   service_name in ${services_list[@]}; do 
-            sudo systemctl status ${service_name} --no-pager >& /tmp/wd-killall.log
-            rc=$?
-            if (( rc )); then
-                printf "Service '${service_name}' is not being run by systemctl, but it may be running in a terminal window\n"
+            local service_clean=${service_name%.service}
+            sudo systemctl status ${service_clean} --no-pager >& /tmp/wd-killall.log
+            rc=$? ; if (( rc )); then
+                printf "Service '${service_clean}' is not being run by systemctl, but it may be running in a terminal window\n"
             else
-                sudo systemctl stop ${service_name} >& /tmp/wd-killall.log
-                rc=$?
-                if (( rc )); then
-                    printf "Service '${service_name}' was running, but 'sudo systemctl stop ${service_name}' => ${rc}\n"
+                set +x
+                sudo systemctl stop ${service_clean} >& /tmp/wd-killall.log
+                rc=$? ; set +x; if (( rc )); then
+                    printf "Service '${service_clean}' was running, but 'sudo systemctl stop ${service_clean}' => ${rc}\n"
                 else
-                    (( ${verbosity-0} )) && printf "Service '${service_name}' was running and 'sudo systemctl stop ${service_name}' was successful\n"
+                    (( verbosity )) && printf "Service '${service_clean}' was running and 'sudo systemctl stop ${service_clean}' was successful\n"
                 fi
             fi
         done
@@ -75,38 +78,42 @@ function wd-killall() {
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
     local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
     if (( ! ${#pid_file_list[@]} )); then
-        (( ${verbosity-0} )) && printf "Found no pid files\n"
+        (( verbosity > 1 )) && printf "Found no pid files\n"
     else
-        (( ${verbosity-0} )) && printf "Found ${#pid_file_list[@]} pid files: '${pid_file_list[*]}'\n"
+        (( verbosity )) && printf "Found ${#pid_file_list[@]} pid files to kill\n" ###: '${pid_file_list[*]}'\n"
 
         local pid_file
         for pid_file in ${pid_file_list[@]}; do
             local pid_val=$(< ${pid_file})
-            (( ${verbosity-0} )) && printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
+            (( verbosity > 1 )) && printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
             sudo kill ${pid_val} >& /tmp/wd-killall.log
             rc=$?
             if (( rc )); then
                 ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
-                (( ${verbosity-0} )) && printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
+                (( verbosity )) && printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
             fi
             rm ${pid_file}
             rc1=$?
             if (( rc1 )); then
                 ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
-                (( ${verbosity-1} )) && printf "INFO: failed to rm '${pid_file}'\n"
+                (( verbosity )) && printf "INFO: failed to rm '${pid_file}'\n"
             fi
             if (( ! rc && ! rc1 )); then
-                (( ${verbosity-0} )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+                (( verbosity > 1 )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
             fi
         done
    fi
-   #read -p "Done killing all pids from PID files. Proceed to search for and kill zombies? => "
 
     ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
         sudo kill ${zombie_pid_list[@]}
+    fi
+    local mutex_dir_list=( $(find /dev/shm/wsprdaemon -type d -name '*mutex.lock') )
+    if (( ${#mutex_dir_list[@]} )) ; then
+        echo "Purging ${#mutex_dir_list[@]} zombie *mutex.lock directories"
+        rmdir ${mutex_dir_list[@]}
     fi
 }
 
