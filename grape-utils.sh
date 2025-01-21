@@ -160,13 +160,11 @@ function upload_24hour_wavs_to_grape_drf_server() {
             if !  [[ -f ${band_24hour_wav_file} ]]; then
                 wd_logger 1 "Creating ${band_24hour_wav_file}"
                 grape_repair_band_bad_compressed_files ${band_dir}
-                rc=$?
-                if (( rc )); then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "WARNING: 'grape_repair_band_bad_compressed_files ${band_dir}' => ${rc}"
                 fi
                 grape_create_wav_file  ${band_dir}
-                rc=$?
-                if (( rc )); then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "WARNING: 'grape_create_wav_file ${band_dir}' => ${rc}"
                 fi
             fi 
@@ -177,7 +175,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
                  wd_logger 1 "Neither found nor could create  ${band_24hour_wav_file}"
             fi
         done
-        if [[ ${wav_file_count} -eq 0 ]]; then
+        if (( ! wav_file_count )); then
             wd_logger 1 "WARNING: no wav files found or created for any bands, so skip DRF creation for this receiver/band"
             continue
         fi
@@ -415,7 +413,7 @@ function grape_repair_date_wvs() {
 
     ### Get a list of bands sorted so the WWV bands are first and in frequency order followed by the CHU bands in frequency order. Thanks to chatgbt:
     local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d  -regex '.*/\(WWV\|CHU\|K_BEACON\).*' | awk -F_ '{print $(NF-1), $NF, $0}' | sort -k1,1r -k2,2n  | cut -d' ' -f3) )
-    wd_logger 1 "Repairing any defective an/pr missing .wv files in these ${#band_dir_list[@]} bands: ${band_dir_list[*]##*/}"
+    wd_logger 1 "Repairing any defective and/or missing .wv files in these ${#band_dir_list[@]} bands: ${band_dir_list[*]##*/}"
     for band_dir in ${band_dir_list[@]} ; do
         wd_logger 1 "Repairing ${band_dir##*/}"
         grape_repair_band_bad_compressed_files ${band_dir}
@@ -733,6 +731,7 @@ function grape_menu() {
             wd_logger 1 "ERROR: flag '$1' is not valid"
             ;;
     esac
+    return 0
 }
 
 ### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
