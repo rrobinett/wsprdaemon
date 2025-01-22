@@ -336,7 +336,7 @@ function grape_repair_band_bad_compressed_files() {
         return 1
     fi
 
-    wd_logger 1 "Checking all the ${#compressed_wav_file_list[@]} .wv files in band dir ${band_dir} are present and valid and that the wav files they contin are valid"
+    wd_logger 1 "Checking all the ${#compressed_wav_file_list[@]} .wv files in band dir ${band_dir} are present and valid and that the wav files they contain are valid"
     local rc
     local bad_wav_file_count=0
     local good_wav_file_count=0
