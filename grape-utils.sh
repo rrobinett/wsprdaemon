@@ -343,8 +343,7 @@ function grape_repair_band_bad_compressed_files() {
     local compressed_wav_file
     for compressed_wav_file in  ${compressed_wav_file_list[@]} ; do
         wvunpack -v ${compressed_wav_file} 2> /tmp/wvunpack.log
-        rc=$?
-        if (( ! rc )); then
+        rc=$? ; if (( ! rc )); then
             (( ++good_wav_file_count ))
             wd_logger 3 " wavunpack reports file ${compressed_wav_file} is good"
         else
@@ -358,7 +357,7 @@ function grape_repair_band_bad_compressed_files() {
     fi
     if (( ! good_wav_file_count )); then
         wd_logger 1 "There are no good .wv files in this ${band_dir}"
-        return 0
+        return 1
     fi
 
     local band_date=${compressed_wav_file_list[0]##*/}
@@ -367,13 +366,16 @@ function grape_repair_band_bad_compressed_files() {
     band_freq=${band_freq#*_}
     band_freq=${band_freq/_iq.wv/}
     wd_logger 1 "Found ${#compressed_wav_file_list[@]} .wv files in ${band_dir}. Check there is a .wv for each minute for this band_date=${band_date},  band_freq=${band_freq}"
+
     local silence_file_list=()
+    local expected_files_list=()
     local hour
     for hour in ${HOURS_LIST[@]} ; do
         local minute 
         for minute in ${MINUTES_LIST[@]} ; do
             local expected_file_name="${band_date}T${hour}${minute}00Z_${band_freq}_iq.wv"
             local expected_file_path=${band_dir}/${expected_file_name}
+            expected_files_list+=( ${expected_file_path} )
             if [[ "${compressed_wav_file_list[@]}" =~ ${expected_file_path} ]]; then
                 wd_logger 2 "Found expected IQ file ${expected_file_path}"
             else
@@ -385,15 +387,39 @@ function grape_repair_band_bad_compressed_files() {
     done
 
     local silence_files_added=${#silence_file_list[@]}
-    if (( silence_files_added )); then
+    if (( ! silence_files_added )); then
+        wd_logger 1 "No silence files were added"
+    else
         echo "${silence_file_list[@]}" > silence_file_list.txt
-        wd_logger 2 "Created ${silence_files_added} silence files:  $( < silence_file_list.txt)"
+        wd_logger 1 "Created ${silence_files_added} silence files"
         if (( silence_files_added >=  GRAPE_ERROR_RETURN_BASE)); then
             silence_files_added=$(( ${GRAPE_ERROR_RETURN_BASE} - 1 ))
             wd_logger 1 "Added ${#silence_file_list[@]} silence files, more than can be returned from a bash function.  So returning instead ${silence_files_added}"
         fi
     fi
-    return ${silence_files_added}
+
+    wd_logger 1 "Check for extra .wv files and flush them"
+    local extra_files_list=()
+    for found_file in "${compressed_wav_file_list[@]}"; do
+        if [[ ! " ${expected_files_list[*]} " =~ ${found_file} ]]; then
+            wd_logger 1 "Flushing file ${found_file} which is not expected to be in this directory"
+            extra_files_list+=( ${found_file} )
+            wd_rm ${found_file}
+        fi
+    done
+    if (( ${#extra_files_list[@]} )); then
+        wd_logger 1 "Founbd and flushed ${#extra_files_list[@]} extra .wv files"
+    else
+        wd_logger 1 "Found no extra .wv files"
+    fi
+
+    if (( silence_files_added )); then
+        wd_logger 1 "Returning count of the ${silence_files_added}"
+        return ${silence_files_added}
+    else
+         wd_logger 1 "Returning zero, since no silence files were added"
+         return 0
+    fi
 }
 
 ### 'To execute this ffrom the cmd line execute: 'WD -g "R <YYYYMMDD>"'
@@ -624,15 +650,13 @@ function grape_uploader() {
     local rc
 
     grape_create_all_24_hour_wavs
-    rc=$?
-    if  [[ ${rc} -eq 0 ]]; then
-        wd_logger 1 "There were no new 24h.wav files created"
-    else
+    rc=$? ; if (( rc )); then
         wd_logger 1 "There were ${rc} new 24h.wav files created"
+    else
+        wd_logger 1 "There were no new 24h.wav files created"
     fi
     grape_upload_all_local_wavs
-    rc=$?
-    if (( rc )); then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: grape_upload_all_local_wavs => ${rc}"
     else
         wd_logger 2 "Successful upload of  ${rc} new 24h.wav files"
@@ -651,9 +675,10 @@ function grape_upload_daemon() {
 
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
     while true; do
+        wd_logger 1 "Checking for new .wav files to upload"
         grape_uploader
         local sleep_seconds=$(seconds_until_next_odd_minute)
-        wd_logger 2 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
+        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
         wd_sleep  ${sleep_seconds}
     done
 }
