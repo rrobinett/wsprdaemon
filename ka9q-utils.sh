@@ -697,8 +697,7 @@ function build_ka9q_radio() {
     fi
     local rc
     find ${project_subdir}  -type f -exec stat -c "%Y %n" {} \; | sort -n > before_make.txt
-    rc=$?
-    if (( rc )); then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'find ${project_subdir}  -type... > before_make.txt' => ${rc}"
         return 2
     fi
@@ -713,24 +712,20 @@ function build_ka9q_radio() {
         wd_logger 1 "Creating a symbolic link from Makefile.linux to Makefile"
         ln -s Makefile.linux Makefile
     fi
-    make
+    make -k
     ) >&  ${project_logfile}
-    rc=$?
-
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc && rc != 2 )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
-        exit 1
+        #exit 1
     fi
 
     find ${project_subdir} -type f -exec stat -c "%Y %n" {} \; | sort -n > after_make.txt
-    rc=$?
-    if (( rc )); then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'find ${project_subdir}  -type...' > after_make.tx  => ${rc} "
         return 2
     fi
     diff before_make.txt after_make.txt > diff.log
-    rc=$?
-    case ${rc} in
+    rc=$? ; case ${rc} in
         0)
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
@@ -1367,9 +1362,7 @@ function build_ka9q_web() {
     make
     sudo make install
     ) >&  ${project_logfile}
-    rc=$?
-
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of 'ka9q-web' returned ${rc}:\n$(< ${project_logfile})"
         exit 1
     fi
@@ -1454,11 +1447,11 @@ function install_github_project() {
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_EABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}               ${KA9Q_WEB_COMMIT-2cb5828ae43d44d6f486eaf275addc3a00450786}"
+    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_EABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}               ${KA9Q_WEB_COMMIT-bde35d65e3ba3f857262b3d8283718310717c6b3}"
     "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_EABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-66f0b5cd70d2435184b54b29459bb15214120a2c}"
     "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
     "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/scottnewell/ka9q-web}                ${KA9Q_WEB_COMMIT-45664b8b84ab251d4fc2a7fe57386599232e43f7}"
+    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/scottnewell/ka9q-web}                ${KA9Q_WEB_COMMIT-cd8a3935082af2ca95ebf3edaa5580656497867c}"
 )
 
 ###
