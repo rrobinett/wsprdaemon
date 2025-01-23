@@ -712,9 +712,9 @@ function build_ka9q_radio() {
         wd_logger 1 "Creating a symbolic link from Makefile.linux to Makefile"
         ln -s Makefile.linux Makefile
     fi
-    make -k
+    make
     ) >&  ${project_logfile}
-    rc=$? ; if (( rc && rc != 2 )); then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
         #exit 1
     fi
