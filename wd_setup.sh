@@ -50,7 +50,7 @@ wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}'
 
 declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
-                libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev bzip2)
+                libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev bzip2 wavpack )
                 ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
