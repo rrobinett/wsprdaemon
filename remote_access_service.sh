@@ -10,7 +10,6 @@
 #
 # Hosts with names which start with "WSPRSONDE-" are gateways connected to Wsprsonde8 beacons, and those hosts are automatically set up to log on to this RAC service
 
-set +x
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
 declare WD_FRPS_URL=${WD_FRPS_URL-wd0.wsprdaemon.org}
@@ -26,7 +25,6 @@ declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} 
 declare WSPRSONDE_ID_BASE=$(( ${WSPRSONDE_IP_PORT_BASE} - ${RAC_IP_PORT_BASE} ))
 declare RAC_ID_MAX=$(( ${WSPRSONDE_ID_BASE} - 1 ))                                    ### Max RAC_ID is 2199, which should be plenty
 declare WSPRSONDE_ID_MAX=$(( ${RAC_IP_PORT_MAX} - ${WSPRSONDE_IP_PORT_BASE} ))        ### Max WPSRSONDE_ID in 1999, which should be plenty
-set +x
 
 function execute_sysctl_command()
 {
@@ -75,14 +73,14 @@ function get_frpc_ini_values() {
         wd_logger 1 "ERROR: Found no '[...]' lines in ${FRPC_INI_FILE}"
         return 2
     fi
-    wd_logger 2 "Found ${#rac_id_line_list[@]} '[...]' lines in  ${FRPC_INI_FILE}: ${rac_id_line_list[*]}"
+    wd_logger 1 "Found ${#rac_id_line_list[@]} '[...]' lines in  ${FRPC_INI_FILE}: ${rac_id_line_list[*]}"
     if (( ${#rac_id_line_list[@]} == 1 )); then
         wd_logger 1 "ERROR: Found only one '[...]'' line in  ${FRPC_INI_FILE}: ${rac_id_line_list[0]}"
         return 3
     fi
 
     local frpc_ini_id="$(echo ${rac_id_line_list[1]} | sed 's/\[//;s/\]//')"
-    wd_logger 2 "Found frpc_ini's RAC_ID = '${frpc_ini_id}'"
+    wd_logger 1 "Found frpc_ini's RAC_ID = '${frpc_ini_id}'"
 
     local rac_port_line_list=( $(grep "^remote_port"  ${FRPC_INI_FILE}) )
     if (( ${#rac_port_line_list[@]} < 3 )); then 
@@ -98,7 +96,7 @@ function get_frpc_ini_values() {
     local frpc_ini_channel=$(( remote_port - RAC_IP_PORT_BASE )) 
     local return_value="${frpc_ini_channel} ${frpc_ini_id}"
 
-    wd_logger 2 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to loal port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
+    wd_logger 2 "The RAC ini file ${FRPC_INI_FILE} is configured to forward RAC '${frpc_ini_id}' from remote_port ${remote_port} to local port 22. Returning '${return_value}' to variable '${__return_variable_name}'"
     eval ${__return_variable_name}="\${return_value}"
     return 0
  }
@@ -122,8 +120,7 @@ function remote_access_connection_status() {
     fi
 
     source ${WSPRDAEMON_CONFIG_FILE} > /dev/null
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: there is a format error in ${WSPRDAEMON_CONFIG_FILE}"
         exit 1
     fi
@@ -185,49 +182,77 @@ function remote_access_connection_status() {
     eval ${__remote_access_id_var}=\${wd_conf_rac_id}
     wd_logger 2 "Found REMOTE_ACCESS_ID=${wd_conf_rac_id}" 
 
-   ### The RAC is enabled and configured in the WD.conf file. Check to see if it and the ID match the frpc_wd.ini
+    ### The RAC is enabled and configured in the WD.conf file. Check to see if it and the ID match the frpc_wd.ini
     ### Get the last REMOTE_ACCESS_ID or SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
-    local frpc_ini_info_string
-    get_frpc_ini_values "frpc_ini_info_string"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'get_frpc_ini_values frpc_ini_info_string' => ${rc}"
-        return ${rc}
+    if [[ ! -f ${FRPC_INI_FILE} ]]; then
+        wd_logger 1 "The FRC .ini file ${FRPC_INI_FILE} doesn't exist, so it will need to be created"
+        return 1
     fi
-    local frpc_ini_info_list=( ${frpc_ini_info_string} )
-    if [[ ${#frpc_ini_info_list[@]} -ne 2 ]]; then
-         wd_logger 1 "The RAC is enabled in the WD.conf file, but here is no session id and/or channel defined in the frpc_wd_file"
-         return 1
-    fi
-    wd_logger 2 "Got frpc_ini_info_list='${frpc_ini_info_list[*]}'"
+    wd_logger 2 "Checking .ini file ${FRPC_INI_FILE}"
 
-    local frpc_ini_channel="${frpc_ini_info_list[0]}"
-    if [[ "${frpc_ini_channel}" != "${wd_conf_rac_channel}" ]]; then
-        remote_access_connection_stop_and_disable
-        wd_logger 1 "RAC_CH '${wd_conf_rac_channel}' is defined in the WD.conf file, but the RAC ${frpc_ini_channel} in the frpd_wd.ini file doesn't match it.  So stop frpc, recreated the frpc_wd.ini, and restart it"
-        return 2
-    fi
-    local frpc_ini_id="${frpc_ini_info_list[1]}"
-    if [[ "${frpc_ini_id}" != "${wd_conf_rac_id}" ]]; then
-        remote_access_connection_stop_and_disable
-        wd_logger 1 "RAC_ID '${wd_conf_rac_id}' is defined in the WD.conf file, but the RAC '${frpc_ini_id}' in the frpd_wd.ini file doesn't match it.  So stop frpc, recreate the frpc_wd.ini, and restart it"
-        return 3
-    fi
+    local frpc_ini_section_list=( "${wd_conf_rac_id},local_port:22,remote_port:$(( 35800 + wd_conf_rac_channel))"
+                                  "${wd_conf_rac_id}-WEB,local_port:${KA9Q_WEB_SERVICE_PORT-8081},remote_port:$(( 35800 + 10000 + wd_conf_rac_channel))" )
+
+    local frpc_ini_section
+    for frpc_ini_section in ${frpc_ini_section_list[@]}; do
+        local exepcted_section_info_list=( ${frpc_ini_section//,/ } )
+        if (( ${#exepcted_section_info_list[@]} < 3  )); then
+            wd_logger 1 "INTERNAL ERROR: expect at least 3 expected fields, but found only ${#exepcted_section_info_list[@]} fields"
+            exit 1
+        fi
+        local section_name=${exepcted_section_info_list[0]}
+        local section_string="$( sed -n "/\[${section_name}\]/,/^\[/p" ${FRPC_INI_FILE} )"
+        if [[ -z "${section_string}" ]]; then
+            wd_logger 1 "Can't find [${section_name}] in ${FRPC_INI_FILE} "
+            return 1
+        fi
+        wd_logger 2 "Checking section ${section_name} for one or more expected <VARIABLE> = <VALUE> lines"
+        wd_logger 3 "${section_string}"
+
+        local serach_info_list=( ${exepcted_section_info_list[@]:1} )
+        local search_info
+        for search_info in ${serach_info_list[@]}; do
+            local search_name_expected_value_list=( ${search_info[@]/:/ } )
+            if (( ${#search_name_expected_value_list[@]} != 2  )); then
+                wd_logger 1 "INTERNAL ERROR: expected 2 fields, but found ${#search_name_expected_value_list[@]} fields"
+                exit 1
+            fi
+            local value_id=${search_name_expected_value_list[0]}
+            local expected_value=${search_name_expected_value_list[1]}
+
+            wd_logger 2 "Checking section '${section_name}' for ${value_id} = ${expected_value}"
+            local search_name_line_list=( =$(echo "${section_string}" | grep ${value_id}) )
+            if (( ${#search_name_line_list[@]} == 0 )); then
+                wd_logger 1 "ERROR: can't find expected ${value_id} = <VALUE> line in an existing section ${section_name}"
+                return 1
+            fi
+            if (( ${#search_name_line_list[@]} != 3 )); then
+                wd_logger 1 "ERROR: can't find the 3 expected fields ${value_id} = <VALUE> in an existing section ${section_name}"
+                return 1
+            fi
+            if [[ ${search_name_line_list[2]} ==  ${expected_value} ]]; then
+                wd_logger 2 "Found in section ${section_name} the expected ${value_id} = ${expected_value}"
+            else
+                 wd_logger 1 "Found in section ${section_name}: ${value_id} = ${search_name_line_list[2]} instead of = ${expected_value}"
+                 return 1
+            fi
+        done
+    done
+    wd_logger 2 "${FRPC_INI_FILE} exists and is properly configured.  Make sure the WD RAC service ${WD_REMOTE_ACCESS_SERVICE_NAME} is running"
 
     execute_sysctl_command is-active ${WD_REMOTE_ACCESS_SERVICE_NAME}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "The Remote Access Connection service is configured but not active"
         return 4
     fi
     wd_logger 2 "The ${WD_REMOTE_ACCESS_SERVICE_NAME} service is configured and active.  Checking the status of its connection"
     execute_sysctl_command status ${WD_REMOTE_ACCESS_SERVICE_NAME}  
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "The ${WD_REMOTE_ACCESS_SERVICE_NAME} is configured but returns status ${rc}"
         return 5
     fi
-    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is enabled and running"
+    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is configured, enabled and running"
+    wd_logger 1 "So authorized WD devlopers can ssh to this server and a.so open the KSA9Q-web UI on this server (if there is a RX888 attached to it)"
     return 0
 }
 
@@ -251,8 +276,7 @@ function wd_remote_access_service_manager() {
     local remote_access_channel
     local remote_access_id
     remote_access_connection_status "remote_access_channel" "remote_access_id"
-    rc=$?
-    if [[ ${rc} -eq 0 ]]; then
+    rc=$? ; if (( rc == 0 )); then
         wd_logger 2 "Remote Access Connection service is not enabled, or it is enabled and running normally"
         return 0
     fi
@@ -322,7 +346,7 @@ function wd_remote_access_service_manager() {
         fi
     fi
 
-    wd_logger 2 "Creating ${FRPC_INI_FILE}"
+    wd_logger 1 "Creating ${FRPC_INI_FILE}"
     cat > ${FRPC_INI_FILE} <<EOF
 [common]
 admin_addr = 127.0.0.1
@@ -335,8 +359,14 @@ type = tcp
 local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
+
+[${remote_access_id}-WEB]
+type = tcp
+local_ip = 127.0.0.1
+local_port = ${KA9Q_WEB_SERVICE_PORT-8081}
+remote_port = $(( frpc_remote_port + 10000 ))
 EOF
-    wd_logger 2 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
+    wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
  
     local rc
     setup_wd_remote_access_systemctl_daemon
