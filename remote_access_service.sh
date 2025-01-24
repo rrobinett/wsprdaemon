@@ -190,8 +190,10 @@ function remote_access_connection_status() {
     fi
     wd_logger 2 "Checking .ini file ${FRPC_INI_FILE}"
 
-    local frpc_ini_section_list=( "${wd_conf_rac_id},local_port:22,remote_port:$(( 35800 + wd_conf_rac_channel))"
-                                  "${wd_conf_rac_id}-WEB,local_port:${KA9Q_WEB_SERVICE_PORT-8081},remote_port:$(( 35800 + 10000 + wd_conf_rac_channel))" )
+    local wd0_rac_ssh_ip_port=$(( 35800 + wd_conf_rac_channel ))
+    local wd0_rac_web_ip_port=$(( wd0_rac_ssh_ip_port + 10000 ))
+    local frpc_ini_section_list=( "${wd_conf_rac_id},local_port:22,remote_port:${wd0_rac_ssh_ip_port}"
+                                  "${wd_conf_rac_id}-WEB,local_port:${KA9Q_WEB_SERVICE_PORT-8081},remote_port:${wd0_rac_web_ip_port}")
 
     local frpc_ini_section
     for frpc_ini_section in ${frpc_ini_section_list[@]}; do
@@ -252,7 +254,7 @@ function remote_access_connection_status() {
         return 5
     fi
     wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is configured, enabled and running"
-    wd_logger 1 "So authorized WD devlopers can ssh to this server and a.so open the KSA9Q-web UI on this server (if there is a RX888 attached to it)"
+    wd_logger 1 "So authorized WD devlopers can ssh to this server at IP port ${wd0_rac_ssh_ip_port} and also open the KSA9Q-web UI on this server (if there is a RX888 attached to it) at ${wd0_rac_web_ip_port=}"
     return 0
 }
 
