@@ -43,7 +43,7 @@ function purge_oldest_archive() {
     wd_logger 1 "Found ${#date_dir_list[@]} '20*' archive dirctories"
     local purged_files=0
     for date_dir in ${date_dir_list[@]} ; do
-        local wv_file_list=( $( find -L ${date_dir} -type f -name '*.wv' ) )
+        local wv_file_list=( $( find -L ${date_dir} -type f \( -name '*.wv' -o  -name '*.flac' \) ) )
         if (( ! ${#wv_file_list[@]} )); then
             wd_logger 1 "There are no .wv to purge under ${date_dir}"
         else
