@@ -778,7 +778,7 @@ function get_wav_file_list() {
 
     ### The pcmrecord wav files are created with names which different from those created by kiwirecorder
     local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
-    local wav_file_regex="*_${band_freq_hz}*.wav"
+    local wav_file_regex="*_${band_freq_hz}_*.wav"
 
     # Start:
     # Find all wav files for this band abd sort by reverse time (i.e newest in [0]
