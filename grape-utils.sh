@@ -518,7 +518,7 @@ function grape_create_wav_file()
     wd_logger 1 "Creating one 24 hour, 10 hz wav file ${output_10sps_wav_file} from ${#compressed_wav_file_list[@]} .wv files..."
     local sox_log_file_name="${compressed_wav_file_dir}/sox.log"
     ulimit -n 2048    ### sox will open 1440+ files, so up the open file limit
-    nice -n 19 sox ${compressed_wav_file_list[@]} ${output_10sps_wav_file} rate 10 >& ${sox_log_file_name}
+    nice -n 19 sox ${compressed_wav_file_list[@]} --encoding float --bits 32 ${output_10sps_wav_file} rate 10 >& ${sox_log_file_name}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'sox ...' => ${rc}:\n$(<${sox_log_file_name})"
          return ${GRAPE_ERROR_SOX_FAILED}
