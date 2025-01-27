@@ -1347,8 +1347,8 @@ alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.co
 function wd-watch-wavs() {
     local band_freq=${1-14}
     local band_dir=${PWD##*/}
-    local ls_regex="*.wav ../*Z_${band_freq}*"
-    watch "ls -lr ${ls_regex}"  ### watch for wd-record or kiwirecorder to create wav files in cwd
+
+    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
 }
 alias wdww='wd-watch-wavs'
 
