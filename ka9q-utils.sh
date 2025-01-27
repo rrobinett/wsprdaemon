@@ -1518,20 +1518,25 @@ function install_github_project() {
     local project_url="$6"
     local project_sha="$7"
 
+    local rc
+
     wd_logger 2 "In subdir '${project_subdir}' install libs '${project_libs}' and then ensure installation of '${project_url}' with commit COMMIT '${project_sha}'"
 
     if [[ ${project_libs} != "NONE" ]] && ! install_dpkg_list ${project_libs}; then
         wd_logger 1 "ERROR: 'install_dpkg_list ${project_libs}' => $?"
-        exit 1
+        return 1
     fi
+    wd_logger 2 "Packages required by this service have been checked and installed if needed"
 
     if [[ -d  ${project_subdir} ]]; then
-        local rc
+        wd_logger 2 "An exisiting project needs to be checked"
         ( cd ${project_subdir}; git remote -v | grep -q "${project_url}" )   ### Run in a subshell which returnes the status returned by grep
         rc=$? ; if (( rc )); then
             echo wd_logger 1 "The clone of ${project_subdir} doesn't come from the configured ' ${project_url}', so delete the '${project_subdir}' directory so it will be re-cloned"
             rm -rf ${project_subdir}
         fi
+    else
+         wd_logger 1 "There is no existing project subdir which needs to be checked"
     fi
 
     if [[ ! -d ${project_subdir} ]]; then
@@ -1594,7 +1599,7 @@ declare GITHUB_PROJECTS_LIST=(
 ###
 function ka9q-services-setup() {
     local rc
-    wd_logger 2 "Starting in ${PWD}"
+    wd_logger 2 "Starting in ${PWD} and checking on ${#GITHUB_PROJECTS_LIST[@]} github projects"
 
     local index
     for (( index=0; index < ${#GITHUB_PROJECTS_LIST[@]}; ++index))  ; do
