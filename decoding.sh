@@ -1742,7 +1742,8 @@ function decoding_daemon() {
         local ov_returned_files=${mode_wav_file_list[0]}
         local ov_comma_separated_files=${ov_returned_files#*:}        ### Chop off the SECONDS: leading the list
         local ov_wav_file_list=( ${ov_comma_separated_files//,/ } )
-        local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
+        local ov_wav_file=$(basename ${ov_wav_file_list[0]})
+        local ov_first_input_wav_filename="${ov_wav_file:2:6}_${ov_wav_file:9:4}.wav"
 
         if (( ${adc_overloads_print_line_count} % ${ADC_LOG_HEADER_RATE-16} == 0)) ; then
              printf "DATE_TIME          OV_COUNT  NEW_OVs  RF_GAIN     ADC_DBFS        N0   CH_DBFS   CH_GAIN\n"  >> ${ADC_OVERLOADS_LOG_FILE_NAME}
