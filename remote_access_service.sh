@@ -203,7 +203,7 @@ function remote_access_connection_status() {
             exit 1
         fi
         local section_name=${exepcted_section_info_list[0]}
-        local section_string="$( sed -n "/\[${section_name}\]/,/^\[/p" ${FRPC_INI_FILE} )"
+        local section_string="$( sed -n "/\[${section_name//\//[/]}\]/,/^\[/p" ${FRPC_INI_FILE} )"        ### A lot of sed regex work so sections can have very common RAC names with '/' like 'KFS/OMNI'
         if [[ -z "${section_string}" ]]; then
             wd_logger 1 "Can't find [${section_name}] in ${FRPC_INI_FILE} "
             return 1
@@ -277,7 +277,9 @@ function wd_remote_access_service_manager() {
 
     local remote_access_channel
     local remote_access_id
+
     remote_access_connection_status "remote_access_channel" "remote_access_id"
+
     rc=$? ; if (( rc == 0 )); then
         wd_logger 2 "Remote Access Connection service is not enabled, or it is enabled and running normally"
         return 0
