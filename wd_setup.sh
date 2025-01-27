@@ -84,7 +84,7 @@ case ${CPU_ARCH} in
         wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
         if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian doesn't use qt5-default
-            PACKAGE_NEEDED_LIST+=( libsamplerate0 python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
+            PACKAGE_NEEDED_LIST+=( libsamplerate0  libsamplerate0-dev python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
         elif grep -q 'Linux Mint' /etc/os-release; then
