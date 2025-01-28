@@ -48,7 +48,7 @@ function purge_oldest_archive() {
             wd_logger 1 "There are no .wv to purge under ${date_dir}"
         else
              wd_logger 1 "Purging ${#wv_file_list[@]} files under ${date_dir}"
-             rm ${wv_file_list[@]} > /dev/null
+             echo ${wv_file_list[@]} | xargs -n 1000 rm > /dev/null
              rc=$? ; if (( rc )); then
                  wd_logger 1 "ERROR: failed to delete some or all of the ${#wv_file_list[@]} .wv files with 'rm ${wv_file_list[0]} ..."
              else
