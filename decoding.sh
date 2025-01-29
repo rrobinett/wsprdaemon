@@ -96,6 +96,10 @@ function calculate_nl_adjustments() {
     ### In each of these assignments, if cal_vals[] was not defined above from the file 'noise_ca_vals.csv', then use the default value.  e.g. cal_c2_correction will get the default value '-187.7
     local cal_nom_bw=${cal_vals[0]-320}        ### In this code I assume this is 320 hertz
     local cal_ne_bw=${cal_vals[1]-246}
+    if (( cal_ne_bw == 0 )); then
+        wd_logger 1 "ERROR: cal_ne_bw = 0, which is an invalid value.  So assign the default value of '246'"
+        cal_ne_bw=246
+    fi
     local cal_rms_offset=${cal_vals[2]--50.4}
     local cal_fft_offset=${cal_vals[3]--41.0}
     local cal_fft_band=${cal_vals[4]--13.9}
@@ -1408,6 +1412,21 @@ declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                         
 declare GET_PEAK_WAV_SAMPLE_CMD="${WSPRDAEMON_ROOT_DIR}/get-peak-wav-sample.py"     ### A little script created by chatgbt
 declare GET_PEAK_WAV_SAMPLE_LOG_FILE="./get-peak-wav-sample.log"                     ### This file should have the peak amplitude in linear and also in dbFS
 
+function is_a_float() {
+    local value=$1
+
+    if [[ -z "${value}" ]]; then
+        wd_logger 1 "'${value}' is empty, so it can't be a float"
+        return 1
+    fi
+    if ! [[ ${value} =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        wd_logger 1 "'${value}' is not a float"
+        return 1
+    fi
+    wd_logger 1 "'${value}' is a float"
+    return 0
+}
+
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
@@ -1924,15 +1943,18 @@ function decoding_daemon() {
             rc=$? ; if (( rc )); then
                  wd_logger 1 "ERROR: while getting stats for the one minute files with 'sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}' => ${rc}:\n$(< ${SOX_LOG_FILE})"
              fi
-            local max_input_float_amplitude
-            max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
+            local max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
             local gain_in_db    ### In case we can't get the gain from sox
             local sox_normalization_dBFS=${SOX_NORMALIZATION_DBFS--1}        ### Default -1 dBFS creates 16 bit int wav file with max value 0.891251
             local sox_normalization_linear=$(bc -l <<< "scale = 6; e(${sox_normalization_dBFS}/20 * l(10))")
-            if [[ -z "${max_input_float_amplitude}" ]]; then
+            if ! is_a_float "${max_input_float_amplitude}" ; then
                 gain=0
-                wd_logger 1 "ERROR: can't get 'Maximum amplitude' of the input wav files from ${SOX_LOG_FILE}"
+                wd_logger 1 "ERROR: can't get 'Maximum amplitude' of the input wav files from ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
+            elif [[ "${max_input_float_amplitude}" =~ ^-?0+(\.0+)?$ ]]; then
+                gain=0
+                wd_logger "ERROR: ${max_input_float_amplitude} is an int or float zero in ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
             else
+                ### We are certain that ${max_input_float_amplitude} is not a zero
                 local gain_in_db=$(bc -l <<< "scale = 1; 20 * l( ${sox_normalization_linear} / ${max_input_float_amplitude} ) / l(10)")
                 wd_logger 1 "The 'Maximum amplitude' of the input files is ${max_input_float_amplitude}, so sox will automatically apply ${gain_in_db} dB gain while creating the 16bit PCM wav file"
             fi
