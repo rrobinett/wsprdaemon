@@ -628,6 +628,13 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
         return 0
     fi
+
+    if [[ "${ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO-no}" == "no" ]]; then
+        wd_logger 1 "ERROR: ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO is 'no' but '${adjust_current_file_path##*/}' is named for second '${adjust_current_file_seconds}' not the expected '00'"
+        eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
+        return 0
+    fi
+
     local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
     if (( current_file_seconds_int > FILE_NAME_REJECT_SECONDS_MIN && current_file_seconds_int < FILE_NAME_REJECT_SECONDS_MAX )); then
         wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${FILE_NAME_REJECT_SECONDS_MAX} to ${FILE_NAME_REJECT_SECONDS_MIN} seconds, so dump the file"
@@ -1791,7 +1798,7 @@ function decoding_daemon() {
         else
             declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
 
-            new_sdr_overloads_count=$(( ${adc_overloads_count} - ${last_adc_overloads_count} ))
+            new_sdr_overloads_count=$(( adc_overloads_count - last_adc_overloads_count ))
             wd_logger 2 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
             if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
                 wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {adc_overloads_count '${adc_overloads_count}'"
