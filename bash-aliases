@@ -76,7 +76,8 @@ function wd-killall() {
     done
 
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
-    local pid_file_list=( $(find ${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
+    local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
+    local pid_file_list=( $(find ${wd_temp_root_dir} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
     if (( ! ${#pid_file_list[@]} )); then
         (( verbosity > 1 )) && printf "Found no pid files\n"
     else
@@ -115,6 +116,22 @@ function wd-killall() {
         echo "Purging ${#mutex_dir_list[@]} zombie *mutex.lock directories"
         rmdir ${mutex_dir_list[@]}
     fi
+    local active_cpus_files_list=( $(find ${wd_temp_root_dir} -type f -name active_cpus_count) )
+    (( ++verbosity ))
+    if (( ${#active_cpus_files_list[@]} )); then
+        (( verbosity > 1 )) && printf "Found ${#active_cpus_files_list[@]} active_cpus_count files\n"
+        local active_cpu_file
+        for active_cpu_file in ${active_cpus_files_list[@]}; do
+            local cpu_count=$(<${active_cpu_file})
+            if (( cpu_count )); then
+                 (( verbosity )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so flush that file\n"
+                 rm ${active_cpu_file}
+             else
+                 (( verbosity > 1 )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so leave it alone\n"
+            fi
+        done
+    fi
+    (( --verbosity ))
 }
 
 function wd-flush-hashtables() {
