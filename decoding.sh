@@ -628,6 +628,13 @@ function adjust_file_named_59_seconds_to_nearest_minute() {
         eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
         return 0
     fi
+
+    if [[ "${ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO-no}" == "no" ]]; then
+        wd_logger 1 "ERROR: ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO is 'no' but '${adjust_current_file_path##*/}' is named for second '${adjust_current_file_seconds}' not the expected '00'"
+        eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
+        return 0
+    fi
+
     local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
     if (( current_file_seconds_int > FILE_NAME_REJECT_SECONDS_MIN && current_file_seconds_int < FILE_NAME_REJECT_SECONDS_MAX )); then
         wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${FILE_NAME_REJECT_SECONDS_MAX} to ${FILE_NAME_REJECT_SECONDS_MIN} seconds, so dump the file"
@@ -1420,10 +1427,10 @@ function is_a_float() {
         return 1
     fi
     if ! [[ ${value} =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-        wd_logger 1 "'${value}' is not a float"
+        wd_logger 1 "'${value}' is not a float or int"
         return 1
     fi
-    wd_logger 1 "'${value}' is a float"
+    wd_logger 2 "'${value}' is a float"
     return 0
 }
 
@@ -1791,7 +1798,7 @@ function decoding_daemon() {
         else
             declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
 
-            new_sdr_overloads_count=$(( ${adc_overloads_count} - ${last_adc_overloads_count} ))
+            new_sdr_overloads_count=$(( adc_overloads_count - last_adc_overloads_count ))
             wd_logger 2 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
             if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
                 wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {adc_overloads_count '${adc_overloads_count}'"
@@ -2089,8 +2096,17 @@ function decoding_daemon() {
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
                     local c2_filename="${decode_dir}/000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
                     if [[ ! -f ${C2_FFT_CMD} ]]; then
-                        wd_logger 1 "Can't find the '${C2_FFT_CMD}' script"
-                        exit 1
+                        wd_logger 1 "ERROR: Can't find the '${C2_FFT_CMD}' script"
+                        if [[ ${got_cpu_semaphore} == "yes" ]]; then
+                            free_cpu
+                            rc=$? ; if (( rc )); then
+                            wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since we are aborting decoding because '${C2_FFT_CMD}' doesn't exist"
+                        else
+                            wd_logger 1 "Put cpu_busy semaphore now that decoding is done"
+                            fi
+                        fi
+                        sleep 1
+                        return 1
                     fi
                     local c2_fft_noise_level_float
                     nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
@@ -2112,6 +2128,14 @@ function decoding_daemon() {
                     get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
                     rc=$? ; if (( rc )); then
                         wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level_float rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${rc}"
+                        if [[ ${got_cpu_semaphore} == "yes" ]]; then
+                            free_cpu
+                            rc=$? ; if (( rc )); then
+                            wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since we are aborting decoding because of a sox error"
+                        else
+                            wd_logger 1 "Put semaphore now that decoding is done"
+                            fi
+                        fi
                         return 1
                     fi
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
@@ -2174,8 +2198,7 @@ function decoding_daemon() {
                 fi
                 local rc1
                 wd_rm ${decode_dir_path}/${decoder_input_wav_filename}
-                rc1=$?
-                if [[ ${rc1} -ne 0 ]]; then
+                rc1=$? ; if (( rc1 )); then
                     wd_logger 1 "ERROR: 'wd_rm ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc1}"
                 fi
 
@@ -2554,19 +2577,19 @@ function claim_cpu()
 
     wd_logger 1 "Starting an attempt to get one of the ${semaphore_max_count} semaphores in ${ACTIVE_DECODING_CPU_DIR}. Timeout after ${semaphore_timeout} seconds"
 
-    while [[ ${EPOCHSECONDS} -lt ${end_epoch} ]]; do
+    while (( EPOCHSECONDS < end_epoch )); do
         wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
         rc=$? ; if (( rc )) ; then
             wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
         else
-            wd_logger 2 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+            wd_logger 1 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
             if [[ ! -f ${semaphore_count_filename} ]]; then
                 wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
                 echo "0" > ${semaphore_count_filename}
             fi
             local current_semaphore_count=$(< ${semaphore_count_filename})
             local new_semaphore_count=-1
-            if [[ ${current_semaphore_count} -lt ${semaphore_max_count} ]]; then
+            if (( current_semaphore_count < semaphore_max_count )); then
                 new_semaphore_count=$(( current_semaphore_count + 1 ))
                 echo ${new_semaphore_count} > ${semaphore_count_filename}
             fi
@@ -2574,13 +2597,13 @@ function claim_cpu()
             rc=$? ; if (( rc )) ; then
                 wd_logger 1 "ERROR: When freeing ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} muxtex, got unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}"
             else
-                wd_logger 2 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+                wd_logger 1 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
             fi
-            if (( {new_semaphore_count )); then
+            if (( new_semaphore_count > 0 )); then
                 wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
                 return 0
             else
-                wd_logger 2 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
+                wd_logger 1 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
             fi
         fi
         wd_logger 2 "Sleeping 1 second"
@@ -2606,9 +2629,11 @@ function free_cpu()
             wd_logger 1 "ERROR: expected count file ${semaphore_count_filename} does not exist, so wd_semaphore_pget() never ran" 
         else
             local current_semaphore_count=$(< ${semaphore_count_filename})
+            wd_logger 1 "current_semaphore_count=${current_semaphore_count}"
             if (( current_semaphore_count )); then
                 (( --current_semaphore_count ))
                 echo ${current_semaphore_count} > ${semaphore_count_filename}
+                wd_logger 1 "Decremented and wrote new current_semaphore_count=${current_semaphore_count} to ${semaphore_count_filename}"
             else
                 wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
             fi
