@@ -755,7 +755,7 @@ function build_ka9q_radio() {
     fi
 
     ### We are configured to decode from a local RX888.  
-   if ! getent group "radio" > /dev/null 2>&1; then
+    if ! getent group "radio" > /dev/null 2>&1; then
         wd_logger 1 "ERROR: the group 'radio' which should have been created by KA9Q-radio doesn't exist"
         exit 1
     fi
@@ -901,6 +901,13 @@ declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
 function ka9q-ft-setup() {
+    local ka9q_runs_only_remotely
+    get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
+    if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
+        wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
+        return 0
+    fi
+
     local ft_type=$1        ## can be 4 or 8
     local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}       ### The ftX-decoded will create this directory and put the wav files it needs in it.  We don't need to create it.
 
