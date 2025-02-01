@@ -1361,6 +1361,7 @@ function  wd-git-to-ssh(){
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
+alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
 function wd-watch-wavs() {
     local band_freq=${1-14}
     local band_dir=${PWD##*/}
