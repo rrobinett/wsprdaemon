@@ -639,11 +639,11 @@ function ka9q_web_daemon() {
 
     local ka9q_radiod_status_dns
     ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
     else
-        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-WD_RX888}"         ### This is hack to get this one service imlmewntationb working
+        ka9q_service_daemons_list=()
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE:-WD_RX888}"         ### This is hack to get this one service imlmewntationb working
 
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
