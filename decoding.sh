@@ -906,6 +906,7 @@ function get_wav_file_list() {
             wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written"
             if file_is_closed_or_last_write_was_seconds_ago ${newest_file_name}  ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}; then
                 wd_logger 1 "' ${newest_file_name}' is closed, so start search for files again"
+                sleep 1
             else
                 wd_logger 1 "ERROR: 'file_is_closed_or_last_write_was_seconds_ago ${newest_file_name} ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}' => $?.  So sleep 1 and start search againi"
                 sleep 1
