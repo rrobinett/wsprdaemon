@@ -754,10 +754,10 @@ function file_is_open() {
     local file_directory="${file_path%/*}"
     if [[ "${file_directory}" != "${PWD}" ]]; then
         if lsof ${file_path} >& /dev/null; then
-             wd_logger 1 "The file ${file_path} is open"
+             wd_logger 1 "Running in ${PWD}, ${file_path} is open"
              return 0
          else
-             wd_logger 1 "The file ${file_path} is closed"
+             wd_logger 1 "Running in ${PWD}, ${file_path} is closed"
              return 1
         fi
     else
