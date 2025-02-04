@@ -145,7 +145,7 @@ if is_orange_pi_5; then
     wd_logger 1 "Running on Orange Pi 5, so setup limits to CPU affinity and max memory usage"
     wd_run_in_cgroup "${OPI_CPU_RANGE}" "${OPI_MEMORY_LIMIT}" "$0" $@
 else
-    wd_logger 1  "No CPU affinity or memory limits are being imposed while running on this CPU"
+    wd_logger 2  "No CPU affinity or memory limits are being imposed while running on this CPU"
 fi
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
