@@ -48,9 +48,7 @@ function wd-killall() {
     local services_regex_list=(  "radiod@.*" ft4-decoded.service ft8-decoded.service  "pskreporter@*" wspsrdaemon )
     local service_regex
     for service_regex in "${services_regex_list[@]}"; do
-        set +x
         local services_list=( $( systemctl list-units --type=service --no-legend --no-pager | awk -v service_regex="${service_regex}.*running" '$0 ~ service_regex{print $1}') )
-        set +x
         if (( ! ${#services_list[@]} )); then
              (( verbosity > 1 )) && printf "Found no running '${service_regex}'\n"
             continue
@@ -64,12 +62,11 @@ function wd-killall() {
             rc=$? ; if (( rc )); then
                 printf "Service '${service_clean}' is not being run by systemctl, but it may be running in a terminal window\n"
             else
-                set +x
                 sudo systemctl stop ${service_clean} >& /tmp/wd-killall.log
-                rc=$? ; set +x; if (( rc )); then
+                rc=$? ; if (( rc )); then
                     printf "Service '${service_clean}' was running, but 'sudo systemctl stop ${service_clean}' => ${rc}\n"
                 else
-                    (( verbosity )) && printf "Service '${service_clean}' was running and 'sudo systemctl stop ${service_clean}' was successful\n"
+                    (( verbosity >= 0 )) && printf "Service '${service_clean}' was running and 'sudo systemctl stop ${service_clean}' was successful\n"
                 fi
             fi
         done
@@ -1053,7 +1050,6 @@ function wd-get_ka9q-conf_file-base_name() {
         [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
     fi
     echo "${conf_base_name}"
-    set +x
 }
 
 function wd-get-ka9q-conf-file-path () {
