@@ -412,7 +412,7 @@ static const char *wd_time(){
   clock_gettime(CLOCK_REALTIME,&now);
   struct tm *tm_now = gmtime(&now.tv_sec);;
   static char timebuff[512];
-  strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S %Z",tm_now);
+  strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S UTC",tm_now);
   return timebuff;
 }
 
