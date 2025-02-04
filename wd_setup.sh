@@ -100,6 +100,54 @@ case ${CPU_ARCH} in
         exit 1
         ;;
 esac
+
+function is_orange_pi_5() {
+    if grep -q 'Rockchip RK3588' /proc/cpuinfo 2>/dev/null || \
+       grep -q "Orange Pi 5" /sys/firmware/devicetree/base/model 2>/dev/null; then
+        return 0  # Success (Orange Pi 5 detected)
+    else
+        return 1  # Failure (Not an Orange Pi 5)
+    fi
+}
+
+declare WD_CPUSET_PATH="/sys/fs/cgroup/wsprdaemon"
+declare OPI_CPU_RANGE="0-5"
+declare WD_MEMORY_PATH="/sys/fs/cgroup/wsprdaemon"
+declare OPI_MEMORY_LIMIT="1G"
+declare FORCE_CGROUPS="${FORCE_CGROUPS:-yes}"
+
+function wd_run_in_cgroup() {
+    local cpu_range="${1}"
+    local memory_limit="${2}"
+    shift 2
+
+    wd_logger 1 "Run on cores ${cpu_range} with memory limited to ${memory_limit} bytes"
+
+    if [[ ! -d "${WD_CPUSET_PATH}" || "${FORCE_CGROUPS}" == "yes" ]]; then
+        sudo mkdir -p  "${WD_CPUSET_PATH}"
+        sudo bash -c "echo  0             > ${WD_CPUSET_PATH}/cpuset.mems"
+        sudo bash -c "echo  ${cpu_range}  > ${WD_CPUSET_PATH}/cpuset.cpus"
+        wd_logger 1 "Cgroup created and configured with CPU range: ${cpu_range}"
+    fi
+    if [[ ! -d "${WD_MEMORY_PATH}"  || "${FORCE_CGROUPS}" == "yes" ]]; then
+        sudo mkdir -p "${WD_MEMORY_PATH}"
+        sudo bash -c "echo ${memory_limit} > ${WD_MEMORY_PATH}/memory.max"
+        wd_logger 1 "Memory limit is set to '${memory_limit}' bytes"
+    fi
+    wd_logger 1 "Moving current shell $$ to the cgroup"
+    sudo sh -c "echo $$ > ${WD_CPUSET_PATH}/cgroup.procs"
+    sudo sh -c "echo $$ > ${WD_MEMORY_PATH}/cgroup.procs"
+    #stress --vm 15 --vm-bytes 8M
+}
+
+### To run effectively on some CPUs, WD needs to be limited to a subset of the cores and its use of memory limited as well
+if is_orange_pi_5; then
+    wd_logger 1 "Running on Orange Pi 5, so setup limits to CPU affinity and max memory usage"
+    wd_run_in_cgroup "${OPI_CPU_RANGE}" "${OPI_MEMORY_LIMIT}" "$0" $@
+else
+    wd_logger 1  "No CPU affinity or memory limits are being imposed while running on this CPU"
+fi
+
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
 function setup_wd_auto_ssh()
