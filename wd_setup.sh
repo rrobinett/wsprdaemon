@@ -110,11 +110,12 @@ function is_orange_pi_5() {
     fi
 }
 
-declare WD_CPUSET_PATH="/sys/fs/cgroup/wsprdaemon"
-declare OPI_CPU_RANGE="0-5"
-declare WD_MEMORY_PATH="/sys/fs/cgroup/wsprdaemon"
-declare OPI_MEMORY_LIMIT="1G"
 declare FORCE_CGROUPS="${FORCE_CGROUPS:-yes}"
+declare WD_CPUSET_PATH="/sys/fs/cgroup/wsprdaemon"
+declare WD_MEMORY_PATH="/sys/fs/cgroup/wsprdaemon"
+
+declare OPI_CPU_RANGE="${OPI_CPU_RANGE-0-4}"
+declare OPI_MEMORY_LIMIT="${OPI_MEMORY_LIMIT-1G}"
 
 function wd_run_in_cgroup() {
     local cpu_range="${1}"
@@ -127,17 +128,16 @@ function wd_run_in_cgroup() {
         sudo mkdir -p  "${WD_CPUSET_PATH}"
         sudo bash -c "echo  0             > ${WD_CPUSET_PATH}/cpuset.mems"
         sudo bash -c "echo  ${cpu_range}  > ${WD_CPUSET_PATH}/cpuset.cpus"
-        wd_logger 1 "Cgroup created and configured with CPU range: ${cpu_range}"
+        wd_logger 2 "Cgroup created and configured with CPU range: ${cpu_range}"
     fi
     if [[ ! -d "${WD_MEMORY_PATH}"  || "${FORCE_CGROUPS}" == "yes" ]]; then
         sudo mkdir -p "${WD_MEMORY_PATH}"
         sudo bash -c "echo ${memory_limit} > ${WD_MEMORY_PATH}/memory.max"
-        wd_logger 1 "Memory limit is set to '${memory_limit}' bytes"
+        wd_logger 2 "Memory limit is set to '${memory_limit}' bytes"
     fi
-    wd_logger 1 "Moving current shell $$ to the cgroup"
+    wd_logger 2 "Moving current shell $$ to the cgroup"
     sudo sh -c "echo $$ > ${WD_CPUSET_PATH}/cgroup.procs"
     sudo sh -c "echo $$ > ${WD_MEMORY_PATH}/cgroup.procs"
-    #stress --vm 15 --vm-bytes 8M
 }
 
 ### To run effectively on some CPUs, WD needs to be limited to a subset of the cores and its use of memory limited as well
