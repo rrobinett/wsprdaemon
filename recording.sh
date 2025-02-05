@@ -332,8 +332,7 @@ function ka9q_recording_daemon()
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
             wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} .*-s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
             kill ${running_jobs_pid_list[@]}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
+            rc=$? ; if (( rc ==  0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
             fi
             sleep 10
@@ -343,8 +342,7 @@ function ka9q_recording_daemon()
         local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
         wd_logger 1 "Starting '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >& wd-record-${receiver_band}.log"
         ${KA9Q_RADIO_WD_RECORD_CMD} -v ${wd_record_args} -s ${receiver_rx_freq_hz} ${receiver_ip} >& wd-record-${receiver_band}.log    ## wd-record prints to stderr, but we want it in wd-record.log
-        rc=$?
-        if [[ ${rc} -eq 0 ]]; then
+        rc=$? ; if (( rc ==  0 )); then
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >  >& wd-record-${receiver_band}.log' ' terminated with no error"
         else
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >  >& wd-record-${receiver_band}.log' => ${rc}"
@@ -356,8 +354,7 @@ function ka9q_recording_daemon()
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
             wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_PCMRECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
             kill ${running_jobs_pid_list[@]}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
+            rc=$? ; if (( rc == 0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
             fi
             sleep 10
@@ -366,7 +363,9 @@ function ka9q_recording_daemon()
         local verbosity_args_list=( -v -v -v -v )
         local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
         wd_logger 1 "Starting '${KA9Q_RADIO_PCMRECORD_CMD} ${PCMRECORD_CMD_EXTRA_ARGS-} -L 60 ${receiver_ip}' in ${PWD}"
-        ${KA9Q_RADIO_PCMRECORD_CMD} ${PCMRECORD_CMD_EXTRA_ARGS-} -W -L 60 --jt ${receiver_ip} > wd-record.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
+        echo "=========== Starting at $(date -u) =================" >>  pcmrecord-errors.log
+        echo "=========== Starting at $(date -u) =================" >>  pcmrecord-outs.log
+        ${KA9Q_RADIO_PCMRECORD_CMD} ${PCMRECORD_CMD_EXTRA_ARGS-} -W -q pcmrecord-errors.log -L 60 --jt ${receiver_ip} > pcmrecord-outs.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_PCMRECORD_CMD} -L 60 ${receiver_ip}' => ${rc}"
         else
