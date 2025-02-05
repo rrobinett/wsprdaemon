@@ -61,6 +61,7 @@ Command-line options:
 #include <getopt.h>
 #include <inttypes.h>
 #include <ogg/ogg.h>
+#include <stdarg.h>
 
 #include "misc.h"
 #include "attr.h"
@@ -209,6 +210,7 @@ static bool Jtmode = false;
 static bool Raw = false;
 static bool wd_mode = false;
 static int force_sample_rate_error = 0;
+static char const *wd_error_log = 0;
 
 const char *App_path;
 static int Input_fd,Status_fd;
@@ -255,9 +257,10 @@ static struct option Options[] = {
   {"max_length", required_argument, NULL, 'x'},
   {"wd_mode", no_argument, NULL, 'W'},
   {"error", required_argument, NULL, 'E'},
+  {"wd_errors", required_argument, NULL, 'q'},
   {NULL, no_argument, NULL, 0},
 };
-static char Optstring[] = "cd:e:fjl:m:rsS:t:vL:Vx:WE:";
+static char Optstring[] = "cd:e:fjl:m:rsS:t:vL:Vx:WE:q:";
 
 int main(int argc,char *argv[]){
   App_path = argv[0];
@@ -339,6 +342,9 @@ int main(int argc,char *argv[]){
       }
       fprintf(stderr,"Warning: sample count error forced to %+d samples\n",force_sample_rate_error);
       break;
+    case 'q':
+      wd_error_log = optarg;
+      break;
     default:
       fprintf(stderr,"Usage: %s [-c|--catmode|--stdout] [-r|--raw] [-e|--exec command] [-f|--flush] [-s] [-d directory] [-l locale] [-L maxtime] [-t timeout] [-j|--jt] [-v] [-m sec] [-x|--max_length max_file_time, no sync, oneshot] [--wd_mode|-W] PCM_multicast_address\n",argv[0]);
       exit(EX_USAGE);
@@ -411,9 +417,33 @@ static const char *wd_time(){
   struct timespec now;
   clock_gettime(CLOCK_REALTIME,&now);
   struct tm *tm_now = gmtime(&now.tv_sec);;
-  static char timebuff[512];
+  static char timebuff[256];
   strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S UTC",tm_now);
   return timebuff;
+}
+
+void wd_log(int v_level,const char *format,...) __attribute__ ((format (printf, 2, 3)));
+
+void wd_log(int v_level,const char *format,...){
+  if (Verbose < v_level){
+    return;
+  }
+  va_list args;
+  va_start(args,format);
+  char *msg;
+  if (vasprintf(&msg,format,args) >= 0){
+    FILE *f = fopen(wd_error_log,"a");
+    if (NULL == f){
+      f = stderr;
+    }
+    fputs(wd_time(),f);
+    fputs(msg,f);
+    if (stderr != f){
+      fclose(f);
+    }
+    FREE(msg);
+  }
+  va_end(args);
 }
 
 static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds,struct timespec now,uint32_t rtp_ts){
@@ -427,8 +457,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   // is the rtp->timestamp (sample count?) value reasonable compared
   // to last time?
   if ((0 != sp->total_file_samples) && (rtp_ts != sp->next_expected_rtp_ts)){
-      fprintf(stderr,"%s: Weird rtp->timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
-              wd_time(),
+    wd_log(0,": Weird rtp->timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
               sp->next_expected_rtp_ts,
               rtp_ts,
               rtp_ts - sp->next_expected_rtp_ts,
@@ -447,8 +476,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   // if packets are missing, we'll run over time first
   double delta = time_diff(now,sp->file_time);
   if (delta >= FileLengthLimit){
-    fprintf(stderr,"%s: Hit deadline--missing samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-            wd_time(),
+    wd_log(0,": Hit deadline--missing samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
             sp->total_file_samples,
             delta,
             sp->total_file_samples / delta,
@@ -463,8 +491,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   {
     // Should be in :59 at end of recording...are we?
     if (seconds != (FileLengthLimit - 1)){
-      fprintf(stderr,"%s: File end error--extra samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-              wd_time(),
+      wd_log(0,": File end error--extra samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
               sp->total_file_samples,
               delta,
               sp->total_file_samples / delta,
@@ -547,9 +574,9 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
 
     if (0 == seconds){
       // just in case we hit the :59->:00 edge before the file is complete
-      // in that case, abort/error the current file and start fresh
-      fprintf(stderr,"%s: hit :00 before sample count was reached on SSRC %d\n",
-              wd_time(),
+      // in that case, abort/error the current file and start the next file
+      wd_log(0,": Hit :00 with sample %ld before sample count was reached on SSRC %d\n",
+              sp->total_file_samples,
               sp->ssrc);
       close_file(sp);
 
