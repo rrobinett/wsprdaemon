@@ -709,6 +709,7 @@ alias WDA='wd -A'       ### Start WD from this terminal session so stderr messag
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wds='wd -s'
 alias wdv='wd -V'
+alias wdvv='(cd ~/wsprdaemon; echo "$(git symbolic-ref --short HEAD 2>/dev/null)-$(git rev-list --count HEAD)" )'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
 alias wddd='wd -D'      ### Decrement
 
