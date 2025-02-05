@@ -738,7 +738,25 @@ function build_ka9q_radio() {
             exit 1
     esac
 
-   ### KA9Q installed, so see if it needs to be started or restarted
+    ### This is a hack until Phil accepts Scott's version of pcmrecorder which  supports the -W and -q flags
+    if ! [[ -f pcmrecord.c ]]; then
+        wd_logger 2 "WD no longer stores Scott's version of pcmrecord.c, so Phil has integrated it"
+    else
+        if diff -q pcmrecord.c  ${project_subdir}/pcmrecord.c > /dev/null ; then
+            wd_logger 2 "WD's pcmrecord matches the one in ka9q-radio/"
+        else
+            wd_logger 1 "Installing Scott's version of pcmrecord.c"
+            cp pcmrecord.c  ${project_subdir}/pcmrecord.c
+            (cd ${project_subdir} ; make)
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c"
+            else
+                wd_logger 1 "Built Scott's version of pcmrecord.c"
+            fi
+        fi
+    fi
+
+    ### KA9Q installed, so see if it needs to be started or restarted
     local ka9q_runs_only_remotely
     get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
     if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
