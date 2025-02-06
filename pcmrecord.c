@@ -189,6 +189,7 @@ struct session {
   enum sync_state_t sync_state;
   struct timespec end_time;
   uint32_t next_expected_rtp_ts;
+  uint16_t next_expected_rtp_seq;
 };
 
 
@@ -418,7 +419,10 @@ static const char *wd_time(){
   clock_gettime(CLOCK_REALTIME,&now);
   struct tm *tm_now = gmtime(&now.tv_sec);;
   static char timebuff[256];
-  strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S UTC",tm_now);
+  size_t s = strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S",tm_now);
+  if (s) {
+    snprintf(&timebuff[s],sizeof(timebuff)-s,".%03lu UTC", now.tv_nsec / 1000000);
+  }
   return timebuff;
 }
 
@@ -446,24 +450,32 @@ void wd_log(int v_level,const char *format,...){
   va_end(args);
 }
 
-static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds,struct timespec now,uint32_t rtp_ts){
+static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds,struct timespec now){
   if(NULL == sp->fp)
     return -1;
 
-  // save to file
+  // track sequence numbers and report if we see one out of order (except the first datagram of file)
+  if ((0 != sp->total_file_samples) && (sp->rtp_state.seq != sp->next_expected_rtp_seq)){
+    wd_log(0,": Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d\n",
+           sp->next_expected_rtp_seq,
+           sp->rtp_state.seq,
+           (int16_t)(sp->rtp_state.seq - sp->next_expected_rtp_seq),
+           sp->ssrc);
+  }
+  sp->next_expected_rtp_seq = sp->rtp_state.seq + 1;    // next expected RTP sequence number
+
   int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2); // bytes per sample time
   int frames = buffer_size / framesize;  // One frame per sample time
 
-  // is the rtp->timestamp (sample count?) value reasonable compared
-  // to last time?
-  if ((0 != sp->total_file_samples) && (rtp_ts != sp->next_expected_rtp_ts)){
-    wd_log(0,": Weird rtp->timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
-              sp->next_expected_rtp_ts,
-              rtp_ts,
-              rtp_ts - sp->next_expected_rtp_ts,
-              sp->ssrc);
+  // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
+  if ((0 != sp->total_file_samples) && (sp->rtp_state.timestamp != sp->next_expected_rtp_ts)){
+    wd_log(0,": Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
+           sp->next_expected_rtp_ts,
+           sp->rtp_state.timestamp,
+           sp->rtp_state.timestamp - sp->next_expected_rtp_ts,
+           sp->ssrc);
   }
-  sp->next_expected_rtp_ts = rtp_ts + frames;    // next expected RTP timestamp
+  sp->next_expected_rtp_ts = sp->rtp_state.timestamp + frames;    // next expected RTP timestamp
 
   fwrite(samples,framesize,frames,sp->fp);
   sp->total_file_samples += frames;
@@ -477,11 +489,11 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   double delta = time_diff(now,sp->file_time);
   if (delta >= FileLengthLimit){
     wd_log(0,": Hit deadline--missing samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-            sp->total_file_samples,
-            delta,
-            sp->total_file_samples / delta,
-            seconds,
-            sp->ssrc);
+           sp->total_file_samples,
+           delta,
+           sp->total_file_samples / delta,
+           seconds,
+           sp->ssrc);
     close_file(sp);
     sp->sync_state = sync_state_startup;
     return -1;
@@ -492,11 +504,11 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
     // Should be in :59 at end of recording...are we?
     if (seconds != (FileLengthLimit - 1)){
       wd_log(0,": File end error--extra samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-              sp->total_file_samples,
-              delta,
-              sp->total_file_samples / delta,
-              seconds,
-              sp->ssrc);
+             sp->total_file_samples,
+             delta,
+             sp->total_file_samples / delta,
+             seconds,
+             sp->ssrc);
       close_file(sp);
       sp->sync_state = sync_state_startup;
       return -1;
@@ -510,7 +522,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   return 0;
 }
 
-static void wd_state_machine(struct session * const sp,struct sockaddr const *sender,void *samples,int buffer_size,uint32_t rtp_ts){
+static void wd_state_machine(struct session * const sp,struct sockaddr const *sender,void *samples,int buffer_size){
   if (!wd_mode || NULL == sp){
     return;
   }
@@ -539,8 +551,16 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
         // create new file in second :00
         session_file_init(sp,sender);
         sp->sync_state = sync_state_active;
+
+        // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
+        wd_log(1, ": start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+               sp->ssrc,
+               sp->rtp_state.seq,
+               sp->rtp_state.timestamp,
+               sp->rtp_state.timestamp / sp->samprate);
+
         start_wav_stream(sp);
-        if (0 != wd_write(sp,samples,buffer_size,seconds,now,rtp_ts)){
+        if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
           // something went wrong...should we delete the file?
           sp->sync_state = sync_state_startup;
           close_file(sp);
@@ -556,7 +576,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
     }
 
     // save to file until file is complete
-    if (0 != wd_write(sp,samples,buffer_size,seconds,now,rtp_ts)){
+    if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
       // something went wrong...should we delete the file?
       sp->sync_state = sync_state_startup;
       close_file(sp);
@@ -585,7 +605,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
       sp->sync_state = sync_state_active;
       start_wav_stream(sp);
     }
-    if (0 != wd_write(sp,samples,buffer_size,seconds,now,rtp_ts)){
+    if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
       // something went wrong...should we delete the file?
       sp->sync_state = sync_state_startup;
       close_file(sp);
@@ -1020,7 +1040,9 @@ static void input_loop(){
           for(int n = 0; n < samp_count; n++)
             wp[n] = bswap_16((uint16_t)samples[n]);
         }
-        wd_state_machine(sp,&sender,dp,size,rtp.timestamp);
+	sp->rtp_state.seq = rtp.seq;
+	sp->rtp_state.timestamp = rtp.timestamp;
+        wd_state_machine(sp,&sender,dp,size);
         goto datadone;
       }
 
