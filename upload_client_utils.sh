@@ -267,10 +267,13 @@ function upload_to_wsprnet_daemon() {
 
        ### All spots in an upload to wspr.org must come from a single CALL/GRID
        for call_grid_dir in ${call_grid_dirs_list[@]} ; do
+            local call=${call_grid_dir%_*}
+            call=${call//=//}              ### Since CALL is part of a linux directory name, it can't contain the very common '/' in call signs.  So we have replaced '/' in diretory name with '='.  Now restore the '/'
+            local grid=${call_grid_dir#*_}
 
            spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
 
-           if [[ ${#spots_files_list[@]} -eq 0 ]]; then
+           if (( ${#spots_files_list[@]} == 0 )); then
                wd_logger 1 "Found no '*_spots.txt' files under  ${call_grid_dir}"
                continue
            fi
@@ -283,6 +286,29 @@ function upload_to_wsprnet_daemon() {
 
             ### Remove the 'none' we insert in type 2 spot line, then sort the spots in ascending order by fields of spots.txt: YYMMDD HHMM .. FREQ, then chop off the extended spot information we added which isn't used  by wsprnet.org
             sed 's/none/    /' ${upload_spots_file_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+
+            if [[ "${UPLOAD_TO_WSPRNET_DROP_MY_CALL-yes}" == "yes" || -n "${UPLOAD_TO_WSPRNET_DROP_REGX+set}" ]]; then
+                wd_logger 1 "Dropping my call ${call} and/or spot lines which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX-}'"
+                grep -iw "${call}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "Report all spots since there are no spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
+                else
+                    wd_logger 1 "Dropping $(wc -l < grep.txt) spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(< grep.txt)"
+                    grep -viw "${call}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
+                    mv  grep.txt ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+                fi
+                if [[ -n "${UPLOAD_TO_WSPRNET_DROP_REGX+set}" ]]; then
+                    grep "${UPLOAD_TO_WSPRNET_DROP_REGX}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "Report all spots since there are no spots which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX}' in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
+                    else
+                        wd_logger 1 "Dropping $(wc -l < grep.txt) spots which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX}' in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(< grep.txt)"
+                        grep -v "${UPLOAD_TO_WSPRNET_DROP_REGX}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
+                        mv  grep.txt  ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
+                    fi
+                fi
+            fi
+
             local spots_to_xfer=$( wc -l < ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )
             if [[ ${spots_to_xfer} -eq 0 ]]; then
                 wd_logger 1 "Found ${#upload_spots_file_list[@]} spot files but there are no spot lines in them, so flushing those spot files"
@@ -294,11 +320,8 @@ function upload_to_wsprnet_daemon() {
                 wd_rm ${upload_spots_file_list[@]}
                 continue
             fi
-            ### Upload all the spots for one CALL_GRID in one curl transaction 
-            local call=${call_grid_dir%_*}
-            call=${call//=//}              ### Since CALL is part of a linux directory name, it can't contain the very common '/' in call signs.  So we have replaced '/' in diretory name with '='.  Now restore the '/'
-            local grid=${call_grid_dir#*_}
 
+             ### Upload all the spots for one CALL_GRID in one curl transaction 
             wd_logger 1 "Uploading ${call} at ${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
 
             local start_epoch=${EPOCHSECONDS}
