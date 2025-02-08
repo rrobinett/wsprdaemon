@@ -128,6 +128,20 @@ function wd-killall() {
             fi
         done
     fi
+
+    ### Clear the CPU affinity settings if they have been set by WD.  Only on the Orange Pi 5 for now.
+    local wd_cgroups_root_path="/sys/fs/cgroup"
+    local wd_cgroups_list=( wsprdaemon radiod linux )
+    local cgroup_name
+    for cgroup_name in ${wd_cgroups_list[@]} ; do
+        local cgroup_path="${wd_cgroups_root_path}/${cgroup_name}"
+        if [[ -d ${cgroup_path} ]]; then
+            (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
+            sudo rmdir  ${cgroup_path}
+        else
+            (( verbosity ))  && printf "Cgroup ${cgroup_path} is not configured\n"
+        fi
+    done
     (( --verbosity ))
 }
 
