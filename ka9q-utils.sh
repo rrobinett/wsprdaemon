@@ -85,8 +85,7 @@ function pull_commit(){
     local git_root="main"  ### Now github's default.  older projects like wsprdaemon have the root 'master'
     local current_commit_sha
     get_current_commit_sha current_commit_sha ${git_directory}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${git_director}' => ${rc}"
         return 3
     fi
@@ -96,23 +95,20 @@ function pull_commit(){
     fi
     wd_logger 1 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
     wd_logger 1 "First 'git checkout ${git_root}'"
-    ( cd ${git_directory}; git checkout ${git_root} ) >& git.log
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    ( cd ${git_directory}; git restore pcmrecord.c; git checkout ${git_root} ) >& git.log
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
         return 4
     fi
     wd_logger 1 "Then 'git pull' to be sure the code is current"
     ( cd ${git_directory}; git pull ) >& git.log
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git pull' => ${rc}. git.log:\n$(< git.log)"
         return 5
     fi
     wd_logger 1 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
     ( cd ${git_directory}; git checkout ${desired_git_sha} ) >& git.log
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc} git.log:\n$(< git.log)"
         return 6
     fi
