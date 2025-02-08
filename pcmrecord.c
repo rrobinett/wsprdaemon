@@ -78,7 +78,7 @@ enum sync_state_t
   sync_state_startup,           // any second; waiting for data to arrive in second :59
   sync_state_armed,             // second :59; waiting for data to arrive in second :00 to sync
   sync_state_active,            // recording data to file, wait for final samples to complete file
-  sync_state_last_second,       // recording data to file in :59
+  sync_state_resync,
 };
 
 // Simplified .wav file header
@@ -450,7 +450,7 @@ void wd_log(int v_level,const char *format,...){
   va_end(args);
 }
 
-static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds,struct timespec now){
+static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds){
   if(NULL == sp->fp)
     return -1;
 
@@ -477,6 +477,17 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   }
   sp->next_expected_rtp_ts = sp->rtp_state.timestamp + frames;    // next expected RTP timestamp
 
+  // check time of first sample; if it's not in second :00, this file will be short and we need to resync the next file
+  if (0 == sp->total_file_samples){
+    //wd_log(1,": total_file_samples = 0, this should be first sample in file\n");
+    if (0 != seconds){
+      wd_log(1,": First sample NOT in second :00...resync at next interval\n");
+      sp->sync_state = sync_state_resync;
+    } else {
+      //wd_log(1,": First sample in in second :00 ?\n");
+    }
+  }
+
   fwrite(samples,framesize,frames,sp->fp);
   sp->total_file_samples += frames;
   sp->current_segment_samples += frames;
@@ -485,39 +496,11 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   sp->samples_written += frames;
   sp->samples_remaining -= frames;
 
-  // if packets are missing, we'll run over time first
-  double delta = time_diff(now,sp->file_time);
-  if (delta >= FileLengthLimit){
-    wd_log(0,": Hit deadline--missing samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-           sp->total_file_samples,
-           delta,
-           sp->total_file_samples / delta,
-           seconds,
-           sp->ssrc);
-    close_file(sp);
-    sp->sync_state = sync_state_startup;
-    return -1;
-  }
-
   if(sp->samples_remaining <= 0)
   {
-    // Should be in :59 at end of recording...are we?
-    if (seconds != (FileLengthLimit - 1)){
-      wd_log(0,": File end error--extra samples?! %ld samples in %.6f seconds, %.3f Hz (second %d) on SSRC %d\n",
-             sp->total_file_samples,
-             delta,
-             sp->total_file_samples / delta,
-             seconds,
-             sp->ssrc);
-      close_file(sp);
-      sp->sync_state = sync_state_startup;
-      return -1;
-    }
-    else{
-      close_file(sp);
-      sp->sync_state = sync_state_armed;
-      return 0;
-    }
+    // hit sample count, close file and create the next one
+    close_file(sp);
+    return 1;           // tell state machine to create the next file
   }
   return 0;
 }
@@ -549,6 +532,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
 
       if(sp->fp == NULL && !sp->complete){
         // create new file in second :00
+        sp->file_time.tv_sec = 0;
         session_file_init(sp,sender);
         sp->sync_state = sync_state_active;
 
@@ -560,7 +544,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
                sp->rtp_state.timestamp / sp->samprate);
 
         start_wav_stream(sp);
-        if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
+        if (0 != wd_write(sp,samples,buffer_size,seconds)){
           // something went wrong...should we delete the file?
           sp->sync_state = sync_state_startup;
           close_file(sp);
@@ -575,37 +559,58 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
       return;
     }
 
-    // save to file until file is complete
-    if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
+    // save to file until error or file is complete
+    int status = wd_write(sp,samples,buffer_size,seconds);
+
+    if (-1 == status){
       // something went wrong...should we delete the file?
       sp->sync_state = sync_state_startup;
       close_file(sp);
     }
-    if ((seconds == (FileLengthLimit -1) && (sync_state_active == sp->sync_state))){
-      sp->sync_state = sync_state_last_second;
+    else if (1 == status){
+      // file complete, start next one
+      session_file_init(sp,sender);
+      sp->sync_state = sync_state_active;
+
+      // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
+      wd_log(1, ": start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+             sp->ssrc,
+             sp->rtp_state.seq,
+             sp->rtp_state.timestamp,
+             sp->rtp_state.timestamp / sp->samprate);
+
+      start_wav_stream(sp);
     }
     break;
 
-  case sync_state_last_second:
+  case sync_state_resync:
+    // record short file until we can resync at next :00
     if(NULL == sp->fp){
       sp->sync_state = sync_state_startup;
       return;
     }
 
-    if (0 == seconds){
-      // just in case we hit the :59->:00 edge before the file is complete
-      // in that case, abort/error the current file and start the next file
-      wd_log(0,": Hit :00 with sample %ld before sample count was reached on SSRC %d\n",
-              sp->total_file_samples,
-              sp->ssrc);
+    // tricky...if samples arrive too fast, we could start a new file in :59, which
+    // would trigger a resync, but then it'd quickly go to :00 and the short file would be less
+    // than a second, leading to duplicate file names! Argh.
+    // Maybe only create the new file once the short file is at least half full?
+    if ((0 == seconds) && (sp->total_file_samples > sp->samples_remaining)) {
+      // first packet in :00, resync and start clean after the short file
       close_file(sp);
-
-      // create new file in second :00
+      sp->file_time.tv_sec = 0;
       session_file_init(sp,sender);
       sp->sync_state = sync_state_active;
+
+      // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
+      wd_log(1, ": resync file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+             sp->ssrc,
+             sp->rtp_state.seq,
+             sp->rtp_state.timestamp,
+             sp->rtp_state.timestamp / sp->samprate);
+
       start_wav_stream(sp);
     }
-    if (0 != wd_write(sp,samples,buffer_size,seconds,now)){
+    if (0 != wd_write(sp,samples,buffer_size,seconds)){
       // something went wrong...should we delete the file?
       sp->sync_state = sync_state_startup;
       close_file(sp);
@@ -1235,7 +1240,20 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
   struct timespec now;
   clock_gettime(CLOCK_REALTIME,&now);
   struct timespec file_time = now; // Default to actual time when length limit is not set
-  sp->file_time = file_time;
+  if (wd_mode){
+    if (sp->file_time.tv_sec){
+      // not the first file in the series, so +60 seconds from last file time
+      sp->file_time.tv_sec += FileLengthLimit;
+      wd_log(1,": new file named +%.0f s from last: %ld.%03ld\n",FileLengthLimit,sp->file_time.tv_sec,sp->file_time.tv_nsec/1000000);
+    } else {
+      // first file in series, use current time to name it
+      sp->file_time = file_time;
+      wd_log(1,": new file named from current time due to startup or resync: %ld.%03ld\n",sp->file_time.tv_sec,sp->file_time.tv_nsec/1000000);
+    }
+  } else {
+    // not wd mode, use current time
+    sp->file_time = file_time;
+  }
 
   if(FileLengthLimit > 0){ // Not really supported on opus yet
     // Pad start of first file with zeroes
@@ -1264,9 +1282,11 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
       imaxdiv_t f = imaxdiv(start_ns,BILLION);
       file_time.tv_sec = f.quot + epoch; // restore original epoch
       file_time.tv_nsec = f.rem;
-      sp->file_time = file_time;
+      if (!wd_mode)
+        sp->file_time = file_time;
       sp->starting_offset = (sp->samprate * skip_ns) / BILLION;
       sp->total_file_samples += sp->starting_offset;
+//      wd_log(0,": why are we here?! sp->no_offset: %s\n",sp->no_offset ? "true" : "false");
 #if 0
       fprintf(stderr,"padding %lf sec %ld samples\n",
 	      (float)skip_ns / BILLION,
@@ -1280,10 +1300,15 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
 
   if (wd_mode){
     sp->starting_offset = 0;
+    sp->total_file_samples = 0;
     sp->samples_remaining = FileLengthLimit * sp->samprate;
     sp->samples_remaining += force_sample_rate_error;
     sp->sync_state = sync_state_startup;
-    sp->file_time = now;
+
+    // hack the file start time to be in sequence, even if it's wrong
+    file_time.tv_sec = sp->file_time.tv_sec;
+    file_time.tv_nsec = sp->file_time.tv_nsec;
+    //wd_log(1,": override new file name using %ld.%03ld\n",file_time.tv_sec,file_time.tv_nsec/1000000);
   }
 
   if(Jtmode){
