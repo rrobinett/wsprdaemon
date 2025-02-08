@@ -641,6 +641,9 @@ function ka9q_web_daemon() {
     ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
+    fi
+    if [[ -z "${ka9q_radiod_status_dns}" ]]; then
+        wd_logger 1 "ERROR: can't file ka9q_radiod_status_dns"
     else
         ka9q_service_daemons_list=()
         ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE:-WD_RX888}"         ### This is hack to get this one service imlmewntationb working
@@ -654,7 +657,7 @@ function ka9q_web_daemon() {
             sleep 1
         done
     fi
- }
+}
 
 function ka9q_web_service_daemon() {
     local status_dns_name=$1             ### Where to get the spectrum stream (e.g. hf.local)
