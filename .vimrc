@@ -30,3 +30,16 @@ if exists('$TMUX')
     " Normal mode: block cursor
     let &t_EI = "\e[2 q"
 endif
+" F2: Horizontal split
+nnoremap <F2> :split<CR>
+
+" F3: Vertical split
+nnoremap <F3> :vsplit<CR>
+
+" F4: Increase current split size
+nnoremap <F4> :resize +5<CR>
+nnoremap <S-F4> :vertical resize +5<CR> " Shift+F4 for vertical resizing
+
+" F5: Move between splits
+nnoremap <F5> <C-w>w
+
