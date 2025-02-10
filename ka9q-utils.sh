@@ -684,6 +684,85 @@ function ka9q_web_service_daemon() {
 #}
 # test_ka9q-web-setup
 
+### Given the path to an ini file like /etc/radio/radiod@rx888-wsprdemon.conf or ~/bin/frpc_wd.ini
+### This function searches for a variable in a section and:
+### 1)  If is isn't found, it adds the variable = value to the section
+### 2)  If the variable is found it varifies its value and changes it if it differs
+###     As a special case, if variable = '#', then remark out the line with a '#' as the first character of the line
+### Created by chatgbt
+function update_ini_file_section_variable() {
+    local file="$1"
+    local section="$2"
+    local variable="$3"
+    local new_value="$4"
+    local rc=0
+
+    if [[ ! -f "${file}" ]]; then
+        wd_logger 1 "ERROR: ini file '${file}' does not exist"
+        return 2
+    fi
+
+    # Escape special characters in section and variable for use in regex
+    local section_esc=$(printf "%s\n" "$section" | sed 's/[][\/.^$*]/\\&/g')
+    local variable_esc=$(printf "%s\n" "$variable" | sed 's/[][\/.^$*]/\\&/g')
+
+    wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
+
+    # Check if section exists
+    if ! grep -q "^\[$section_esc\]" "$file"; then
+        # Add section if it doesn't exist
+        wd_logger 1 "WARNING: section $section doesn't exist, so adding it at the end of $file"
+        echo -e "\n[$section]" >> "$file"
+    fi
+
+    # Find section start and end lines
+    local section_start=$(grep -n "^\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_end=$(awk -v start=$section_start 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
+
+    # If no next section is found, set section_end to end of file
+    [[ -z "$section_end" ]] && section_end=$(wc -l < "$file")
+
+    # Check if variable exists within the section
+    set +x
+    if sed -n "${section_start},${section_end}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
+        ### The variable is defined.  see if it needs to be changed
+        local temp_file="${file}.tmp"
+
+        if [[ "$new_value" == "#" ]]; then
+            wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
+            set +x
+            sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
+                set +x
+        else
+            wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
+            sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*\).*|\1$new_value|" "$file" > "$temp_file"
+        fi
+        set +x
+        if ! diff "$file" "$temp_file" > diff.log; then
+            wd_logger 1 "Changing section [#section] of $file:\n$(<diff.log)"
+            mv "${temp_file}"  "$file"
+            return 1
+        else
+            rm "${temp_file}"
+            wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
+            return 0
+        fi
+    else
+        # Append the variable inside the section
+         if [[ "$new_value" == "#" ]]; then
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
+            return 0
+        else
+            set +x
+            wd_logger 1 "ERROR: Unexpected that variable '$variable_esc' was not in [$section_esc] of file $file, so inserting the line '$variable = $new_value'"
+            sed -i "${section_start}a\\$variable = $new_value" "$file"
+            return 1
+         fi
+    fi
+    ### Code should never get here
+    return 2
+}
+
 ### This function is executed once the ka9q-radio dirrectory is created and has the configured version of SW installed
 function build_ka9q_radio() {
     local project_subdir=$1
@@ -813,31 +892,39 @@ function build_ka9q_radio() {
         fi
     fi
 
-    ### By default WD configures radiod to enable RF AGC
-    local agc_enabled="${KA9Q_RF_AGC_ENABLED-yes}"
-    if [[ ${agc_enabled} == "yes" ]]; then
-        sed  '/^\[rx888\]/,/^\[/s/^gain/#gain/'  ${ka9q_conf_file_path} > /tmp/radiod.conf
-        if diff -q  ${ka9q_conf_file_path} /tmp/radiod.conf > /dev/null ; then
-            wd_logger 2 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is 'yes', and ${ka9q_conf_file_path} already was configured without a 'gain = ...' linei, so no radiod restart is needed"
-        else
-            wd_logger 1 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is 'yes', but ${ka9q_conf_file_path} was configured a 'gain = ...' line. So fix the conf file and restart radiod"
-            mv /tmp/radiod.conf ${ka9q_conf_file_path}
-            radio_restart_needed="yes"
-        fi
-    else
-        local rx888_section_gain_line=$(sed -n '/^\[rx888\]/,/^\[/s/^gain/#gain/p' ${ka9q_conf_file_path})
-        if [[ -z "${rx888_section_gain_line}" ]]; then
-            wd_logger 1 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is not 'yes', but there is no 'gain = NN' line in  ${ka9q_conf_file_path}.  So add that line and run WD again"
-            exit 1
-        else
-            wd_logger 2 "KA9Q_RF_AGC_ENABLED=${agc_enabled} is not 'yes' and the needed line '${rx888_section_gain_line}' is present in  ${ka9q_conf_file_path}.  so no radiod restart is needed"
-        fi
-    fi
+    ### INI/CONF FILE        SECTION   VARIABLE  DESIRED VALUE
+     local init_file_section_variable_value_list=(
+    "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
+    "${ka9q_conf_file_path}  WSPR    agc          0"
+    "${ka9q_conf_file_path}  WSPR    gain         0"
+    "${ka9q_conf_file_path}  WSPR    low       1300"
+    "${ka9q_conf_file_path}  WSPR    high      1700"
+    "${ka9q_conf_file_path}  WSPR    encoding float"
+    "${ka9q_conf_file_path}  WWV-IQ  agc          0"
+    "${ka9q_conf_file_path}  WWV-IQ  gain         0"
+    "${ka9q_conf_file_path}  WWV-IQ  encoding float"
+    )
+    local index
+    for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
+        wd_logger 2 "Checking .conf/.ini file variable with: 'update_ini_file_section_variable ${init_file_section_variable_value_list[index]}'"
+        update_ini_file_section_variable ${init_file_section_variable_value_list[index]}
+        rc=$?
+        case $rc in
+            0)
+                wd_logger 2 "Made no changes"
+                ;;
+            1)
+                wd_logger 1 "Made changes, so radiod restart is needed"
+                radio_restart_needed="yes"
+                  ;;
+            *)
+                 wd_logger 1 "ERROR: ' update_ini_file_section_variable ${init_file_section_variable_value_list[index]}' => $rc"
+                 exit 1
+                 ;;
+         esac
+    done
 
-     ### Make sure the config doesn't have the broken low = 100, high = 5000 values
-    ka9q_conf_file_bw_check ${ka9q_conf_name}
-
-    ### Make sure the wisdomf needed for effecient execution of radiod exists
+   ### Make sure the wisdomf needed for effecient execution of radiod exists
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
         wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
     else
