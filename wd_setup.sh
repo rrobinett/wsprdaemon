@@ -110,43 +110,33 @@ function is_orange_pi_5() {
     fi
 }
 
-declare FORCE_CGROUPS="${FORCE_CGROUPS:-yes}"
-declare WD_CPUSET_PATH="/sys/fs/cgroup/wsprdaemon"
-declare WD_MEMORY_PATH="/sys/fs/cgroup/wsprdaemon"
+declare CPU_CGROUP_PATH="/sys/fs/cgroup"
+declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 
-declare OPI_CPU_RANGE="${OPI_CPU_RANGE-0-4}"
-declare OPI_MEMORY_LIMIT="${OPI_MEMORY_LIMIT-1G}"
-
+### Restrict WD and its children so two CPU cores are always free for KA9Q-radio
+# This should be undone later on systems not running KA9Q-radio
 function wd_run_in_cgroup() {
-    local cpu_range="${1}"
-    local memory_limit="${2}"
-    shift 2
+    local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
 
-    wd_logger 1 "Run on cores ${cpu_range} with memory limited to ${memory_limit} bytes"
+    if ((  cpu_core_count < 8 )); then
+        wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+        return 0
+    fi
 
-    if [[ ! -d "${WD_CPUSET_PATH}" || "${FORCE_CGROUPS}" == "yes" ]]; then
-        sudo mkdir -p  "${WD_CPUSET_PATH}"
-        sudo bash -c "echo  0             > ${WD_CPUSET_PATH}/cpuset.mems"
-        sudo bash -c "echo  ${cpu_range}  > ${WD_CPUSET_PATH}/cpuset.cpus"
-        wd_logger 2 "Cgroup created and configured with CPU range: ${cpu_range}"
-    fi
-    if [[ ! -d "${WD_MEMORY_PATH}"  || "${FORCE_CGROUPS}" == "yes" ]]; then
-        sudo mkdir -p "${WD_MEMORY_PATH}"
-        sudo bash -c "echo ${memory_limit} > ${WD_MEMORY_PATH}/memory.max"
-        wd_logger 2 "Memory limit is set to '${memory_limit}' bytes"
-    fi
-    wd_logger 2 "Moving current shell $$ to the cgroup"
-    sudo sh -c "echo $$ > ${WD_CPUSET_PATH}/cgroup.procs"
-    sudo sh -c "echo $$ > ${WD_MEMORY_PATH}/cgroup.procs"
+    local max_cpu_core=$(( cpu_core_count - 2 ))     
+    local cpu_range="0-$(( max_cpu_core - 1 ))"
+
+ 
+    echo  "+cpuset"     | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
+    sudo mkdir -p  "${WD_CPUSET_PATH}"
+    echo  "+cpuset"     | sudo tee "${WD_CPUSET_PATH}/cgroup.subtree_control"  > /dev/null
+    echo  0             | sudo tee "${WD_CPUSET_PATH}/cpuset.mems"             > /dev/null
+    echo  ${cpu_range}  | sudo tee "${WD_CPUSET_PATH}/cpuset.cpus"             > /dev/null
+    echo $$             | sudo tee "${WD_CPUSET_PATH}/cgroup.procs"            > /dev/null
+
+    wd_logger 1 "Restricted current WD shell $$ and its children to CPU cores ${cpu_range}"
 }
-
-### To run effectively on some CPUs, WD needs to be limited to a subset of the cores and its use of memory limited as well
-if is_orange_pi_5; then
-    wd_logger 1 "Running on Orange Pi 5, so setup limits to CPU affinity and max memory usage"
-    wd_run_in_cgroup "${OPI_CPU_RANGE}" "${OPI_MEMORY_LIMIT}" "$0" $@
-else
-    wd_logger 2  "No CPU affinity or memory limits are being imposed while running on this CPU"
-fi
+wd_run_in_cgroup
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
