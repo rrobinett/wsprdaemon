@@ -188,6 +188,7 @@ struct session {
 
   enum sync_state_t sync_state;
   struct timespec end_time;
+  struct timespec wd_file_time;
   uint32_t next_expected_rtp_ts;
   uint16_t next_expected_rtp_seq;
 };
@@ -421,7 +422,7 @@ static const char *wd_time(){
   static char timebuff[256];
   size_t s = strftime(timebuff,sizeof(timebuff),"%a %d %b %Y %H:%M:%S",tm_now);
   if (s) {
-    snprintf(&timebuff[s],sizeof(timebuff)-s,".%03lu UTC", now.tv_nsec / 1000000);
+    snprintf(&timebuff[s],sizeof(timebuff)-s,".%03lu UTC: ", now.tv_nsec / 1000000);
   }
   return timebuff;
 }
@@ -436,7 +437,9 @@ void wd_log(int v_level,const char *format,...){
   va_start(args,format);
   char *msg;
   if (vasprintf(&msg,format,args) >= 0){
-    FILE *f = fopen(wd_error_log,"a");
+    FILE *f = stderr;
+    if ((wd_error_log) && (strlen(wd_error_log)))
+      f = fopen(wd_error_log,"a");
     if (NULL == f){
       f = stderr;
     }
@@ -456,7 +459,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
 
   // track sequence numbers and report if we see one out of order (except the first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.seq != sp->next_expected_rtp_seq)){
-    wd_log(0,": Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d\n",
+    wd_log(0,"Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d\n",
            sp->next_expected_rtp_seq,
            sp->rtp_state.seq,
            (int16_t)(sp->rtp_state.seq - sp->next_expected_rtp_seq),
@@ -469,7 +472,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
 
   // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.timestamp != sp->next_expected_rtp_ts)){
-    wd_log(0,": Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
+    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
            sp->next_expected_rtp_ts,
            sp->rtp_state.timestamp,
            sp->rtp_state.timestamp - sp->next_expected_rtp_ts,
@@ -479,12 +482,12 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
 
   // check time of first sample; if it's not in second :00, this file will be short and we need to resync the next file
   if (0 == sp->total_file_samples){
-    //wd_log(1,": total_file_samples = 0, this should be first sample in file\n");
+    //wd_log(1,"total_file_samples == 0: first sample in file\n");
     if (0 != seconds){
-      wd_log(1,": First sample NOT in second :00...resync at next interval\n");
+      wd_log(0,"First sample NOT in second :00...resync at next interval\n");
       sp->sync_state = sync_state_resync;
     } else {
-      //wd_log(1,": First sample in in second :00 ?\n");
+      //wd_log(1,"First sample is in second :00\n");
     }
   }
 
@@ -532,18 +535,19 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
 
       if(sp->fp == NULL && !sp->complete){
         // create new file in second :00
-        sp->file_time.tv_sec = 0;
+        sp->wd_file_time.tv_sec = 0;
         session_file_init(sp,sender);
         sp->sync_state = sync_state_active;
 
         // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
-        wd_log(1, ": start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+        wd_log(1, "Start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
                sp->ssrc,
                sp->rtp_state.seq,
                sp->rtp_state.timestamp,
                sp->rtp_state.timestamp / sp->samprate);
 
         start_wav_stream(sp);
+        sp->file_time = now;
         if (0 != wd_write(sp,samples,buffer_size,seconds)){
           // something went wrong...should we delete the file?
           sp->sync_state = sync_state_startup;
@@ -573,13 +577,14 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
       sp->sync_state = sync_state_active;
 
       // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
-      wd_log(1, ": start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+      wd_log(1, "Start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
              sp->ssrc,
              sp->rtp_state.seq,
              sp->rtp_state.timestamp,
              sp->rtp_state.timestamp / sp->samprate);
 
       start_wav_stream(sp);
+      sp->file_time = now;
     }
     break;
 
@@ -597,18 +602,19 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
     if ((0 == seconds) && (sp->total_file_samples > sp->samples_remaining)) {
       // first packet in :00, resync and start clean after the short file
       close_file(sp);
-      sp->file_time.tv_sec = 0;
+      sp->wd_file_time.tv_sec = 0;
       session_file_init(sp,sender);
       sp->sync_state = sync_state_active;
 
       // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
-      wd_log(1, ": resync file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+      wd_log(1, "Resync file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
              sp->ssrc,
              sp->rtp_state.seq,
              sp->rtp_state.timestamp,
              sp->rtp_state.timestamp / sp->samprate);
 
       start_wav_stream(sp);
+      sp->file_time = now;
     }
     if (0 != wd_write(sp,samples,buffer_size,seconds)){
       // something went wrong...should we delete the file?
@@ -1241,21 +1247,21 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
   clock_gettime(CLOCK_REALTIME,&now);
   struct timespec file_time = now; // Default to actual time when length limit is not set
   if (wd_mode){
-    if (sp->file_time.tv_sec){
-      // not the first file in the series, so +60 seconds from last file time
-      sp->file_time.tv_sec += FileLengthLimit;
-      wd_log(1,": new file named +%.0f s from last: %ld.%03ld\n",FileLengthLimit,sp->file_time.tv_sec,sp->file_time.tv_nsec/1000000);
+    if (sp->wd_file_time.tv_sec){
+      // not the first file in the series, so +60 (well, FileLengthLimit) seconds from last file time
+      sp->wd_file_time.tv_sec += FileLengthLimit;
+      //wd_log(1,"New file named +%.0f s from last: %ld.%03ld\n",FileLengthLimit,sp->wd_file_time.tv_sec,sp->wd_file_time.tv_nsec/1000000);
     } else {
       // first file in series, use current time to name it
-      sp->file_time = file_time;
-      wd_log(1,": new file named from current time due to startup or resync: %ld.%03ld\n",sp->file_time.tv_sec,sp->file_time.tv_nsec/1000000);
+      sp->wd_file_time = file_time;
+      //wd_log(1,"New file named from current time due to startup or resync: %ld.%03ld\n",sp->wd_file_time.tv_sec,sp->wd_file_time.tv_nsec/1000000);
     }
   } else {
     // not wd mode, use current time
     sp->file_time = file_time;
   }
 
-  if(FileLengthLimit > 0){ // Not really supported on opus yet
+  if((FileLengthLimit > 0) && (!wd_mode)){ // Not really supported on opus yet
     // Pad start of first file with zeroes
 #if 0
     struct tm const * const tm_now = gmtime(&now.tv_sec);
@@ -1282,11 +1288,9 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
       imaxdiv_t f = imaxdiv(start_ns,BILLION);
       file_time.tv_sec = f.quot + epoch; // restore original epoch
       file_time.tv_nsec = f.rem;
-      if (!wd_mode)
-        sp->file_time = file_time;
+      sp->file_time = file_time;
       sp->starting_offset = (sp->samprate * skip_ns) / BILLION;
       sp->total_file_samples += sp->starting_offset;
-//      wd_log(0,": why are we here?! sp->no_offset: %s\n",sp->no_offset ? "true" : "false");
 #if 0
       fprintf(stderr,"padding %lf sec %ld samples\n",
 	      (float)skip_ns / BILLION,
@@ -1306,9 +1310,9 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
     sp->sync_state = sync_state_startup;
 
     // hack the file start time to be in sequence, even if it's wrong
-    file_time.tv_sec = sp->file_time.tv_sec;
-    file_time.tv_nsec = sp->file_time.tv_nsec;
-    //wd_log(1,": override new file name using %ld.%03ld\n",file_time.tv_sec,file_time.tv_nsec/1000000);
+    file_time.tv_sec = sp->wd_file_time.tv_sec;
+    file_time.tv_nsec = sp->wd_file_time.tv_nsec;
+    //wd_log(1,"Override new file name using %ld.%03ld\n",file_time.tv_sec,file_time.tv_nsec/1000000);
   }
 
   if(Jtmode){
@@ -1505,6 +1509,14 @@ static int close_file(struct session *sp){
       clock_gettime(CLOCK_REALTIME,&now);
       attrprintf(fd,"end time","%ld.%09ld",(long)now.tv_sec,(long)now.tv_nsec);
       attrprintf(fd,"elapsed","%.6f",time_diff(now,sp->file_time));
+      if (wd_mode){
+        attrprintf(fd,"drift","%.6f",time_diff(sp->file_time,sp->wd_file_time));
+        wd_log(1,"Close file at %ld.%09ld, %.6f s elapsed, %.6f drift\n",
+               (long)now.tv_sec,
+               (long)now.tv_nsec,
+               time_diff(now,sp->file_time),
+               time_diff(sp->file_time,sp->wd_file_time));
+      }
     } else if(strlen(sp->filename) > 0){
       if(unlink(sp->filename) != 0)
 	fprintf(stderr,"Can't unlink %s: %s\n",sp->filename,strerror(errno));
