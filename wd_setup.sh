@@ -123,7 +123,10 @@ function wd_run_in_cgroup() {
         return 0
     fi
 
-    local max_cpu_core=$(( cpu_core_count - 2 ))     
+    if [[ -n "${MAX_WD_CPU_CORES+set}" ]]; then
+        wd_logger 1 "MAX_WD_CPU_CORES was set to ${MAX_WD_CPU_CORES} in WD.conf"
+    fi
+    local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 4 ))}
     local cpu_range="0-$(( max_cpu_core - 1 ))"
 
  
