@@ -116,30 +116,32 @@ declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 ### Restrict WD and its children so two CPU cores are always free for KA9Q-radio
 # This should be undone later on systems not running KA9Q-radio
 function wd_run_in_cgroup() {
-    local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
-
-    if ((  cpu_core_count < 8 )); then
-        wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
-        return 0
+    local wd_core_range
+    if [[ -n "${WD_CPU_CORES+set}" ]]; then
+        wd_core_range="$WD_CPU_CORES"
+        wd_logger 1 "MAX_WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
+    else
+        local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
+        if ((  cpu_core_count < 8 )); then
+            wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+            return 0
+        fi
+        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - ${RADIO_CPU_CORES-4} ))}
+        wd_core_range="0-$(( max_cpu_core - 1 ))"
+        wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
     fi
-
-    if [[ -n "${MAX_WD_CPU_CORES+set}" ]]; then
-        wd_logger 1 "MAX_WD_CPU_CORES was set to ${MAX_WD_CPU_CORES} in WD.conf"
-    fi
-    local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 4 ))}
-    local cpu_range="0-$(( max_cpu_core - 1 ))"
-
  
-    echo  "+cpuset"     | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
+    echo  "+cpuset"         | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
     sudo mkdir -p  "${WD_CPUSET_PATH}"
-    echo  "+cpuset"     | sudo tee "${WD_CPUSET_PATH}/cgroup.subtree_control"  > /dev/null
-    echo  0             | sudo tee "${WD_CPUSET_PATH}/cpuset.mems"             > /dev/null
-    echo  ${cpu_range}  | sudo tee "${WD_CPUSET_PATH}/cpuset.cpus"             > /dev/null
-    echo $$             | sudo tee "${WD_CPUSET_PATH}/cgroup.procs"            > /dev/null
+    echo  "+cpuset"         | sudo tee "${WD_CPUSET_PATH}/cgroup.subtree_control"  > /dev/null
+    echo  0                 | sudo tee "${WD_CPUSET_PATH}/cpuset.mems"             > /dev/null  ### This must be done before the next line
+    echo  ${wd_core_range}  | sudo tee "${WD_CPUSET_PATH}/cpuset.cpus"             > /dev/null  ###
+    echo $$                 | sudo tee "${WD_CPUSET_PATH}/cgroup.procs"            > /dev/null
 
-    wd_logger 1 "Restricted current WD shell $$ and its children to CPU cores ${cpu_range}"
+    wd_logger 1 "Restricted current WD shell $$ and its children to CPU cores ${wd_core_range}"
 }
 wd_run_in_cgroup
+
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
