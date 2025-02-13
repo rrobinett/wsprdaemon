@@ -126,7 +126,7 @@ function wd_run_in_cgroup() {
             wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
             return 0
         fi
-        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - ${RADIO_CPU_CORES-4} ))}
+        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - ${RADIO_CPU_CORES-2} ))}
         wd_core_range="0-$(( max_cpu_core - 1 ))"
         wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
     fi
