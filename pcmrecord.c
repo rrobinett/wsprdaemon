@@ -537,40 +537,39 @@ static bool grab_queue_stats(uint32_t *tx_queue_depth,uint32_t *rx_queue_depth,u
   if (f){
     struct sockaddr_in const *sin = (struct sockaddr_in *)&mcast_dest_sock;
     char *src_addr;
-    asprintf(&src_addr,"%08X:%04X",(sin->sin_addr.s_addr),ntohs(sin->sin_port));
+    if (asprintf(&src_addr,"%08X:%04X",(sin->sin_addr.s_addr),ntohs(sin->sin_port)) >= 0){
+      char *line = NULL;
+      size_t len = 0;
+      ssize_t nread;
 
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t nread;
-
-    while ((nread = getline(&line,&len,f)) != -1){
-      strtok(line," ");
-      char *a = strtok(0," ");
-      if (0 == strcmp(src_addr, a)){
-        strtok(0," ");
-        strtok(0," ");
-        char *tq = strtok(0,":");
-        char *rq = strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        strtok(0," ");
-        char *d = strtok(0," ");
-        *drops = strtoul(d,0,16);
-        *tx_queue_depth = strtoul(tq,0,16);
-        *rx_queue_depth = strtoul(rq,0,16);
-        free(src_addr);
-        free(line);
-        fclose(f);
-        return true;
+      while ((nread = getline(&line,&len,f)) != -1){
+        strtok(line," ");
+        char *a = strtok(0," ");
+        if (0 == strcmp(src_addr, a)){
+          strtok(0," ");
+          strtok(0," ");
+          char *tq = strtok(0,":");
+          char *rq = strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          strtok(0," ");
+          char *d = strtok(0," ");
+          *drops = strtoul(d,0,16);
+          *tx_queue_depth = strtoul(tq,0,16);
+          *rx_queue_depth = strtoul(rq,0,16);
+          FREE(src_addr);
+          FREE(line);
+          fclose(f);
+          return true;
+        }
       }
+      FREE(src_addr);
+      FREE(line);
     }
-
-    free(src_addr);
-    free(line);
     fclose(f);
     return false;
   }
