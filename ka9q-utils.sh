@@ -698,7 +698,7 @@ function update_ini_file_section_variable() {
 
     if [[ ! -f "${file}" ]]; then
         wd_logger 1 "ERROR: ini file '${file}' does not exist"
-        return 2
+        return 3
     fi
 
     # Escape special characters in section and variable for use in regex
@@ -710,8 +710,8 @@ function update_ini_file_section_variable() {
     # Check if section exists
     if ! grep -q "^\[$section_esc\]" "$file"; then
         # Add section if it doesn't exist
-        wd_logger 1 "WARNING: section $section doesn't exist, so adding it at the end of $file"
-        echo -e "\n[$section]" >> "$file"
+        wd_logger 1 "iERROR: expected section [$section] doesn't exist in '$file'"
+        return 4
     fi
 
     # Find section start and end lines
@@ -722,23 +722,19 @@ function update_ini_file_section_variable() {
     [[ -z "$section_end" ]] && section_end=$(wc -l < "$file")
 
     # Check if variable exists within the section
-    set +x
     if sed -n "${section_start},${section_end}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
         ### The variable is defined.  see if it needs to be changed
         local temp_file="${file}.tmp"
 
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
-            set +x
             sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
-                set +x
         else
             wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
-            sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*\).*|\1$new_value|" "$file" > "$temp_file"
+            sed  "${section_start},${section_end}s|^\s*\($variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
         fi
-        set +x
         if ! diff "$file" "$temp_file" > diff.log; then
-            wd_logger 1 "Changing section [#section] of $file:\n$(<diff.log)"
+            wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
             mv "${temp_file}"  "$file"
             return 1
         else
@@ -752,9 +748,8 @@ function update_ini_file_section_variable() {
             wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
             return 0
         else
-            set +x
-            wd_logger 1 "ERROR: Unexpected that variable '$variable_esc' was not in [$section_esc] of file $file, so inserting the line '$variable = $new_value'"
-            sed -i "${section_start}a\\$variable = $new_value" "$file"
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
+            sed -i "${section_start}a\\$variable=$new_value" "$file"
             return 1
          fi
     fi
@@ -793,13 +788,13 @@ function build_ka9q_radio() {
     ) >&  ${project_logfile}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
-        #exit 1
+        return 3
     fi
 
     find ${project_subdir} -type f -exec stat -c "%Y %n" {} \; | sort -n > after_make.txt
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'find ${project_subdir}  -type...' > after_make.tx  => ${rc} "
-        return 2
+        return 3
     fi
     diff before_make.txt after_make.txt > diff.log
     rc=$? ; case ${rc} in
@@ -917,7 +912,7 @@ function build_ka9q_radio() {
                 radio_restart_needed="yes"
                   ;;
             *)
-                 wd_logger 1 "ERROR: ' update_ini_file_section_variable ${init_file_section_variable_value_list[index]}' => $rc"
+                 wd_logger 1 "ERROR: 'update_ini_file_section_variable ${init_file_section_variable_value_list[index]}' => $rc"
                  exit 1
                  ;;
          esac
@@ -963,6 +958,42 @@ function build_ka9q_radio() {
     sudo udevadm trigger
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
+    local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
+    if (( cpu_core_count < 8 )); then
+        wd_logger 1 "Found only ${cpu_core_count} cores, so don't resstrict radiod to cores"
+    else
+        local radiod_cores
+        if [[ -n "${RADIOD_CPU_CORES+set}" ]]; then
+             radiod_cores="$RADIOD_CPU_CORES"
+             wd_logger 1 "RADIOD_CPU_CORES='$RADIOD_CPU_CORES' in WD.conf, so configure radiod to run in those cores"
+         else
+             radiod_cores="$(( cpu_core_count - ${RADIOD_RESERVED_CORES-2}))-$(( cpu_core_count - 1 ))"
+             wd_logger 1 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
+        fi
+        local radio_service_file_path="/etc/systemd/system/radiod@.service"
+        update_ini_file_section_variable "$radio_service_file_path"  "Service" "CPUAffinity" "$radiod_cores"
+        rc=$?
+        case $rc in
+            0)
+                wd_logger 2 "Made no changes to ${radio_service_file_path}"
+                ;;
+            1)
+                wd_logger 1 "Made changes to ${radio_service_file_path}, so 'sudo systemctl daemon-reload' and radiod restart is needed"
+                sudo systemctl daemon-reload
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "'sudo systemctl daemon-reload' => $rc after change to  ${radio_service_file_path}"
+                    exit 1
+                fi
+                radio_restart_needed="yes"
+                ;;
+            *)
+                wd_logger 1 "ERROR: 'update_ini_file_section_variable ${radio_service_file_path}' => $rc"
+                exit 1
+                ;;
+        esac
+    fi
+    exit 1
+
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "KA9Q-radio softwaare is installed and configured, but can't find a RX888 MkII attached to a USB port"
         exit 1
@@ -971,8 +1002,7 @@ function build_ka9q_radio() {
 
     if [[  ${radio_restart_needed} == "no" ]] ; then
         sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
-        rc=$?
-        if [[ ${rc} -eq 0 ]]; then
+        rc=$? ; if (( rc == 0 )); then
             wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
@@ -1499,8 +1529,7 @@ function install_github_project() {
     if [[ -d  ${project_subdir} ]]; then
         local rc
         ( cd ${project_subdir}; git remote -v | grep -q "${project_url}" )   ### Run in a subshell which returnes the status returned by grep
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             echo wd_logger 1 "The clone of ${project_subdir} doesn't come from the configured ' ${project_url}', so delete the '${project_subdir}' directory so it will be re-cloned"
             rm -rf ${project_subdir}
         fi
@@ -1509,8 +1538,7 @@ function install_github_project() {
     if [[ ! -d ${project_subdir} ]]; then
         wd_logger 1 "Subdir ${project_subdir} does not exist, so 'git clone ${project_url}'"
         git clone ${project_url} >& git.log
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: 'git clone ${project_url} >& git.log' =>  ${rc}:\n$(< git.log)"
             exit 1
         fi
@@ -1530,28 +1558,28 @@ function install_github_project() {
             local project_real_path=$( realpath  ${project_subdir} )
             wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
             pull_commit ${project_real_path} ${pull_commit_target}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
+            rc=$? ; if (( rc == 0 )); then
                 wd_logger 2 "The ${project_subdir} software was current"
-            elif [[  ${rc} -eq 1 ]]; then
+            elif (( rc == 1 )); then
                 wd_logger 1 "KA9Q software was updated, so compile and install it"
             else
                 wd_logger 1 "ERROR: git could not update KA9Q software"
-                exit 1
+                return 1
             fi
             ;;
         *)
             wd_logger 1 "ERROR: ${project_commit_check}=${project_commit_check}"
-            exit
+            exit 1
             ;;
     esac
 
     wd_logger 2 "Run ${project_build_function}() in ${project_subdir}"
-    if ! ${project_build_function} ${project_subdir} ; then
-        wd_logger 1 "ERROR:  ${project_build_function} ${project_subdir} => $?"
-        exit 1
+    if ${project_build_function} ${project_subdir} ; then
+        wd_logger 1 "Success: '${project_build_function} ${project_subdir}' => $?"
+        return 0
     fi
-    return 0
+    wd_logger 1 "ERROR: ${project_build_function} ${project_subdir} => $?"
+    return 1
 }
 
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
@@ -1596,8 +1624,7 @@ function ka9q-setup() {
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
     ka9q-services-setup
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: ka9q-services-setup() => ${rc}"
     else
         wd_logger 2 "All ka9q services are installed"
