@@ -960,7 +960,7 @@ function build_ka9q_radio() {
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
     if (( cpu_core_count < 8 )); then
-        wd_logger 1 "Found only ${cpu_core_count} cores, so don't resstrict radiod to cores"
+        wd_logger 2 "Found only ${cpu_core_count} cores, so don't restrict which cores it can run on"
     else
         local radiod_cores
         if [[ -n "${RADIOD_CPU_CORES+set}" ]]; then
@@ -1574,7 +1574,7 @@ function install_github_project() {
 
     wd_logger 2 "Run ${project_build_function}() in ${project_subdir}"
     if ${project_build_function} ${project_subdir} ; then
-        wd_logger 1 "Success: '${project_build_function} ${project_subdir}' => $?"
+        wd_logger 2 "Success: '${project_build_function} ${project_subdir}' => $?"
         return 0
     fi
     wd_logger 1 "ERROR: ${project_build_function} ${project_subdir} => $?"
