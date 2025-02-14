@@ -191,6 +191,9 @@ struct session {
   struct timespec wd_file_time;
   uint32_t next_expected_rtp_ts;
   uint16_t next_expected_rtp_seq;
+  uint32_t max_tx_queue;
+  uint32_t max_rx_queue;
+  uint32_t max_drops;
 };
 
 
@@ -219,6 +222,7 @@ static int Input_fd,Status_fd;
 static struct session *Sessions;
 int Mcast_ttl;
 struct sockaddr Metadata_dest_socket;
+struct sockaddr mcast_dest_sock;
 
 static void closedown(int a);
 static void input_loop(void);
@@ -379,8 +383,8 @@ int main(int argc,char *argv[]){
   {
     struct sockaddr sock;
     char iface[1024];
-    resolve_mcast(PCM_mcast_address_text,&sock,DEFAULT_RTP_PORT,iface,sizeof(iface),0);
-    Input_fd = listen_mcast(&sock,iface);
+    resolve_mcast(PCM_mcast_address_text,&mcast_dest_sock,DEFAULT_RTP_PORT,iface,sizeof(iface),0);
+    Input_fd = listen_mcast(&mcast_dest_sock,iface);
     resolve_mcast(PCM_mcast_address_text,&sock,DEFAULT_STAT_PORT,iface,sizeof(iface),0);
     Status_fd = listen_mcast(&sock,iface);
   }
@@ -453,17 +457,26 @@ void wd_log(int v_level,const char *format,...){
   va_end(args);
 }
 
+static void clear_queue_counters(struct session * const sp){
+  sp->max_tx_queue = 0;
+  sp->max_rx_queue = 0;
+  sp->max_drops = 0;
+}
+
 static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds){
   if(NULL == sp->fp)
     return -1;
 
   // track sequence numbers and report if we see one out of order (except the first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.seq != sp->next_expected_rtp_seq)){
-    wd_log(0,"Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d\n",
+    wd_log(0,"Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u)\n",
            sp->next_expected_rtp_seq,
            sp->rtp_state.seq,
            (int16_t)(sp->rtp_state.seq - sp->next_expected_rtp_seq),
-           sp->ssrc);
+           sp->ssrc,
+           sp->max_tx_queue,
+           sp->max_rx_queue,
+           sp->max_drops);
   }
   sp->next_expected_rtp_seq = sp->rtp_state.seq + 1;    // next expected RTP sequence number
 
@@ -472,11 +485,14 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
 
   // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.timestamp != sp->next_expected_rtp_ts)){
-    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d\n",
+    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u)\n",
            sp->next_expected_rtp_ts,
            sp->rtp_state.timestamp,
            sp->rtp_state.timestamp - sp->next_expected_rtp_ts,
-           sp->ssrc);
+           sp->ssrc,
+           sp->max_tx_queue,
+           sp->max_rx_queue,
+           sp->max_drops);
   }
   sp->next_expected_rtp_ts = sp->rtp_state.timestamp + frames;    // next expected RTP timestamp
 
@@ -484,11 +500,16 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   if (0 == sp->total_file_samples){
     //wd_log(1,"total_file_samples == 0: first sample in file\n");
     if (0 != seconds){
-      wd_log(0,"First sample NOT in second :00...resync at next interval\n");
+      wd_log(0,"First sample NOT in second :00...resync at next interval on SSRC %d (tx %u, rx %u, drops %u)\n",
+             sp->ssrc,
+             sp->max_tx_queue,
+             sp->max_rx_queue,
+             sp->max_drops);
       sp->sync_state = sync_state_resync;
     } else {
       //wd_log(1,"First sample is in second :00\n");
     }
+    clear_queue_counters(sp);
   }
 
   fwrite(samples,framesize,frames,sp->fp);
@@ -508,6 +529,54 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   return 0;
 }
 
+static bool grab_queue_stats(uint32_t *tx_queue_depth,uint32_t *rx_queue_depth,uint32_t *drops){
+  if (AF_INET != mcast_dest_sock.sa_family)
+    return false;
+
+  FILE *f = fopen("/proc/net/udp","r");
+  if (f){
+    struct sockaddr_in const *sin = (struct sockaddr_in *)&mcast_dest_sock;
+    char *src_addr;
+    asprintf(&src_addr,"%08X:%04X",(sin->sin_addr.s_addr),ntohs(sin->sin_port));
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+
+    while ((nread = getline(&line,&len,f)) != -1){
+      strtok(line," ");
+      char *a = strtok(0," ");
+      if (0 == strcmp(src_addr, a)){
+        strtok(0," ");
+        strtok(0," ");
+        char *tq = strtok(0,":");
+        char *rq = strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        strtok(0," ");
+        char *d = strtok(0," ");
+        *drops = strtoul(d,0,16);
+        *tx_queue_depth = strtoul(tq,0,16);
+        *rx_queue_depth = strtoul(rq,0,16);
+        free(src_addr);
+        free(line);
+        fclose(f);
+        return true;
+      }
+    }
+
+    free(src_addr);
+    free(line);
+    fclose(f);
+    return false;
+  }
+  return false;
+}
+
 static void wd_state_machine(struct session * const sp,struct sockaddr const *sender,void *samples,int buffer_size){
   if (!wd_mode || NULL == sp){
     return;
@@ -516,6 +585,19 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
   clock_gettime(CLOCK_REALTIME,&now);
 
   int seconds = now.tv_sec % (time_t)FileLengthLimit;
+
+  // update max queue depth and drops (really only need this per channel group, not per session)
+  uint32_t tx = 0;
+  uint32_t rx = 0;
+  uint32_t d = 0;
+  if (grab_queue_stats(&tx,&rx,&d)){
+    if (tx > sp->max_tx_queue)
+      sp->max_tx_queue = tx;
+    if (rx > sp->max_rx_queue)
+      sp->max_rx_queue = rx;
+    if (d > sp->max_drops)
+      sp->max_drops = d;
+  }
 
   switch(sp->sync_state){
   default:
