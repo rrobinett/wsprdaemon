@@ -1574,7 +1574,7 @@ function install_github_project() {
 
     wd_logger 2 "Run ${project_build_function}() in ${project_subdir}"
     if ${project_build_function} ${project_subdir} ; then
-        wd_logger 1 "Success: '${project_build_function} ${project_subdir}' => $?"
+        wd_logger 2 "Success: '${project_build_function} ${project_subdir}' => $?"
         return 0
     fi
     wd_logger 1 "ERROR: ${project_build_function} ${project_subdir} => $?"
