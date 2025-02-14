@@ -992,7 +992,6 @@ function build_ka9q_radio() {
                 ;;
         esac
     fi
-    exit 1
 
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
         wd_logger 1 "KA9Q-radio softwaare is installed and configured, but can't find a RX888 MkII attached to a USB port"
