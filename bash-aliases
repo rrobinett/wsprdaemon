@@ -3,6 +3,39 @@
 
 shopt -s -o nounset
 
+function wd-wsprlog-check() {
+    awk '{printf "%s%s\n", $1, $2}' /var/log/wspr.log | sort | uniq -c > /tmp/wspr-spots-counts.log
+
+    local last_line_epoch=0
+    local spot_count_line
+    while read spot_count_line; do
+        local spot_count_line_list=( $spot_count_line )
+
+        if (( ${#spot_count_line_list[@]} != 2 )) ; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+        
+        local this_line_epoch=$( date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[1]:6:2}:${spot_count_line_list[1]:8:2}" +%s )
+
+        if [[ -z "$this_line_epoch" ]]; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+
+        if (( last_line_epoch == 0 )) ; then
+            printf "First WSPR cycle: %s %s reported %3d spots\n" ${spot_count_line_list[1]:0:6} ${spot_count_line_list[1]:6} ${spot_count_line_list[0]}
+            last_line_epoch=$this_line_epoch
+        else
+            local expected_line_epoch=$(( last_line_epoch + 120 ))
+            if (( this_line_epoch !=  expected_line_epoch )) ; then
+                echo "Found gap of $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) WSPR cycles before  $spot_count_line"
+            fi
+            last_line_epoch=$this_line_epoch
+        fi
+    done <  /tmp/wspr-spots-counts.log
+}
+
 ### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
 function ka9q-web-control-usage() {
     echo "$0:
