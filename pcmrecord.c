@@ -331,6 +331,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
+      fputs("wsprdaemon mode (-W): v0.6\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
@@ -529,20 +530,25 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
   return 0;
 }
 
+static FILE *udp_stats_file = 0;
+
 static bool grab_queue_stats(uint32_t *tx_queue_depth,uint32_t *rx_queue_depth,uint32_t *drops){
   if (AF_INET != mcast_dest_sock.sa_family)
     return false;
 
-  FILE *f = fopen("/proc/net/udp","r");
-  if (f){
+  if (0 == udp_stats_file){
+    udp_stats_file = fopen("/proc/net/udp","r");
+  }
+
+  if (udp_stats_file){
     struct sockaddr_in const *sin = (struct sockaddr_in *)&mcast_dest_sock;
     char *src_addr;
     if (asprintf(&src_addr,"%08X:%04X",(sin->sin_addr.s_addr),ntohs(sin->sin_port)) >= 0){
       char *line = NULL;
       size_t len = 0;
       ssize_t nread;
-
-      while ((nread = getline(&line,&len,f)) != -1){
+      fseek(udp_stats_file,0,SEEK_SET);
+      while ((nread = getline(&line,&len,udp_stats_file)) != -1){
         strtok(line," ");
         char *a = strtok(0," ");
         if (0 == strcmp(src_addr, a)){
@@ -558,19 +564,17 @@ static bool grab_queue_stats(uint32_t *tx_queue_depth,uint32_t *rx_queue_depth,u
           strtok(0," ");
           strtok(0," ");
           char *d = strtok(0," ");
-          *drops = strtoul(d,0,16);
+          *drops = strtoul(d,0,10);
           *tx_queue_depth = strtoul(tq,0,16);
           *rx_queue_depth = strtoul(rq,0,16);
           FREE(src_addr);
           FREE(line);
-          fclose(f);
           return true;
         }
       }
       FREE(src_addr);
       FREE(line);
     }
-    fclose(f);
     return false;
   }
   return false;
