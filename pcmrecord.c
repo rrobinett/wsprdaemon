@@ -331,6 +331,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
+      fputs("wsprdaemon mode (-W): v0.4\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
