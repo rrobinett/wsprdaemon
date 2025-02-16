@@ -3,14 +3,43 @@
 
 shopt -s -o nounset
 
+function get_pid_start_epoch() {
+    local pid="$1"
+
+    local CLK_TCK=$(getconf CLK_TCK)
+    local boot_epoch=$(awk '/btime/ {print $2}' /proc/stat)
+    local start_ticks=$(awk '{print $22}' /proc/"$pid"/stat)
+    local start_epoch=$((boot_epoch + (start_ticks / CLK_TCK)))
+
+    echo $start_epoch
+}
+
 function wd-wsprlog-check() {
-    awk '{printf "%s %s\n", $1, $2}' /var/log/wspr.log | sort | uniq -c > /tmp/wspr-spots-counts.log
+
+    local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
+    local wd_watchdog_start_epoch=0
+
+    if [[ ! -f $wd_watchdog_pid_file ]]; then
+        printf "WD isn't running, since there is no  wd_watchdog_pid_file '$wd_watchdog_pid_file'"
+    else
+        local  wd_watchdog_pid=$(<$wd_watchdog_pid_file)
+        if ! ps $wd_watchdog_pid > /dev/null; then
+            printf "The WD watchdog PID $wd_watchdog_pid recorded in '$wd_watchdog_pid_file' is not active"
+        else
+            wd_watchdog_start_epoch=$(get_pid_start_epoch $wd_watchdog_pid)
+            #printf "The currently running WD started at epoch %s which is %s\n"  "$wd_watchdog_start_epoch" "$(date -d @$wd_watchdog_start_epoch "+%Y-%m-%d %H:%M:%S")"
+        fi
+    fi
+
+    awk '{printf "%s %s\n", $1, $2}' /var/log/wspr.log | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
 
     local lat_line
     local last_line_epoch=0
     local spot_count_line
+    local spot_count_line_list
+    local needs_nl=0
     while read spot_count_line; do
-        local spot_count_line_list=( $spot_count_line )
+        spot_count_line_list=( $spot_count_line )
 
         if (( ${#spot_count_line_list[@]} != 3 )) ; then
             echo "ERROR: bad line $spot_count_line"
@@ -26,18 +55,37 @@ function wd-wsprlog-check() {
         fi
 
         if (( last_line_epoch == 0 )) ; then
-            printf "%s %s: %3d spots\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
-            last_line="$spot_count_line"
-            last_line_epoch=$this_line_epoch
+            printf "%s %s: %3d spots is the first cycle in the log\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
         else
             local expected_line_epoch=$(( last_line_epoch + 120 ))
-            if (( this_line_epoch !=  expected_line_epoch )) ; then
-                printf "%s %s: %3d spots after gap of %2d  WSPR cycles. Last %s\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+            if ((  wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
+                if (( needs_nl )); then
+                    printf "\n"
+                    needs_nl=0
+                fi
+                printf "%s: currently running WD start time\n" "$(date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+                wd_watchdog_start_epoch=0
             fi
-            last_line="$spot_count_line"
-            last_line_epoch=$this_line_epoch
+            if (( this_line_epoch ==  expected_line_epoch )) ; then
+                printf "+"
+                (( ++needs_nl ))
+            else
+                if (( needs_nl )); then
+                    printf "(%d) cycles\n"  $needs_nl
+                    needs_nl=0
+                fi
+                printf "%s %s: %3d spots after gap of %2d  WSPR cycles. The last cycle reported '%s'\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+            fi
         fi
+        last_line="$spot_count_line"
+        last_line_epoch=$this_line_epoch
     done <  /tmp/wspr-spots-counts.log
+
+    spot_count_line_list=( $(tail -n 1 /tmp/wspr-spots-counts.log) )
+    if (( needs_nl )); then
+        printf " (%d) cycles\n" $needs_nl
+    fi
+    printf "%s %s: %3d spots in most recent cycle\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
 }
 
 ### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
