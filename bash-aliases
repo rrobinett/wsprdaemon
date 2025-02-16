@@ -27,7 +27,7 @@ function wd-wsprlog-check() {
             printf "The WD watchdog PID $wd_watchdog_pid recorded in '$wd_watchdog_pid_file' is not active"
         else
             wd_watchdog_start_epoch=$(get_pid_start_epoch $wd_watchdog_pid)
-            #printf "The currently running WD started at epoch %s which is %s\n"  "$wd_watchdog_start_epoch" "$(date -d @$wd_watchdog_start_epoch "+%Y-%m-%d %H:%M:%S")"
+            #printf "The currently running WD started at epoch %s which is %s\n"  "$wd_watchdog_start_epoch" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%Y-%m-%d %H:%M:%S")"
         fi
     fi
 
@@ -60,10 +60,10 @@ function wd-wsprlog-check() {
             local expected_line_epoch=$(( last_line_epoch + 120 ))
             if ((  wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
                 if (( needs_nl )); then
-                    printf "\n"
+                    printf "\n" $needs_nl
                     needs_nl=0
                 fi
-                printf "%s: currently running WD start time\n" "$(date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+                printf "%s: Is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
                 wd_watchdog_start_epoch=0
             fi
             if (( this_line_epoch ==  expected_line_epoch )) ; then
@@ -71,7 +71,7 @@ function wd-wsprlog-check() {
                 (( ++needs_nl ))
             else
                 if (( needs_nl )); then
-                    printf "(%d) cycles\n"  $needs_nl
+                    printf " (%d) cycles\n"  $needs_nl
                     needs_nl=0
                 fi
                 printf "%s %s: %3d spots after gap of %2d  WSPR cycles. The last cycle reported '%s'\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
