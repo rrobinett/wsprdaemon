@@ -66,6 +66,7 @@ maintenance/aliases.md
 ```{toctree}
 :maxdepth: 2
 :caption: External Links
+```
 
 [wsprdaemon](https://github.com/rrobinett/wsprdaemon.git)
 [ka9q-radio](https://ka9q-radio.org)
@@ -74,11 +75,10 @@ maintenance/aliases.md
 [WSPR Rocks!](https://wspr.rocks)
 [WSPR.net](https://wsprnet.org)
 [PSKReporter](https://pskreporter.info)
-```
 
 ```{toctree}
 :maxdepth: 2
 :caption: Contributors 
 ```
-
+Rob Robinett AI6VN
 
