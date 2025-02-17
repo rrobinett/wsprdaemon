@@ -1,5 +1,7 @@
 # Aliases for monitoring and interacting with wsprdaemon
+
 ##
+
 ### source : wsprdaemon/bash-aliases on 18-04-2024
 
 - alias wd-k=wd-kill-uploader 

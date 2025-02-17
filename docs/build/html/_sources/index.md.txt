@@ -57,24 +57,25 @@ maintenance/aliases.md
 :caption: Troubleshooting
 
 troubleshooting/overview.md
+troubleshooting/typicals.md
 ```
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 :caption: FAQ
 
 FAQ.md
 ```
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 :caption: External Links
 
 external_links.md
 ```
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 :caption: Contributors 
 
 contributors.md
