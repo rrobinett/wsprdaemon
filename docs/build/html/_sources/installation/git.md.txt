@@ -1,12 +1,13 @@
 # Getting the software with GIT
 
-### clone wsprdaemon from github.com
+## Clone wsprdaemon from github.com
 
+From /home/wsprdaemon (or the installing user's home directory) [See Preparing the Installation](./preparation.md)
 ```
 git clone https://github.com/rrobinett/wsprdaemon.git
 cd wsprdaemon
 ```
-Execute all git commands in the /home/wsprdaemon/wsprdaemon directory.
+Execute all further git commands in the /home/wsprdaemon/wsprdaemon directory.
 
 Ensure you have the latest version:
 ```
@@ -14,7 +15,7 @@ git checkout master
 git status
 git log
 ```
-Subsequently, to update a given branch, use:
+Subsequently, to update from master (or from any branch of master), use:
 ```
 git pull
 ```
@@ -25,7 +26,9 @@ git checkout 3.2.0
 git pull
 ```
 
-Ensure regular loading of all the wd aliases:
+wsprdaemon provides lots of "aliases" for important and otherwise useful functions.  To have immediate access to these, run:
 ```
 source bash-aliases ../.bash_aliases
 ```
+
+You can now run wsprdaemon for the first time and configure it for your purposes.
