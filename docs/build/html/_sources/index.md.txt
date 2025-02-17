@@ -66,19 +66,13 @@ maintenance/aliases.md
 ```{toctree}
 :maxdepth: 2
 :caption: External Links
-```
 
-[wsprdaemon](https://github.com/rrobinett/wsprdaemon.git)
-[ka9q-radio](https://ka9q-radio.org)
-[Personal Space Weather Station Data](https://pswsnetwork.caps.ua.edu/home)
-[HamSCI](https://hamsci.org/grape)
-[WSPR Rocks!](https://wspr.rocks)
-[WSPR.net](https://wsprnet.org)
-[PSKReporter](https://pskreporter.info)
+external_links.md
+```
 
 ```{toctree}
 :maxdepth: 2
 :caption: Contributors 
-```
-Rob Robinett AI6VN
 
+contributors.md
+```
