@@ -52,15 +52,18 @@ maintenance/monitoring.md
 maintenance/aliases.md
 ```
 
-
 ```{toctree}
 :maxdepth: 2
 :caption: Troubleshooting
+
+troubleshooting/overview.md
 ```
 
 ```{toctree}
 :maxdepth: 2
 :caption: FAQ
+
+FAQ.md
 ```
 
 ```{toctree}
