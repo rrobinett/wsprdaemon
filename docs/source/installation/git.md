@@ -1,8 +1,8 @@
 # Getting the software with GIT
 
-### clone wsprdaemon from github.com
+## Clone wsprdaemon from github.com
 
-From /home/wsprdaemon (or the installing user's home directory) [See Preparing the Installation](../preparation.md)
+From /home/wsprdaemon (or the installing user's home directory) [See Preparing the Installation](./preparation.md)
 ```
 git clone https://github.com/rrobinett/wsprdaemon.git
 cd wsprdaemon

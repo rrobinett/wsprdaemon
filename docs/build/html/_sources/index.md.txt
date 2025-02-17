@@ -31,11 +31,17 @@ installation/git.md
 :caption: Configuration
 
 configuration/overview.md
-configuration/receivers.md
-configuration/schedule.md
-configuration/computer.md
-configuration/reporting.md
-configuration/ka9q-radio.md
+configuration/wd_conf/computer.md
+configuration/wd_conf/receivers.md
+configuration/wd_conf/reporting.md
+configuration/wd_conf/ka9q-radio.md
+configuration/wd_conf/schedule.md
+configuration/wd_conf/wsprdaemon.conf.md
+
+configuration/radiod_conf/global.md
+configuration/radiod_conf/hardware.md
+configuration/radiod_conf/channels.md
+configuration/radiod_conf/radiod@rx888-wsprdaemon.conf.md
 ```
 
 ```{toctree}

@@ -61,11 +61,16 @@
 <p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="configuration/overview.html">Overview of Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/receivers.html">Receiver definitions</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/schedule.html">Schedule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/computer.html">Computer Issues</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/reporting.html">Reporting</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/computer.html">Computer Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/receivers.html">Receiver definitions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/reporting.html">Reporting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/schedule.html">Schedule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/wsprdaemon.conf.html">Example of a working wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/hardware.html">The ka9q-radio [frontend] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Network</span></p>
 <ul>
@@ -158,7 +163,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="installation/git.html">Getting the software with GIT</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="installation/git.html#clone-wsprdaemon-from-github-com">clone wsprdaemon from github.com</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation/git.html#clone-wsprdaemon-from-github-com">Clone wsprdaemon from github.com</a></li>
 </ul>
 </li>
 </ul>
@@ -171,30 +176,46 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration/overview.html#radiod-conf">radiod&#64;.conf</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/receivers.html">Receiver definitions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="configuration/receivers.html#kiwisdr">KiwiSDR</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/receivers.html#ka9q">KA9Q</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/computer.html">Computer Issues</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/computer.html#cpus">CPUs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/computer.html#memory">Memory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/computer.html#disk-storage">Disk storage</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/schedule.html">Schedule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/computer.html">Computer Issues</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="configuration/computer.html#cpus">CPUs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/computer.html#memory">Memory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/computer.html#disk-storage">Disk storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/receivers.html">Receiver definitions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/receivers.html#kiwisdr">KiwiSDR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/receivers.html#ka9q">KA9Q</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/reporting.html">Reporting</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="configuration/reporting.html#wspr">WSPR</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/reporting.html#hamsci-grape">HamSCI – Grape</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/reporting.html#pskreporter">PSKReporter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/reporting.html">Reporting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/reporting.html#wspr">WSPR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/reporting.html#hamsci-grape">HamSCI – Grape</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/reporting.html#pskreporter">PSKReporter</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="configuration/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="configuration/ka9q-radio.html#running-radiod-locally-or-remotely">Running radiod locally or remotely</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/ka9q-radio.html#dependence-on-ka9q-radio-processes">Dependence on ka9q-radio processes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/ka9q-radio.html#radiod-configuration-file">radiod configuration file</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/ka9q-radio.html#ka9q-web-title">ka9q-web title</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration/ka9q-radio.html#code-commits">code commits</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html#running-radiod-locally-or-remotely">Running radiod locally or remotely</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html#dependence-on-ka9q-radio-processes">Dependence on ka9q-radio processes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html#radiod-configuration-file">radiod configuration file</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html#ka9q-web-title">ka9q-web title</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/wd_conf/ka9q-radio.html#code-commits">code commits</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/schedule.html">Schedule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/wd_conf/wsprdaemon.conf.html">Example of a working wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/hardware.html">The ka9q-radio [frontend] section</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/radiod_conf/hardware.html#rx888">[RX888]</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/radiod_conf/hardware.html#airspy">[Airspy]</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/channels.html">The ka9q-radio [channels] section</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/radiod_conf/channels.html#wspr">[WSPR]</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration/radiod_conf/channels.html#wwv-iq">[WWV-IQ]</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html#set-up-for-wspr-ft4-and-ft8-only">set up for wspr, ft4 and ft8 only.</a></li>
 </ul>
 </li>
 </ul>
