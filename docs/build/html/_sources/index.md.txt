@@ -21,6 +21,9 @@ requirements/network.md
 ```{toctree}
 :maxdepth: 2
 :caption: Installation
+
+installation/preparation.md
+installation/git.md
 ```
 
 ```{toctree}

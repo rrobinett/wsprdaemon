@@ -1,0 +1,215 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preparing the installation &mdash; wsprdaemon 3.3.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=9ac01507"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Description</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/overview.html">Overview of Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/receivers.html">Receiver definitions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/schedule.html">Schedule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/computer.html">Computer Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/reporting.html">Reporting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Network</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">FAQ</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">External Links</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Contributors</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Preparing the installation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/installation/preparation.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="preparing-the-installation">
+<h1>Preparing the installation<a class="headerlink" href="#preparing-the-installation" title="Link to this heading"></a></h1>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<p>If installing on someone’s behalf, you need an account on their machine with sudo privileges.</p>
+<p>To avoid entering the su password all the time:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">visudo</span>
+</pre></div>
+</div>
+<p>Edit the %sudo line to allow members of group sudo to execute any command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">sudo</span>   <span class="n">ALL</span><span class="o">=</span><span class="p">(</span><span class="n">ALL</span><span class="p">:</span><span class="n">ALL</span><span class="p">)</span> <span class="n">NOPASSWD</span><span class="p">:</span> <span class="n">ALL</span>
+</pre></div>
+</div>
+<section id="create-a-wsprdaemon-user">
+<h3>create a wsprdaemon user<a class="headerlink" href="#create-a-wsprdaemon-user" title="Link to this heading"></a></h3>
+<p>Once on the new machine, create a wsprdaemon user:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">adduser</span> <span class="n">wsprdaemon</span>
+</pre></div>
+</div>
+<p>Installing and managing wd must happen as wsprdaemon.</p>
+<p>To make it easier to change to the wsprdaemon user, create an alias:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span>  <span class="s2">&quot;alias wd=&#39;sudo su - wsprdaemon&#39;&quot;</span> <span class="o">&gt;&gt;</span> <span class="o">~/.</span><span class="n">bashrc</span>
+</pre></div>
+</div>
+<p>Add wsprdaemon to groups sudo, plugdev:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">sudo</span> <span class="n">wsprdaemon</span>
+<span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">plugdev</span> <span class="n">wsprdaemon</span>
+</pre></div>
+</div>
+<p>ka9q-radio creates a radio group.  Once wsprdaemon has finished compiling and installing, ka9q-radio, check that user wsprdaemon has been added to the radio group in /etc/group.  If not, then:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
+</pre></div>
+</div>
+</section>
+<section id="remote-access-setup">
+<h3>remote access setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>
+<p>From your present computer, make it easier to login to the new (if remote) machine:
+make sure you have a public key :</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">keygen</span>
+</pre></div>
+</div>
+<p>then</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">copy</span><span class="o">-</span><span class="nb">id</span>  <span class="n">wsprdaemon</span><span class="o">@</span>\<span class="o">&lt;</span><span class="n">new</span> <span class="n">machine</span> <span class="n">name</span>\<span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>To suppress login notices,</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">touch</span> <span class="o">.</span><span class="n">hushlogin</span>
+</pre></div>
+</div>
+<p>shell command to find your external ip address:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dig</span> <span class="o">+</span><span class="n">short</span> <span class="n">myip</span><span class="o">.</span><span class="n">opendns</span><span class="o">.</span><span class="n">com</span> <span class="nd">@resolver1</span><span class="o">.</span><span class="n">opendns</span><span class="o">.</span><span class="n">com</span>
+</pre></div>
+</div>
+</section>
+<section id="system-pre-requisites-and-useful-utilities">
+<h3>system pre-requisites and useful utilities:<a class="headerlink" href="#system-pre-requisites-and-useful-utilities" title="Link to this heading"></a></h3>
+<p>This includes what will prove needed or useful for wsprdaemon and ka9q-radio.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span> <span class="n">install</span> <span class="n">btop</span> <span class="n">nmap</span> <span class="n">git</span> <span class="n">tmux</span> <span class="n">vim</span> <span class="n">net</span><span class="o">-</span><span class="n">tools</span> <span class="n">iputils</span><span class="o">-</span><span class="n">ping</span> <span class="n">avahi</span><span class="o">-</span><span class="n">daemon</span> <span class="n">libnss</span><span class="o">-</span><span class="n">mdns</span> <span class="n">mdns</span><span class="o">-</span><span class="n">scan</span> <span class="n">avahi</span><span class="o">-</span><span class="n">utils</span> <span class="n">avahi</span><span class="o">-</span><span class="n">discover</span> <span class="n">build</span><span class="o">-</span><span class="n">essential</span> <span class="n">make</span> <span class="n">cmake</span> <span class="n">gcc</span> <span class="n">libairspy</span><span class="o">-</span><span class="n">dev</span> <span class="n">libairspyhf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libavahi</span><span class="o">-</span><span class="n">client</span><span class="o">-</span><span class="n">dev</span> <span class="n">libbsd</span><span class="o">-</span><span class="n">dev</span> <span class="n">libfftw3</span><span class="o">-</span><span class="n">dev</span> <span class="n">libhackrf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libiniparser</span><span class="o">-</span><span class="n">dev</span> <span class="n">libncurses5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libopus</span><span class="o">-</span><span class="n">dev</span> <span class="n">librtlsdr</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="mf">1.0</span><span class="o">-</span><span class="mi">0</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="n">dev</span> <span class="n">portaudio19</span><span class="o">-</span><span class="n">dev</span> <span class="n">libasound2</span><span class="o">-</span><span class="n">dev</span> <span class="n">uuid</span><span class="o">-</span><span class="n">dev</span> <span class="n">rsync</span> <span class="n">sox</span> <span class="n">libsox</span><span class="o">-</span><span class="n">fmt</span><span class="o">-</span><span class="nb">all</span> <span class="n">opus</span><span class="o">-</span><span class="n">tools</span> <span class="n">flac</span> <span class="n">tcpdump</span> <span class="n">wireshark</span> <span class="n">libhdf5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libsamplerate</span><span class="o">-</span><span class="n">dev</span>
+</pre></div>
+</div>
+<p>For ethernet transport, make sure to enable the appropriate NIC device in /etc/avahi/avahi-daemon.conf.  This primarily pertains to systems that have more than one NIC and setups that will use multicast between systems, not just on one system.</p>
+<p>To enable tmux mouse control, edit .tmux.conf (logged in as wsprdaemon) with</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span> <span class="o">-</span><span class="n">g</span> <span class="n">mouse</span> <span class="n">on</span>
+</pre></div>
+</div>
+<p>If using iTerm on macOS, goto iTerm2 &gt; Preferences &gt; “General” tab, and in the “Selection” section, check “Applications in terminal may access clipboard”.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
