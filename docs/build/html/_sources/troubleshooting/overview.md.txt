@@ -32,3 +32,57 @@ Here, you can invoke the wdww alias that dynamically lists the wav files for tha
 ```
 wdww
 ```
+
+## Check the logs
+
+You can locate logs using something like the following command:
+```
+find . -type f -name "*.log" ! -name "*sox.log" ! -name "*error.log"
+```
+where: 
+- "." indicates starting the search from the current directory
+- "-type" directs the search only for files
+- "-name" specifies the filename of interest
+- "! -name" specifies names to exclude
+
+
+### logs in ~/wsprdaemon
+
+- ./wav-archive.d/grape_upload_daemon.log
+- ./ka9q-radio_build.log
+- ./grep.log
+- ./ps.log
+- ./diff.log
+- ./git.log
+- ./uploads.d/wsprdaemon.d/upload_to_wsprdaemon_daemon.log
+- ./uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
+- ./ft8_lib_build.log
+- ./onion-build.log
+- ./noise_plot.log
+- ./ka9q_web_daemon.log
+- ./ka9q-web_build.log
+- ./watchdog_daemon.log
+- ./ka9q_web_service_8081.log
+
+### logs in /dev/shm/wsprdaemon
+
+- ./recording.d/KA9Q_LONGWIRE/80eu/posting_daemon.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/decoding_daemon.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/find.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/metadump.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/ka9q_status.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/sox-stats.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/adc_overloads.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/sox.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/get-peak-wav-sample.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/W_120/decoding_daemon.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/wav_status.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/add_derived.log
+- ./recording.d/KA9Q_LONGWIRE/80eu/printf.log
+
+- ./recording.d/KA9Q_LONGWIRE_WWV/wav-record-daemon-all.log
+- ./recording.d/KA9Q_LONGWIRE_WWV/pcmrecord-errors.log
+- ./recording.d/KA9Q_LONGWIRE_WWV/pcmrecord-outs.log
+
+- ./uploads.d/wsprdaemon.d/grep.log
+- ./uploads.d/wsprnet.d/curl.log
