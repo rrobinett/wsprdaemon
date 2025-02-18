@@ -40,6 +40,7 @@ installation/git.md
 
 configuration/wd_conf.md
 configuration/radiod_conf.md
+configuration/ka9q-web.md
 ```
 
 ```{toctree}
