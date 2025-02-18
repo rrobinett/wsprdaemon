@@ -20,28 +20,18 @@ requirements/network.md
 
 ```{toctree}
 :maxdepth: 2
-:caption: Installation
+:caption: Software Installation
 
 installation/preparation.md
 installation/git.md
 ```
 
 ```{toctree}
-:maxdepth: 2
-:caption: Configuration
+:maxdepth: 1
+:caption: Software Configuration
 
-configuration/overview.md
-configuration/wd_conf/computer.md
-configuration/wd_conf/receivers.md
-configuration/wd_conf/reporting.md
-configuration/wd_conf/ka9q-radio.md
-configuration/wd_conf/schedule.md
-configuration/wd_conf/wsprdaemon.conf.md
-
-configuration/radiod_conf/global.md
-configuration/radiod_conf/hardware.md
-configuration/radiod_conf/channels.md
-configuration/radiod_conf/radiod@rx888-wsprdaemon.conf.md
+configuration/wd_conf.md
+configuration/radiod_conf.md
 ```
 
 ```{toctree}

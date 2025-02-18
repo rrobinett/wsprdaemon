@@ -31,4 +31,9 @@ wsprdaemon provides lots of "aliases" for important and otherwise useful functio
 source bash-aliases ../.bash_aliases
 ```
 
-You can now run wsprdaemon for the first time and configure it for your purposes.
+Having prepared and cloned the wsprdaemon software, now you can run it:
+
+```
+wd
+```
+This sets the stage and tells you to configure wsprdaemon.conf.
