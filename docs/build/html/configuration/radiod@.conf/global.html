@@ -123,6 +123,220 @@
              
   <section id="the-ka9q-radio-global-section">
 <h1>The ka9q-radio [GLOBAL] section<a class="headerlink" href="#the-ka9q-radio-global-section" title="Link to this heading"></a></h1>
+<p>A typical configuration of this section for wsprdaemon use follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="k">global</span><span class="p">]</span>
+<span class="c1"># these next two establish defaults for all demod sections</span>
+<span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span> <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">hf</span><span class="o">.</span><span class="n">local</span>       <span class="c1"># DNS name for receiver status and commands</span>
+<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>        <span class="c1"># default output sample rate</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>              <span class="c1"># default receive mode</span>
+<span class="c1"># rest are defaults</span>
+<span class="c1">#ttl = 1</span>
+<span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c1"># Too many WD sites don&#39;t have IGMP aware ethernet swtiches, so don&#39;t send radiod multicast packets out the ethernet port.</span>
+<span class="c1">#fft-threads = 2</span>
+<span class="c1">#blocktime = 20 # allowable Opus block times: 2.5, 5, 10, 20, 40, 60, 80, 100, 120</span>
+<span class="c1">#overlap = 5 # don&#39;t change unless you know what you&#39;re doing</span>
+<span class="c1">#iface = enp1s0</span>
+</pre></div>
+</div>
+<p>Phil Karn’s comprehensive documentation of this section:</p>
+<section id="the-global-section">
+<h2>The [global] Section<a class="headerlink" href="#the-global-section" title="Link to this heading"></a></h2>
+<hr class="docutils" />
+<p>This is the only reserved section name, and it must appear exactly once in
+every <em>radiod</em> configuration file. Entries in the <strong>[global]</strong> section include:</p>
+<section id="hardware-no-default-required">
+<h3>hardware = (no default, required)<a class="headerlink" href="#hardware-no-default-required" title="Link to this heading"></a></h3>
+<p>Gives the name of the config file section that describes the
+specific front end hardware to be used. It is usually, but need not
+be, the same as the actual device type. This entry is required.</p>
+</section>
+<section id="status-no-default-required">
+<h3>status = (no default, required)<a class="headerlink" href="#status-no-default-required" title="Link to this heading"></a></h3>
+<p>This gives the domain name of the multicast group that will be used
+for status and control. The name will be registered with the Linux
+multicast name server <em>avahi</em>. This entry is required.</p>
+<p>This string is
+deterministically hashed to generate and advertise an IPv4
+multicast address in the site local 239.0.0.0/8 block, along with a SRV DNS
+record of type _ka9q-ctl._udp with this name.</p>
+<p>This parameter cannot specify a unicast IP address, though periodic
+status transmissions are also sent on each active data channel every 500 ms,
+and that can use a unicast destination.</p>
+</section>
+<section id="iface-no-default-optional">
+<h3>iface = (no default, optional)<a class="headerlink" href="#iface-no-default-optional" title="Link to this heading"></a></h3>
+<p>Many computers, including most recent Raspberry Pis have
+both a wired Ethernet interface (usually eth0) and a WiFi interface
+(wlan0). If wlan0 comes up before eth0, which can happen if you have
+a “smart” Ethernet switch with the spanning tree protocol (STP)
+enabled, the Linux kernel may pick it as the default multicast
+interface. Since most WiFi networks handle multicast traffic poorly,
+this will probably result in lost traffic and erratic operation on
+your entire network, not just for <em>ka9q-radio</em>.</p>
+<p>This option gives the interface name of the local Ethernet device to
+be used for all status/control and data traffic.  Don’t set this
+unless you really need to.</p>
+<p>When <strong>ttl = 0</strong> (the default) the internal loopback interface is used automatically;
+it need not be specified here</p>
+</section>
+<section id="dns-optional-default-off">
+<h3>dns = (optional, default off)<a class="headerlink" href="#dns-optional-default-off" title="Link to this heading"></a></h3>
+<p>Set the global default for whether to use the Domain Name System (DNS) to resolve domain names in the <em>data</em> and <em>status</em>
+fields.
+The default (off) causes <strong>radiod</strong> to publish the specified name in the ‘.local’ multicast DNS zone
+along with an IPv4 multicast address in the 239.0.0.0/8 block generated from the
+name by a deterministic hash.</p>
+<p>Setting <strong>dns = on</strong> causes <strong>radiod</strong> to instead query
+the domain name system for an existing name (by default, in the .local zone)
+and use the resulting IP address. This is primarily intended
+for sending an output stream to a regular (unicast) IP address, though the DNS entry
+may point to a preset multicast address. IPv6 is not yet supported.</p>
+<p>The <strong>dns</strong> parameter can be overridden in individual channel definitions.</p>
+</section>
+<section id="data-no-default-optional">
+<h3>data = (no default, optional)<a class="headerlink" href="#data-no-default-optional" title="Link to this heading"></a></h3>
+<p>This sets the default domain name of the multicast group for receiver
+output streams in any receiver channel group that doesn’t explicitly
+set one. A <strong>data =</strong> directive in a channel group overrides this one.</p>
+<p>This option is required to create dynamic channels, otherwise it is optional
+provided that it is specified in each channel group.</p>
+<p>When the <em>dns</em> option (see above) is off, <em>radiod</em> deterministically hashes the destination string to generate
+and advertise an IPv4 multicast address in the site local 239.0.0.0/8 block,
+along with a SRV DNS record of type _rtp._udp or _opus._udp
+advertising this name, depending on the output encoding. _rtp._udp is used for all PCM
+formats.</p>
+<p>When the <em>dns</em> option is on, the specified name is looked up in the Domain Name System,
+and the corresponding address may be either a multicast or unicast IPv4 address.</p>
+<p>A single multicast group can carry many receiver channels, each
+distinguished by its 32-bit RTP SSRC (Real Time Protocol Stream Source
+Identifier), which must be unique for an instance of
+<em>radiod</em>. However, consider that Ethernet switches, routers and host
+handle multicast group subscriptions by their IP addresses only, so an
+application (e.g., <em>pcmrecord</em>) will discard traffic from
+any unwanted SSRCs sharing an IP multicast address with desired
+traffic. At a 24 kHz sample rate, each 16-bit mono PCM stream is 384
+kb/s plus header overhead, so this can add up when many channels are
+active.  This is usually OK on 1Gb/s Ethernet, but it can be a problem
+over slower Ethernets or WiFi, especially where the base station does
+not do multicast-to-unicast conversion. To minimize network bandwidth
+when you’re simply listening, use Opus output encoding.</p>
+</section>
+<section id="mode-no-default-optional">
+<h3>mode = (no default, optional)<a class="headerlink" href="#mode-no-default-optional" title="Link to this heading"></a></h3>
+<p>Sets the default mode to be used for any channel group that doesn’t
+specify one. Modes are specified in the file
+<em>/usr/local/share/ka9q-radio/modes.conf</em>. They would probably be
+better called “presets” because a “mode” actually describes a group of
+parameters (demodulator type, filter settings, etc) in that file.</p>
+<p>This option is needed if you want to create dynamic channels, otherwise it is optional
+provided that it is specified in each channel group.</p>
+</section>
+<section id="ttl-optional-default-0">
+<h3>ttl = (optional, default 0)<a class="headerlink" href="#ttl-optional-default-0" title="Link to this heading"></a></h3>
+<p>Sets the Internet Protocol Time-to-Live (IP TTL) field in all
+outbound traffic. The TTL field, or more accurately a “hop count limit”
+field, limits how many hosts and routers may process the packet before
+it is dropped. Multicast routers are rare, so in practice the usual
+values are 0 and 1.</p>
+<p><strong>ttl</strong> <em>defaults to zero</em>, which keeps multicast traffic
+from even leaving the system that generates it. This avoids
+swamping networks with low-end WiFi base stations and “dumb”
+(unmanaged) Ethernet switches that flood multicast traffic to all
+output ports. “Smart” switches that “snoop” IGMP to limit multicast
+traffic to where it is wanted (and away from WiFi) are strongly recommended. <strong>ttl = 0</strong> is
+fine as long as all applications that read status or data
+from <em>radiod</em> run on the same physical system.</p>
+<p>Note that <em>ttl</em> can only be set globally, not in individual demodulator sections.</p>
+</section>
+<section id="tos-optional-default-48">
+<h3>tos = (optional, default 48)<a class="headerlink" href="#tos-optional-default-48" title="Link to this heading"></a></h3>
+<p>Sets the Internet Protocol Type-of-Service (TOS) field in all outbound traffic.
+There is little reason to change this on a LAN with sufficient capacity.
+This parameter also applies only globally.</p>
+</section>
+<section id="blocktime-optional-default-20">
+<h3>blocktime = (optional, default 20)<a class="headerlink" href="#blocktime-optional-default-20" title="Link to this heading"></a></h3>
+<p><em>ka9q-radio</em> filters with <em>fast convolution</em>;
+this is how it efficiently demodulates hundreds of channels at once on
+modest hardware. Fast convolution is based on the Fast Fourier
+Transform (FFT), which processes incoming sample data in blocks. This
+parameter sets that block size in milliseconds.  The default of 20 ms
+(50 Hz) seems to be a good balance between efficiency, signal
+I/O delay and kernel scheduling. I generally use only block times
+supported by the Opus codec to ease transcoding the PCM output of
+<em>radiod</em> to Opus by the <em>opusd</em> daemon; this is optional.</p>
+<p>The actual block size in samples is equal to <strong>blocktime</strong> times the
+A/D sample rate. E.g., the Airspy R2 has a 20 MHz (real) sample rate,
+so a 20 ms <strong>blocktime</strong> corresponds to a block of 400,000 real
+samples. The actual FFT block is larger because it includes data from
+the previous block depending on the <strong>overlap</strong> setting.</p>
+<p>Larger values of <strong>blocktime</strong> permit sharper channel filters and are
+more tolerant to CPU scheduling variability but add latency and incur
+greater CPU overhead. (The relative per-sample CPU cost of an FFT
+increases with the logarithm of the FFT block size.)</p>
+</section>
+<section id="overlap-optional-default-5">
+<h3>overlap = (optional, default 5)<a class="headerlink" href="#overlap-optional-default-5" title="Link to this heading"></a></h3>
+<p>Another fast convolution parameter that applies to the
+entire <em>radiod</em> instance.  It specifies how much of each FFT block
+is to overlap with the previous one. This is necessary to convert the
+FFT’s circular convolution into the linear convolution we need for
+filtering.  It sets the fraction of each block that is old data from
+the previous block.</p>
+<p>An overlap of 5 (the default) means that 1/5 of each FFT input block
+is from the previous block and 4/5 are new A/D samples. This limits
+the duration of the impulse response of the individual channel
+filters, with longer responses permitting sharper filter edges. For
+example, an <strong>overlap</strong> of 5 combined with a <strong>blocktime</strong> of 20
+milliseconds gives an overlap of 20 / 5 = 4 milliseconds.  Smaller
+values of <strong>overlap</strong> permit sharper filters at the expense of greater
+CPU loading since each FFT processes more old data.</p>
+<p>Only certain values of <strong>overlap</strong> work properly, so stick with the
+default unless you’re feeling adventurous or until I write a more
+detailed discussion. An <strong>overlap</strong> of 2 might be good for sharper
+filters on HF, as the extra CPU load isn’t a problem with lower A/D
+sample rates.</p>
+</section>
+<section id="fft-threads-optional-default-2">
+<h3>fft-threads = (optional, default 2)<a class="headerlink" href="#fft-threads-optional-default-2" title="Link to this heading"></a></h3>
+<p>Sets the number of FFT “worker” threads for the forward FFT shared by
+all the receiver channels. The default is usually sufficient except on slow systems.
+A single thread will suffice on fast CPUs, and may reduce overhead.</p>
+</section>
+<section id="rtcp-optional-default-off">
+<h3>rtcp = (optional, default off)<a class="headerlink" href="#rtcp-optional-default-off" title="Link to this heading"></a></h3>
+<p>Enable the Real Time Protcol (RTP) Control protocol. Incomplete and
+experimental; leave off for now.</p>
+</section>
+<section id="sap-optional-default-off">
+<h3>sap = (optional, default off)<a class="headerlink" href="#sap-optional-default-off" title="Link to this heading"></a></h3>
+<p>Enable the Session Announcement Protocol (SAP). Eventually this will
+make receiver streams visible to session browers in applications such
+as VLC. Leave off for now.</p>
+</section>
+<section id="mode-file-optional-default-usr-local-share-ka9q-radio-modes-conf">
+<h3>mode-file = (optional, default <em>/usr/local/share/ka9q-radio/modes.conf</em>)<a class="headerlink" href="#mode-file-optional-default-usr-local-share-ka9q-radio-modes-conf" title="Link to this heading"></a></h3>
+<p>Specifies the mode description file mentioned in the <strong>mode</strong>
+parameter above. Use the default when possible.</p>
+</section>
+<section id="wisdom-file-optional-default-var-lib-ka9q-radio-wisdom">
+<h3>wisdom-file = (optional, default <em>/var/lib/ka9q-radio/wisdom</em>)<a class="headerlink" href="#wisdom-file-optional-default-var-lib-ka9q-radio-wisdom" title="Link to this heading"></a></h3>
+<p>Specifies where FFTW3 should store accumulated “wisdom” information
+about the fastest ways to perform <em>radiod</em>’s specific FFT transforms
+on this specific CPU. Some of this is automatically computed when <em>radiod</em>
+starts, but to avoid long startup times only minimal effort is expended.</p>
+<p>FFTW3 also uses the “global wisdom” file <em>/etc/fftw/wisdomf</em>, which
+can be created with significantly more effort (and CPU time). Right
+now I generate the latter file by hand with a fairly esoteric set of
+commands, see <a class="reference internal" href="#FFTW3.md"><span class="xref myst">FFTW3.md</span></a>. FFTW <em>can</em> generate this information
+automatically when first run but can take <em>hours</em> to do so. I am
+working on a better way, e.g., by automatically starting wisdom
+generation in the background so that <em>radiod</em> starts immediately,
+though of course it will run faster after wisdom generation is
+complete and <em>radiod</em> is restarted to use it.</p>
+</section>
+</section>
 </section>
 
 
