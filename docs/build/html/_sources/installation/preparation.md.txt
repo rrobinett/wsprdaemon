@@ -1,8 +1,8 @@
-# Preparing the installation
+# Preparing for installation
 
-You will install and run the wsprdaemon software in a regular linux user account subdirectory, e.g., /home/<username>/wsprdaemon.  Typically, you will create a separate "wsprdaemon" user, e.g., /home/wsprdaemon but you can run it under your own (or another's) account. 
+You will install and run the wsprdaemon software in a "wsrdaemon" sub-directory of a regular linux user account, e.g., /home/<username>/wsprdaemon.  Typically, you will create a separate "wsprdaemon" user, e.g., /home/wsprdaemon but you can run it under your own (or another's) account. 
 
-N.B.  In either case, this account needs sudo privileges. 
+N.B.  In either case, this account needs sudo privileges as several component installations and process management require it.
 
 ## Prerequisites
 
@@ -38,6 +38,14 @@ wsprdaemon includes the ka9q-radio package which creates a "radio" group.  Once 
 ```
 sudo usermod -a -G radio wsprdaemon
 ```
+
+If dedicating this machine to exclusive wsprdaemon use, you may want to change the name of your system, do so with:
+
+```
+sudo hostnamectl set-hostname W3USR-B1-1
+```
+After changing the hostname, you may need to update the /etc/hosts file to reflect the change. 
+
 ### Remote Access Setup
 
 If the wsprdaemon computer is not the one in in front of you, from your present computer, make it easier to login to the new (if remote) machine.

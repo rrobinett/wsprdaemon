@@ -54,24 +54,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing the installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Getting the software with GIT</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/overview.html">Overview of Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/computer.html">Computer Issues</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/receivers.html">Receiver definitions</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/reporting.html">Reporting</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/schedule.html">Schedule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/wsprdaemon.conf.html">Example of a working wsprdaemon.conf</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/hardware.html">The ka9q-radio [frontend] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/channels.html">The ka9q-radio [channels] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Network</span></p>
 <ul>
@@ -86,7 +77,14 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting wsprdaemon</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#use-tmux-or-screen">Use tmux or screen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-btop">Use btop!</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-wdln">Use wdln</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-wdle">Use wdle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-recordings">Check recordings</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="typicals.html">Some typical problems</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">FAQ</span></p>
@@ -129,6 +127,36 @@
   <section id="troubleshooting-wsprdaemon">
 <h1>Troubleshooting wsprdaemon<a class="headerlink" href="#troubleshooting-wsprdaemon" title="Link to this heading"></a></h1>
 <p>Nothing ever goes wrong!</p>
+<section id="use-tmux-or-screen">
+<h2>Use tmux or screen<a class="headerlink" href="#use-tmux-or-screen" title="Link to this heading"></a></h2>
+<p>Especially useful in managing a computer remotely.  This will enable you to maintain a session between logins or should your network connection drop.</p>
+</section>
+<section id="use-btop">
+<h2>Use btop!<a class="headerlink" href="#use-btop" title="Link to this heading"></a></h2>
+<p><img alt="" src="../_images/btop.png" /></p>
+</section>
+<section id="use-wdln">
+<h2>Use wdln<a class="headerlink" href="#use-wdln" title="Link to this heading"></a></h2>
+<p>This displays the wsprnet upload log.</p>
+</section>
+<section id="use-wdle">
+<h2>Use wdle<a class="headerlink" href="#use-wdle" title="Link to this heading"></a></h2>
+</section>
+<section id="check-recordings">
+<h2>Check recordings<a class="headerlink" href="#check-recordings" title="Link to this heading"></a></h2>
+<p>Change to the temporary directory.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cdt</span>
+</pre></div>
+</div>
+<p>Then enter the sub-directory for a receiver and channel, for instance, the following moves to receiver KA9Q_0 and a 20m wspr channel:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="n">recording</span><span class="o">.</span><span class="n">d</span><span class="o">/</span><span class="n">KA9Q_0</span><span class="o">/</span><span class="mi">20</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Here, you can invoke the wdww alias that dynamically lists the wav files for that channel.  A problem exists if you don’t see regular increments of the latest file.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wdww</span>
+</pre></div>
+</div>
+</section>
 </section>
 
 

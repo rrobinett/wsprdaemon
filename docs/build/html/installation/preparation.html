@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Preparing the installation &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>Preparing for installation &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -54,9 +54,9 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Preparing the installation</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Preparing for installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#determine-the-wsprdaemon-user">Determine the wsprdaemon user</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#remote-access-setup">Remote Access Setup</a></li>
@@ -67,19 +67,10 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="git.html">Getting the software with GIT</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/overview.html">Overview of Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/computer.html">Computer Issues</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/receivers.html">Receiver definitions</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/reporting.html">Reporting</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/schedule.html">Schedule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/wsprdaemon.conf.html">Example of a working wsprdaemon.conf</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/hardware.html">The ka9q-radio [frontend] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/channels.html">The ka9q-radio [channels] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Network</span></p>
 <ul>
@@ -124,7 +115,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Preparing the installation</li>
+      <li class="breadcrumb-item active">Preparing for installation</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/installation/preparation.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -134,10 +125,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="preparing-the-installation">
-<h1>Preparing the installation<a class="headerlink" href="#preparing-the-installation" title="Link to this heading"></a></h1>
-<p>You will install and run the wsprdaemon software in a regular linux user account subdirectory, e.g., /home/<username>/wsprdaemon.  Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
-<p>N.B.  In either case, this account needs sudo privileges.</p>
+  <section id="preparing-for-installation">
+<h1>Preparing for installation<a class="headerlink" href="#preparing-for-installation" title="Link to this heading"></a></h1>
+<p>You will install and run the wsprdaemon software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/<username>/wsprdaemon.  Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
+<p>N.B.  In either case, this account needs sudo privileges as several component installations and process management require it.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
 <p>To avoid entering the su password all the time:</p>
@@ -169,6 +160,11 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
+<p>If dedicating this machine to exclusive wsprdaemon use, you may want to change the name of your system, do so with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">hostnamectl</span> <span class="nb">set</span><span class="o">-</span><span class="n">hostname</span> <span class="n">W3USR</span><span class="o">-</span><span class="n">B1</span><span class="o">-</span><span class="mi">1</span>
+</pre></div>
+</div>
+<p>After changing the hostname, you may need to update the /etc/hosts file to reflect the change.</p>
 </section>
 <section id="remote-access-setup">
 <h3>Remote Access Setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>

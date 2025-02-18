@@ -14,7 +14,8 @@ I suggest that you create a user 'wsprdaemon' with sudo privileges after install
 
 While WD can run on many different x86 and ARM CPU's, the RX888 is best run on a i5-6500T-class or newer x86 server.
 
-For new installations I have found the Beelink brand SER 5 Ryzen 5800U offers excellent price, performance and low power consumption for a WD system. Today Sept 9, 2024 Amazon offers it for $270 (after $18 discount) at: https://www.amazon.com/Beelink-SER5-Computer-Graphics-Support/dp/B0D6G965BC, but the same Beelink may be offered at several different prices on Amazon, so search for price including 'discount coupons'. The Beelink Ser 5 5560U is another excellent choice which until today I was able to purchase for $219.
+For new installations I have found the Beelink brand SER 5 Ryzen 5800U offers excellent price, performance and low power consumption for a WD system. Today Sept 9, 2024 Amazon offers it for $270 (after $18 discount) at [Amazon](https://www.amazon.com/Beelink-SER5-Computer-Graphics-Support/dp/B0D6G965BC), but the same Beelink may be offered at several different prices on Amazon, so search for price including 'discount coupons'. The Beelink Ser 5 5560U is another excellent choice which until today I was able to purchase for $219.  Also consider the Ryzen 5800 series chips, (5800U, 5800H, 5825H) but avoid the 5700 series as these have a divided L3 cache which may introduce gaps in the USB stream as processing switches from one set of cores to another.
+
 Whatever server you choose, WD runs a little better on 16 GB of ram.
 
 The Beelink comes with Windows installed but WD runs on Linux, so I usually first install Windows and associate the Beelink with my Microsoft account to be sure the server hardware and software are functional, and in case I want to restore Windows on that server.

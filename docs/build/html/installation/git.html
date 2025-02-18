@@ -19,8 +19,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Overview of Configuration" href="../configuration/overview.html" />
-    <link rel="prev" title="Preparing the installation" href="preparation.html" /> 
+    <link rel="next" title="Configuring wsprdaemon: wsprdaemon.conf" href="../configuration/wd_conf.html" />
+    <link rel="prev" title="Preparing for installation" href="preparation.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -54,27 +54,18 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="preparation.html">Preparing the installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="preparation.html">Preparing for installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Getting the software with GIT</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#clone-wsprdaemon-from-github-com">Clone wsprdaemon from github.com</a></li>
 </ul>
 </li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/overview.html">Overview of Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/computer.html">Computer Issues</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/receivers.html">Receiver definitions</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/reporting.html">Reporting</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/ka9q-radio.html">Configuration with ka9q-radio and ka9q-web</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/schedule.html">Schedule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf/wsprdaemon.conf.html">Example of a working wsprdaemon.conf</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/hardware.html">The ka9q-radio [frontend] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/channels.html">The ka9q-radio [channels] section</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Network</span></p>
 <ul>
@@ -158,7 +149,11 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">source</span> <span class="n">bash</span><span class="o">-</span><span class="n">aliases</span> <span class="o">../.</span><span class="n">bash_aliases</span>
 </pre></div>
 </div>
-<p>You can now run wsprdaemon for the first time and configure it for your purposes.</p>
+<p>Having prepared and cloned the wsprdaemon software, now you can run it:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wd</span>
+</pre></div>
+</div>
+<p>This sets the stage and tells you to configure wsprdaemon.conf.</p>
 </section>
 </section>
 
@@ -166,8 +161,8 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="preparation.html" class="btn btn-neutral float-left" title="Preparing the installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../configuration/overview.html" class="btn btn-neutral float-right" title="Overview of Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="preparation.html" class="btn btn-neutral float-left" title="Preparing for installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../configuration/wd_conf.html" class="btn btn-neutral float-right" title="Configuring wsprdaemon: wsprdaemon.conf" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
