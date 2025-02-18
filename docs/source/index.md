@@ -20,6 +20,14 @@ requirements/network.md
 
 ```{toctree}
 :maxdepth: 2
+:caption: Network
+
+network/basics.md
+network/multicast.md
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: Software Installation
 
 installation/preparation.md
@@ -36,10 +44,11 @@ configuration/radiod_conf.md
 
 ```{toctree}
 :maxdepth: 2
-:caption: Network
+:caption: Working Results
 
-network/basics.md
-network/multicast.md
+results/wspr.md
+results/grape.md
+results/psk.md
 ```
 
 ```{toctree}
