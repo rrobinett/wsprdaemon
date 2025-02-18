@@ -123,12 +123,481 @@
              
   <section id="the-ka9q-radio-channels-section">
 <h1>The ka9q-radio [channels] section<a class="headerlink" href="#the-ka9q-radio-channels-section" title="Link to this heading"></a></h1>
-<p>ka9q-radio supports tons of options here.  We will focus on those used with wsprdaemon.</p>
-<section id="wspr">
-<h2>[WSPR]<a class="headerlink" href="#wspr" title="Link to this heading"></a></h2>
+<p>wsprdaemon typically manages reception and reporting of 4 types of channels – WSPR spots, FT4 and FT8 spots, and WWV recordings.  A typical configuration of this section follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">WSPR</span><span class="p">]</span>
+<span class="c1"># Bottom of 200 Hz WSPR segments on each band. Center is 1500 Hz higher</span>
+<span class="c1"># sample rate must be 12 kHz as required by wsprd</span>
+<span class="n">disable</span> <span class="o">=</span> <span class="n">no</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">wspr</span><span class="o">-</span><span class="n">pcm</span><span class="o">.</span><span class="n">local</span>
+<span class="n">agc</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">gain</span> <span class="o">=</span> <span class="mi">60</span>
+<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>
+<span class="n">low</span> <span class="o">=</span> <span class="mi">1300</span>
+<span class="n">high</span> <span class="o">=</span> <span class="mi">1700</span>
+<span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10m138700 13m553900 14m095600 18m104600 21m094600 24m924600 28m124600 50m293000&quot;&quot;</span>
+
+<span class="p">[</span><span class="n">WSPR</span><span class="o">-</span><span class="n">IQ</span><span class="p">]</span>
+<span class="n">disable</span> <span class="o">=</span> <span class="n">yes</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">wspr</span><span class="o">-</span><span class="n">iq</span><span class="o">.</span><span class="n">local</span>
+<span class="n">agc</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">gain</span> <span class="o">=</span> <span class="mi">60</span>
+<span class="n">samprate</span> <span class="o">=</span> <span class="mi">16</span><span class="n">k</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">iq</span>
+<span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10m138700 13m553900 14m095600 18m104600 21m094600 24m924600 28m124600&quot;</span>
+<span class="c1"># If you were to want to center IQ recordings of WSPR bands on the center freqeuncy, not the Upper Sidbeand tuning frequency, then use this line:</span>
+<span class="c1"># freq =  &quot;137k500 475k700 1m838100 3m570100 3m594100 5m288700 5m366200 7m040100 10m140200 13m555400 14m097100 18m106100 21m096100 24m926100 28m126100&quot;</span>
+
+<span class="p">[</span><span class="n">FT8</span><span class="p">]</span>
+<span class="n">disable</span> <span class="o">=</span> <span class="n">no</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">ft8</span><span class="o">-</span><span class="n">pcm</span><span class="o">.</span><span class="n">local</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>
+<span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;1m840000 3m573000 5m357000 7m074000 10m136000 14m074000 18m100000 21m074000 24m915000 28m074000 50m313000&quot;</span>
+<span class="c1"># extras 144m174000</span>
+<span class="c1"># NOTE: be sure that frequencies are specified to the Hz or the PSKReporter uploader will get bad frequencies in the ftX.log files</span>
+
+<span class="p">[</span><span class="n">FT4</span><span class="p">]</span>
+<span class="n">disable</span> <span class="o">=</span> <span class="n">no</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">ft4</span><span class="o">-</span><span class="n">pcm</span><span class="o">.</span><span class="n">local</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>
+<span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;3m575000 7m047500 10m140000 14m080000 18m10k000 21m140000 24m919000 28m180000 50m318000&quot;</span>
+<span class="c1"># extras &quot;144m170000&quot;</span>
+<span class="c1"># NOTE: be sure that frequencies are specified to the Hz or the PSKReporter uploader will get bad frequencies in the ftX.log files</span>
+
+</pre></div>
+</div>
+<p>Phil Karn’s comprehensive documentation of this section:</p>
+<p>A <em>radiod</em> configuration file may contain one or more sections
+configuring receiver channels. This
+is necessarily the most complex part of the configuration since
+it depends on your specific applications.</p>
+<p>Each section configures one or more channels with the same mode,
+output multicast stream and sample rate, differing only in frequency. What follows
+is a list of parameter settings with their default values:</p>
+<section id="mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum">
+<h2>mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum<a class="headerlink" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum" title="Link to this heading"></a></h2>
+<p>No default. Required unless specified in [global].</p>
+<p>A “mode” would be more accurately called a “preset” because it
+actually refers to a group of parameters (demodulator type, sample
+rate, filters, etc) defined in sections of
+<em>/var/lib/ka9q-radio/modes.conf</em>. See the documentation for that file
+for a description of the standard definitions.</p>
+<p>The <em>modes.conf</em> file covers the most common modes, but individual parameters can be
+overridden if desired. If you find yourself doing this a lot, you might
+add a new mode to <em>/var/lib/ka9q-radio/modes.conf</em>. Be careful to back
+it up; it may be overwritten by the next “make install.</p>
 </section>
-<section id="wwv-iq">
-<h2>[WWV-IQ]<a class="headerlink" href="#wwv-iq" title="Link to this heading"></a></h2>
+<section id="dns-no-yes-default-no">
+<h2>dns = no | yes (default no)<a class="headerlink" href="#dns-no-yes-default-no" title="Link to this heading"></a></h2>
+<p>Use the domain name system to resolve the name in the <em>data</em> parameter. See
+the discussion in <a class="reference internal" href="#ka9q-radio.md"><span class="xref myst">ka9q-radio.md</span></a>.</p>
+</section>
+<section id="data">
+<h2>data =<a class="headerlink" href="#data" title="Link to this heading"></a></h2>
+<p>No default. Required unless specified in [global].</p>
+<p>Specifies the DNS name of the multicast group to be used for receiver
+output streams. If not specified in the [global] section, it must be
+individually specified in each subsequent section.</p>
+<p><em>radiod</em> deterministically hashes the destination string to generate
+and advertise an IPv4 multicast address in the 239.0.0.0/8 block,
+along with a SRV DNS record of type _rtp._udp advertising this name.
+See the discussion of this parameter in the [global] section.</p>
+</section>
+<section id="parameters-in-modes-conf">
+<h2>Parameters in <em>modes.conf</em><a class="headerlink" href="#parameters-in-modes-conf" title="Link to this heading"></a></h2>
+<p>The parameters that may be set in <em>modes.conf</em> and selectively overridden
+in each receiver channel group are:</p>
+<section id="demod-linear-fm-wfm">
+<h3>demod = linear | fm | wfm<a class="headerlink" href="#demod-linear-fm-wfm" title="Link to this heading"></a></h3>
+<p>Selects one of
+three demodulators built into <em>radiod</em>, distinct from the
+<strong>mode</strong> entries that select an entry in
+<em>/usr/local/share/ka9q-radio/modes.conf</em>.  The “Linear” demodulator is
+for modes such as AM (envelope detected or coherent), SSB, CW, IQ and
+DSB-SC. The “FM” demodulator is for general purpose frequency
+modulation, including so-called “NBFM” that is actually phase
+modulation (PM). “WFM” is similar to FM but is intended for FM stereo
+broadcasting; it contains a multiplex decoder and always produces
+stereo output at a 48 kHz sample rate. (Note: a separate <em>stereod</em>
+daemon may be used to decode multiplexed stereo from the single
+channel composite baseband output of a regular FM demodulator with
+appropriate bandwidth and sample rates, but the one built into the WFM demodulator is
+more convenient.)</p>
+</section>
+<section id="samprate">
+<h3>samprate =<a class="headerlink" href="#samprate" title="Link to this heading"></a></h3>
+<p>Set the output sample rate in Hz. A good value for communications
+FM/PM is 24000 (24 KHz); for linear modes, 12000 (12 kHz). WFM (FM
+stereo broadcast) should use 48000 (48 kHz). (These values are used on
+<strong>modes.conf</strong>.)</p>
+<p>Remember the Nyquist theorem: the sample rate must be at least twice
+the highest frequency. For real signals, such as mono audio,
+a sample rate of 12 kHz can handle audio up to 6 kHz, but you must allow
+room for filter skirts so don’t push the filters beyond about +/-5 kHz.
+If you need more, increase the sample rate.</p>
+<p>FM is a little different; the sample rate is constrained by the
+pre-demodulation bandwidth of the signal, not the audio output. NBFM
+is typically 16-20 kHz wide and is handled internally as a <em>complex</em>
+sample stream, so a sample rate of 24 kHz is sufficient.  (Since the
+demodulated audio output has at most a bandwidth of 5 kHz, it doesn’t
+need such a high sample rate. A future enhancement of <em>ka9q-radio</em> may
+lower the sample rate of the FM demodulator output to save network
+capacity.)</p>
+<p><em>ka9q-radio</em> supports any output sample rate that is a common multiple of the
+FFT bin spacing and the frame rate. For a 20 ms
+frame, the frame rate is 50 Hz. For an overlap of 5 (i.e., 1/5 of each
+FFT block is old data and 4/5 is new), the FFT bin spacing is 40 Hz. Therefore
+the sample rate must be a multiple of 200 Hz.
+This covers all the usual standard sample rates except for 44.1 kHz, the
+sample rate of the compact disk.</p>
+</section>
+<section id="channels-1-2">
+<h3>channels = 1 | 2<a class="headerlink" href="#channels-1-2" title="Link to this heading"></a></h3>
+<p>Set the number of output channels. Forced to 1 for FM modes, 2 for WFM
+(Wideband broadcast FM). In linear mode with envelope detection
+disabled, <em><strong>channels = 2</strong></em> implies I/Q output. With envelope detection enabled,
+<em><strong>channels = 2</strong></em> places the linear output on the left channel and the evelope
+detector output on the right channel.  This is for experimentation
+with automatic SSB tuning algorithms that use envelope detection to
+determine voice pitch frequencies.</p>
+</section>
+<section id="stereo-y">
+<h3>stereo = y<a class="headerlink" href="#stereo-y" title="Link to this heading"></a></h3>
+<p>Equivalent to <strong>channels = 2</strong>.</p>
+</section>
+<section id="mono-y">
+<h3>mono = y<a class="headerlink" href="#mono-y" title="Link to this heading"></a></h3>
+<p>Equivalent to <strong>channels = 1</strong>.</p>
+</section>
+<section id="kaiser-beta-11-0">
+<h3>kaiser-beta = 11.0<a class="headerlink" href="#kaiser-beta-11-0" title="Link to this heading"></a></h3>
+<p>Sets the <a class="reference external" href="https://en.wikipedia.org/wiki/Kaiser_window">Kaiser window</a>
+beta parameter for filter generation. Larger values give better sidelobe
+suppression while smaller values narrow the main lobe (i.e., give
+faster transitions between passband and stopband). Don’t be tempted to
+lower this parameter too much, as windowing also prevents aliasing
+during sample rate downconversion. Once aliases get into a digital
+signal, there’s no getting rid of them. If you need sharper filters,
+use a larger <strong>blocksize</strong> or a smaller <strong>overlap</strong> factor (e.g., 2) in the [global] section.</p>
+</section>
+<section id="low-5000">
+<h3>low = -5000<a class="headerlink" href="#low-5000" title="Link to this heading"></a></h3>
+<p>Sets the lower edge of the predetection filter passband.</p>
+</section>
+<section id="high-5000">
+<h3>high = +5000<a class="headerlink" href="#high-5000" title="Link to this heading"></a></h3>
+<p>Sets the upper edge of the predetection filter passband.</p>
+<p>Both <strong>low</strong> and <strong>high</strong> are set by every entry in <em>modes.conf</em>, so
+these defaults just provide a way to override them when necessary.</p>
+</section>
+<section id="squelch-open-8">
+<h3>squelch-open = 8<a class="headerlink" href="#squelch-open-8" title="Link to this heading"></a></h3>
+<p>Sets the SNR (in dB) at which the squelch opens.</p>
+</section>
+<section id="squelch-close-7">
+<h3>squelch-close = 7<a class="headerlink" href="#squelch-close-7" title="Link to this heading"></a></h3>
+<p>Sets the SNR (in dB) at which the
+squelch closes. The difference provides some hysteresis.</p>
+<p>Squelch is applicable to both FM and AM, though very different
+algorithms are used. In FM, the SNR is estimated from the mean and
+variance of the signal amplitude; since FM is constant envelope, any
+variance is due to noise.  The AM squelch uses a PLL to detect a
+carrier, so it is active whenever the PLL is turned on. Note that it
+is still active even if envelope detection is selected. If synchronous
+AM detection is wanted without squelch, set the opening threshold to
+-1000 dB.  This will underflow to -infinity dB and keep the squelch
+open.</p>
+</section>
+<section id="squelchtail-1">
+<h3>squelchtail = 1<a class="headerlink" href="#squelchtail-1" title="Link to this heading"></a></h3>
+<p>Keep the squelch open for
+the specified number of block times (e.g., 20 milliseconds each) after
+the SNR drops below the <strong>squelch-close</strong> threshold. The default of 1
+block keeps the ends of packet transmissions from being chopped off,
+while a value of 0 is suitable to completely eliminate audible squelch
+tails in FM voice operation. Because the preset ‘pm’ in modes.conf
+is usually used for ordinary voice, it sets this to 0. Preset ‘fm’ (no de-emphasis) sets it to 1.</p>
+</section>
+<section id="headroom-15">
+<h3>headroom = -15<a class="headerlink" href="#headroom-15" title="Link to this heading"></a></h3>
+<p>Sets the target output audio
+level in dBFS. Valid in all modes but relevant mainly to the linear
+demodulator (e.g., SSB/CW/AM) with AGC enabled. All signal level
+measurements are averages over a block time (default 20 ms), so this
+setting minimizes clipping on signals with the usual Gaussian (noise like) statistics.</p>
+</section>
+<section id="shift-0">
+<h3>shift = 0<a class="headerlink" href="#shift-0" title="Link to this heading"></a></h3>
+<p>Sets the frequency shift applied after
+downconversion, baseband filtering and PLL tracking, if enabled. Not
+the same as offsetting the predetection filter and adjusting the
+tuning frequency to compensate because those operations are performed
+before the 0-Hz PLL while the <strong>shift</strong> value is applied last. Applicable
+to the linear demodulator only. Primarily used for CW.</p>
+</section>
+<section id="recovery-rate-20">
+<h3>recovery-rate = +20<a class="headerlink" href="#recovery-rate-20" title="Link to this heading"></a></h3>
+<p>Specifies the rate, in decibels per second, at which gain is increased
+when the input signal level has decreased and the <strong>hang-time</strong> has
+expired.  Linear demodulator only.</p>
+</section>
+<section id="hang-time-1-1">
+<h3>hang-time = 1.1<a class="headerlink" href="#hang-time-1-1" title="Link to this heading"></a></h3>
+<p>Specifies the time to hold
+a constant gain after the input signal level decreases.
+Linear demodulator only.</p>
+</section>
+<section id="threshold-15">
+<h3>threshold = -15<a class="headerlink" href="#threshold-15" title="Link to this heading"></a></h3>
+<p>Specifies the output level in dB relative to the <strong>headroom</strong>
+setting, that the AGC will maintain on noise without signal. With the
+default <strong>headroom</strong> setting of -15 dBFS, noise will thus appear at
+-30 dBFS. Applicable only to the Linear demodulator.</p>
+</section>
+<section id="gain-50">
+<h3>gain = 50<a class="headerlink" href="#gain-50" title="Link to this heading"></a></h3>
+<p>Linear demodulator only (the FM and
+WFM demodulators automatically set their output gains.)
+This is the gain in dB applied to the output of the
+linear demodulator before transmission to the output data stream. With
+the AGC on, this value only sets the initial value before the AGC
+operates. It should be chosen to avoid either loud momentary bursts (from being set too high) or
+excessive gain recovery time (from being set too low).</p>
+</section>
+<section id="envelope-on-off">
+<h3>envelope = on | off<a class="headerlink" href="#envelope-on-off" title="Link to this heading"></a></h3>
+<p>Select the AM envelope detector
+(linear demodulator only). When 2 channels are selected, send the
+envelope detector to the right channel (see the discussion under
+<strong>channels</strong>). Linear only.</p>
+</section>
+<section id="pll-on-off">
+<h3>pll = on | off<a class="headerlink" href="#pll-on-off" title="Link to this heading"></a></h3>
+<p>Linear demodulator only. Enable the
+phase lock loop. When enabled, the PLL will try to track a carrier to
+a nominal frequency of 0 Hz. This also enables the carrier squelch.</p>
+</section>
+<section id="square-on-off">
+<h3>square = on | off<a class="headerlink" href="#square-on-off" title="Link to this heading"></a></h3>
+<p>Linear demodulator only. Enables the
+PLL with a squaring operation in the feedback path. Useful for DSB-SC
+(Double Sideband AM with Suppressed Carrier). Implies <strong>pll = on</strong>.</p>
+</section>
+<section id="pll-bw-100">
+<h3>pll-bw = 100<a class="headerlink" href="#pll-bw-100" title="Link to this heading"></a></h3>
+<p>Linear demodulator only. Sets the
+loop filter bandwidth of the PLL in Hz.</p>
+</section>
+<section id="agc-on-off">
+<h3>agc = on | off<a class="headerlink" href="#agc-on-off" title="Link to this heading"></a></h3>
+<p>Linear demodulator only. Enables automatic gain control (AGC).</p>
+</section>
+<section id="deemph-tc-530-5">
+<h3>deemph-tc = 530.5<a class="headerlink" href="#deemph-tc-530-5" title="Link to this heading"></a></h3>
+<p>Not applicable to the linear
+demodulator. Default: 530.5 (FM demodulator), 75 (WFM
+demodulator). Sets the time constant, in microseconds, for FM
+demodulation. This controls the transition between a “flat FM”
+response at lower frequencies to phase modulation (-6 dB/octave
+de-emphasis) at higher frequencies.</p>
+<p>The 530.5 microsecond value corresponds to a corner frequency of 300
+Hz, the apparent unofficial value for amateur narrowband FM, while
+75 microseconds is the official value for FM broadcasting in North
+America and South Korea. Other countries use 50 microseconds.</p>
+</section>
+<section id="deemph-gain-12">
+<h3>deemph-gain = +12<a class="headerlink" href="#deemph-gain-12" title="Link to this heading"></a></h3>
+<p>Not applicable to the linear
+demodulator. Default: +12 dB (empirically chosen) for the FM
+demodulator, 0 dB for the WFM demodulator. Applies the specified
+amount of gain to the signal after de-emphasis to maintain the same
+objective loudness as with de-emphasis
+off. Needed mainly for NBFM because its 300 Hz corner frequency is
+below the nominal speech band. Not needed for WFM because the 75
+microsecond time constant corresponds to 2123 Hz, above most of the
+power in typical speech or music.</p>
+</section>
+<section id="extend-threshold-extend-yes-no">
+<h3>extend | threshold-extend = yes | no<a class="headerlink" href="#extend-threshold-extend-yes-no" title="Link to this heading"></a></h3>
+<p>FM only. Enable or disable an experimental FM threshold extension scheme to reduce the “popcorn” noise that happens just below what
+is conventionally called “full quieting”. This can buy another 2-3 dB until the pops become too frequent to suppress.</p>
+</section>
+<section id="tone-pl-ctcss-0">
+<h3>tone | pl | ctcss = 0<a class="headerlink" href="#tone-pl-ctcss-0" title="Link to this heading"></a></h3>
+<p>FM only. When non-zero, enable a tone squelch for the specified tone frequency (Hz). Otherwise carrier squelch is used</p>
+</section>
+<section id="pacing-on-off">
+<h3>pacing = on | off<a class="headerlink" href="#pacing-on-off" title="Link to this heading"></a></h3>
+<p>When on, add a delay after each transmitted Ethernet data packet to help avoid overrunning switches or hosts with
+insufficient buffering. This is useful only at high bit rates where multiple packets need to be sent during each frame time.</p>
+<p>The Ethernet data size limit is 1440, 60 bytes less than the standard Ethernet MTU (Maximum Transmission Unit) of 1500 bytes
+to allow room for the RTP/UDP/IP headers. (The 1500 byte MTU excludes the 14-byte Ethernet header.) 1440 bytes every 20 ms (the usual
+frame time) is 576 kb/s or 16-bit PCM at a 36 kHz sampling rate. Higher output rates (e.g., 48 kHz) require multiple packets be sent
+with each frame’s data, and without <strong>pacing</strong> on they are sent back-to-back. See also the <strong>buffer</strong> option.</p>
+</section>
+<section id="encoding-s16le-s16be-f16le-f32le-opus">
+<h3>encoding = s16le | s16be | f16le | f32le | opus<a class="headerlink" href="#encoding-s16le-s16be-f16le-f32le-opus" title="Link to this heading"></a></h3>
+<p>Select an output encoding. All options except ‘opus’ are uncompressed
+PCM (pulse code modulation). The default is s16be, i.e., signed 16-bit
+linear PCM with big-endian byte order. This became an Internet
+convention well before little-endian machines took over the world, so
+programs like <strong>pcmrecord</strong> automatically convert this to s16le
+(signed 16-bit little endian).</p>
+<p>f32le is 32-bit IEEE 754 floating point format in little endian (i.e.,
+Intel) byte order. This is ka9q-radio’s internal format,
+useful when a channel is operated with fixed gain to avoid exceeding
+the (already large) 100 dB dynamic range of 16-bit linear PCM.</p>
+<p>f16le is 16-bit IEEE 754 “half float” format. Half the size of f32le,
+f16le still has a very large total dynamic range, though at some loss
+in instantaneous dynamic range.</p>
+<p>opus is the Opus codec defined in RFC 6716. Opus is an open, royalty
+free “lossy” codec for general purpose use, from voice through high
+fidelity audio. It is very widely used “under the hood” in web
+browsing, games, and voice conferencing (e.g., Zoom, Signal.)  HF SSB
+typically compresses to 15 kb/s and NBFM to 25 kb/s, an enormous
+savings over uncompressed PCM rates (192 kb/s for 16 bit PCM &#64; 12 kHz
+and 384 kb/s at 24 kHz.) Opus is highly recommended for signals that
+you’re just listening to, like FM or SSB voice, but stick to the PCM
+formats for digital data signals that need to be decoded.</p>
+<p>Note that Opus only supports a specific set of sample rates
+(8/12/16/24/48 kHz) so <em><strong>nothing at all</strong></em> is sent unless the
+demodulator sample rate is set to one of them. Opus also
+supports only a specific set of frame durations (2.5, 5, 10, 20, 40,
+60 ms, with more in newer versions) but this isn’t a problem
+at the default ka9q-radio frame rate of 20 ms.</p>
+</section>
+<section id="bitrate-0">
+<h3>bitrate = 0<a class="headerlink" href="#bitrate-0" title="Link to this heading"></a></h3>
+<p>Set the target bitrate, in kb/s, for the Opus encoder. (No effect in
+the PCM modes.) Setting this to 0 allows Opus to make its own
+decisions according to the bandwidth and SNR of the audio signal. This
+is usually the best choice.</p>
+</section>
+<section id="update-25">
+<h3>update = 25<a class="headerlink" href="#update-25" title="Link to this heading"></a></h3>
+<p>Sets the interval, in frames, between transmissions of the status update packets
+on the data channel. At a default frame time of 20 ms, this corresponds to 2 Hz, which
+is good enough for most applications. Note that status updates stop in FM
+when the squelch is closed.</p>
+<p>These updates carry the full state of the channel and are needed by
+programs such as <strong>pcmrecord</strong> and <strong>monitor</strong> to determine
+the sample rate and format before it can be
+interpreted.</p>
+</section>
+<section id="buffer-0">
+<h3>buffer = 0<a class="headerlink" href="#buffer-0" title="Link to this heading"></a></h3>
+<p>Controls data output buffering. Allowable values are 0-4.</p>
+<p>The default of 0 means no buffering, i.e., at least one Ethernet
+output packet is sent during every ka9q-radio frame (assuming any squelch is open). When delay is not
+critical, buffering can significantly reduce the packet output rate at
+lower sample rates or with the Opus codec.</p>
+<p>Values 1-4 specify the maximum number of frame times that data may be
+buffered pending additional data. In Opus, 0 and 1 are basically the
+same: transmit one Opus packet every frame time. This is because the
+Opus codec only handles a specific set of sample rates and packet
+durations, and these match to the usual sample rates and frame times
+of ka9q-radio (this is not a coincidence). Opus compresses so effectively that
+it is essentially impossible to reach the Ethernet size limit with 4 x
+20 = 80 ms of audio, so this setting primarily sets the Opus frame
+duration and encoding delay.</p>
+<p>PCM modes are a little more complicated. They quickly run into the
+Ethernet packet size limit; this happens with 16-bit samples at only
+36 kHz (see the <strong>pacing</strong> section).  Nevertheless, Ethernet packets
+can be much less than full at lower sample rates (e.g., 480 bytes for
+16-bit PCM &#64; 12 kHz). Setting buffer = 3 will send 3 * 480 = 1440
+bytes every 60 ms, cutting the packet rate to 1/3.  I recommend trying
+this out especially in non-delay-sensitive applications like
+WSPR/FT8/HFDL decoding, or when recording to files.</p>
+<p>Except for the <strong>pacing</strong> option, data is never delayed when there’s enough to send a full packet,
+so the effect of buffering is minimal at higher PCM sample
+rates. Depending on the specific sample rate and format it still may
+help fully pack all Ethernet frames instead of sending sequences of
+full packets plus one partial fragment during each frame, still
+reducing the average packet rate.</p>
+</section>
+<section id="disable-yes-no">
+<h3>disable = yes | no<a class="headerlink" href="#disable-yes-no" title="Link to this heading"></a></h3>
+<p>A section may be disabled without deleting it by setting “disable = yes”
+somewhere in the section.</p>
+</section>
+<section id="freq">
+<h3>freq =<a class="headerlink" href="#freq" title="Link to this heading"></a></h3>
+<p>No default. Set the channel carrier frequency.  If a
+list is specified, a receiver channel will be created for each
+one. Automatically sets the RTP SSRC if not otherwise specified to the
+number formed by removing all letters from the frequency string.</p>
+<p>Frequencies are specified either as pure decimal numbers, or with a SI scale factor as follows:</p>
+<blockquote>
+<div><p>123.4k, 123k4 - 123.4 kilohertz<br />
+123.4m, 123m4 - 123m4 Megahertz<br />
+1.234g, 1g234 - 1.234 Gigahertz</p>
+</div></blockquote>
+<p>When no scale is given, a heuristic is used to give a “reasonable”
+answer (which may not always be right). e.g., “400” is interpreted as
+400 MHz while 700 is interpreted as 700 kHz. When in doubt, specify
+the scale factor or give the frequency in hertz.</p>
+<p>Ten aliases for <strong>freq</strong> are provided, <strong>freq0</strong> through <strong>freq9</strong>. This is strictly to work
+around the line length limitation in the <em>libiniparser</em> library so you can have literally
+hundreds of receiver channels in a single <em>radiod</em> instance. (The parser only allows one of each key to be present in a section, so repeating <strong>freq</strong> won’t work.)</p>
+</section>
+<section id="ssrc">
+<h3>ssrc =<a class="headerlink" href="#ssrc" title="Link to this heading"></a></h3>
+<p>Set the RTP (Real Time Protocol) SSRC (Stream Source Identifier). This
+is a 32-bit value placed in every RTP header to identify the stream,
+necessary because many streams may share the same IP multicast group
+from the same originating host.</p>
+<p>Normally the SSRC is set automatically from the frequency, as described above.</p>
+<p>Note that once the SSRC is set for a stream it cannot be changed even
+if the channel is tuned to a different radio frequency, making this
+usage a bit of a hack.  But particularly in VHF/UHF repeater
+monitoring, most <em>ka9q-radio</em> channels are statically configured and
+never retuned, so it is nonetheless a useful convention. Also, the
+actual radio frequency (and other channel parameters) are included in
+the metadata (status) stream, and newer versions of <strong>pcmrecord</strong> and
+<strong>monitor</strong> now use this.</p>
+</section>
+<section id="filter2-0-4-default-0">
+<h3>filter2 = 0-4 (default 0)<a class="headerlink" href="#filter2-0-4-default-0" title="Link to this heading"></a></h3>
+<p>Linear demodulator only. This is an <em><strong>experimental</strong></em> second filter
+after the primary channel filter that sharpens the frequency response
+at the expense of extra latency and a little extra CPU. The default
+setting disables the secondary filter.</p>
+<p>The duration of the primary filter impulse response, and thus its
+selectivity, is limited by the overlap in the big forward FFT; for the
+usual values of <strong>blocktime = 20</strong> and <strong>overlap = 5</strong>, this is 4
+milliseconds. With the relatively large values of <strong>kaiser-beta</strong>
+needed to keep sidelobes from strong adjacent signals from aliasing
+into the passband, the transition bandwidth is several FFT bins or
+about 100-150 Hz.</p>
+<p>This is good enough for most uses, but when more selectivity is needed
+(e.g., for weak signal CW operation) setting <strong>filter2</strong> to 1 through
+4 specifies how many receiver blocks are to be grouped and run through
+a second, longer filter for greater selectivity. The filter2 overlap
+is 2 (50%) so even with <strong>filter2 = 1</strong> the selectivity is
+improved by a factor of 10/4 = 2.5 at a small cost in
+additional CPU and latency. Larger values sharpen the filter even
+more primarily at the expense of latency; <strong>filter2 = 4</strong> provides
+an impulse response of 50% * 80 ms = 40 ms, ten times as
+sharp as the primary filter alone at the cost of 60 ms of
+additional latency.</p>
+<p>The secondary filter uses the same values of
+<strong>low</strong>, <strong>high</strong> and <strong>kaiser-beta</strong> as the primary
+filter.</p>
+<p>Both <strong>filter2</strong> and <strong>buffer</strong> increase latency, but the latter doesn’t
+change filtering. I.e., if you want to send fewer, larger output
+packets at low sample rates you might use <strong>filter2</strong> instead of <strong>buffer</strong>.</p>
+<p>This feature is experimental and subject to substantial change.</p>
+</section>
+</section>
+<section id="the-dynamic-template">
+<h2>The Dynamic Template<a class="headerlink" href="#the-dynamic-template" title="Link to this heading"></a></h2>
+<p>A dynamic “template” is also set up to allow new channels to be
+created and deleted at run time, e.g., with the <em>control</em> command.
+This is automatic if default <strong>data</strong> and <strong>mode</strong> settings are
+present in the [global] section.  At present the outputs of all
+dynamically created channels go to the same multicast group, but it
+will probably be made settable over the command/status channel in the
+near future.</p>
 </section>
 </section>
 
