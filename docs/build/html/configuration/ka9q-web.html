@@ -140,11 +140,13 @@ wsprdaemon typically starts it automatically.  You invoke it manually, if necess
 <p>Logged in an running everything locally, direct your browser to http://localhost:8081.</p>
 <p>If managing the computer remotely using ssh, you can set up an ssh tunnel from the remote computer to your local computer like this:</p>
 <p>From your local machine, run:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span> <span class="o">-</span><span class="n">L</span> <span class="mi">8081</span><span class="p">:</span><span class="n">localhost</span><span class="p">:</span><span class="mi">8081</span> <span class="n">wsprdaemon</span><span class="nd">@XX</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span> <span class="o">-</span><span class="n">L</span> <span class="mi">8081</span><span class="p">:</span><span class="n">localhost</span><span class="p">:</span><span class="mi">8081</span> <span class="n">wsprdaemon</span><span class="nd">@aa</span><span class="o">.</span><span class="n">bb</span><span class="o">.</span><span class="n">cc</span><span class="o">.</span><span class="n">dd</span>
 </pre></div>
 </div>
-<p>where XX is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)</p>
-<p>Then direct your browser to http://localhost:8081 to view ka9q-web from the XX remote machine.</p>
+<p>where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)</p>
+<p>Then direct your browser to http://localhost:8081 to view ka9q-web served from the aa.bb.cc.dd remote computer.
+If you happen to be using port 8081 on your local computer for another purpose, simply replace the port number after -L in the command above to an unused port YYYY. Then direct your browser to http://localhost:YYYY.</p>
+<p>The port will disappear when you close the ssh session.</p>
 <p><strong>John Melton G0ORX</strong> started this with a proof-of-concept version in late 2023. This adjunct to ka9q-radio displays a spectrum, waterfall, and other data from radiod.  <strong>Scott Newell N5TNL</strong> has since improved it dramatically in collaboration with <strong>Rob Robinett AI6VN</strong>, <strong>Phil Karn KA9Q</strong>, <strong>Glenn Elmore N6GN</strong>, <strong>Jim Lill WA2ZKD</strong>, and desultory kibbitzers.</p>
 <ul class="simple">
 <li><p>Web Server by John Melton, G0ORX (https://github.com/g0orx/ka9q-radio)</p></li>

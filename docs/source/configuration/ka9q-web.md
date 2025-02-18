@@ -15,12 +15,14 @@ If managing the computer remotely using ssh, you can set up an ssh tunnel from t
 
 From your local machine, run:
 ```
-ssh -L 8081:localhost:8081 wsprdaemon@XX
+ssh -L 8081:localhost:8081 wsprdaemon@aa.bb.cc.dd
 ```
-where XX is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)
+where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)
 
-Then direct your browser to http://localhost:8081 to view ka9q-web from the XX remote machine.
+Then direct your browser to http://localhost:8081 to view ka9q-web served from the aa.bb.cc.dd remote computer.
+If you happen to be using port 8081 on your local computer for another purpose, simply replace the port number after -L in the command above to an unused port YYYY. Then direct your browser to http://localhost:YYYY.
 
+The port will disappear when you close the ssh session.
 
 **John Melton G0ORX** started this with a proof-of-concept version in late 2023. This adjunct to ka9q-radio displays a spectrum, waterfall, and other data from radiod.  **Scott Newell N5TNL** has since improved it dramatically in collaboration with **Rob Robinett AI6VN**, **Phil Karn KA9Q**, **Glenn Elmore N6GN**, **Jim Lill WA2ZKD**, and desultory kibbitzers.  
 
