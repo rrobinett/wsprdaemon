@@ -1,0 +1,227 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedule &mdash; wsprdaemon 3.3.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=9ac01507"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Description</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../requirements/network.html">Networking</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Network</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../network/basics.html">Basic Network Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../network/multicast.html">Multicast Requirements</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Getting the software with GIT</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Working Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../troubleshooting/typicals.html">Some typical problems</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">FAQ</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">External Links</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../external_links.html">External Links</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Contributors</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Schedule</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/configuration/wsprdaemon.conf.d/schedule.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="schedule">
+<h1>Schedule<a class="headerlink" href="#schedule" title="Link to this heading"></a></h1>
+<section id="id1">
+<h2><a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">### The WSPR_SCHEDULE[] array (table) defines a schedule of configurations which will applied by WD&#39;s  watchdog daemon when it runs every odd two minutes</span>
+<span class="c1">### The first field of each entry is the start time for the configuration defined in the following fields</span>
+<span class="c1">### Start time is in the format HH:MM (e.g 13:15) and by default is in the time zone of the host server &#39;01:30&#39;</span>
+<span class="c1">### Start times can also be specified by &#39;sunrise&#39; or &#39;sunset&#39; followed optionally by &quot;+HH:MM&quot; or &quot;-HH:MM&quot; e.g. &quot;sunrise+01:00&quot;</span>
+<span class="c1">### Schedules are referenced to the time zone of the host server.  So if your server is set to &#39;America/New_York&#39;, then the entry times are for EST/EDT</span>
+<span class="c1">### If the time of the first entry is not 00:00, then the latest entry (which may not necessarily be the last ) will be applied at time 00:00</span>
+
+<span class="c1">### Following the time are one or more fields of the format &#39;RECEIVER,BAND[,MODE_1[:MODE_2[:...]]&#39;</span>
+<span class="c1">### The value of RECEIVER must match one of the receivers defined in RECEIVER_LIST[]</span>
+
+<span class="c1">### The value of BAND must match one of:</span>
+<span class="c1">### WSPR bands:            2200 630 160 80 80eu 60 60eu 40 30 22 20 17 15 12 10 6 4 2 1 0</span>
+<span class="c1">### Noise only bands:      WWVB WWV_2_5 WWV_5 WWV_10 WWV_15 WWV_20 WWV_25 CHU_3 CHU_7 CHU_14</span>
+
+<span class="c1">### The optional &#39;MODE&#39; arguments specify one or more packet decode modes:</span>
+<span class="c1">###    I1     =&gt; Record and archive a series of one minute long IQ files from a KA9Q stream. KA9Q/radiod must be configured to output those streams</span>
+<span class="c1">###              The IQ wav file are losslessly compressed by &#39;flac&#39; and stored in tar files which are by default located in ~/wsprdemon/wav-archive.d/...</span>
+<span class="c1">###    WO     =&gt; for the &#39;Noise only&#39; bands, which runs the &#39;wsprd&#39; decoder in its fastest to run mode.  This mode cannot be specified with the other modes</span>
+<span class="c1">###    W2     =&gt; legacy WSPR 2 minute mode (the default if no modes are specified)</span>
+<span class="c1">###    F2     =&gt; FST4W-120  (2 minute)</span>
+<span class="c1">###    F5     =&gt; FST4W-300  (5 minute)</span>
+<span class="c1">###    F15    =&gt; FST4W-900  (15 minue)</span>
+<span class="c1">###    F30    =&gt; FST4W-1800 (30 minute)</span>
+<span class="c1">###  For example &quot;00:00   KIWI_0,630,W2:F2:F5  AI6VN&quot;   specifies that KIWI_0 should tune to 630M and decode WSPR-2,FST4W-120, and FST4W-300 mode packets</span>
+<span class="c1">###  Specifying additional modes will add to the CPU burden of the sysem and even more significantly to the peak usage of the /tmp/wsprdaemon tmpfd (ramdisk) file system</span>
+<span class="c1">###  In 3.0.2.4 and later, WD calculates the peak usages of the /tmp/wsprdaemon file system and warns if that file system may overflow.</span>
+<span class="c1">###  For FST4W modes spectral width estimation is enabled and is available in the wsprdaemon_spots_s table in database tutorial on wd3.wsprdaemon.org as &#39;metric&#39;</span>
+<span class="c1">### So the form of each line is  &quot;HH:MM   RECEIVER,BAND[,MODE_1[:Mode2[...]]...] &quot;.  Here are some examples:</span>
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE_simple</span><span class="o">=</span><span class="p">(</span>
+    <span class="s2">&quot;00:00                       KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+<span class="p">)</span>
+
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE_complex</span><span class="o">=</span><span class="p">(</span>
+    <span class="s2">&quot;sunrise-01:00               KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12          &quot;</span>
+    <span class="s2">&quot;sunrise+01:00                          KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+    <span class="s2">&quot;09:00                       KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12          &quot;</span>
+    <span class="s2">&quot;10:00                                  KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+    <span class="s2">&quot;11:00                                             KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+    <span class="s2">&quot;18:00           KIWI_0,2200 KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15                    &quot;</span>
+    <span class="s2">&quot;sunset-01:00                           KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+    <span class="s2">&quot;sunset+01:00                KIWI_0,630 KIWI_0,160 KIWI_1,80 KIWI_2,80eu KIWI_2,60 KIWI_2,60eu KIWI_1,40 KIWI_1,30 KIWI_1,20 KIWI_1,17 KIWI_1,15 KIWI_1,12 KIWI_1,10&quot;</span>
+<span class="p">)</span>
+
+<span class="c1">### KA9Q + and RX-888 Mk II can easily decode all the bands as long as you have enough CPU</span>
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE_ka9q</span><span class="o">=</span><span class="p">(</span>
+    <span class="s2">&quot;00:00             KA9Q_0,2200,W2:F2:F5  KA9Q_0,630,W2:F2:F5  KA9Q_0,160,W2:F2:F5  KA9Q_0,80,W2:F2:F5  KA9Q_0,80eu,W2:F2:F5  KA9Q_0,60,W2:F2:F5  KA9Q_0,60eu,W2:F2:F5  KA9Q_0,40,W2:F2:F5</span>
+                       <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">30</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>    <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>   <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">17</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>  <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">15</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>    <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>  <span class="n">KA9Q_0</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE_merged</span><span class="o">=</span><span class="p">(</span>
+    <span class="s2">&quot;00:00 MERG_K01_Q01,2200,W2:F2:F5 MERG_K01_Q01,630,W2:F2:F5   MERG_K01_Q01,160,W2:F2:F5  MERG_K01_Q01,80,W2:F2:F5  MERG_K01_Q01,80eu,W2:F2:F5</span>
+           <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">60</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>   <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">60</span><span class="n">eu</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>  <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">40</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>   <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">30</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>  <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">22</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>
+           <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>   <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">17</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>    <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">15</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>   <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>  <span class="n">MERG_K01_Q01</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+
+<span class="c1">### This is how to define IQ recording+archiving jobs.  We are decoding WSPR-2 and FST4W on 20M, recording and archiving a wav file of 20M WSPR,</span>
+<span class="c1">### And recording and archiving a a wav file of 10 MHz WWV.  The series of 1 minute long wav files are losslessly compressed by &#39;flac&#39; by about 50% and stored in a series of</span>
+<span class="c1">### tar files found in ~/wsprdaemon/wav-archive.d/.  A new tar file is created at each odd minute and it contains all of the wav files from the precious 2 minutes.</span>
+<span class="c1">### &#39;tar -tf xxxx.tar&#39; will list the wav files in the tar file.</span>
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE_iq</span><span class="o">=</span><span class="p">(</span>
+     <span class="s2">&quot;00:00     KIWI_0,20,W2:F2  KA9Q_0_WSPR_IQ,20,I1  KA9Q_0_WWV_IQ,WWV_10,I1&quot;</span>
+<span class="p">)</span>
+
+<span class="c1">### This array WSPR_SCHEDULE defines the running configuration.  Here we make the simple configuration defined above the active one:</span>
+<span class="c1">#declare WSPR_SCHEDULE=( &quot;${WSPR_SCHEDULE_merged[@]}&quot; )</span>
+<span class="c1">#declare WSPR_SCHEDULE=( &quot;${WSPR_SCHEDULE_simple[@]}&quot; )</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
