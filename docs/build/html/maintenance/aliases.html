@@ -81,16 +81,23 @@
 <li class="toctree-l1"><a class="reference internal" href="operating.html">Operating wsprdaemon</a></li>
 <li class="toctree-l1"><a class="reference internal" href="monitoring.html">Monitoring wsprdaemon operation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Aliases for monitoring and interacting with wsprdaemon</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#id1"></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#source-wsprdaemon-bash-aliases-on-18-04-2024">source : wsprdaemon/bash-aliases on 18-04-2024</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#latest-aliases-from-branch-3-3-1">Latest Aliases from branch 3.3.1</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems">This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#each-element-containsa-the-function-name-a-comma-seperated-list-of-its-aliases-and-a-description-of-it">Each element containsa the function name, a comma-seperated list of its aliases, and a description of it</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#add-sourcing-this-file-to-bash-aliases-so-that-these-bash-aliases-and-functions-are-defined-in-every-bash-session">Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#reload-the-local-bash-aliases-and-funtions-defined-in-its-bash-aliases-which-will-include-this-file-after-rci-has-been-executed">Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after ‘rci’ has been executed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tmux-alias">tmux alias</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#git-aliases">git aliases</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias">Reloads these functions and aliases into the users running bash (must be an alias)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#aliases-from-3-2-3-circa-18-04-2024">Aliases from 3.2.3 circa 18-04-2024</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after ‘rci’ has been executed</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#common-usages-of-linux-commands">Common usages of Linux commands</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#get-pub-file-for-a-copy-past-to-remote-server-s-ssh-authorized-keys-file">Get pub file for a copy/past to remote server’s .ssh/authorized_keys file</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#aliases-which-call-wd">Aliases which call WD</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#wd-systemctl">WD systemctl</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#tmux-aliases">tmux aliases</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#git-aliases">git aliases</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias">Reloads these functions and aliases into the users running bash (must be an alias)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">git aliases</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Reloads these functions and aliases into the users running bash (must be an alias)</a></li>
 </ul>
 </li>
 </ul>
@@ -140,10 +147,153 @@
              
   <section id="aliases-for-monitoring-and-interacting-with-wsprdaemon">
 <h1>Aliases for monitoring and interacting with wsprdaemon<a class="headerlink" href="#aliases-for-monitoring-and-interacting-with-wsprdaemon" title="Link to this heading"></a></h1>
-<section id="id1">
-<h2><a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
-<section id="source-wsprdaemon-bash-aliases-on-18-04-2024">
-<h3>source : wsprdaemon/bash-aliases on 18-04-2024<a class="headerlink" href="#source-wsprdaemon-bash-aliases-on-18-04-2024" title="Link to this heading"></a></h3>
+<p>These aliases (in ~wsprdaemon/bash-aliases) can provide very useful functions with a few keystrokes.  The documentation for what they do remains minimal.  Also, take note that some of them will only work in a particular directory.</p>
+<section id="latest-aliases-from-branch-3-3-1">
+<h2>Latest Aliases from branch 3.3.1<a class="headerlink" href="#latest-aliases-from-branch-3-3-1" title="Link to this heading"></a></h2>
+<section id="this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems">
+<h3>This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems<a class="headerlink" href="#this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems" title="Link to this heading"></a></h3>
+<p>alias wdtw=”test_get_wav_file_list”</p>
+</section>
+<section id="each-element-containsa-the-function-name-a-comma-seperated-list-of-its-aliases-and-a-description-of-it">
+<h3>Each element containsa the function name, a comma-seperated list of its aliases, and a description of it<a class="headerlink" href="#each-element-containsa-the-function-name-a-comma-seperated-list-of-its-aliases-and-a-description-of-it" title="Link to this heading"></a></h3>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>local alias_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[1]}
+    local alias_names=&quot;${help_string_list[1]}&quot;
+    if [[ ${#alias_names} -gt ${alias_name_field_width} ]]; then
+        alias_name_field_width=${#alias_names}
+printf &quot;%${function_name_field_width}s  %${alias_name_field_width}s  %s\n&quot; \
+    local alias_names=&quot;${help_string_list[1]}&quot;
+    printf &quot;%${function_name_field_width}s  %${alias_name_field_width}s  %s\n&quot; &quot;${function_name}&quot; &quot;${alias_names}&quot; &quot;${description_string}&quot;
+</pre></div>
+</div>
+<p>alias wd-k=wd-kill-uploader
+alias wdk=wd-kill-uploader
+alias wd-un=wd-watch-wsprnet-upload-log
+alias wdln=wd-watch-wsprnet-upload-log
+alias wd-gp=’git push’
+alias wd-gl=’git log | head -n 12’</p>
+</section>
+<section id="add-sourcing-this-file-to-bash-aliases-so-that-these-bash-aliases-and-functions-are-defined-in-every-bash-session">
+<h3>Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session<a class="headerlink" href="#add-sourcing-this-file-to-bash-aliases-so-that-these-bash-aliases-and-functions-are-defined-in-every-bash-session" title="Link to this heading"></a></h3>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>if [[ ! -f ~/.bash_aliases ]] || ! grep &#39;/bash-aliases&#39; ~/.bash_aliases &gt; /dev/null ; then
+</pre></div>
+</div>
+<p>if [[ -f ~/wsprdaemon/bash-aliases ]]; then
+source ~/wsprdaemon/bash-aliases
+“ &gt;&gt; ~/.bash_aliases
+echo “A reference to ‘~/wsprdaemon/bash-aliases’ has been added to ‘ ~/.bash_aliases’”
+[[ ${verbosity-0} -gt 1 ]] &amp;&amp; echo “bash-aliases has already been installed in ~/.bash_aliases”
+alias wdrci=’wd-rci’</p>
+</section>
+<section id="reload-the-local-bash-aliases-and-funtions-defined-in-its-bash-aliases-which-will-include-this-file-after-rci-has-been-executed">
+<h3>Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after ‘rci’ has been executed<a class="headerlink" href="#reload-the-local-bash-aliases-and-funtions-defined-in-its-bash-aliases-which-will-include-this-file-after-rci-has-been-executed" title="Link to this heading"></a></h3>
+<p>alias wd-rcc=’source ~/.bash_aliases’
+alias wd-rcc=’wd-rcc’
+alias l=’ls -CF’
+alias ll=’ls -l’
+alias lrt=’ls -lrt’
+alias la=’ls -A’
+alias pd=pushd
+alias d=dirs
+alias ag=’alias | grep’
+alias h=history
+alias hg=’history | grep’
+alias j=jobs
+alias cdw=’cd ~/wsprdaemon/’
+alias cdk=’cd ~/wsprdaemon/ka9q-radio’
+alias cdr=’cd /etc/radio’
+alias cdrf=’cd /run/ft8’
+alias cds=’cd /etc/systemd/system’
+alias cdt=’cd /dev/shm/wsprdaemon’
+alias cdu=’cd /dev/shm/wsprdaemon/uploads.d/’
+alias cdww=’cd ~/wsprdaemon/wav-archive.d/’
+alias vib=’vi ~/wsprdaemon/bash-aliases’
+alias vibb=’vi ~/.bash_aliases’
+alias viw=’vi ~/wsprdaemon/wsprdaemon.sh’
+alias vic=’vi ~/wsprdaemon/wsprdaemon.conf’
+alias vir=’vi ~/wsprdaemon/radiod&#64;rx888-wsprdaemon.conf’
+alias virr=’vi /etc/radio/radiod&#64;rx888-wsprdaemon.conf’
+alias tf=’tail -F -n 40’
+alias tfd=’tf decoding_daemon.log’
+alias tfr=’tf wav_recording_daemon.log’
+alias tfw=’tf ~/wsprdaemon/watchdog_daemon.log’
+alias g=’git’
+alias gc=’git commit’
+alias gd=’git diff’
+alias gs=’git status | grep -B 100 “Untracked files”’
+alias gl=’git log | head’
+alias catss=’cat ~/.ssh/*pub’
+scp -p ~/.vimrc ~/.bash_aliases ${remote_ip}:
+alias wd=’~/wsprdaemon/wsprdaemon.sh’
+alias wdl=’wd -l’
+alias wdle=’wd -l e’
+alias wdld=’wd -l d’
+alias wda=’wd -a’       ### Instruct systemctl to if needed install and configure WD as a service, and then run ‘systemctl start wsprdaemon’
+alias WDA=’wd -A’       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wdz=’wd-killall’  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
+alias wds=’wd -s’
+alias wdv=’wd -V’
+alias wdvv=’(cd ~/wsprdaemon; echo “$(git symbolic-ref –short HEAD 2&gt;/dev/null)-$(git rev-list –count HEAD)” )’
+alias wdd=’wd -d’       ### Increment the verbosity level of all running daemons in CWD
+alias wddd=’wd -D’      ### Decrement
+alias wdgi=’wd-grape-info’
+alias wd-wav-archive=’df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2’
+alias wdwaf=wd-wav-archive-fix
+alias wdssp=wd-ssh-psws
+alias wd-ov=’wd-overloads’
+alias wdov=’wd-ov’
+alias wd-q=’wd-query’
+alias wdq=’wd-query’
+alias wd-syslog=’sudo tail -F /var/log/syslog’
+alias wd-syslogl=’sudo less /var/log/syslog’
+alias wdsl=’wd-syslog’
+alias wd-wd-rec=’watch “ps aux | grep wd-rec | grep -v grep | sort -k 14,14n -k 15r”’
+alias wdwd=’wd-wd-rec’
+#alias wd-rl=’sudo journalctl -u radiod&#64;rx888-wsprdaemon.service’     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
+alias wdrl=’wd-rl’
+alias wd-ra=’wd-radiod-action start’  ### show it’s status
+alias wdra=’wd-ra’
+alias wd-rz=’wd-radiod-action stop’  ### show it’s status
+alias wdrz=’wd-rz’
+alias wd-rs=’wd-radiod-action status’  ### show it’s status
+alias wdrs=’wd-rs’
+alias wdrv=’wd-radiod-conf-edit’
+alias wd-ss=’sudo systemctl’
+alias wdss=wd-ss
+alias wd-wd-start=’sudo systemctl start wsprdaemon.service’
+alias wdwa=’wd-wd-start’
+alias wd-wd-stop=’sudo systemctl stop wsprdaemon.service’
+alias wdwz=’wd-wd-stop’
+alias wd-wd-status=’sudo systemctl status wsprdaemon.service’
+alias wdws=’wd-wd-status’
+alias wd9c=wd-radiod-control
+alias wdrc=wd-radiod-control
+alias wdrg=’wd-rc-gain’
+alias wd9m=wd-9m</p>
+</section>
+<section id="tmux-alias">
+<h3>tmux alias<a class="headerlink" href="#tmux-alias" title="Link to this heading"></a></h3>
+<p>alias wd-wait=’wd-wait-for_wspr-gap’
+alias wd-nf=”awk ‘{printf “%2d: %s\n”, NF, $0}’”</p>
+</section>
+<section id="git-aliases">
+<h3>git aliases<a class="headerlink" href="#git-aliases" title="Link to this heading"></a></h3>
+<p>alias wd-get-my-public_ip=”dig TXT +short o-o.myaddr.l.google.com &#64;ns1.google.com | sed ‘s/”//g’”
+alias wd-watch-wavs &gt;&amp; /dev/null &amp;&amp; unalias wd-watch-wavs
+alias wdww=’wd-watch-wavs’
+alias wdps=’ps aux | grep “wd-record|pcmrecord” | grep -v grep’
+alias wdssr=wd-ssh-to-wdclient</p>
+</section>
+<section id="reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias">
+<h3>Reloads these functions and aliases into the users running bash (must be an alias)<a class="headerlink" href="#reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias" title="Link to this heading"></a></h3>
+<p>alias wd-bash_aliases=’source ~/wsprdaemon/bash-aliases’
+alias wdba=’wd-bash_aliases’
+alias wd-=’wd-help’
+alias wd-h=’wd-help’
+alias wdg=’wd -g’</p>
+</section>
+<hr class="docutils" />
+<section id="aliases-from-3-2-3-circa-18-04-2024">
+<h3>Aliases from 3.2.3 circa 18-04-2024<a class="headerlink" href="#aliases-from-3-2-3-circa-18-04-2024" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>alias wd-k=wd-kill-uploader</p></li>
 <li><p>alias wdk=wd-kill-uploader</p></li>
@@ -156,8 +306,8 @@
 <li><p>alias wdrci=’wd-rci’</p></li>
 </ul>
 </section>
-<section id="reload-the-local-bash-aliases-and-funtions-defined-in-its-bash-aliases-which-will-include-this-file-after-rci-has-been-executed">
-<h3>Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after ‘rci’ has been executed<a class="headerlink" href="#reload-the-local-bash-aliases-and-funtions-defined-in-its-bash-aliases-which-will-include-this-file-after-rci-has-been-executed" title="Link to this heading"></a></h3>
+<section id="id1">
+<h3>Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after ‘rci’ has been executed<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>alias wd-rcc=’source ~/.bash_aliases’</p></li>
 <li><p>alias wd-rcc=’wd-rcc’</p></li>
@@ -272,8 +422,8 @@
 <li><p>alias wd-nf=”awk ‘{printf “%2d: %s\n”, NF, $0}’”</p></li>
 </ul>
 </section>
-<section id="git-aliases">
-<h3>git aliases<a class="headerlink" href="#git-aliases" title="Link to this heading"></a></h3>
+<section id="id2">
+<h3>git aliases<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>alias wd-get-my-public_ip=”dig TXT +short o-o.myaddr.l.google.com &#64;ns1.google.com | sed ‘s/”//g’”</p></li>
 <li><p>alias wd-watch-wavs=’watch “ls -lr *.wav”’ ### watch for wd-record or kiwirecorder to create wav files in cwd</p></li>
@@ -282,8 +432,8 @@
 <li><p>alias wdssr=wd-ssh-to-wdclient</p></li>
 </ul>
 </section>
-<section id="reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias">
-<h3>Reloads these functions and aliases into the users running bash (must be an alias)<a class="headerlink" href="#reloads-these-functions-and-aliases-into-the-users-running-bash-must-be-an-alias" title="Link to this heading"></a></h3>
+<section id="id3">
+<h3>Reloads these functions and aliases into the users running bash (must be an alias)<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>alias wd-bash_aliases=’source ~/wsprdaemon/bash-aliases’</p></li>
 <li><p>alias wdba=’wd-bash_aliases’</p></li>
