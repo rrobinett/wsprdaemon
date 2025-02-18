@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multicast Requirements &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>WSPR spots &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -19,8 +19,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Preparing for installation" href="../installation/preparation.html" />
-    <link rel="prev" title="Basic Network Requirements" href="basics.html" /> 
+    <link rel="next" title="HamSCI WWV/H and CHU Monitoring" href="grape.html" />
+    <link rel="prev" title="Configuring ka9q-radio: radiod@.conf" href="../configuration/radiod_conf.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -55,9 +55,9 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Multicast Requirements</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
@@ -70,10 +70,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Working Results</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">WSPR spots</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#wspr-rocks">WSPR.Rocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wspr-live">WSPR.Live</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wsprnet">WSPRnet</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="psk.html">PSKReporter</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
@@ -113,9 +118,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Multicast Requirements</li>
+      <li class="breadcrumb-item active">WSPR spots</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/network/multicast.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/results/wspr.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -123,17 +128,37 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="multicast-requirements">
-<h1>Multicast Requirements<a class="headerlink" href="#multicast-requirements" title="Link to this heading"></a></h1>
-<p><img alt="" src="../_images/IGMP_switch.png" /></p>
+  <section id="wspr-spots">
+<h1>WSPR spots<a class="headerlink" href="#wspr-spots" title="Link to this heading"></a></h1>
+<p>WSPR, which stands for Weak Signal Propagation Reporter, is a protocol used in amateur radio for assessing radio signal propagation. It allows users to send and receive very low-power transmissions over long distances, which are then automatically reported by receiving stations. Here are some key points about WSPR:</p>
+<p><strong>Purpose</strong>: WSPR is primarily used for scientific and testing purposes, helping amateur radio operators analyze radio wave propagation conditions.</p>
+<p><strong>Operation</strong>: WSPR operates on specific frequencies and uses a special encoding method for its transmissions. Unlike traditional radio communication, WSPR does not support two-way conversations; it focuses on sending short, beacon-like signals.</p>
+<p><strong>Implementation</strong>: The WSPR protocol can be implemented in software, and it is compatible with various hardware setups, making it accessible for many amateur radio operators.</p>
+<p><strong>Community and Reporting</strong>: WSPR signals are often received by automated software-defined radio (SDR) receivers, which can report back the signal’s strength and other details via the Internet, contributing to a global database of propagation conditions.</p>
+<p>For more detailed information, you may refer to the <a class="reference external" href="https://en.wikipedia.org/wiki/WSPR_(amateur_radio_software)">WSPR Wikipedia page</a>.</p>
+<section id="wspr-rocks">
+<h2>WSPR.Rocks<a class="headerlink" href="#wspr-rocks" title="Link to this heading"></a></h2>
+<p>Managed by Philip Barnard VK7JJ.
+Presents an interface to a Clickhouse DB courtesy of Arne at wspr.live and hosted at wsprdaemon.org.</p>
+<p><a class="reference external" href="https://wspr.rocks">wspr.rocks</a></p>
+</section>
+<section id="wspr-live">
+<h2>WSPR.Live<a class="headerlink" href="#wspr-live" title="Link to this heading"></a></h2>
+<p>WSPR.live allows you to do analysis on the real time wspr spot data. The database contains all spots ever reported to wsprnet.org and allows public access to the data.</p>
+<p><a class="reference external" href="https://wspr.live">wspr.live</a></p>
+</section>
+<section id="wsprnet">
+<h2>WSPRnet<a class="headerlink" href="#wsprnet" title="Link to this heading"></a></h2>
+<p>The Weak Signal Propagation Reporter Network is a group of amateur radio operators using K1JT’s MEPT_JT digital mode to probe radio frequency propagation conditions using very low power (QRP/QRPp) transmissions. The software is open source, and the data collected are available to the public through <a class="reference external" href="https://wsprnet.org/">this site</a>.</p>
+</section>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="basics.html" class="btn btn-neutral float-left" title="Basic Network Requirements" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../installation/preparation.html" class="btn btn-neutral float-right" title="Preparing for installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../configuration/radiod_conf.html" class="btn btn-neutral float-left" title="Configuring ka9q-radio: radiod@.conf" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="grape.html" class="btn btn-neutral float-right" title="HamSCI WWV/H and CHU Monitoring" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
