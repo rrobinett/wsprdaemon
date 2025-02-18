@@ -90,6 +90,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#use-wdln">Use wdln</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#use-wdle">Use wdle</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#check-recordings">Check recordings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-the-logs">Check the logs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#logs-in-wsprdaemon">logs in ~/wsprdaemon</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#logs-in-dev-shm-wsprdaemon">logs in /dev/shm/wsprdaemon</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="typicals.html">Some typical problems</a></li>
@@ -163,6 +168,63 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wdww</span>
 </pre></div>
 </div>
+</section>
+<section id="check-the-logs">
+<h2>Check the logs<a class="headerlink" href="#check-the-logs" title="Link to this heading"></a></h2>
+<p>You can locate logs using something like the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>find . -type f -name &quot;*.log&quot; ! -name &quot;*sox.log&quot; ! -name &quot;*error.log&quot;
+</pre></div>
+</div>
+<p>where:</p>
+<ul class="simple">
+<li><p>“.” indicates starting the search from the current directory</p></li>
+<li><p>“-type” directs the search only for files</p></li>
+<li><p>“-name” specifies the filename of interest</p></li>
+<li><p>“! -name” specifies names to exclude</p></li>
+</ul>
+<section id="logs-in-wsprdaemon">
+<h3>logs in ~/wsprdaemon<a class="headerlink" href="#logs-in-wsprdaemon" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>./wav-archive.d/grape_upload_daemon.log</p></li>
+<li><p>./ka9q-radio_build.log</p></li>
+<li><p>./grep.log</p></li>
+<li><p>./ps.log</p></li>
+<li><p>./diff.log</p></li>
+<li><p>./git.log</p></li>
+<li><p>./uploads.d/wsprdaemon.d/upload_to_wsprdaemon_daemon.log</p></li>
+<li><p>./uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log</p></li>
+<li><p>./ft8_lib_build.log</p></li>
+<li><p>./onion-build.log</p></li>
+<li><p>./noise_plot.log</p></li>
+<li><p>./ka9q_web_daemon.log</p></li>
+<li><p>./ka9q-web_build.log</p></li>
+<li><p>./watchdog_daemon.log</p></li>
+<li><p>./ka9q_web_service_8081.log</p></li>
+</ul>
+</section>
+<section id="logs-in-dev-shm-wsprdaemon">
+<h3>logs in /dev/shm/wsprdaemon<a class="headerlink" href="#logs-in-dev-shm-wsprdaemon" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/posting_daemon.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/decoding_daemon.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/find.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/metadump.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/ka9q_status.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/sox-stats.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/adc_overloads.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/sox.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/get-peak-wav-sample.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/W_120/decoding_daemon.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/wav_status.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/add_derived.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE/80eu/printf.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE_WWV/wav-record-daemon-all.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE_WWV/pcmrecord-errors.log</p></li>
+<li><p>./recording.d/KA9Q_LONGWIRE_WWV/pcmrecord-outs.log</p></li>
+<li><p>./uploads.d/wsprdaemon.d/grep.log</p></li>
+<li><p>./uploads.d/wsprnet.d/curl.log</p></li>
+</ul>
+</section>
 </section>
 </section>
 
