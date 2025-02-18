@@ -23,7 +23,7 @@ samprate =   64800000     # 128 Msps will eventual burn out the stock RX888 Mk I
 #gain = 1.5               # AD8370 VGA gain, -25 to +17 dB (low gain mode) or -8 to +34 dB (high gain mode)
 ```
 
-Phil Karn's comprehensive documentation of this section:
+[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 ## Hardware Configuration
 ----------------------
