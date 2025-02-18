@@ -17,7 +17,7 @@ ttl = 0                 # Too many WD sites don't have IGMP aware ethernet swtic
 #iface = enp1s0
 ```
 
-Phil Karn's comprehensive documentation of this section:
+[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 ## The [global] Section
 --------------------

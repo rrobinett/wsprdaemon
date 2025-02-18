@@ -45,7 +45,7 @@ freq = "3m575000 7m047500 10m140000 14m080000 18m10k000 21m140000 24m919000 28m1
 
 ```
 
-Phil Karn's comprehensive documentation of this section:
+[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 A *radiod* configuration file may contain one or more sections
 configuring receiver channels. This
