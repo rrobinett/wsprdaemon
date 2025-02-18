@@ -68,7 +68,10 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">ka9q-web</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">ka9q-web</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#viewing-the-ka9q-web-spectrum-display">Viewing the ka9q-web spectrum display</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Working Results</span></p>
 <ul>
@@ -126,14 +129,30 @@
              
   <section id="ka9q-web">
 <h1>ka9q-web<a class="headerlink" href="#ka9q-web" title="Link to this heading"></a></h1>
-<p>This software builds in reference to ka9q-radio and requires no specific configuration.</p>
-<p>John Melton G0ORX started this with a proof-of-concept version in late 2023. This adjunct to ka9q-radio displays a spectrum, waterfall, and other data from radiod.  Scott Newell N5TNL has since improved it dramatically in collaboration with Rob Robinett AI6VN, Phil Karn KA9Q, Glenn Elmore N6GN, Jim Lill WA2ZKD, and desultory kibbitzers.</p>
+<p>This software builds in reference to ka9q-radio and requires no specific configuration.<br />
+wsprdaemon typically starts it automatically.  You invoke it manually, if necessary, thus:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ka9q</span><span class="o">-</span><span class="n">web</span> <span class="o">-</span><span class="n">m</span> <span class="n">your</span><span class="o">-</span><span class="n">radiod</span><span class="o">-</span><span class="n">status</span><span class="o">-</span><span class="n">stream</span><span class="o">.</span><span class="n">local</span> <span class="o">&amp;</span>
+</pre></div>
+</div>
+<p>where “your-radiod-status-stream” is the name specified in your radiod&#64;.conf (often hf.local or hf-status.local)</p>
+<section id="viewing-the-ka9q-web-spectrum-display">
+<h2>Viewing the ka9q-web spectrum display<a class="headerlink" href="#viewing-the-ka9q-web-spectrum-display" title="Link to this heading"></a></h2>
+<p>Logged in an running everything locally, direct your browser to http://localhost:8081.</p>
+<p>If managing the computer remotely using ssh, you can set up an ssh tunnel from the remote computer to your local computer like this:</p>
+<p>From your local machine, run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span> <span class="o">-</span><span class="n">L</span> <span class="mi">8081</span><span class="p">:</span><span class="n">localhost</span><span class="p">:</span><span class="mi">8081</span> <span class="n">wsprdaemon</span><span class="nd">@XX</span>
+</pre></div>
+</div>
+<p>where XX is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)</p>
+<p>Then direct your browser to http://localhost:8081 to view ka9q-web from the XX remote machine.</p>
+<p><strong>John Melton G0ORX</strong> started this with a proof-of-concept version in late 2023. This adjunct to ka9q-radio displays a spectrum, waterfall, and other data from radiod.  <strong>Scott Newell N5TNL</strong> has since improved it dramatically in collaboration with <strong>Rob Robinett AI6VN</strong>, <strong>Phil Karn KA9Q</strong>, <strong>Glenn Elmore N6GN</strong>, <strong>Jim Lill WA2ZKD</strong>, and desultory kibbitzers.</p>
 <ul class="simple">
 <li><p>Web Server by John Melton, G0ORX (https://github.com/g0orx/ka9q-radio)</p></li>
 <li><p>ka9q-radio by Phil Karn, KA9Q (https://github.com/ka9q/ka9q-radio)</p></li>
 <li><p>Onion Web Framework by David Moreno (https://github.com/davidmoreno/onion)</p></li>
 <li><p>Spectrum/Waterfall Display by Jeppe Ledet-Pedersen (https://github.com/jledet/waterfall)</p></li>
 </ul>
+</section>
 </section>
 
 
