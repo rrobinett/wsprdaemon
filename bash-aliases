@@ -18,6 +18,7 @@ function get_pid_start_epoch() {
 ### It expects at least 1 spot in every 2 minute cycle and accomodates 5 minute cycles with spots
 alias wdlc='wd-wsprlog-check'      ## == "WD wspr log check
 function wd-wsprlog-check() {
+    local wspr_cycles_to_search=${1-400}
 
     local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
     local wd_watchdog_start_epoch=0
@@ -42,7 +43,7 @@ function wd-wsprlog-check() {
     if [[ -f /var/log/wspr.log.1 ]]; then
         wspr_log_files="/var/log/wspr.log.1 $wspr_log_files"
     fi
-    awk '{printf "%s %s\n", $1, $2}' $wspr_log_files | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
+    awk '{printf "%s %s\n", $1, $2}' $wspr_log_files | sort | uniq -c | tail -n $wspr_cycles_to_search > /tmp/wspr-spots-counts.log
 
     local last_line
     local last_line_epoch=0
