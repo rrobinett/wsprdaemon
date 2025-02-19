@@ -14,6 +14,9 @@ function get_pid_start_epoch() {
     echo $start_epoch
 }
 
+### Looks at the most recent 400 wspr cycles and looks for missing cycles
+### It expects at least 1 spot in every 2 minute cycle and accomodates 5 minute cycles with spots
+alias wdlc='wd-wsprlog-check'      ## == "WD wspr log check
 function wd-wsprlog-check() {
 
     local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
@@ -31,13 +34,14 @@ function wd-wsprlog-check() {
         fi
     fi
 
-    awk '{printf "%s %s\n", $1, $2}' /var/log/wspr.log | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
+    awk '{printf "%s %s\n", $1, $2}' /var/log/wspr.log{.1,} | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
 
-    local lat_line
+    local last_line
     local last_line_epoch=0
+    local contiguous_cycles_count=0
     local spot_count_line
     local spot_count_line_list
-    local needs_nl=0
+
     while read spot_count_line; do
         spot_count_line_list=( $spot_count_line )
 
@@ -46,46 +50,61 @@ function wd-wsprlog-check() {
             return
         fi
 
-        set +x
         local this_line_epoch=$( date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[2]:0:2}:${spot_count_line_list[2]:2:2}" +%s )
 
         if [[ -z "$this_line_epoch" ]]; then
             echo "ERROR: bad line $spot_count_line"
             return
         fi
-
+        if (( wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
+            if (( contiguous_cycles_count )); then
+                printf "(%d) contiguous cycles\n"  $contiguous_cycles_count
+                contiguous_cycles_count=0
+            fi
+            printf "%s: Is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+            wd_watchdog_start_epoch=0
+        fi
+ 
         if (( last_line_epoch == 0 )) ; then
-            printf "%s %s: %3d spots is the first cycle in the log\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            printf "%s %s: with %3d spots is the first cycle of the log\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            last_line="$spot_count_line"
+            last_line_epoch=$this_line_epoch
+            continue
+        fi
+
+        local last_line_list=( $last_line )
+        (( verbosity > 1 ))  && printf "\n\nThis epoch is %d at %s %s, last epoch is %d at %s %s\n" $this_line_epoch ${spot_count_line_list[1]} ${spot_count_line_list[2]} $last_line_epoch "${last_line_list[1]}"  "${last_line_list[2]}"
+        local expected_line_epoch
+        local last_line_minute_digit="${last_line: -1}"
+        if [[ "${last_line: -1}" == "5" ]]; then
+            ### After a 5/15/25/35/45/55 minute spot, the next onw should be one minute later
+            (( verbosity > 1 )) && echo "Last line was a 5/15/25/..., so this line should be 60 seconds later"
+            expected_line_epoch=$(( last_line_epoch + 60 ))
         else
-            local expected_line_epoch=$(( last_line_epoch + 120 ))
-            if ((  wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
-                if (( needs_nl )); then
-                    printf "\n" $needs_nl
-                    needs_nl=0
-                fi
-                printf "%s: Is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
-                wd_watchdog_start_epoch=0
-            fi
-            if (( this_line_epoch ==  expected_line_epoch )) ; then
-                printf "+"
-                (( ++needs_nl ))
+            if (( this_line_epoch == (last_line_epoch + 60) )); then
+                (( verbosity > 1 )) && echo "This line is 60 sesconds after the last"
+                expected_line_epoch=$(( last_line_epoch + 60 ))   ### This a 5/15/... minute packet
             else
-                if (( needs_nl )); then
-                    printf " (%d) cycles\n"  $needs_nl
-                    needs_nl=0
-                fi
-                printf "%s %s: %3d spots after gap of %2d  WSPR cycles. The last cycle reported '%s'\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+                (( verbosity > 1 )) && echo "this line should be 120 seconds after the last line"
+                expected_line_epoch=$(( last_line_epoch + 120 ))
             fi
+        fi
+
+        if (( this_line_epoch ==  expected_line_epoch )) ; then
+            (( verbosity > 1 )) && printf "%s %s: %3d spots as expected\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            (( ++contiguous_cycles_count ))
+        else
+            printf "%s %s: has %3d spots. After %d contiguous spot reports found gap of %2d WSPR cycles. The last cycle reported '%s'\n" \
+                    $contiguous_cycles_count ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+            contiguous_cycles_count=0
         fi
         last_line="$spot_count_line"
         last_line_epoch=$this_line_epoch
-    done <  /tmp/wspr-spots-counts.log
+    done <  <(cat /tmp/wspr-spots-counts.log)
 
     spot_count_line_list=( $(tail -n 1 /tmp/wspr-spots-counts.log) )
-    if (( needs_nl )); then
-        printf " (%d) cycles\n" $needs_nl
-    fi
-    printf "%s %s: %3d spots in most recent cycle\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+    printf "%s %s is the most recent cycle which has %3d spots. It ends a run of %d contiguous wspr cycles\n" \
+               ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count
 }
 
 ### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
