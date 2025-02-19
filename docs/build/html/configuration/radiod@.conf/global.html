@@ -45,6 +45,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../description/validity.html">Validity of data path and results</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
 <ul>
@@ -129,6 +130,7 @@
 <span class="c1"># these next two establish defaults for all demod sections</span>
 <span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span> <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
 <span class="n">status</span> <span class="o">=</span> <span class="n">hf</span><span class="o">.</span><span class="n">local</span>       <span class="c1"># DNS name for receiver status and commands</span>
+<span class="c1"># data = hf-data.local    # not strictly necessary</span>
 <span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>        <span class="c1"># default output sample rate</span>
 <span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>              <span class="c1"># default receive mode</span>
 <span class="c1"># rest are defaults</span>

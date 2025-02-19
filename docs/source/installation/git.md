@@ -1,5 +1,7 @@
 # Getting the software with GIT
 
+GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  Version 3.3.1 remains in a development branch.
+
 ## Clone wsprdaemon from github.com
 
 From /home/wsprdaemon (or the installing user's home directory) [See Preparing the Installation](./preparation.md)
@@ -9,13 +11,13 @@ cd wsprdaemon
 ```
 Execute all further git commands in the /home/wsprdaemon/wsprdaemon directory.
 
-Ensure you have the latest version:
+Ensure you have the latest stable version:
 ```
 git checkout master
 git status
 git log
 ```
-Subsequently, to update from master (or from any branch of master), use:
+Subsequently, to apply any updates of the latest version, use:
 ```
 git pull
 ```
@@ -36,4 +38,7 @@ Having prepared and cloned the wsprdaemon software, now you can run it:
 ```
 wd
 ```
-This sets the stage and tells you to configure wsprdaemon.conf.
+This sets the stage and prompts you to configure your setup:
+- [wsprdaemon configuration](../configuration/wd_conf.md)
+- [radiod configuration](../configuration/radiod_conf.md)
+- KiwiSDR

@@ -49,12 +49,12 @@ the device type, but this is not required.
 
 Six SDR front ends are currently supported in *ka9q-radio*:
 
-[airspy](airspy.md) - Airspy R2, Airspy Mini]  
-[airspyhf](airspy.md) - Airspy HF+  
-[funcube](funcube.md) - AMSAT UK Funcube Pro+ dongle  
-[rx888](rx888.md) - RX888 Mkii (direct conversion only)  
-[rtlsdr](rtlsdr.md) - Generic RTL-SDR dongle (VHF/UHF only)  
-[sig_gen](sig_gen.md) - synthetic front end with signal generator (to be documented)
+[airspy](https://github.com/ka9q/ka9q-radio/tree/main/docs/airspy.md) - Airspy R2, Airspy Mini  
+[airspyhf](https://github.com/ka9q/ka9q-radio/tree/main/docs/airspy.md) - Airspy HF+  
+[funcube](https://github.com/ka9q/ka9q-radio/tree/main/docs/funcube.md) - AMSAT UK Funcube Pro+ dongle  
+[rx888](https://github.com/ka9q/ka9q-radio/tree/main/docs/rx888.md) - RX888 Mkii (direct conversion only)  
+[rtlsdr](https://github.com/ka9q/ka9q-radio/tree/main/docs/rtlsdr.md) - Generic RTL-SDR dongle (VHF/UHF only)  
+[sig_gen](https://github.com/ka9q/ka9q-radio/tree/main/docs/sig_gen.md) - synthetic front end with signal generator (to be documented)
 
 The configuration of each device type is necessarily
 hardware-dependent, so separate documents describe the options unique

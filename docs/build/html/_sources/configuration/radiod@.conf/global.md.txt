@@ -6,6 +6,7 @@ A typical configuration of this section for wsprdaemon use follows:
 # these next two establish defaults for all demod sections
 hardware = rx888 # use built-in rx888 driver, configured in [rx888]
 status = hf.local       # DNS name for receiver status and commands
+# data = hf-data.local    # not strictly necessary
 samprate = 12000        # default output sample rate
 mode = usb              # default receive mode
 # rest are defaults

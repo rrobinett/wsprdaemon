@@ -1,6 +1,6 @@
 # Preparing for installation
 
-You will install and run the wsprdaemon software in a "wsrdaemon" sub-directory of a regular linux user account, e.g., /home/<username>/wsprdaemon.  Typically, you will create a separate "wsprdaemon" user, e.g., /home/wsprdaemon but you can run it under your own (or another's) account. 
+You will install and run the wsprdaemon software in a "wsrdaemon" sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.  Typically, you will create a separate "wsprdaemon" user, e.g., /home/wsprdaemon but you can run it under your own (or another's) account. 
 
 N.B.  In either case, this account needs sudo privileges as several component installations and process management require it.
 
