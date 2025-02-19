@@ -34,7 +34,15 @@ function wd-wsprlog-check() {
         fi
     fi
 
-    awk '{printf "%s %s\n", $1, $2}' /var/log/wspr.log{.1,} | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
+    local wspr_log_files="/var/log/wspr.log"
+    if [[ ! -f $wspr_log_files ]]; then
+        echo "ERROR: the expected file  $wspr_log_files doesn't exist"
+        return 1
+    fi
+    if [[ -f /var/log/wspr.log.1 ]]; then
+        wspr_log_files="/var/log/wspr.log.1 $wspr_log_files"
+    fi
+    awk '{printf "%s %s\n", $1, $2}' $wspr_log_files | sort | uniq -c | tail -n 400 > /tmp/wspr-spots-counts.log
 
     local last_line
     local last_line_epoch=0
