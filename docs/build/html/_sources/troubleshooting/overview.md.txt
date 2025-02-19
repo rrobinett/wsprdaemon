@@ -45,6 +45,11 @@ where:
 - "-name" specifies the filename of interest
 - "! -name" specifies names to exclude
 
+### logs in /var/log
+
+- /var/log/wspr.log
+- /var/log/ft8.log
+- /var/log/ft4.log
 
 ### logs in ~/wsprdaemon
 
@@ -65,6 +70,8 @@ where:
 - ./ka9q_web_service_8081.log
 
 ### logs in /dev/shm/wsprdaemon
+
+Note: the 2nd and 3rd subdirectories will vary according to your receivers and channels.
 
 - ./recording.d/KA9Q_LONGWIRE/80eu/posting_daemon.log
 - ./recording.d/KA9Q_LONGWIRE/80eu/decoding_daemon.log

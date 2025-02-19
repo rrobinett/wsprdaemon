@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HamSCI WWV/H and CHU Monitoring &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>Validity of data path and results &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -19,8 +19,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="PSKReporter" href="psk.html" />
-    <link rel="prev" title="WSPR spots" href="wspr.html" /> 
+    <link rel="next" title="Operating Sytems" href="../requirements/os.html" />
+    <link rel="prev" title="How wsprdaemon Works" href="how_it_works.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -43,11 +43,11 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="collaborations.html">Collaborations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Validity of data path and results</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
 <ul>
@@ -72,10 +72,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Working Results</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="wspr.html">WSPR spots</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">HamSCI WWV/H and CHU Monitoring</a></li>
-<li class="toctree-l1"><a class="reference internal" href="psk.html">PSKReporter</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
@@ -115,9 +115,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">HamSCI WWV/H and CHU Monitoring</li>
+      <li class="breadcrumb-item active">Validity of data path and results</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/results/grape.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/description/validity.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -125,20 +125,17 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="hamsci-wwv-h-and-chu-monitoring">
-<h1>HamSCI WWV/H and CHU Monitoring<a class="headerlink" href="#hamsci-wwv-h-and-chu-monitoring" title="Link to this heading"></a></h1>
-<p>wsprdaemon software captures data in support of the <a class="reference external" href="https://hamsci.org/psws-overview">HamSCI Personal Space Weather Station project</a>.
-It makes simultaneous I/Q stream recordings of WWV, WWVH, and CHU broadcasts, converts these into digital_rf data repositories and uploads them to the <a class="reference external" href="https://pswsnetwork.caps.ua.edu/">PSWS server at the University of Alabama</a>.</p>
-<p><img alt="" src="../_images/psws.png" /></p>
-<p><img alt="" src="../_images/wwv_obs.png" /></p>
+  <section id="validity-of-data-path-and-results">
+<h1>Validity of data path and results<a class="headerlink" href="#validity-of-data-path-and-results" title="Link to this heading"></a></h1>
+<p>describe the data path and validity checks</p>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="wspr.html" class="btn btn-neutral float-left" title="WSPR spots" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="psk.html" class="btn btn-neutral float-right" title="PSKReporter" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="how_it_works.html" class="btn btn-neutral float-left" title="How wsprdaemon Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../requirements/os.html" class="btn btn-neutral float-right" title="Operating Sytems" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

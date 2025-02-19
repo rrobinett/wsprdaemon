@@ -19,3 +19,45 @@
 - if using multicast between computers, ttl = 1 required on sending computer and on the right NIC
 - multicast will require an IGMP-capable switch with snooping ON to isolate the computers using radiod multicast from the rest of your LAN or WLAN. 
 - have you defined and enabled a device in radiod@rx888-XXX.conf?
+
+## Brute force recovery
+
+One method of recovery involves, in effect, starting from (almost) scratch.
+
+The important "almost" refers to preserving your configuration.  DON'T FORGET THIS!
+
+First, critically, copy your ~/wsprdaemon/wsprdaemon.conf file to the home directory:
+```
+cp ~/wsprdaemon/wsprdaemon.conf ~
+```
+The delete the wsprdaemon subdirectory:
+```
+rm -rf ~/wsprdaemon/
+```
+
+clone the repository (in ~):
+```
+git clone https://github.com/rrobinett/wsprdaemon.git
+```
+
+move the wsprdaemon.conf back:
+```
+cp ~/wsprdaemon.conf ~/wsrdaemon
+```
+
+run wd to get everything built and installed:
+```
+wd
+```
+
+clean out /shm/wsprdaemon:
+```
+rm -rf /shm/wsprdaemon/*
+```
+
+restart wsprdaemon:
+```
+wda
+```
+
+Check the usual places (see above) to ensure things are functioning as expected.

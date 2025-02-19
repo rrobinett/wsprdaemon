@@ -47,6 +47,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
 <ul>
@@ -91,6 +92,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#use-wdle">Use wdle</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#check-recordings">Check recordings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#check-the-logs">Check the logs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#logs-in-var-log">logs in /var/log</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#logs-in-wsprdaemon">logs in ~/wsprdaemon</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#logs-in-dev-shm-wsprdaemon">logs in /dev/shm/wsprdaemon</a></li>
 </ul>
@@ -182,6 +184,14 @@
 <li><p>“-name” specifies the filename of interest</p></li>
 <li><p>“! -name” specifies names to exclude</p></li>
 </ul>
+<section id="logs-in-var-log">
+<h3>logs in /var/log<a class="headerlink" href="#logs-in-var-log" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>/var/log/wspr.log</p></li>
+<li><p>/var/log/ft8.log</p></li>
+<li><p>/var/log/ft4.log</p></li>
+</ul>
+</section>
 <section id="logs-in-wsprdaemon">
 <h3>logs in ~/wsprdaemon<a class="headerlink" href="#logs-in-wsprdaemon" title="Link to this heading"></a></h3>
 <ul class="simple">
@@ -204,6 +214,7 @@
 </section>
 <section id="logs-in-dev-shm-wsprdaemon">
 <h3>logs in /dev/shm/wsprdaemon<a class="headerlink" href="#logs-in-dev-shm-wsprdaemon" title="Link to this heading"></a></h3>
+<p>Note: the 2nd and 3rd subdirectories will vary according to your receivers and channels.</p>
 <ul class="simple">
 <li><p>./recording.d/KA9Q_LONGWIRE/80eu/posting_daemon.log</p></li>
 <li><p>./recording.d/KA9Q_LONGWIRE/80eu/decoding_daemon.log</p></li>

@@ -7,9 +7,10 @@ wsprdaemon typically manages reception and reporting of 4 types of channels -- W
 # Bottom of 200 Hz WSPR segments on each band. Center is 1500 Hz higher
 # sample rate must be 12 kHz as required by wsprd
 disable = no
+# encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats
 data = wspr-pcm.local
 agc = 0
-gain = 60
+gain = 60               # will change to 0 in 3.3.1 when encoding = float
 samprate = 12000
 mode = usb
 low = 1300
@@ -18,9 +19,10 @@ freq = "136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10
 
 [WSPR-IQ]
 disable = yes
+# encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats
 data = wspr-iq.local
 agc = 0
-gain = 60
+gain = 60               # will change to 0 in 3.3.1 when encoding = float
 samprate = 16k
 mode = iq
 freq = "136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10m138700 13m553900 14m095600 18m104600 21m094600 24m924600 28m124600"
