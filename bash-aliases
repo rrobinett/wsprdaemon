@@ -20,6 +20,7 @@ alias wdlc='wd-wsprlog-check'      ## == "WD wspr log check
 function wd-wsprlog-check() {
     local wspr_cycles_to_search=${1-400}
 
+    local verbosity=${verbosity-0}
     local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
     local wd_watchdog_start_epoch=0
 
