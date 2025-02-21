@@ -57,11 +57,11 @@ function wd-wsprlog-check() {
             return
         fi
         if (( wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
-            if (( contiguous_cycles_count )); then
+            if false && (( contiguous_cycles_count )); then
                 printf "(%d) contiguous cycles\n"  $contiguous_cycles_count
                 contiguous_cycles_count=0
             fi
-            printf "%s: Is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+            printf "%s: is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
             wd_watchdog_start_epoch=0
         fi
  
@@ -95,7 +95,7 @@ function wd-wsprlog-check() {
             (( ++contiguous_cycles_count ))
         else
             printf "%s %s: has %3d spots. After %d contiguous spot reports found gap of %2d WSPR cycles. The last cycle reported '%s'\n" \
-                    $contiguous_cycles_count ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+                    ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
             contiguous_cycles_count=0
         fi
         last_line="$spot_count_line"
@@ -103,7 +103,7 @@ function wd-wsprlog-check() {
     done <  <(cat /tmp/wspr-spots-counts.log)
 
     spot_count_line_list=( $(tail -n 1 /tmp/wspr-spots-counts.log) )
-    printf "%s %s is the most recent cycle which has %3d spots. It ends a run of %d contiguous wspr cycles\n" \
+    printf "%s %s: is the most recent cycle which has %3d spots. It ends a run of %d contiguous wspr cycles\n" \
                ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count
 }
 
