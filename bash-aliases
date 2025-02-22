@@ -60,7 +60,7 @@ function wd-wsprlog-check() {
             return
         fi
 
-        local this_line_epoch=$( date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[2]:0:2}:${spot_count_line_list[2]:2:2}" +%s )
+        local this_line_epoch=$( TZ=UTC date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[2]:0:2}:${spot_count_line_list[2]:2:2}" +%s )
 
         if [[ -z "$this_line_epoch" ]]; then
             echo "ERROR: bad line $spot_count_line"
