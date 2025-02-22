@@ -948,6 +948,7 @@ function wd-wav-clean() {
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 
+alias wdwaf=wd-wav-archive-fix
 function wd-wav-archive-fix(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
@@ -959,7 +960,7 @@ function wd-wav-archive-fix(){
         return 0
     fi
     local date_dir
-    for date_dir in $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
+    for date_dir in $(find -L ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
         #echo "date_dir = ${date_dir}"
         local reporter_dir
         for reporter_dir in $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
@@ -967,9 +968,10 @@ function wd-wav-archive-fix(){
             local receiver_dir
             for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
                 echo  "Examining  ${receiver_dir} "
-                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]]; then
-                    read -p "Fix ${receiver_dir} to become ${receiver_dir}_${GRAPE_PSWS_ID#*_}? "
-                    mv  ${receiver_dir} ${receiver_dir}_${GRAPE_PSWS_ID#*_}
+                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]] || [[ ${receiver_dir##*@} =~ "NOT_DEFINED" ]]; then
+                    local new_file_name="${receiver_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}"
+                    read -p "Fix ${receiver_dir} to become ${new_file_name} ? => "
+                    mv  ${receiver_dir} ${new_file_name}
                 elif ! [[ ${receiver_dir} =~ "@" ]]; then
                    read -p  "Fix receiver directory ${receiver_dir} by renaming it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
                    mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
@@ -978,7 +980,6 @@ function wd-wav-archive-fix(){
         done
     done
 }
-alias wdwaf=wd-wav-archive-fix
 
 function wd-ssh-psws(){
     source ~/wsprdaemon/wsprdaemon.conf
