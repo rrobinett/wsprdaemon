@@ -78,7 +78,6 @@ enum sync_state_t
   sync_state_startup,           // any second; waiting for data to arrive in second :59
   sync_state_armed,             // second :59; waiting for data to arrive in second :00 to sync
   sync_state_active,            // recording data to file, wait for final samples to complete file
-  sync_state_resync,
 };
 
 // Simplified .wav file header
@@ -331,7 +330,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
-      fputs("wsprdaemon mode (-W): v0.6\n",stdout);
+      fputs("wsprdaemon mode (-W): v0.7\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
@@ -464,20 +463,22 @@ static void clear_queue_counters(struct session * const sp){
   sp->max_drops = 0;
 }
 
-static int wd_write(struct session * const sp,void *samples,int buffer_size,int seconds){
+static int wd_write(struct session * const sp,void *samples,int buffer_size){
   if(NULL == sp->fp)
     return -1;
 
   // track sequence numbers and report if we see one out of order (except the first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.seq != sp->next_expected_rtp_seq)){
-    wd_log(0,"Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u)\n",
+    wd_log(0,"Weird rtp.seq: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u), forcing resync after %ld samples\n",
            sp->next_expected_rtp_seq,
            sp->rtp_state.seq,
            (int16_t)(sp->rtp_state.seq - sp->next_expected_rtp_seq),
            sp->ssrc,
            sp->max_tx_queue,
            sp->max_rx_queue,
-           sp->max_drops);
+           sp->max_drops,
+           sp->total_file_samples);
+    return -1;
   }
   sp->next_expected_rtp_seq = sp->rtp_state.seq + 1;    // next expected RTP sequence number
 
@@ -486,30 +487,20 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
 
   // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.timestamp != sp->next_expected_rtp_ts)){
-    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u)\n",
+    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u), forcing resync after %ld samples\n",
            sp->next_expected_rtp_ts,
            sp->rtp_state.timestamp,
            sp->rtp_state.timestamp - sp->next_expected_rtp_ts,
            sp->ssrc,
            sp->max_tx_queue,
            sp->max_rx_queue,
-           sp->max_drops);
+           sp->max_drops,
+           sp->total_file_samples);
+    return -1;
   }
   sp->next_expected_rtp_ts = sp->rtp_state.timestamp + frames;    // next expected RTP timestamp
 
-  // check time of first sample; if it's not in second :00, this file will be short and we need to resync the next file
   if (0 == sp->total_file_samples){
-    //wd_log(1,"total_file_samples == 0: first sample in file\n");
-    if (0 != seconds){
-      wd_log(0,"First sample NOT in second :00...resync at next interval on SSRC %d (tx %u, rx %u, drops %u)\n",
-             sp->ssrc,
-             sp->max_tx_queue,
-             sp->max_rx_queue,
-             sp->max_drops);
-      sp->sync_state = sync_state_resync;
-    } else {
-      //wd_log(1,"First sample is in second :00\n");
-    }
     clear_queue_counters(sp);
   }
 
@@ -527,7 +518,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,int 
     close_file(sp);
     return 1;           // tell state machine to create the next file
   }
-  return 0;
+  return 0;     // current file is not complete
 }
 
 static FILE *udp_stats_file = 0;
@@ -633,7 +624,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
 
         start_wav_stream(sp);
         sp->file_time = now;
-        if (0 != wd_write(sp,samples,buffer_size,seconds)){
+        if (0 != wd_write(sp,samples,buffer_size)){
           // something went wrong...should we delete the file?
           sp->sync_state = sync_state_startup;
           close_file(sp);
@@ -649,7 +640,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
     }
 
     // save to file until error or file is complete
-    int status = wd_write(sp,samples,buffer_size,seconds);
+    int status = wd_write(sp,samples,buffer_size);
 
     if (-1 == status){
       // something went wrong...should we delete the file?
@@ -670,41 +661,6 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
 
       start_wav_stream(sp);
       sp->file_time = now;
-    }
-    break;
-
-  case sync_state_resync:
-    // record short file until we can resync at next :00
-    if(NULL == sp->fp){
-      sp->sync_state = sync_state_startup;
-      return;
-    }
-
-    // tricky...if samples arrive too fast, we could start a new file in :59, which
-    // would trigger a resync, but then it'd quickly go to :00 and the short file would be less
-    // than a second, leading to duplicate file names! Argh.
-    // Maybe only create the new file once the short file is at least half full?
-    if ((0 == seconds) && (sp->total_file_samples > sp->samples_remaining)) {
-      // first packet in :00, resync and start clean after the short file
-      close_file(sp);
-      sp->wd_file_time.tv_sec = 0;
-      session_file_init(sp,sender);
-      sp->sync_state = sync_state_active;
-
-      // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
-      wd_log(1, "Resync file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
-             sp->ssrc,
-             sp->rtp_state.seq,
-             sp->rtp_state.timestamp,
-             sp->rtp_state.timestamp / sp->samprate);
-
-      start_wav_stream(sp);
-      sp->file_time = now;
-    }
-    if (0 != wd_write(sp,samples,buffer_size,seconds)){
-      // something went wrong...should we delete the file?
-      sp->sync_state = sync_state_startup;
-      close_file(sp);
     }
     break;
   }
