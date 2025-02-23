@@ -1617,7 +1617,7 @@ function ka9q-setup() {
     local active_receivers
     get_list_of_active_real_receivers "active_receivers"
     if ! [[ "${active_receivers}" =~ KA9Q ]]; then
-        wd_logger 1 "There are no KA9Q receivers in the conf file, so skip KA9Q setup"
+        wd_logger 2 "There are no KA9Q receivers in the conf file, so skip KA9Q setup"
         return 0
    fi
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
