@@ -73,13 +73,11 @@ case ${CPU_ARCH} in
         fi
         ;;
     aarch64)
+        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
          if [[ "${OS_RELEASE}" == "12" ]]; then
             ### The 64 bit Pi 5 OS is based upon  Debian 12
             wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${OS_RELEASE}"
-            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5 ${LIB_QT5_CORE} )
-        else
-            ### This is a 64 bit bullseye Pi4 and the OrangePi
-            PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
@@ -123,7 +121,7 @@ function wd_run_in_cgroup() {
     else
         local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
         if ((  cpu_core_count < 8 )); then
-            wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+            wd_logger 2 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
             return 0
         fi
         local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - ${RADIO_CPU_CORES-2} ))}
