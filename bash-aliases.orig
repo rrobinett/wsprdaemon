@@ -1,0 +1,1600 @@
+#!/bin/bash 
+### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
+
+shopt -s -o nounset
+
+<<<<<<< HEAD
+function get_pid_start_epoch() {
+    local pid="$1"
+
+    local CLK_TCK=$(getconf CLK_TCK)
+    local boot_epoch=$(awk '/btime/ {print $2}' /proc/stat)
+    local start_ticks=$(awk '{print $22}' /proc/"$pid"/stat)
+    local start_epoch=$((boot_epoch + (start_ticks / CLK_TCK)))
+
+    echo $start_epoch
+}
+
+### Looks at the most recent 400 wspr cycles and looks for missing cycles
+### It expects at least 1 spot in every 2 minute cycle and accomodates 5 minute cycles with spots
+alias wdlc='wd-wsprlog-check'      ## == "WD wspr log check
+function wd-wsprlog-check() {
+    local wspr_cycles_to_search=${1-400}
+
+    local verbosity=${verbosity-0}
+    local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
+    local wd_watchdog_start_epoch=0
+
+    if [[ ! -f $wd_watchdog_pid_file ]]; then
+        printf "WD isn't running, since there is no  wd_watchdog_pid_file '$wd_watchdog_pid_file'"
+    else
+        local  wd_watchdog_pid=$(<$wd_watchdog_pid_file)
+        if ! ps $wd_watchdog_pid > /dev/null; then
+            printf "The WD watchdog PID $wd_watchdog_pid recorded in '$wd_watchdog_pid_file' is not active"
+        else
+            wd_watchdog_start_epoch=$(get_pid_start_epoch $wd_watchdog_pid)
+            #printf "The currently running WD started at epoch %s which is %s\n"  "$wd_watchdog_start_epoch" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%Y-%m-%d %H:%M:%S")"
+        fi
+    fi
+
+    local wspr_log_files="/var/log/wspr.log"
+    if [[ ! -f $wspr_log_files ]]; then
+        echo "ERROR: the expected file  $wspr_log_files doesn't exist"
+        return 1
+    fi
+    if [[ -f /var/log/wspr.log.1 ]]; then
+        wspr_log_files="/var/log/wspr.log.1 $wspr_log_files"
+    fi
+    awk '{printf "%s %s\n", $1, $2}' $wspr_log_files | sort | uniq -c | tail -n $wspr_cycles_to_search > /tmp/wspr-spots-counts.log
+
+    local last_line
+    local last_line_epoch=0
+    local contiguous_cycles_count=0
+    local spot_count_line
+    local spot_count_line_list
+
+    while read spot_count_line; do
+        spot_count_line_list=( $spot_count_line )
+
+        if (( ${#spot_count_line_list[@]} != 3 )) ; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+
+        local this_line_epoch=$( TZ=UTC date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[2]:0:2}:${spot_count_line_list[2]:2:2}" +%s )
+
+        if [[ -z "$this_line_epoch" ]]; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+        if (( wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
+            if false && (( contiguous_cycles_count )); then
+                printf "(%d) contiguous cycles\n"  $contiguous_cycles_count
+                contiguous_cycles_count=0
+            fi
+            printf "%s: is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+            wd_watchdog_start_epoch=0
+        fi
+ 
+        if (( last_line_epoch == 0 )) ; then
+            printf "%s %s: with %3d spots is the first cycle of the log\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            last_line="$spot_count_line"
+            last_line_epoch=$this_line_epoch
+            continue
+        fi
+
+        local last_line_list=( $last_line )
+        (( verbosity > 1 ))  && printf "\n\nThis epoch is %d at %s %s, last epoch is %d at %s %s\n" $this_line_epoch ${spot_count_line_list[1]} ${spot_count_line_list[2]} $last_line_epoch "${last_line_list[1]}"  "${last_line_list[2]}"
+        local expected_line_epoch
+        local last_line_minute_digit="${last_line: -1}"
+        if [[ "${last_line: -1}" == "5" ]]; then
+            ### After a 5/15/25/35/45/55 minute spot, the next onw should be one minute later
+            (( verbosity > 1 )) && echo "Last line was a 5/15/25/..., so this line should be 60 seconds later"
+            expected_line_epoch=$(( last_line_epoch + 60 ))
+        else
+            if (( this_line_epoch == (last_line_epoch + 60) )); then
+                (( verbosity > 1 )) && echo "This line is 60 sesconds after the last"
+                expected_line_epoch=$(( last_line_epoch + 60 ))   ### This a 5/15/... minute packet
+            else
+                (( verbosity > 1 )) && echo "this line should be 120 seconds after the last line"
+                expected_line_epoch=$(( last_line_epoch + 120 ))
+            fi
+        fi
+
+        if (( this_line_epoch ==  expected_line_epoch )) ; then
+            (( verbosity > 1 )) && printf "%s %s: %3d spots as expected\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            (( ++contiguous_cycles_count ))
+        else
+            printf "%s %s: has %3d spots. After %d contiguous spot reports found gap of %2d WSPR cycles. The last cycle reported '%s'\n" \
+                    ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+            contiguous_cycles_count=0
+        fi
+        last_line="$spot_count_line"
+        last_line_epoch=$this_line_epoch
+    done <  <(cat /tmp/wspr-spots-counts.log)
+
+    spot_count_line_list=( $(tail -n 1 /tmp/wspr-spots-counts.log) )
+    printf "%s %s: is the most recent cycle which has %3d spots. It ends a run of %d contiguous wspr cycles\n" \
+               ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count
+}
+
+### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
+function ka9q-web-control-usage() {
+    echo "$0:
+    -h   => print this help message
+    -a   => kill all running ka9q-web servers and start them again
+    -z   => kill all running ka9q-web servers
+    -s   => show status of running ka9q-web servers"
+}
+
+function ka9q-web-control() {
+    if [[ -z "$@" || "$@" == "-h" ]] ; then
+        ka9q-web-control-usage
+        return 0
+    fi
+
+    if [[ "${1-}" == "-s" ]]; then
+        ps aux | grep ka9q-web | grep -v 'grep\|ka9q-web-control'
+        return 0
+    fi
+
+    sudo killall ka9q-web
+
+    if [[ "${1-}" == "-k" ]]; then
+        echo "Killed all ka9q-web services"
+        return 0
+    fi
+
+    /usr/local/sbin/ka9q-web -m hf.local  -p 8081 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8081.log &
+    /usr/local/sbin/ka9q-web -m hf1.local -p 8082 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8082.log &
+
+    echo "Spawned two ka9q-web services, one on port 8081 and port 8082"
+    return 0
+}
+
+### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
+function wd-killall() {
+    local rc
+    local rc1
+
+    verbosity=${verbosity-0}
+
+    ### Stop all services
+    local services_regex_list=(  "radiod@.*" ft4-decoded.service ft8-decoded.service  "pskreporter@*" wspsrdaemon )
+    local service_regex
+    for service_regex in "${services_regex_list[@]}"; do
+        local services_list=( $( systemctl list-units --type=service --no-legend --no-pager | awk -v service_regex="${service_regex}.*running" '$0 ~ service_regex{print $1}') )
+        if (( ! ${#services_list[@]} )); then
+             (( verbosity > 1 )) && printf "Found no running '${service_regex}'\n"
+            continue
+        fi
+        (( verbosity > 1 )) && printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
+
+        local service_name
+        for   service_name in ${services_list[@]}; do 
+            local service_clean=${service_name%.service}
+            sudo systemctl status ${service_clean} --no-pager >& /tmp/wd-killall.log
+            rc=$? ; if (( rc )); then
+                printf "Service '${service_clean}' is not being run by systemctl, but it may be running in a terminal window\n"
+            else
+                sudo systemctl stop ${service_clean} >& /tmp/wd-killall.log
+                rc=$? ; if (( rc )); then
+                    printf "Service '${service_clean}' was running, but 'sudo systemctl stop ${service_clean}' => ${rc}\n"
+                else
+                    (( verbosity >= 0 )) && printf "Service '${service_clean}' was running and 'sudo systemctl stop ${service_clean}' was successful\n"
+                fi
+            fi
+        done
+    done
+
+    ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
+    local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
+    local pid_file_list=( $(find ${wd_temp_root_dir} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
+    if (( ! ${#pid_file_list[@]} )); then
+        (( verbosity > 1 )) && printf "Found no pid files\n"
+    else
+        (( verbosity )) && printf "Found ${#pid_file_list[@]} pid files to kill\n" ###: '${pid_file_list[*]}'\n"
+
+        local pid_file
+        for pid_file in ${pid_file_list[@]}; do
+            local pid_val=$(< ${pid_file})
+            (( verbosity > 1 )) && printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
+            sudo kill ${pid_val} >& /tmp/wd-killall.log
+            rc=$?
+            if (( rc )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                (( verbosity )) && printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
+            fi
+            rm ${pid_file}
+            rc1=$?
+            if (( rc1 )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                (( verbosity )) && printf "INFO: failed to rm '${pid_file}'\n"
+            fi
+            if (( ! rc && ! rc1 )); then
+                (( verbosity > 1 )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+            fi
+        done
+   fi
+
+    ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
+    if (( ${#zombie_pid_list[@]} )); then
+        printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
+        sudo kill ${zombie_pid_list[@]}
+    fi
+    local mutex_dir_list=( $(find /dev/shm/wsprdaemon -type d -name '*mutex.lock') )
+    if (( ${#mutex_dir_list[@]} )) ; then
+        echo "Purging ${#mutex_dir_list[@]} zombie *mutex.lock directories"
+        rmdir ${mutex_dir_list[@]}
+    fi
+    local active_cpus_files_list=( $(find ${wd_temp_root_dir} -type f -name active_cpus_count) )
+    (( ++verbosity ))
+    if (( ${#active_cpus_files_list[@]} )); then
+        (( verbosity > 1 )) && printf "Found ${#active_cpus_files_list[@]} active_cpus_count files\n"
+        local active_cpu_file
+        for active_cpu_file in ${active_cpus_files_list[@]}; do
+            local cpu_count=$(<${active_cpu_file})
+            if (( cpu_count )); then
+                 (( verbosity )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so flush that file\n"
+                 rm ${active_cpu_file}
+             else
+                 (( verbosity > 1 )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so leave it alone\n"
+            fi
+        done
+    fi
+
+    ### Clear the CPU affinity settings if they have been set by WD.  Only on the Orange Pi 5 for now.
+    local wd_cgroups_root_path="/sys/fs/cgroup"
+    local wd_cgroups_list=( wsprdaemon radiod linux )
+    local cgroup_name
+    for cgroup_name in ${wd_cgroups_list[@]} ; do
+        local cgroup_path="${wd_cgroups_root_path}/${cgroup_name}"
+        if [[ -d ${cgroup_path} ]]; then
+            (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
+            sudo rmdir  ${cgroup_path}
+        else
+            (( verbosity ))  && printf "Cgroup ${cgroup_path} is not configured\n"
+        fi
+    done
+    (( --verbosity ))
+}
+
+function wd-flush-hashtables() {
+    wc $(find /dev/shm/wsprdaemon/ -type f -name hashtable.txt) | sort -n
+    read -p "Flush these hashtable.txt files? => "
+    find /dev/shm/wsprdaemon/ -type f -name hashtable.txt -delete
+}
+
+function wd-restart() {
+    wdz     ### stops radiod if it is being run as a Linux service: i.e. auto-started during boot or by 'wda' 
+    wd -Z   ### Stops WD if it had been started by 'wd -A'
+    wdrz    ### Stops radiod and the pktreporter services
+    wd -A    ### Starts WD which starts the radiod services if they are not running
+}
+
+alias wdtw="test_get_wav_file_list"
+function test_get_wav_file_list() {
+    local sleep_seconds_between_creating_new_wav_files=${1-2}   ### defult to 2 seconds
+
+    local testing_receiver_name="KA9Q_0"
+    local testing_receiver_band="20"
+    #local testing_frequency=$( get_wspr_band_freq_hz ${testing_receiver_band} )
+    local testing_frequency="14095600"
+    local testing_modes="W2:F2:W5"
+    #local testing_wav_recording_dir=$(get_recording_dir_path ${testing_receiver_name} ${testing_receiver_band})
+    local testing_wav_recording_dir=" /dev/shm/wsprdaemon/recording.d/KA9Q_0"
+    local template_wav_file="${testing_wav_recording_dir%/*}/one-minute.wav"
+
+    if [[ ! -f ${template_wav_file} ]]; then
+        echo "WARNING: Can't find '${template_wav_file}', so 'cp  ~/one-minute.wav ${template_wav_file}'"
+        cp ~/one-minute.wav ${template_wav_file}
+    fi
+
+    local skip_reads=0
+
+    while true; do
+        local testing__epoch
+
+        local test_wav_file_name_list=( $( find ${testing_wav_recording_dir} -type f -name "20*Z_${testing_frequency}_usb.wav"  | sort ) )
+        if (( ${#test_wav_file_name_list[@]} == 0 )); then
+            local current_epoch=$(date +%s)
+            local first_wav_file_epoch=$(( current_epoch - (current_epoch % 3600) ))
+            testing_epoch=${first_wav_file_epoch}
+        else
+            local most_recent_file_name=${test_wav_file_name_list[-1]##*/}
+            local most_recent_file_date_format="${most_recent_file_name:0:8} ${most_recent_file_name:9:2}:${most_recent_file_name:11:2}:${most_recent_file_name:13:2}"
+            local most_recent_epoch=$(date -d "${most_recent_file_date_format}" +%s)
+            testing_epoch=$(( most_recent_epoch + 60 ))
+        fi
+
+        local test_wav_file_time=$(date -d @${testing_epoch} "+%Y%m%dT%H%M%S")
+        local test_wav_file_name="${testing_wav_recording_dir}/${test_wav_file_time}Z_${testing_frequency}_usb.wav"
+        cp ${template_wav_file} ${test_wav_file_name}
+
+        if (( skip_reads ==  0 )); then
+            echo ""
+            read -p "For testing_epoch ${testing_epoch} created ${test_wav_file_name}. Create the next one minute file? => "
+            if [[ "${REPLY}" =~ ^[0-9]+$ ]]; then
+                if (( REPLY > 0 )); then
+                    skip_reads=$(( ${REPLY} - 1 ))
+                fi
+            fi
+        else
+            (( --skip_reads ))
+            echo -n "Sleeping ${sleep_seconds_between_creating_new_wav_files} seconds.. "
+            sleep ${sleep_seconds_between_creating_new_wav_files}
+        fi
+
+
+
+    done
+}
+
+=======
+function wd-flush-hash-files() {
+     find /dev/shm/wsprdaemon/ -name hashtable.txt -delete
+ }
+>>>>>>> origin/master
+
+function wd-restart-web() {
+    local ka9q_web_pid_file=~/wsprdaemon/ka9q_web_daemon.pid
+
+    if [[ ! -f  ${ka9q_web_pid_file} ]]; then
+        echo "There is no file ${ka9q_web_pid_file}, so KA9Q-web server is not running"
+        return 0
+    fi
+    local ka9q_web_pid=$(<  ${ka9q_web_pid_file} )
+    echo "Killing the KA9Q-web server with PID = ${ka9q_web_pid}"
+    kill ${ka9q_web_pid}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        echo "WARNING: found stale pid  ${ka9q_web_pid} in ${ka9q_web_pid_file} since  kill ${ka9q_web_pid} => ${rc}"
+    fi
+    rm ${ka9q_web_pid_file}
+    echo "Starting the  KA9Q-web server (and any other WD services which aren't running)"
+    ~/wsprdaemon/wsprdaemon.sh -A
+}
+
+
+### On a Wsprsonde gateway, this function simplifies opening a terminal session to the WS through a USB connection
+function wd2ws(){
+    if [[ ! -e /dev/ttyACM0 ]]; then
+        echo "ERROR: There is no USB cable on this server which is connected to a Wsprsonde"
+        return 1
+    fi
+    read -p "Connect to the WS8 by running 'screen'? (exit 'screen' by typing <CONTROL-A> + '\') => "
+    sudo screen /dev/ttyACM0
+}
+
+function wd-desnap() {
+    local snaps_list=()
+    local rc
+
+    #set -x
+    while snaps_list=( $( snap list | awk '!/Name/{print $1}') ) && [[ ${#snaps_list[@]} -gt 0 ]]; do
+        local desnap_failures=0
+        local snap
+        for snap in ${snaps_list[@]} ; do
+            #read -p "Execute 'sudo snap remove --purge ${snap}' [Y,n]? => "
+            sudo snap remove --purge ${snap} >& /tmp/wd-desnap.log
+            rc=$?
+            if [[ ${rc} -ne 0 ]]; then
+                echo "ERROR:'sudo snap remove --purge ${snap}' => ${rc}"
+                (( ++desnap_failures))
+            else
+                echo "Removed ${snap}"
+            fi
+        done
+        read -p "Finished de-smap pass with ${desnap_failures} failures.  Proceed [Y,n]? =>"
+    done
+    sudo rm -rf /var/cache/snapd/
+    sudo apt autoremove --purge snapd gnome-software-plugin-snap
+    rm -fr ~/snap
+    sudo apt autoremove --purge snapd gnome-software-plugin-
+}
+
+export LC_TIME="C"          ### Forces user session 'date' to display 24 hour time
+
+if [[ -d /dev/shm/wsprdaemon ]]; then
+    WD_TMP_ROOT=/dev/shm/wsprdaemon
+else
+    WD_TMP_ROOT=/tmp/wsprdaemon
+fi
+
+
+### Each element containsa the function name, a comma-seperated list of its aliases, and a description of it
+### ie.e:  "FUNCTION_NAME:  ALIAS1,ALIAS2.,... DESCRIOTION"
+declare WD_BASH_HELP_LIST=()
+declare WD_BASH_HELP_HEADER_LINE_LIST=( "FUNCTION"  "ALIAS(es)"  "DESCRIPTION" )
+
+function wd-print-help-strings() {
+    local function_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[0]}
+    local alias_name_field_width=${#WD_BASH_HELP_HEADER_LINE_LIST[1]}
+    local help_string_index
+
+    ### Calculate the width of fields which will be printed
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        if [[ ${#function_name} -gt ${function_name_field_width} ]]; then
+            function_name_field_width=${#function_name}
+        fi
+        local alias_names="${help_string_list[1]}"
+        if [[ ${#alias_names} -gt ${alias_name_field_width} ]]; then
+            alias_name_field_width=${#alias_names}
+        fi
+    done
+
+    printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" \
+               "${WD_BASH_HELP_HEADER_LINE_LIST[0]}" "${WD_BASH_HELP_HEADER_LINE_LIST[1]}" "${WD_BASH_HELP_HEADER_LINE_LIST[2]}"
+
+    for (( help_string_index=0; help_string_index < ${#WD_BASH_HELP_LIST[@]}; ++ help_string_index )) do
+        local help_string="${WD_BASH_HELP_LIST[${help_string_index}]}"
+        local help_string_list=( ${help_string} )
+
+        local function_name="${help_string_list[0]}"
+        local alias_names="${help_string_list[1]}"
+        local description_string="${help_string_list[@]:2}"
+
+        printf "%${function_name_field_width}s  %${alias_name_field_width}s  %s\n" "${function_name}" "${alias_names}" "${description_string}"
+    done
+}
+
+WD_BASH_HELP_LIST=( "wd_logger  wdl  Emulate WD's wd_logger() function when these functions are run from the linux cmd line" )
+
+### When this file is sourced by wsprdaemon.sh this function will be redefined in wd-utils.sh to the full wd_logger() used by WD
+function wd_logger(){
+    local verbosity_printing_level=${1:-1}
+    local printout_string="${2:-Missing printout string}"
+
+    if [[ ${verbosity_printing_level} -ge ${verbosity:-1} ]]; then
+        echo -e "${printout_string}"
+    fi
+}
+
+WD_BASH_HELP_LIST+=( "wd-machine_name - Executes 'uname -m'" )
+function wd-machine-name() {
+    echo $(uname -m)
+}
+
+WD_BASH_HELP_LIST+=( "wd-flush-empty-dirs - Flush any empty directories under CWD" )
+function wd-flush-empty-dirs() {
+    for dir in * ;  do 
+        if [[ -d $dir ]]; then
+            file_count=$(find $dir -type f | wc -l)
+            if [[ $file_count -eq 0 ]]; then 
+                echo "Deleting empty directory $dir"
+                rm -r $dir
+            fi
+        fi
+    done
+}
+
+WD_BASH_HELP_LIST+=( "wd-find-functions - Find all bash functions in \$1 and print all usage of them" )
+function wd-find-functions() {
+   local bash_file=$1
+
+   local functions_list=( $( awk '/^function/{print $2}' ${bash_file} | sed 's/(.*//' ) )
+
+   echo "Found ${#functions_list[@]} functions: '${functions_list[*]}'"
+
+   for function in ${functions_list[@]} ; do
+       grep -w ${function}  ${bash_file}
+       read
+   done
+}
+
+### To speed debugging of the WD upload daemons, kill just the watchdog and upload daemons.  You can then 'wda' and watch the upload log as the WD uploader starts to work immediately
+function wd-kill-uploader()
+{
+    kill $( cat ~/wsprdaemon/watchdog_daemon.pid  ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.pid )
+}
+alias wd-k=wd-kill-uploader
+alias wdk=wd-kill-uploader
+
+### Watch the upload log file
+function wd-watch-wsprnet-upload-log()
+{
+    echo "To view the full log file execute the command: 'less ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log'"
+    tail -F ~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
+}
+alias wd-un=wd-watch-wsprnet-upload-log
+alias wdln=wd-watch-wsprnet-upload-log
+
+### Gets status for the Kiwis listed in WD.conf
+function wd-find-kiwis()
+{
+    local local_lan_list=( $(ip addr | grep -w inet | grep -v 'inet 127' | awk '{print $2}' | sed 's;\.[0-9]*/;.0/;g') )
+
+    [[ ${verbosity-0} -gt 0 ]] && echo "Searching the ${#local_lan_list[@]} LANs for Kiwis:  ${local_lan_list[@]}"
+    for lan in ${local_lan_list[@]} ; do
+        echo "Searching LAN ${lan} for Kiwis"
+        local kiwi_ip_list=( $( nmap --open -p 8073 ${lan} | awk '/Nmap scan report for/{print $5}' ) )
+        if [[ ${#kiwi_ip_list[@]} -eq 0 ]]; then
+            echo "Found no Kiwis"
+        else
+            echo "Found ${#kiwi_ip_list[@]} Kiwis: ${kiwi_ip_list[*]/%/  }"
+        fi
+    done
+}
+
+function wd-kiwi-status()
+{
+    local wsprconf_file=~/wsprdaemon/wsprdaemon.conf;
+    if [[ ! -f ${wsprconf_file} ]]; then
+        echo "ERROR: can't find config file ${wsprconf_file}";
+        return;
+    fi;
+    source ${wsprconf_file};
+    local kiwi_list=();
+    for rx_line in "${RECEIVER_LIST[@]}";
+    do
+        local rx_fields=(${rx_line});
+        local rx_name=${rx_fields[0]};
+        local rx_ip_port=${rx_fields[1]};
+        if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]]; then
+            [[ ${verbosity-0} -ge 1 ]] && echo "skipping rx ${rx_name}";
+        else
+            local rx_ip=${rx_ip_port/:*/};
+            if ! ping -c 1 -W 1 ${rx_ip} > /dev/null; then
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings";
+            else
+                kiwi_list+=(${rx_name},${rx_ip_port});
+                [[ ${verbosity-0} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}";
+            fi;
+        fi;
+    done;
+    [[ ${verbosity-0} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}";
+    [[ ${verbosity-0} -ge 1 ]] && echo;
+    local users;
+    local users_max;
+    local gps_good;
+    local users_total=0;
+    local wsprdaemon_total=0;
+    local channels_total=0;
+    for kiwi_info in "${kiwi_list[@]}";
+    do
+        local kiwi_name=${kiwi_info%,*};
+        local kiwi_ip=${kiwi_info#*,};
+        local kiwi_status="$(curl -s http://${kiwi_ip}/status)";
+        users=$(sed -n '/users=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        channels_total=$((channels_total + users_max));
+        gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status});
+        [[ ${verbosity-0} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}";
+        curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log;
+        while read user_line; do
+            [[ ${verbosity-0} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+            if grep --color=auto -q wsprdaemon <<< "${user_line}"; then
+                [[ ${verbosity-0} -ge 1 ]] && echo "skipping WD user";
+                wsprdaemon_total=$((wsprdaemon_total + 1));
+            else
+                [[ ${verbosity-0} -ge 1 ]] && echo "Checking '${user_line:1}' on user line ${user_line}"
+                if [[ -n "${user_line:1}" ]]; then
+                    eval declare $(echo "${user_line:1}" | sed '/"\([^"]*\)":/s//\1=/g');
+                    [[ $? -ne 0 ]] && continue
+                    local listener_channel="${user_line:0:1}";
+                    local listener_name="$(echo "$n" | sed 's/%20/ /g')";
+                    local listener_location="$(echo "$g" | sed 's/%20//g')";
+                    local listener_freq="$f";
+                    local listener_mode="$m";
+                    local listener_ip="$a";
+                    local listener_time="$t";
+                    printf "%12s:%s %20s %8s %3s %s %20s %s\n" "${kiwi_name}" "${listener_channel}" "'${listener_name}'" "${listener_freq}" "${listener_mode}" "${listener_time}" "${listener_ip}" "${listener_location}";
+                    users_total=$((users_total + 1));
+                fi;
+            fi;
+        done < /tmp/curl.log;
+    done;
+    printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total $users_total $wsprdaemon_total
+}
+
+### 'git commit'
+function wd-gc()
+{
+    if [[ -z "$1" ]]; then
+        echo "usage:  wd-gc \"commit message\""
+        return
+    fi
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob"
+    git commit -m "$1" -a
+}
+
+### 'git push'
+alias wd-gp='git push'
+
+#### Get the most recent commit
+alias wd-gl='git log | head -n 12'
+
+### Setup a WD server 'git cloned' with https, so it can checkin to github with ssh
+function wd-gc-ssh() {
+    git remote set-url origin git@github.com:rrobinett/wsprdaemon.git 
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob Robinett"
+}
+
+function wdgl() {
+    git log
+}
+
+function wdgs() {
+    git status
+}
+
+### Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session
+function wd-rci() 
+{
+    if [[ ! -f ~/.bash_aliases ]] || ! grep '/bash-aliases' ~/.bash_aliases > /dev/null ; then
+        echo "
+if [[ -f ~/wsprdaemon/bash-aliases ]]; then
+    source ~/wsprdaemon/bash-aliases
+fi
+" >> ~/.bash_aliases
+         echo "A reference to '~/wsprdaemon/bash-aliases' has been added to ' ~/.bash_aliases'"
+    else
+         [[ ${verbosity-0} -gt 1 ]] && echo "bash-aliases has already been installed in ~/.bash_aliases"
+    fi
+}
+wd-rci
+alias wdrci='wd-rci'
+
+### Reload the local bash aliases and funtions defined in its ~/.bash_aliases, which will include this file after 'rci' has been executed
+alias wd-rcc='source ~/.bash_aliases'
+alias wd-rcc='wd-rcc'
+
+### Common usages of Linux commands
+alias l='ls -CF'
+alias ll='ls -l'
+alias lrt='ls -lrt'
+alias la='ls -A'
+
+alias pd=pushd
+alias d=dirs
+
+alias ag='alias | grep'
+
+alias h=history
+alias hg='history | grep'
+alias j=jobs
+
+alias cdw='cd ~/wsprdaemon/'
+alias cdk='cd ~/wsprdaemon/ka9q-radio'
+alias cdr='cd /etc/radio'
+alias cdrf='cd /run/ft8'
+alias cds='cd /etc/systemd/system'
+alias cdt='cd /dev/shm/wsprdaemon'
+alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
+alias cdww='cd ~/wsprdaemon/wav-archive.d/'
+
+### Start 'vi' using WD's .vimrc
+function vi() 
+{
+    local vim_rc_file=~/.vimrc
+    local wd_vim_rc_file=~/wsprdaemon/.vimrc
+
+    if [[ ! -f ${vim_rc_file} ]] || ! grep wsprdaemon ${vim_rc_file}  > /dev/null ; then
+        echo "Adding 'source ${wd_vim_rc_file}' to ${vim_rc_file}"
+        echo "source ${wd_vim_rc_file}" >> ${vim_rc_file}
+    fi
+    vim $*
+}
+
+alias vib='vi ~/wsprdaemon/bash-aliases'
+alias vibb='vi ~/.bash_aliases'
+alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
+alias vic='vi ~/wsprdaemon/wsprdaemon.conf'
+alias vir='vi ~/wsprdaemon/radiod@rx888-wsprdaemon.conf'
+alias virr='vi /etc/radio/radiod@rx888-wsprdaemon.conf'
+
+alias tf='tail -F -n 40'
+alias tfd='tf decoding_daemon.log'
+alias tfr='tf wav_recording_daemon.log'
+alias tfw='tf ~/wsprdaemon/watchdog_daemon.log'
+
+alias g='git'
+alias gc='git commit'
+alias gd='git diff'
+alias gs='git status | grep -B 100 "Untracked files"'
+alias gl='git log | head'
+
+### Get pub file for a copy/past to remote server's .ssh/authorized_keys file
+alias catss='cat ~/.ssh/*pub'
+
+### Helps cleanup WD source files
+function find_unused_vars() {
+    local sh_file=$1
+
+    local var
+    local vars=$(cat ${sh_file} | sed -n '/^declare /s///p' | sed 's/=.*//')
+    for var in ${vars}; do
+        local lines=$(grep -v '^declare' ${sh_file} | grep ${var})
+        if [[ -z "${lines}" ]]; then
+            echo "Found no usage of variable ${var}"
+        fi
+    done
+}
+
+### Prepends the date to each response from 'ping'
+function pinge() 
+{
+   if [[ -z "$1" ]]; then
+       echo "usage:  pinge DEST"
+       return 1
+   fi
+   local dest=$1
+   local pong
+
+   ping ${dest} | while read pong; do echo "$(date): ${pong}"; done
+}
+
+
+function setup-ubuntu() {
+    local remote_ip=$1
+
+    if [[ -z "${remote_ip}" ]]; then
+        echo "usage: ${FUNCNAME[0]} USER@IPADDRESS"
+        return 0
+    fi
+    local url_list=( ${remote_ip/@/ } )
+    if [[ ${#url_list[@]} -ne 2 ]]; then
+        echo "ERROR: URL '${remote_ip}' doesn't contain a 'USER@IP'"
+    fi
+    scp -p ~/.ssh/authorized_keys ${remote_ip}:.ssh/
+    scp -p ~/.vimrc ~/.bash_aliases ${remote_ip}:
+    ### In an interactive login session:  run visudo to setup NOPASSWD:, install vim, disable VNC encryption so RealVNC clients can login
+    ssh ${remote_ip} "echo 'sudo visudo
+    sudo apt update 
+    sudo apt install vim -y
+    sudo apt install git -y
+    sudo apt install sox -y
+    gsettings set org.gnome.Vino require-encryption false
+    ' > setup-ubuntu.sh; chmod +x setup-ubuntu.sh"
+    echo
+    echo "Run './setup-ubuntu.sh' to finish this installation"
+    echo
+    ssh ${remote_ip} 
+}
+
+# Get status of all active kiwis
+function kiwi-stats(){
+    local wsprconf_file=~/wsprdaemon/wsprdaemon.conf
+
+    if [[ ! -f ${wsprconf_file} ]] ; then
+        echo "ERROR: can't find config file ${wsprconf_file}"
+        return
+    fi
+    source ${wsprconf_file}
+
+    ## Construct a list of configured and present Kiwis
+    local kiwi_list=()
+    for rx_line in "${RECEIVER_LIST[@]}"; do
+        local rx_fields=(${rx_line})
+        local rx_name=${rx_fields[0]}
+        local rx_ip_port=${rx_fields[1]}
+        if [[ ${rx_name} =~ AUDIO* ]] || [[ ${rx_name} =~ MERG* ]] || [[ ${rx_name} =~ RTL* ]] ; then
+            [[ ${verbosity-0} -ge 1 ]] && echo "skipping rx ${rx_name}"
+        else
+            local rx_ip=${rx_ip_port/:*/}
+            if ! ping -c 1 -W 1 ${rx_ip} > /dev/null ; then
+                echo "WARNING: the Kiwi '${rx_name}' defined in ${wsprconf_file} doesn't respond to pings"
+            else
+                kiwi_list+=(${rx_name},${rx_ip_port})
+                [[ ${verbosity-0} -ge 1 ]] && echo "Added ${rx_name} => ${rx_ip}"
+            fi
+        fi
+    done
+    [[ ${verbosity-0} -ge 1 ]] && echo "kiwi_list[@] => ${kiwi_list[@]}"
+    [[ ${verbosity-0} -ge 1 ]] && echo
+
+    local users
+    local users_max
+    local gps_good
+    local users_total=0
+    local wsprdaemon_total=0
+    local channels_total=0
+    for kiwi_info in "${kiwi_list[@]}" ; do
+        local kiwi_name=${kiwi_info%,*}
+        local kiwi_ip=${kiwi_info#*,}
+        local kiwi_status="$(curl -s http://${kiwi_ip}/status)"
+        users=$(sed -n '/users=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        users_max=$(sed -n '/users_max=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        channels_total=$((channels_total + users_max))
+        gps_good=$(sed -n '/gps_good=\(.*\)/s//\1/p' <<< ${kiwi_status})
+        [[ ${verbosity-0} -ge 1 ]] && printf "%15s: %d channels, %d users, %2d GPS satellites tracked\n" "${kiwi_name}" "${users_max}" "${users}" "${gps_good}"
+
+        ### I was unable to parse the curl output when it was assigned to a bash variable. After some frustration I am using the hack of
+        ### piping curl's output to a /tmp file and reading and parsing it from there
+
+        curl -s http://${kiwi_ip}/users | sed -n 's/"i":\([0-9]*\)/\n\1/g ; s/},{//g ; p' | sed '/\[{/d; s/}]//; s/,/     /g' > /tmp/curl.log
+        while read user_line; do
+            if grep -q wsprdaemon <<< "${user_line}" ; then
+                [[ ${verbosity-0} -ge 1 ]] && echo "skipping WD user"
+                wsprdaemon_total=$((wsprdaemon_total + 1))
+            else
+                if [[ -n "${user_line:1}" ]]; then
+                    eval declare $(echo "${user_line:1}" | sed '/"\([^"]*\)":/s//\1=/g')
+                    local listener_channel="${user_line:0:1}"
+                    local listener_name="$(echo "$n" | sed 's/%20/ /g')"
+                    local listener_location="$(echo "$g" | sed 's/%20//g')"
+                    local listener_freq="$f"
+                    local listener_mode="$m"
+                    local listener_ip="$a"
+                    local listener_time="$t"
+                    printf "%12s:%s %15s %8s %3s %s %20s %s\n" "${kiwi_name}" "${listener_channel}" "'${listener_name}'" "${listener_freq}" "${listener_mode}" "${listener_time}" "${listener_ip}" "${listener_location}"
+                    users_total=$((users_total + 1))
+                fi
+            fi
+        done < /tmp/curl.log
+    done
+    printf "Found %d Kiwis configured for %d total rx channels, %d total listeners, %d wsprdaemon channels\n" "${#kiwi_list[@]}" $channels_total  $users_total $wsprdaemon_total
+}
+
+### Aliases which call WD
+alias wd='~/wsprdaemon/wsprdaemon.sh'
+alias wdl='wd -l'
+alias wdle='wd -l e'
+alias wdld='wd -l d'
+alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
+alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
+alias wds='wd -s'
+alias wdv='wd -V'
+alias wdvv='(cd ~/wsprdaemon; echo "$(git symbolic-ref --short HEAD 2>/dev/null)-$(git rev-list --count HEAD)" )'
+alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
+alias wddd='wd -D'      ### Decrement
+
+function wd-merged() {
+    local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log  | sort -t / -k 7nr ) )
+    local merged_file_count=${#merged_file_list[@]}
+    if [[ ${#merged_file_list[@]} -eq 0 ]]; then
+        echo "There are no 'merged.log' files"
+        return 0
+    fi
+    echo "Found ${#merged_file_list[@]} 'merged.log' files:"
+    local i
+    for  (( i = 0; i < ${merged_file_count}; ++i )); do
+        local file_line_list=( $(ls -l ${merged_file_list[${i}]}) )
+        local merge_log_line_count=$( wc -l < ${merged_file_list[${i}]} )
+        printf "%2d:  %-70s %s %2s %s %6s bytes = %4d lines\n" ${i} ${file_line_list[-1]} ${file_line_list[-4]}  ${file_line_list[-3]}  ${file_line_list[-2]}  ${file_line_list[-5]} ${merge_log_line_count}
+    done
+    if [[ "${1}" == "-k" ]]; then
+         wd-merged-kfs -n
+    fi
+    return 0
+}
+
+function wd-merged-kfs() {
+    local merged_file_list=( $(find ${WD_TMP_ROOT}/ -name merged.log | sort -t / -k 7nr) )      ### sort by ascending band freqeuncy
+    local merged_file_count=${#merged_file_list[@]}
+    if [[ ${merged_file_count} -eq 0 ]]; then
+        echo "There are no 'merged.log' files"
+        return 0
+     fi
+     [[ "${1}" != "-n" ]] && echo "Found ${merged_file_count} 'merged.log' files:"
+     local default_index=0
+     local i
+     for  (( i = 0; i < ${merged_file_count}; ++i )); do
+         local file_path_list=( ${merged_file_list[${i}]//\// } )
+         if [[ "${file_path_list[-2]}" == "20" ]]; then
+             default_index=${i}
+         fi
+         [[ "${1}" != "-n" ]] && printf "%2s: %s\n" ${i}   ${merged_file_list[${i}]}
+     done
+
+     local merge_log_file
+     read -p "Select merged file to examine [0-${merged_file_count}], default = ${default_index} ? => "
+     if [[ -z "${REPLY}" ]]; then
+         REPLY=${default_index}
+     fi
+     local merged_log_file=${merged_file_list[${REPLY}]}
+     echo "Examining  merged_log_file  ${merged_log_file} "
+     sed 's/KA9Q_AIRSPYKA9Q_SDRPLAY/KA9Q_AIRSPY KA9Q_SDRPLAY/;s/TOTAL.*//'  ${merged_log_file} | awk '{printf "%s %s %s %s %s %s %10s %8s %10s:   %10s %10s %10s %10s      %10s %10s %10s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $16, $12, $10, $11, $15, $14, $13}' | less
+}
+
+
+declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
+### 11/2/22 - This doesn't work anymore, but it could be modifed 
+function wd-grape-info(){
+    local grape_date_dirs_list=( $( find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
+    wd_logger 1 "Found ${#grape_date_dirs_list[@]} date dirs: ${grape_date_dirs_list[*]##*/}"
+    local date_dir
+    for date_dir in ${grape_date_dirs_list[@]}; do
+        local file_count=$( find ${date_dir} -type f | wc -l )
+        printf "Date %s contains %5d files: " ${date_dir##*/} ${file_count}
+        case ${file_count} in
+            0)
+                read -N 1 -p "There are no files in the date ${date_dir##*/} tree, so delete that tree? [Yn] => "
+                if [[ ${REPLY:-y} == "y" ]]; then
+                    echo "\nDeleting directory tree ${date_dir}"
+                    rm -r ${date_dir}
+                fi
+                ;;
+            21)
+                echo "has been purged of all but the sox.log, 24h.wav and the 'has been uploaded' files"
+                ;;
+            14421)
+                echo "and is fill with 14400 flac files, the sox, wav and 'has been uploaded' files"
+                ;;
+            *)
+                local date=$(printf "%(%Y%m%d)T")
+                if [[ "${date_dir##*/}" == "${date}" ]]; then
+                    echo "Skipping more checks for files being created today"
+                else
+                    read -p "has invalid number ${file_count} of files. List the non-flac files? => "
+                    if [[ ${REPLY:-n} == "y" ]]; then
+                        find ${date_dir} -type f ! -name '*.flac' | less
+                    fi
+                fi
+                ;;
+        esac
+    done
+}
+alias wdgi='wd-grape-info'
+
+function wd-wav-clean() {
+    local wav_archive_root_dir_list=( $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
+    local wav_archive_root_dir
+    for wav_archive_root_dir in ${wav_archive_root_dir_list[@]} ; do
+        local flat_file_list=( $(find ${wav_archive_root_dir} -type f | sort) )  
+        if [[ ${#flat_file_list[@]} -eq 0 ]]; then
+            read -p "wav file root dir ${wav_archive_root_dir} contains only directory files, so delete it? [Yn] => "
+            if [[ "${REPLY:-y}" == "y" ]]; then
+                rm -r ${wav_archive_root_dir}
+            fi
+        else
+            printf "Found %6d files under %s\n"  ${#flat_file_list[@]}  ${wav_archive_root_dir}
+        fi
+    done
+}
+
+### At sites which are archiving wav files, this gets some info
+alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
+
+alias wdwaf=wd-wav-archive-fix
+function wd-wav-archive-fix(){
+    source ~/wsprdaemon/wsprdaemon.conf
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
+        return 0
+    fi
+    if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
+        return 0
+    fi
+    local date_dir
+    for date_dir in $(find -L ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
+        #echo "date_dir = ${date_dir}"
+        local reporter_dir
+        for reporter_dir in $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
+            #echo "reporter_dir = ${reporter_dir}"
+            local receiver_dir
+            for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
+                echo  "Examining  ${receiver_dir} "
+                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]] || [[ ${receiver_dir##*@} =~ "NOT_DEFINED" ]]; then
+                    local new_file_name="${receiver_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}"
+                    read -p "Fix ${receiver_dir} to become ${new_file_name} ? => "
+                    mv  ${receiver_dir} ${new_file_name}
+                elif ! [[ ${receiver_dir} =~ "@" ]]; then
+                   read -p  "Fix receiver directory ${receiver_dir} by renaming it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
+                   mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
+                fi
+            done
+        done
+    done
+}
+
+function wd-ssh-psws(){
+    source ~/wsprdaemon/wsprdaemon.conf
+    if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
+        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
+        return 0
+    fi
+    if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
+        echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
+        return 0
+    fi
+    wd_logger 1 "Executing: 'ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu'"
+    ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu
+}
+alias wdssp=wd-ssh-psws
+
+function wd-overloads()
+{
+: <<"comment_out"
+    local log_file_list=( $(find /dev/shm/wsprdaemon/ -name wav_status.log | sort ) )
+    #printf "Searching ${#log_file_list[@]} 'wav_status.log' files for WAV overload events\n%-40s YYMMDD_HHMM      MIN_SAMPLE MAX_SAMPLE Count_of MIN/MAX\n" "RECIEVER/BAND/log_file"
+
+    if [[ ${#log_file_list[@]} -eq 0 ]]; then
+        echo "Can't find any 'wav_status.log' files, so this must be an older version of WD"
+    else
+       true  #awk '$2 == -1.0 || $3 == 1.0 { printf( "%-40s %s\n", substr(FILENAME,33) ":", $0) } ' ${log_file_list[@]}
+    fi
+comment_out
+
+    log_file_list=( $(find /dev/shm/wsprdaemon/ \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
+    if [[ ${#log_file_list[@]} -eq 0 ]]; then
+        echo "Can't find any 'kiwi_ovs.log or ad_overloads.log' files"
+        return
+    fi
+
+    if [[ $# -ne 0 && "$1" == "-f" ]]; then
+        read -p "Press <ENTER> to flush all of the ${#log_file_list[@]} overload..log files => "
+        rm ${log_file_list[@]}
+        return
+    fi
+
+    ### Get a list of the Kiwis
+    local kiwi_list=()
+    local kiwi_root_path_list=()
+
+    local file_path
+    for file_path in ${log_file_list[@]} ; do
+        local file_path_list=( ${file_path//\// } )         ### put each directory name in an element of an array
+        local kiwi_name=${file_path_list[-3]-}              ### two directories up from the log file is the directory with the name of the kiwi
+        if [[ ! " ${kiwi_list[*]} " =~ " ${kiwi_name} " ]]; then
+            kiwi_list+=("${kiwi_name}")
+           local temp_path_list
+           temp_path_list=(${file_path//\// })
+           local kiwi_root_path=${temp_path_list[@]:0:$(( ${#temp_path_list[@]} - 2 ))}    ### chop off BAND/kiwi_ovs.log
+           kiwi_root_path="/${kiwi_root_path// /\/}"
+           #echo "kiwi_root_path = ${kiwi_root_path}"
+           kiwi_root_path_list+=(${kiwi_root_path})
+           #read -p "Next Kiwi path => "
+        fi
+    done
+    printf "Found there are ${#kiwi_list[@]} Wsprdaemon SDRs: ${kiwi_list[*]}\n\n"
+
+    for kiwi_root_path in ${kiwi_root_path_list[@]} ; do
+        #echo "Searching under ${kiwi_root_path}"
+        local kiwi_name=${kiwi_root_path##*/}
+        log_file_list=( $(find ${kiwi_root_path} \( -name kiwi_ovs.log -o -name adc_overloads.log \) -printf "%p\n" | sort ) )
+
+        local newest_log_file=$(ls -1t ${log_file_list[@]} | head -1)
+        local most_ovs_line=$(sort -k 3n ${newest_log_file} | awk '$2 != $3' | tail -n 1)
+        local ov_report_count=$( wc -l < ${newest_log_file})
+        local ov_non_zero_count=$(awk '$3 != 0' ${newest_log_file} | wc -l)
+
+        local most_ovs_line_list=( ${most_ovs_line} )
+        if [[ ${most_ovs_line_list[2]-0} -eq 0 ]]; then
+            printf "SDR ${kiwi_name} reports no overload events\n\n"
+            continue
+        fi
+
+        printf "For SDR '${kiwi_name}' found in '${newest_log_file}', the newest of the ${#log_file_list[@]} '*.log' files:\n"
+        printf "There are %6d total wspr cycles in the log file, of which %6d cycles report overload events\n"  ${ov_report_count}  ${ov_non_zero_count}
+        printf "This line reports the most OVs:\n${most_ovs_line}\n" 
+
+        read -p "Press 'l + <RETURN>' to execute 'less ${newest_log_file}', then search for ${most_ovs_line_list[0]} => " user_input
+        if [[ -n "${user_input}" ]]; then
+            less ${newest_log_file}
+        fi
+        printf "\n"
+    done
+}
+alias wd-ov='wd-overloads'
+alias wdov='wd-ov'
+
+function wd-query()
+{
+    if [[ $# -lt 1 ]]; then
+        echo "usage:  wd-query {-r | -t} ID [HOURS_TO_SEARCH]       -r => search for ID of reporter     -t => search for ID of transmit beacon"
+        return 0
+    fi
+    local query_target_field="rx_id"
+    case $1 in
+        -r) query_target_field="rx_id";shift ;;
+        -t) query_target_field="tx_call";shift ;;
+    esac
+    if [[ $# -lt 1 ]]; then
+        echo "ERROR: missing ID"
+        echo "usage:  wd-query {-r | -t} ID [HOURS_TO_SEARCH]       -r => search for ID of reporter     -t => search for ID of transmit beacon"
+        return 1
+    fi
+    local target_val=$1
+    local query_hours=${2-1}
+    local query_minutes=$((query_hours * 60))
+
+    PGPASSWORD=JTWSPR2008 psql -U wdread -h wsprdaemon.org -p 5432 -d tutorial -c \
+        "select time,tx_call,tx_grid,rx_id,receiver,rx_grid,freq,\"tx_dBm\",\"SNR\",drift,mode,metric as \"S width (mHz)\" from wsprdaemon_spots_s where ${query_target_field}='${target_val}' and mode >0 and time > now() - interval '${query_minutes} minutes' order by (time,rx_id,receiver) desc;"
+}
+alias wd-q='wd-query'
+alias wdq='wd-query'
+
+alias wd-syslog='sudo tail -F /var/log/syslog'
+alias wd-syslogl='sudo less /var/log/syslog'
+alias wdsl='wd-syslog'
+alias wd-wd-rec='watch "ps aux | grep wd-rec | grep -v grep | sort -k 14,14n -k 15r"'
+alias wdwd='wd-wd-rec'
+function wd-wd-rec-flush()
+{
+    local wd_record_pids=( $(ps aux | grep wd-rec | grep -v grep | awk '{print $2}') )
+    if [[ ${#wd_record_pids[@]} -gt 0 ]]; then
+        echo "Flushing ${#wd_record_pids[@]} wd-record jobs"
+        kill ${wd_record_pids[@]}
+    fi
+}
+
+function wd-freqs(){
+    local rec_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local rec_rx_root_dir_list=( $( find ${rec_root_dir}/* -type d -prune ) )
+    local rec_bands_list=( $( find ${rec_root_dir} -mindepth 2 -maxdepth 2 -type d ! -name kiwi_status.d -printf "%f\n" | sort -u ) )
+
+    local first_print="yes"
+    for band in ${rec_bands_list[@]}; do
+        if [[ ${first_print} == "no" ]]; then
+            echo
+        fi
+        first_print=no
+        for rx_root_dir in ${rec_rx_root_dir_list[@]} ; do
+            local rx_name=${rx_root_dir##*/}
+            echo -n "${rx_name}: "
+            local rx_band_dir=${rx_root_dir}/${band}
+            if [[ -d ${rx_band_dir} ]]; then
+                printf "%s" "$( grep "^23.*AI6" ${rx_band_dir}/decoding_daemon.log | tail -n 1)"
+            fi
+            echo
+        done | sort
+    done
+}
+
+function wd-wavs() {
+    local rx_band=$1
+
+    if [[ -z "${rx_band}" ]]; then
+        echo "usage: wd-wavs BAND"
+        return 0
+    fi
+
+    for rx_dir in */${band} ; do
+        ls -lt ${rx_dir}/${rx_band}/*.wav | head -1
+    done
+    return 0
+
+    local rec_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local rec_rx_root_dir_list=( $( find ${rec_root_dir}/* -type d -prune ) )
+    local rec_bands_list=( $( find ${rec_root_dir} -mindepth 2 -maxdepth 2 -type d ! -name kiwi_status.d -printf "%f\n" | sort -u ) )
+
+    local first_print="yes"
+    for band in ${rec_bands_list[@]}; do
+        echo =n ${band}
+    done
+}
+
+### Monitor and control the KA9Q-radio service
+###
+function wd-get_ka9q-conf_file-base_name() {
+    source ~/wsprdaemon/wsprdaemon.conf
+    local conf_base_name
+
+    if [[ -n "${KA9Q_CONF_NAME-}" ]]; then
+        [[ ${verbosity-0} -gt 0 ]] && echo "Using conf base name KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf" 1>&2
+        conf_base_name="${KA9Q_CONF_NAME}"
+    else
+        [[ ${verbosity-0} -gt 0 ]] && echo "Using default conf base name 'rx888-wsprsdaemon'" 1>&2
+         conf_base_name="rx888-wsprdaemon"
+    fi
+
+    #set -x
+    local running_radiod_status_line=$(sudo systemctl status 'radiod@*' | grep '.conf' | grep -v '\\x')
+    if [[ -n "${running_radiod_status_line}" ]]; then
+        conf_base_name="${running_radiod_status_line##*@}"
+        conf_base_name="${conf_base_name%.conf*}"
+        [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
+    fi
+    echo "${conf_base_name}"
+}
+
+function wd-get-ka9q-conf-file-path () {
+    local base_name=$(wd-get_ka9q-conf_file-base_name)
+    local conf_file_path="/etc/radio/radiod@${base_name}.conf"
+    if [[ ! -f ${conf_file_path} ]]; then
+        echo "ERROR: can't find expected conf file: ${conf_file_path}"
+        return 1
+    fi
+    echo ${conf_file_path}
+    return 0
+}
+
+#alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
+function wd-rl() {
+    local rl_args=${@--n 40}
+    local base_name=$(wd-get_ka9q-conf_file-base_name)
+    sudo journalctl -u radiod@${base_name} -f ${rl_args}
+}
+alias wdrl='wd-rl'
+
+function wd-radiod-action(){
+   local action=$1
+   local base_name=$(wd-get_ka9q-conf_file-base_name)
+   sudo systemctl ${action} radiod@${base_name}.service
+   sudo systemctl ${action} ft8-decoded.service
+   sudo systemctl ${action} ft4-decoded.service
+   sudo systemctl ${action} pskreporter@ft4.service
+   sudo systemctl ${action} pskreporter@ft8.service
+   sudo systemctl ${action} pskreporter@wspr.service
+}
+
+alias wd-ra='wd-radiod-action start'  ### show it's status
+alias wdra='wd-ra'
+
+alias wd-rz='wd-radiod-action stop'  ### show it's status
+alias wdrz='wd-rz'
+
+alias wd-rs='wd-radiod-action status'  ### show it's status
+alias wdrs='wd-rs'
+
+function wd-radiod-conf-edit() {
+   local conf_file_path
+
+   if ! conf_file_path=$(wd-get-ka9q-conf-file-path); then
+       echo "ERROR: ${conf_file_path}"
+       return 1;
+   fi
+   vi ${conf_file_path}
+}
+alias wdrv='wd-radiod-conf-edit'
+
+### WD systemctl 
+alias wd-ss='sudo systemctl'
+alias wdss=wd-ss
+
+alias wd-wd-start='sudo systemctl start wsprdaemon.service'
+alias wdwa='wd-wd-start'
+
+alias wd-wd-stop='sudo systemctl stop wsprdaemon.service'
+alias wdwz='wd-wd-stop'
+
+alias wd-wd-status='sudo systemctl status wsprdaemon.service'
+alias wdws='wd-wd-status'
+
+### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
+function wd-radiod-bw-check() {
+    local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/\/etc\/radio\/radiod.*conf/{print $NF}' )
+    if [[ -z "${running_radiod_conf_file}" ]]; then
+        wd_logger 1 "radiod is not configured to run on this server"
+        return 0
+    fi
+    local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurence of '^low' and '^high' is in the [WSPR] section
+    local rx_audio_high=$( awk '/^high =/{print $3;exit}' ${running_radiod_conf_file})
+    wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
+
+    if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
+        wd_logger 1 "ERROR: can't find the expected low and/or high settings in  ${running_radiod_conf_file}"
+        return 1
+    fi
+    local rx_needs_restart="no"
+    if [[ "${rx_audio_low}" != "1300" ]]; then
+        wd_logger 1 "WARNING: found low = ${rx_audio_low}, so changing it to the desired value of 1300"
+        sed -i "0, /^low =/{s/low = ${rx_audio_low}/low = 1300/}"  ${running_radiod_conf_file}      ### Only change the first 'low = ' line in the conf file
+        rx_needs_restart="yes"
+    fi
+    if [[ "${rx_audio_high}" != "1700" ]]; then
+        wd_logger 1 "WARNING: found high = ${rx_audio_high}, so changing it to the desired value of 1700"
+        sed -i "0, /^high/{s/high = ${rx_audio_high}/high = 1700/}"  ${running_radiod_conf_file}
+        rx_needs_restart="yes"
+    fi
+    if [[ ${rx_needs_restart} == "no" ]]; then
+        wd_logger 2 "No changes needed"
+    else
+        wd_logger 1 "Restarting the radiod service"
+        local radiod_service_name=${running_radiod_conf_file##*/}
+        radiod_service_name=${radiod_service_name/.conf/.service}
+        sudo systemctl restart ${radiod_service_name}
+    fi
+    return 0
+}
+
+function wd-9qstats() {
+    local root_dir="/dev/shm/wsprdaemon/posting.d/MERG_6_Q"
+    local band_dir_list=( $(find ${root_dir} -maxdepth 1 -type d -not -wholename ${root_dir}) )
+    local band_list=( ${band_dir_list[@]##*/} )
+
+    echo "Band  Total  Q Missed       SNR    Kiwi Missed       SNR  SNR Diff"
+    for band_dir in ${band_list[@]}  ; do
+        local merged_log_file
+        merged_log_file=${root_dir}/${band_dir}/merged.log
+        if [[ ! -f ${merged_log_file} ]]; then
+            echo "${band_dir}: No    merged.log in ${root_dir}/${band_dir}"
+        else
+            local spots_info_list=( $(awk '! /FREQUENCY/{++spots_count};\
+                                     $10 == "*" {++q_missed_count};\
+                                     $11 == "*" {++kiwi_missed_count};\
+                                     ! /FREQUENCY/ && $10 != "*" && $11 != "*" { q_spots_sum += $10; kiwi_spots_sum += $11; ++sum_count} ;\
+                                     END {printf "%5d %5d %4.2f%% %f %5d  %4.2f%% %f   %f\n", \
+                                                 spots_count,\
+                                                 q_missed_count,  (q_missed_count/spots_count)*100, q_spots_sum /sum_count,\
+                                                 kiwi_missed_count, (kiwi_missed_count/spots_count)*100, kiwi_spots_sum/sum_count,\ 
+                                                (kiwi_spots_sum/sum_count) - (q_spots_sum /sum_count) }'  ${merged_log_file}) )
+            #echo "spots_info_list[] = '${spots_info_list[*]}'"
+            local spots_count=${spots_info_list[0]}
+            local q_missed_count=${spots_info_list[1]}
+            local q_missed_percent=${spots_info_list[2]}
+            local q_average=${spots_info_list[3]}
+            local kiwi_missed_count=${spots_info_list[4]}
+            local kiwi_missed_percent=${spots_info_list[5]}
+            local kiwi_average=${spots_info_list[6]}
+            local spots_diff_average=${spots_info_list[7]}
+
+            printf "%4d: %5d   %4d %6s %5.1f        %4d %6s %5.1f   %4.2f\n" \
+                ${band_dir} ${spots_count} ${q_missed_count} ${q_missed_percent} ${q_average} ${kiwi_missed_count} ${kiwi_missed_percent} ${kiwi_average} ${spots_diff_average}
+        fi
+    done
+}
+
+declare -A KA9Q_band_freq=(
+    [160]="1836600"
+    [80]="3568600"
+    [60]="5287200"
+    [40]="7038600"
+    [30]="10138700"
+    [20]="14095600"
+    [17]="18104600"
+    [15]="21094600"
+    [12]="24924600"
+    [10]="28124600"
+     [6]="50293000"
+)
+
+function wd-radiod-control()
+{
+    local band=${1-20}
+    local tuning_freq=${KA9Q_band_freq[${band}]}
+    local mc_url
+
+    local radiod_conf_base_name=$(wd-get_ka9q-conf_file-base_name)
+    local radio_conf_file_name="/etc/radio/radiod@${radiod_conf_base_name}.conf"
+
+    if [[ ! -f "${radio_conf_file_name}" ]]; then
+        echo "Can't find the radiod configuration file '${radio_conf_file_name}'"
+        return 1
+    else
+        local wspr_section_data_url="$(grep -i -A 20 '^\[.*wspr' "${radio_conf_file_name}" | grep "^data" | head -1 | cut -d ' ' -f 3)"
+        if [[ -z "${wspr_section_data_url}" ]]; then
+            echo "Can't find [wspr] data = URL in '${radio_conf_file_name}'"
+            return 2
+        else
+            echo "Found [wspr] data = ${wspr_section_data_url} in '${radio_conf_file_name}'"
+            control -s ${tuning_freq} ${wspr_section_data_url}
+        fi
+    fi
+    return 0
+}
+alias wd9c=wd-radiod-control
+alias wdrc=wd-radiod-control
+
+function wd-rc-gain() {
+    local root_dir="/dev/shm/wsprdaemon/recording.d/KA9Q_0"
+
+    if [[ ! -d "${root_dir}" ]]; then
+        echo "${root_dir} doesn't exist"
+        return0
+    fi
+}
+alias wdrg='wd-rc-gain'
+
+function wd-9m()
+{
+    local header_printed="no"
+    local band
+    for band in $( IFS=$'\n'; echo "${!KA9Q_band_freq[*]}" | sort -n ); do
+        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_band_freq[${band}]} hf.local)
+        local rf_gain=$(echo "${metadump_out}" | awk '/rf gain/{print $(NF - 1) }')
+        local if_power=$(echo "${metadump_out}" | awk '/IF pwr/{print $(NF - 1) }')
+        local noise_level=$(echo "${metadump_out}" | awk '/N0 /{print $(NF - 1) }')
+        local agc_enable=$(echo "${metadump_out}" | awk '/agc /{print $(NF - 0) }')
+        local baseband_pwr=$(echo "${metadump_out}" | awk '/baseband pwr/{print $(NF - 1) }')
+        local output_level=$(echo "${metadump_out}" | awk '/output level/{print $(NF - 1) }')
+        local headroom=$(echo "${metadump_out}" | awk '/headroom/{print $(NF - 1) }')
+        local agc_gain=$(echo "${metadump_out}" | awk '/) gain/{print $(NF - 1) }')
+
+        if [[ ${header_printed} == "no" ]]; then
+            printf "RF Gain = %4.1f, AGC %s, AGC gain %4.1f\n" ${rf_gain} ${agc_enable} ${agc_gain}
+            printf "Band  IF_power  Noise_level  Baseband_power Output_level  Headroom\n" 
+            header_printed="yes"
+        fi
+        ##     band    if_power noise_level    baseband_pwr   output_level  headroom
+        printf "%3d      %6.1f      %6.1f          %6.1f       %6.1f    %6.1f\n" ${band} "${if_power}" "${noise_level}" "${baseband_pwr}" "${output_level}" "${headroom}"
+    done
+}
+alias wd9m=wd-9m
+
+### tmux alias
+function tm() {
+    local tm_arg=${1-}
+    local tm_list=( $(tmux ls 2> /dev/null | awk -F : '{print $1}') )
+    local tm_list_count=${#tm_list[@]}
+
+    if [[ -z "${tm_arg}" ]]; then
+        if [[ ${tm_list_count} -eq 0 ]]; then
+            tmux
+            return 0
+        fi
+        if [[ ${tm_list_count} -eq 1 ]]; then
+            tmux a -t ${tm_list[0]}
+            return 0
+        fi
+    fi
+
+    printf "There are ${tm_list_count} active tmux sessions:\n"
+    readarray -t tm_list <  <(tmux ls)
+    local i
+    for (( i = 0; i < ${#tm_list[@]}; ++i )); do
+        local tm_session="${tm_list[${i}]}"
+        printf "#%s\n" "${tm_session}"
+    done
+    if [[ "${tm_arg}" == "-l" ]]; then
+        return 0
+    fi
+    local tm_default_id=$(echo "${tm_list[0]}"  | awk -F : '{print $1}')
+    read -p "Select tmux session id # (default = ${tm_default_id})? => "
+    if [[ -z "${REPLY}" ]]; then
+        REPLY="${tm_default_id}"
+    fi
+    for (( i = 0; i < ${#tm_list[@]}; ++i )); do
+        local tm_session="${tm_list[${i}]}"
+        local tm_session_id=$( echo "${tm_session}" | awk -F : '{print $1}' )
+        if [[ "${tm_session_id}" == "${REPLY}" ]]; then
+            tmux a -t ${tm_session_id} 
+            return 0
+        fi
+    done
+    echo "${REPLY} is not a valid id"
+    return 0
+}
+
+function wd-wait-for_wspr-gap(){
+   printf "Starting at %(%M-%S)T and waiting for the next gap in the WSPR-2 packets\n" -1
+   while printf -v minute "%(%M)T\n" -1 && printf -v sec "%(%S)T\n" -1 && [[ $(( minute % 2 )) -ne 1 || 10#${sec} -lt 55 ]]; do 
+       [[ ${verbosity-0} -gt 0 ]] &&printf '%(%M-%S)T\n' -1
+       sleep 1; 
+   done
+}
+alias wd-wait='wd-wait-for_wspr-gap'
+
+alias wd-nf="awk '{printf \"%2d: %s\n\", NF, \$0}'"
+
+### git aliases
+
+### Change a ~/wsprdaemon from https:..(git read only) to git@github.com (git read/write) so you can check in WD source code changes
+function  wd-git-to-ssh(){
+    local current_url=$(git remote get-url origin)
+    if ! [[ "${current_url}" =~ https ]]; then
+        echo "Nothing to do since current_url='${current_url}' doesn't contain the string 'https'"
+        return 0
+    fi
+    local repo_name=${current_url/*github.com\//}
+    local new_repo_url="git@github.com:${repo_name}"
+    read -p "Change git's url from '${current_url}' to '${new_repo_url}'? => "
+    git config --global user.email "rob@robinett.us"
+    git config --global user.name "Rob Robinett"
+    git remote set-url origin ${new_repo_url}
+    if ! [[ -d ~/.ssh ]]; then
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to generate one.  Press <CR> to accept all of its defaults:"
+        ssh-keygen
+    fi
+    local public_key_file=$(find ~/.ssh -type f -name '*pub')
+    if [[ -z "${public_key_file}" ]]; then
+        echo "There is no local ssh public key file.  Runnning 'ssh-keygen to generate one.  Press <CR> to accept all of its defaults:"
+        ssh-keygen
+    fi
+    public_key_file=$(find ~/.ssh -type f -name '*pub')
+    if [[ -z "${public_key_file}" ]]; then
+        echo "There is still no local ssh public key file, this has failed"
+        return 1
+    fi
+    echo "Copy and paste this ssh public key to the github.com account:"
+    echo "$(< ${public_key_file})"
+    return 0
+}
+
+alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
+
+alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
+function wd-watch-wavs() {
+    local band_freq=${1-14}
+    local band_dir=${PWD##*/}
+
+    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
+}
+alias wdww='wd-watch-wavs'
+
+alias wdps='ps aux | grep "wd-record\|pcmrecord" | grep -v grep'
+
+function wd-ssh-to-wdclient() {
+    local rac_id=${1:-usage}
+
+    if [[ "${rac_id}" == "usage" ]]; then
+        echo "usage:   wd-ssh-to-wdclient (or wdssr) RAD_ID"
+        return 0
+    fi
+    if [[ ${#rac_id} -eq 1 ]]; then
+        rac_id="0${rac}"
+    fi
+    ssh -p 358${rac_id} wsprdaemon@wsprdaemon.org
+}
+alias wdssr=wd-ssh-to-wdclient
+
+###  Reloads these functions and aliases into the users running bash (must be an alias)
+alias wd-bash_aliases='source ~/wsprdaemon/bash-aliases'
+alias wdba='wd-bash_aliases'
+
+function wd-help()
+{
+    echo "Programs which print information about Wsprdaemon (WD) system:
+Command       Can also be executed by    Description
+wd-help       wd-h wd-                   Prints this help message
+wd-start      wd-a wda                   Start or keep running WD
+wd-stop       wd-z wdz                   Stop WD if it is running
+wd-status     wd-s wds                   Show the status of a running WD 
+wd-upload-wn  wd-un wdln                 Watch the 'upload to wsprnet' log
+wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
+wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
+wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files 
+wd-query      wd-q wdq                   Query the wsprdaemon database for spots
+wd-gc                                    Execute git commit
+wd-gp                                    Execute git push
+wq-gl                                    Execute git log
+wd-gc-ssh                                Execute git remote set-ur + git config
+"
+}
+alias wd-='wd-help'
+alias wd-h='wd-help'
+
+if [[ ! -f ~/.tmux.conf ]]; then
+    echo "set -g mouse on" > ~/.tmux.conf
+fi
+
+alias wdg='wd -g'
+
+###  Runs du and sorts output by name rather than ???   Useful in the ~/wsprdaemon/wav-archive directory
+function wddu() {
+    local files="$@"
+
+    du -s ${files}  | awk '{print $2 ":  " $1}'
+}
+
+### Copy a 2 minute wav file to /tmp
+function wd-wav-capture() {
+    local wav_file
+    echo -n "$(date): Waiting for the 2 minute long wav file to appear after the next even 2 minutes: "
+    while ! wav_file=$(ls 2?????_*.wav 2> /dev/null ); do 
+         echo -n "."
+         sleep .25
+     done
+     cp ${wav_file} /tmp/
+     echo 
+     echo "$(date): Captured /tmp/${wav_file}"
+}
+
+function wd-ft-logs() {
+   for d in 4 8; do
+       local ft_log_file_name="/mnt/ka9q-radio/ft${d}/ft${d}.log"
+       echo "FT${d}: ${ft_log_file_name} size if $(stat --format=%s ${ft_log_file_name}) bytes"
+       local ft_log_archived_file_names="$( find ${ft_log_file_name%/*} -type f -name ${ft_log_file_name##*/}.* )"
+       if [[ -n "${ft_log_archived_file_names}" ]]; then
+           echo -n "Archives: "; echo ${ft_log_archived_file_names}
+       fi
+       head -4  ${ft_log_file_name}
+       echo "++++++++++++++"
+       tail -4  ${ft_log_file_name}
+       echo 
+   done
+   df /mnt/ka9q-radio | grep "^tmp"
+   if [[ -n "${1-}" ]]; then
+       if [[ ! -f /mnt/ka9q-radio/ft4/ft4.log ]]; then
+           echo "There is no /mnt/ka9q-radio/ft4/ft4.log"
+       else
+           read -p "$(date): Run 'tail -f /mnt/ka9q-radio/ft4/ft4.log'? => "
+           tail -f "/mnt/ka9q-radio/ft4/ft4.log"
+       fi
+   fi
+}
+
+### On MacOS, disable the caps lock key on a Mac keyboard
+function wd-no-capslock() {
+   hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0}]}'
+}
