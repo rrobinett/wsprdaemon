@@ -39,7 +39,7 @@ wsprdaemon includes the ka9q-radio package which creates a "radio" group.  Once 
 sudo usermod -a -G radio wsprdaemon
 ```
 
-If dedicating this machine to exclusive wsprdaemon use, you may want to change the name of your system, do so with:
+If dedicating this computer to exclusive wsprdaemon use, you may also want the hostname of your computer to reflect this.  To do so:
 
 ```
 sudo hostnamectl set-hostname W3USR-B1-1
@@ -48,17 +48,17 @@ After changing the hostname, you may need to update the /etc/hosts file to refle
 
 ### Remote Access Setup
 
-If the wsprdaemon computer is not the one in in front of you, from your present computer, make it easier to login to the new (if remote) machine.
+If installing wsprdaemon on a remote computer, from your present computer, make it easier to login to the other computer.
 First, make sure you have a public key :
 ```
 ssh-keygen
 ```
-then
+then use the ssh-copy-id utility to copy this to the remote computer.
 ```
-ssh-copy-id  wsprdaemon@\<new machine name\>
+ssh-copy-id  wsprdaemon@\<new computer name\>
 ```
 
-To suppress the several notices that greet you on every login, 
+If you want to suppress the several notices that greet you on every login, 
 ```
 touch .hushlogin
 ```
