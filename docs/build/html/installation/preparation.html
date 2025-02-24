@@ -168,7 +168,7 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>If dedicating this machine to exclusive wsprdaemon use, you may want to change the name of your system, do so with:</p>
+<p>If dedicating this computer to exclusive wsprdaemon use, you may also want the hostname of your computer to reflect this.  To do so:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">hostnamectl</span> <span class="nb">set</span><span class="o">-</span><span class="n">hostname</span> <span class="n">W3USR</span><span class="o">-</span><span class="n">B1</span><span class="o">-</span><span class="mi">1</span>
 </pre></div>
 </div>
@@ -176,16 +176,16 @@
 </section>
 <section id="remote-access-setup">
 <h3>Remote Access Setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>
-<p>If the wsprdaemon computer is not the one in in front of you, from your present computer, make it easier to login to the new (if remote) machine.
+<p>If installing wsprdaemon on a remote computer, from your present computer, make it easier to login to the other computer.
 First, make sure you have a public key :</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">keygen</span>
 </pre></div>
 </div>
-<p>then</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">copy</span><span class="o">-</span><span class="nb">id</span>  <span class="n">wsprdaemon</span><span class="o">@</span>\<span class="o">&lt;</span><span class="n">new</span> <span class="n">machine</span> <span class="n">name</span>\<span class="o">&gt;</span>
+<p>then use the ssh-copy-id utility to copy this to the remote computer.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">copy</span><span class="o">-</span><span class="nb">id</span>  <span class="n">wsprdaemon</span><span class="o">@</span>\<span class="o">&lt;</span><span class="n">new</span> <span class="n">computer</span> <span class="n">name</span>\<span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>To suppress the several notices that greet you on every login,</p>
+<p>If you want to suppress the several notices that greet you on every login,</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">touch</span> <span class="o">.</span><span class="n">hushlogin</span>
 </pre></div>
 </div>
