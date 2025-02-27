@@ -571,3 +571,9 @@ if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
     exit 1
 fi
+
+if ! check_systemctl_is_setup ; then
+    wd_logger 1 "ERROR: failed to setup this server to auto-start"
+    exit 1
+fi
+

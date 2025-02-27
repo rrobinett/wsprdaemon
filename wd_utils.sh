@@ -304,17 +304,81 @@ function seconds_until_next_odd_minute() {
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
 declare -r SYSTEMCTL_UNIT_PATH=/etc/systemd/system/wsprdaemon.service
+
+function systemctl_is_setup() {
+    wd_logger 2 "Checking auto-start configuration"
+
+    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
+    if [[ ! -d ${systemctl_dir} ]]; then
+        wd_logger 1 "ERROR: this server appears to not be configured to use the 'systemctl' service needed for auto-start"
+        return 1
+    fi
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+         wd_logger 1 "This server has not been set up to auto-start wsprdaemon at powerup or reboot"
+         return 1
+    fi
+    if ! grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH} || ! grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
+         return 1
+    fi
+     wd_logger 2 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+     if sudo systemctl is-enabled wsprdaemon.service > /dev/null ; then
+         wd_logger 2 "The WD service is correctly configured and enabled"
+         return 0
+     fi
+     wd_logger 1 "The WD service was configured but not enabled, so enable it"
+     if sudo systemctl enabled wsprdaemon.service ; then
+         wd_logger 1 "The WD service has been enabled"
+         return 0
+     fi
+     wd_logger 1 "ERROR: failed to enable the WD service, so deleting the service file"
+     wd_rm ${SYSTEMCTL_UNIT_PATH}
+     return 1
+}
+
+### Called by wd_setup.sh each time WD is executed
+function check_systemctl_is_setup() {
+    local rc
+
+    wd_logger 2 "Starting"
+    if systemctl_is_setup; then
+       wd_logger 2 "WD is setup to auto-start at powerup and reboot"
+       return 0
+    fi
+    wd_logger 1 "WD needs to be setup to auto-start at powerup and reboot"
+    setup_systemctl_daemon
+    rc=$? ; if (( rc )); then
+       wd_logger 1 "ERROR: failed to setup WD to auto-start"
+       return 1
+    fi
+    wd_logger 1 "WD is now setup to auto-start"
+    return 0
+}
+
+
 function setup_systemctl_daemon() {
     local start_args=${1--A}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
     local stop_args=${2--Z} 
-    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
-    if [[ ! -d ${systemctl_dir} ]]; then
-        echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
-        return
+
+    if systemctl_is_setup ; then
+        wd_logger 1 "The WD service is setup and enabled"
+        return 0
     fi
     if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
-        return
+        if grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH}  &&  grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+            wd_logger 1 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+            if ! sudo systemctl is-enabled wsprdaemon.service ; then
+                wd_logger 1 "The WD service was configured but not enabled, so enabled it"
+                if sudo systemctl enabled wsprdaemon.service ; then
+                    wd_logger 1 "The WD service has been enabled"
+                    return 0
+                fi
+                wd_logger 1 "ERROR: failed to enable the WD service, so re-install it"
+            fi
+        fi
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
     fi
     if [[ ! $(groups) =~ radio ]]; then
         sudo adduser --quiet --system --group radio

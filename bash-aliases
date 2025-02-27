@@ -171,7 +171,7 @@ function wd-killall() {
              (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
         fi
     done
-    sudo systemctl stop radiod@*
+    wd-radiod-action stop
 
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
     local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
@@ -240,10 +240,9 @@ function wd-killall() {
             (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
             sudo rmdir  ${cgroup_path}
         else
-            (( verbosity ))  && printf "Cgroup ${cgroup_path} is not configured\n"
+            (( verbosity > 1 ))  && printf "Cgroup ${cgroup_path} is not configured\n"
         fi
     done
-    (( --verbosity ))
 }
 
 function wd-flush-hashtables() {
