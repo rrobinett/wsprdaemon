@@ -159,32 +159,19 @@ function wd-killall() {
     verbosity=${verbosity-0}
 
     ### Stop all services
-    local services_regex_list=(  "radiod@.*" ft4-decoded.service ft8-decoded.service  "pskreporter@*" wspsrdaemon )
-    local service_regex
-    for service_regex in "${services_regex_list[@]}"; do
-        local services_list=( $( systemctl list-units --type=service --no-legend --no-pager | awk -v service_regex="${service_regex}.*running" '$0 ~ service_regex{print $1}') )
-        if (( ! ${#services_list[@]} )); then
-             (( verbosity > 1 )) && printf "Found no running '${service_regex}'\n"
-            continue
+    local services_list=(  wsprdaemon ft4-decoded ft8-decoded  pskreporter@ft4 pskreporter@ft8   pskreporter@wspr )
+    local service_name
+    for   service_name in ${services_list[@]}; do 
+        (( verbosity > 1 )) && printf "Stopping service '${service_name}"
+        local service_clean=${service_name%.service}
+        sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
+        rc=$? ; if (( rc )); then
+            printf "'ERROR: systemctl stop ${service_clean} => $rc:\m$(</tmp/wd-killall.log)\n"
+        else
+             (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
         fi
-        (( verbosity > 1 )) && printf "Found ${#services_list[@]} services match regex '${service_regex}': ${services_list[*]}\n"
-
-        local service_name
-        for   service_name in ${services_list[@]}; do 
-            local service_clean=${service_name%.service}
-            sudo systemctl status ${service_clean} --no-pager >& /tmp/wd-killall.log
-            rc=$? ; if (( rc )); then
-                printf "Service '${service_clean}' is not being run by systemctl, but it may be running in a terminal window\n"
-            else
-                sudo systemctl stop ${service_clean} >& /tmp/wd-killall.log
-                rc=$? ; if (( rc )); then
-                    printf "Service '${service_clean}' was running, but 'sudo systemctl stop ${service_clean}' => ${rc}\n"
-                else
-                    (( verbosity >= 0 )) && printf "Service '${service_clean}' was running and 'sudo systemctl stop ${service_clean}' was successful\n"
-                fi
-            fi
-        done
     done
+    sudo systemctl stop radiod@*
 
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
     local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
