@@ -135,10 +135,10 @@ function wd_logger_check_all_logs
         fi
         
         if [[ -z "${new_log_lines}" ]]; then
-            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to be printed"
+            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to print"
         else
             local new_log_lines_count=$( echo "${new_error_log_lines}" | wc -l  )
-            wd_logger 1 "There are ${new_log_lines_count} new lines to be printed"
+            wd_logger 1 "There are ${new_log_lines_count} new lines to print"
             local new_last_printed_line=$( echo "${new_error_log_lines}" | tail -1)
             echo "${new_last_printed_line}" > ${log_file_last_printed}
             local new_lines_to_print=$( echo "${new_log_lines}" | awk "{print \"${log_file_path}: \" \$0}")
@@ -214,7 +214,7 @@ function wd_logger() {
     local printout_line="${time_and_calling_function_name}${printout_string}"
 
     if [[ "${TERM}" = "screen" ]] || [ -t 0 -a -t 1 -a -t 2 ]; then
-        ### This program is not a daemon, it is running in a tmxu window or attached to a terminal.  So echo to that terminal
+        ### This program is not a daemon, it is running in a tmux window or attached to a terminal.  So echo to that terminal
         echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
 
@@ -837,7 +837,7 @@ function get_status_of_daemon() {
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is     running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0

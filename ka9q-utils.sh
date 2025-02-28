@@ -67,14 +67,14 @@ function pull_commit(){
         wd_logger 2 "Loading the most recent COMMIT for project ${git_project}"
         rc=0
         if [[ "$(cd ${git_directory}; git rev-parse HEAD)" == "$( cd ${git_directory}; git fetch origin && git rev-parse origin/${desired_git_sha})" ]]; then
-            wd_logger 2 "You have asked for and are on the latest commit of the main branch"
+            wd_logger 2 "You have asked for and are on the latest commit of the main branch."
         else
-            wd_logger 1 "You have asked for but are not on the latest commit of the main branch, so update the local copy of the code"
+            wd_logger 1 "You have asked for but are not on the latest commit of the main branch, so update the local copy of the code."
             ( cd ${git_directory}; git restore pcmrecord.c ; git fetch origin && git checkout origin/${desired_git_sha} ) >& git.log
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: failed to update to latest commit:\n$(< git.log)"
             else
-                 wd_logger 1 "Updated to latest commit"
+                 wd_logger 1 "Updated to latest commit."
             fi
         fi
         return ${rc}
@@ -297,7 +297,7 @@ function ka9q_conf_file_bw_check() {
 
     local running_radiod_conf_file=$( sudo systemctl status | grep -v awk | awk '/\/etc\/radio\/radiod.*conf/{print $NF}' | grep "${conf_name}" )
     if [[ -z "${running_radiod_conf_file}" ]]; then
-        wd_logger 1 "radiod@${conf_name} is not running  on this server"
+        wd_logger 1 "radiod@${conf_name} is not running on this server"
         return 0
     fi
     local rx_audio_low=$( awk '/^low =/{print $3;exit}' ${running_radiod_conf_file})     ### Assume that the first occurence of '^low' and '^high' is in the [WSPR] section
@@ -305,7 +305,7 @@ function ka9q_conf_file_bw_check() {
     wd_logger 2 "In ${running_radiod_conf_file}: low = ${rx_audio_low}, high = ${rx_audio_high}"
 
     if [[ -z "${rx_audio_low}" || -z "${rx_audio_high}" ]]; then
-        wd_logger 1 "ERROR: can't find the expected low and/or high settings in  ${running_radiod_conf_file}"
+        wd_logger 1 "ERROR: can't find the expected low and/or high settings in ${running_radiod_conf_file}"
         return 1
     fi
     local rx_needs_restart="no"
@@ -549,7 +549,7 @@ function ka9q-get-conf-file-name() {
         return 2
     fi
     if ! is_uint  "${ka9q_pid_value}" ]]; then
-        wd_logger 1 "ERROR: couldn't extract a PID(unsigned integer) from the 2nd field of  this ps' line: '${ka9q_ps_line}"
+        wd_logger 1 "ERROR: couldn't extract a PID(unsigned integer) from the 2nd field of this ps' line: '${ka9q_ps_line}"
         return 3
     fi
     eval ${__return_pid_var_name}=\"\${ka9q_pid_value}\"
@@ -723,7 +723,7 @@ function update_ini_file_section_variable() {
 
     # Check if variable exists within the section
     if sed -n "${section_start},${section_end}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
-        ### The variable is defined.  see if it needs to be changed
+        ### The variable is defined.  See if it needs to be changed
         local temp_file="${file}.tmp"
 
         if [[ "$new_value" == "#" ]]; then
@@ -924,11 +924,11 @@ function build_ka9q_radio() {
     else
         wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof1620000 cob9600 cob4800 cob1920 cob1200 cob960 cob800 cob600 cob480 cob400 cob320 cob300 cob200 cob160 cob150
+        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob9600 cob4800 cob1920 cob1200 cob960 cob800 cob600 cob480 cob400 cob320 cob300 cob200 cob160 cob150
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof500000...'"
+            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof500000...'"
             return 3
         fi
         if [[ ! -f ${KA9Q_RADIO_NWSIDOM} ]]; then
@@ -953,7 +953,7 @@ function build_ka9q_radio() {
     wd_logger 2 "${FFTW_WISDOMF} is current"
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
-    wd_logger 2 "Instructing the udev system to give radiod permissions to access the RS888"
+    wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
     sudo udevadm control --reload-rules
     sudo udevadm trigger
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
@@ -994,10 +994,10 @@ function build_ka9q_radio() {
     fi
 
     if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
-        wd_logger 1 "KA9Q-radio software is installed and configured, but can't find a RX888 MkII attached to a USB port"
+        wd_logger 1 "KA9Q-radio software is installed and configured, but can't find a RX888 MkII attached to a USB port!"
         exit 1
     fi
-    wd_logger 2 "Found a RX888 MkII attached to a USB port"
+    wd_logger 2 "Found a RX888 MkII attached to a USB port."
 
     if [[  ${radio_restart_needed} == "no" ]] ; then
         sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
@@ -1005,9 +1005,9 @@ function build_ka9q_radio() {
             wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
-        wd_logger 1 "The installiation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+        wd_logger 1 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
     else
-        wd_logger 1 "Istalliation and configuration checks made changes that require radiod to be started/restarted"
+        wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
     fi
     if sudo systemctl restart radiod@${ka9q_conf_name}  > /dev/null ; then
         wd_logger 2 "KA9Q-radio was started"
@@ -1177,7 +1177,7 @@ function ka9q-ft-setup() {
                     return ${rc}
                 fi
                 needs_new_service_file="yes"
-                wd_logger 1 "Successfully installed  ${KA9Q_DECODE_FT_CMD}"
+                wd_logger 1 "Successfully installed ${KA9Q_DECODE_FT_CMD}"
             fi
         elif [[ ${KA9Q_JT9_DECODING-no} == "yes" ]]; then
             if ! grep -q "${JT9_CMD}" ${ft_service_file_name}; then
@@ -1304,7 +1304,7 @@ function build_psk_uploader() {
         wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
         if ! pip3 -h >& /dev/null ; then
             rc=$?
-            wd_logger 1 "pip3 -h => ${rc}.  So install pipe"
+            wd_logger 1 "pip3 -h => ${rc}.  So install pip"
             sudo apt install python3-pip -y
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
@@ -1435,7 +1435,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
                 echo "${variable_line}" >> ${psk_conf_file}.tmp
-                wd_logger 2 "Added or replaced invalid '${config_variable}=' line in  ${psk_conf_file} with '${variable_line}'"
+                wd_logger 2 "Added or replaced invalid '${config_variable}=' line in ${psk_conf_file} with '${variable_line}'"
                 mv  ${psk_conf_file}.tmp  ${psk_conf_file}
                 needs_systemctl_restart="yes"
             fi
@@ -1529,14 +1529,14 @@ function install_github_project() {
     wd_logger 2 "Packages required by this service have been checked and installed if needed"
 
     if [[ -d  ${project_subdir} ]]; then
-        wd_logger 2 "An exisiting project needs to be checked"
+        wd_logger 2 "An existing project needs to be checked"
         ( cd ${project_subdir}; git remote -v | grep -q "${project_url}" )   ### Run in a subshell which returnes the status returned by grep
         rc=$? ; if (( rc )); then
             echo wd_logger 1 "The clone of ${project_subdir} doesn't come from the configured ' ${project_url}', so delete the '${project_subdir}' directory so it will be re-cloned"
             rm -rf ${project_subdir}
         fi
     else
-         wd_logger 1 "There is no existing project subdir which needs to be checked"
+         wd_logger 1 "There is no existing project sub-dir which needs to be checked"
     fi
 
     if [[ ! -d ${project_subdir} ]]; then
