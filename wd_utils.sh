@@ -190,7 +190,7 @@ function log_file_viewing()
 }
 
 function wd_logger() {
-    if [[ $# -ne 2 ]]; then
+    if (( $# != 2 )); then
         local prefix_str=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}()")
         local bad_args="$@"
         echo "${prefix_str} called from function ${FUNCNAME[1]} in file ${BASH_SOURCE[1]} line #${BASH_LINENO[0]} with bad number of arguments: '${bad_args}'"
@@ -200,11 +200,11 @@ function wd_logger() {
     local printout_string=$2
 
     local print_time_and_calling_function_name="yes"
-    if [[ $1 -lt 0 ]]; then
+    if (( log_at_level < 0 )); then
         print_time_and_calling_function_name="no"
-        log_at_level=$((- ${log_at_level} )) 
+        log_at_level=$((- log_at_level )) 
     fi
-    [[ ${verbosity} -lt ${log_at_level} ]] && return 0
+    (( verbosity < log_at_level )) && return 0
 
     ### printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() passed FORMAT: %s\n" -1 "${format_string}"
     local time_and_calling_function_name=""
@@ -224,15 +224,28 @@ function wd_logger() {
     fi
 
     ### WD_LOGFILE is defined, so truncate if it has grown too large, then append the new log line(s)
-    [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
-    local logfile_size=$( ${GET_FILE_SIZE_CMD} ${WD_LOGFILE} )
-    if [[ ${logfile_size} -ge ${WD_LOGFILE_SIZE_MAX} ]]; then
-        local logfile_lines=$(wc -l < ${WD_LOGFILE})
-        local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
-        printf "${WD_TIME_FMT}: ${FUNCNAME[0]}() logfile '${WD_LOGFILE}' size ${logfile_size} and lines ${logfile_lines} has grown too large, so truncating the first ${logfile_lines_to_trim} lines of it\n" >> ${WD_LOGFILE}
-        sed -i "1,${logfile_lines_to_trim} d" ${WD_LOGFILE}
+    if [[ ! -f $WD_LOGFILE ]] ; then
+        local rc
+        local log_file_path
+        log_file_path=$(realpath  $WD_LOGFILE )
+        rc=$? ; if (( rc )) ; then
+            local log_file_dir="${WD_LOGFILE%/*}"
+            echo "$(TZ=UTC date): wd_logger(): ERROR: 'realpath  $WD_LOGFILE' => $rc, so 'mkdir -p $log_file_dir'" 1>&2   ### Send this message to stderr
+            mkdir -p $log_file_dir
+            echo "$(TZ=UTC date): wd_logger(): ERROR: had to create $log_file_dir" >  $WD_LOGFILE
+        else
+            echo "$(TZ=UTC date): wd_logger(): creating new $log_file_path" >  $WD_LOGFILE
+        fi
     fi
-    echo -e "${printout_line}" >> ${WD_LOGFILE}
+
+    local logfile_size=$( ${GET_FILE_SIZE_CMD} $WD_LOGFILE )
+    if (( logfile_size > WD_LOGFILE_SIZE_MAX )); then
+        local logfile_lines=$(wc -l < $WD_LOGFILE )
+        local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
+        printf "$WD_TIME_FMT: ${FUNCNAME[0]}() logfile '$WD_LOGFILE' size $logfile_size and lines $logfile_lines has grown too large, so truncating the first $logfile_lines_to_trim lines of it\n" >> $WD_LOGFILE
+        sed -i "1,$logfile_lines_to_trim d" $WD_LOGFILE
+    fi
+    echo -e "$printout_line" >> $WD_LOGFILE
     return 0
 }
 
