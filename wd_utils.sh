@@ -24,7 +24,7 @@ declare -i verbosity=${verbosity:-1}              ### default to level 1, but ca
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
-### This ensures that 'bc's floating point calulations of spot frequencies give those numbers in a known format irrespecrtive of the LOCALE environment of the host computer
+### This ensures that 'bc's floating point calculations of spot frequencies give those numbers in a known format irrespective of the LOCALE environment of the host computer
 export LC_ALL="C"
 
 ### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
@@ -135,10 +135,10 @@ function wd_logger_check_all_logs
         fi
         
         if [[ -z "${new_log_lines}" ]]; then
-            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to be printed"
+            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to print"
         else
             local new_log_lines_count=$( echo "${new_error_log_lines}" | wc -l  )
-            wd_logger 1 "There are ${new_log_lines_count} new lines to be printed"
+            wd_logger 1 "There are ${new_log_lines_count} new lines to print"
             local new_last_printed_line=$( echo "${new_error_log_lines}" | tail -1)
             echo "${new_last_printed_line}" > ${log_file_last_printed}
             local new_lines_to_print=$( echo "${new_log_lines}" | awk "{print \"${log_file_path}: \" \$0}")
@@ -214,7 +214,7 @@ function wd_logger() {
     local printout_line="${time_and_calling_function_name}${printout_string}"
 
     if [[ "${TERM}" = "screen" ]] || [ -t 0 -a -t 1 -a -t 2 ]; then
-        ### This program is not a daemon, it is running in a tmxu window or attached to a terminal.  So echo to that terminal
+        ### This program is not a daemon, it is running in a tmux window or attached to a terminal.  So echo to that terminal
         echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
 
@@ -304,17 +304,81 @@ function seconds_until_next_odd_minute() {
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
 declare -r SYSTEMCTL_UNIT_PATH=/etc/systemd/system/wsprdaemon.service
+
+function systemctl_is_setup() {
+    wd_logger 2 "Checking auto-start configuration"
+
+    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
+    if [[ ! -d ${systemctl_dir} ]]; then
+        wd_logger 1 "ERROR: this server appears to not be configured to use the 'systemctl' service needed for auto-start"
+        return 1
+    fi
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+         wd_logger 1 "This server has not been set up to auto-start wsprdaemon at powerup or reboot"
+         return 1
+    fi
+    if ! grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH} || ! grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
+         return 1
+    fi
+     wd_logger 2 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+     if sudo systemctl is-enabled wsprdaemon.service > /dev/null ; then
+         wd_logger 2 "The WD service is correctly configured and enabled"
+         return 0
+     fi
+     wd_logger 1 "The WD service was configured but not enabled, so enable it"
+     if sudo systemctl enabled wsprdaemon.service ; then
+         wd_logger 1 "The WD service has been enabled"
+         return 0
+     fi
+     wd_logger 1 "ERROR: failed to enable the WD service, so deleting the service file"
+     wd_rm ${SYSTEMCTL_UNIT_PATH}
+     return 1
+}
+
+### Called by wd_setup.sh each time WD is executed
+function check_systemctl_is_setup() {
+    local rc
+
+    wd_logger 2 "Starting"
+    if systemctl_is_setup; then
+       wd_logger 2 "WD is setup to auto-start at powerup and reboot"
+       return 0
+    fi
+    wd_logger 1 "WD needs to be setup to auto-start at powerup and reboot"
+    setup_systemctl_daemon
+    rc=$? ; if (( rc )); then
+       wd_logger 1 "ERROR: failed to setup WD to auto-start"
+       return 1
+    fi
+    wd_logger 1 "WD is now setup to auto-start"
+    return 0
+}
+
+
 function setup_systemctl_daemon() {
     local start_args=${1--A}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
     local stop_args=${2--Z} 
-    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
-    if [[ ! -d ${systemctl_dir} ]]; then
-        echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
-        return
+
+    if systemctl_is_setup ; then
+        wd_logger 1 "The WD service is setup and enabled"
+        return 0
     fi
     if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
-        return
+        if grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH}  &&  grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+            wd_logger 1 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+            if ! sudo systemctl is-enabled wsprdaemon.service ; then
+                wd_logger 1 "The WD service was configured but not enabled, so enabled it"
+                if sudo systemctl enabled wsprdaemon.service ; then
+                    wd_logger 1 "The WD service has been enabled"
+                    return 0
+                fi
+                wd_logger 1 "ERROR: failed to enable the WD service, so re-install it"
+            fi
+        fi
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
     fi
     if [[ ! $(groups) =~ radio ]]; then
         sudo adduser --quiet --system --group radio
@@ -564,13 +628,13 @@ function wd_kill_all()
             wd_kill ${pid_val}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'"
             fi
             wd_rm ${pid_file}
             rc1=$?
             if [[ ${rc1} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to rm '${pid_file}'"
             fi
         done
@@ -773,7 +837,7 @@ function get_status_of_daemon() {
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is     running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
@@ -790,7 +854,7 @@ function daemons_list_action()
     local acton_to_perform=$1        ### 'a', 'z', or 's'
     local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
 
-    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${2}'"
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} daemons listed in '${2}'"
 
     for spawn_line in "${daemon_list_name[@]}"; do
         local daemon_info_list=(${spawn_line})
@@ -821,7 +885,7 @@ function daemons_list_action()
 }
 
 ### Get the current value of a variable stored in a file without perturbing any currently defined variables in the calling function
-### To minimize the possiblity of 'sourcing' an already declare r/o global variable, extract the line with the variable we are searching for
+### To minimize the possibility of 'sourcing' an already declared r/o global variable, extract the line with the variable we are searching for
 ### into a tmp file, and then source only that tmp file
 function get_file_variable()
 {
@@ -837,7 +901,7 @@ function get_file_variable()
 }
 
 ################################################################################################################################################################
-declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
+declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Defaults to 5 seconds
 declare MUTEX_MAX_AGE=${MUTEX_MAX_AGE-30}                  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
 
 function wd_mutex_lock() {

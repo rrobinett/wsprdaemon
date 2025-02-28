@@ -75,15 +75,15 @@ case ${CPU_ARCH} in
     aarch64)
         PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
          if [[ "${OS_RELEASE}" == "12" ]]; then
-            ### The 64 bit Pi 5 OS is based upon  Debian 12
-            wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${OS_RELEASE}"
+            ### The 64 bit Pi5 OS is based upon Debian 12
+            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
             PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
         wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
         if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
-            ### Ubuntu 22.04 and Debian doesn't use qt5-default
+            ### Ubuntu 22.04 and Debian don't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
@@ -102,9 +102,9 @@ esac
 function is_orange_pi_5() {
     if grep -q 'Rockchip RK3588' /proc/cpuinfo 2>/dev/null || \
        grep -q "Orange Pi 5" /sys/firmware/devicetree/base/model 2>/dev/null; then
-        return 0  # Success (Orange Pi 5 detected)
+        return 0  # Success (Orange Pi5 detected)
     else
-        return 1  # Failure (Not an Orange Pi 5)
+        return 1  # Failure (Not an Orange Pi5)
     fi
 }
 
@@ -141,7 +141,7 @@ function wd_run_in_cgroup() {
 wd_run_in_cgroup
 
 
-#### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
+#### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
 function setup_wd_auto_ssh()
 {
@@ -252,7 +252,7 @@ if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
         exit 1
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
-        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in  the wd_template.conf file"
+        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
         exit 2
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
@@ -347,7 +347,7 @@ function check_for_kiwirecorder_cmd() {
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
@@ -486,7 +486,7 @@ function find_wsjtx_commands()
             if [[ ${bin_file} =~ bin/wsprd.spread ]]; then
                 wd_logger 2 "Found that WSPRD_SPREADING_CMD='${bin_file}' runs on this server"
                 if [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
-                    wd_logger 1 "Warning: ignaoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
+                    wd_logger 1 "Warning: ignoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
                 else
                     WSPRD_SPREADING_CMD="${bin_file}"
                 fi
@@ -547,11 +547,11 @@ function find_wsjtx_commands()
             exit 1
         fi
         WSPRD_CMD=$(realpath bin/wsprd)
-        wd_logger 1 "Installed missing bin/wspsrd from the 'wsjtx' package"
+        wd_logger 1 "Installed missing bin/wsprd from the 'wsjtx' package"
     fi
     if [[ -z "${WSPRD_SPREADING_CMD-}" ]]; then
         if grep -q "Ubuntu 20" /etc/os-release ; then
-            wd_logger 1 "On Ubuntu 20 installting bin/wsprd as wsprd.spread.ubuntu.20.x86"
+            wd_logger 1 "On Ubuntu 20 installing bin/wsprd as wsprd.spread.ubuntu.20.x86"
             cp bin/wsprd bin/wsprd.spread.ubuntu.20.x86
             WSPRD_SPREADING_CMD=$(realpath bin/wsprd.spread.ubuntu.20.x86)
         else
@@ -571,3 +571,9 @@ if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
     exit 1
 fi
+
+if ! check_systemctl_is_setup ; then
+    wd_logger 1 "ERROR: failed to setup this server to auto-start"
+    exit 1
+fi
+
