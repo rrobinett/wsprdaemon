@@ -24,7 +24,7 @@ declare -i verbosity=${verbosity:-1}              ### default to level 1, but ca
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
-### This ensures that 'bc's floating point calulations of spot frequencies give those numbers in a known format irrespecrtive of the LOCALE environment of the host computer
+### This ensures that 'bc's floating point calculations of spot frequencies give those numbers in a known format irrespective of the LOCALE environment of the host computer
 export LC_ALL="C"
 
 ### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
@@ -628,13 +628,13 @@ function wd_kill_all()
             wd_kill ${pid_val}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'"
             fi
             wd_rm ${pid_file}
             rc1=$?
             if [[ ${rc1} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to rm '${pid_file}'"
             fi
         done
@@ -854,7 +854,7 @@ function daemons_list_action()
     local acton_to_perform=$1        ### 'a', 'z', or 's'
     local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
 
-    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${2}'"
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} daemons listed in '${2}'"
 
     for spawn_line in "${daemon_list_name[@]}"; do
         local daemon_info_list=(${spawn_line})
@@ -885,7 +885,7 @@ function daemons_list_action()
 }
 
 ### Get the current value of a variable stored in a file without perturbing any currently defined variables in the calling function
-### To minimize the possiblity of 'sourcing' an already declare r/o global variable, extract the line with the variable we are searching for
+### To minimize the possibility of 'sourcing' an already declared r/o global variable, extract the line with the variable we are searching for
 ### into a tmp file, and then source only that tmp file
 function get_file_variable()
 {
@@ -901,7 +901,7 @@ function get_file_variable()
 }
 
 ################################################################################################################################################################
-declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
+declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Defaults to 5 seconds
 declare MUTEX_MAX_AGE=${MUTEX_MAX_AGE-30}                  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
 
 function wd_mutex_lock() {
