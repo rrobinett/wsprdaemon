@@ -296,6 +296,7 @@ function queue_noise_signal_levels_to_wsprdaemon()
     fi
 
     wd_logger 2 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
+    mkdir -p ${signal_levels_log_file%/*}
     echo "${spot_date}-${spot_time}: ${noise_line}" >> ${signal_levels_log_file}
 
     if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
