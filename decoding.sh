@@ -796,7 +796,18 @@ function file_is_closed_or_last_write_was_seconds_ago() {
             wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait -e close ${newest_file_name}' => ${rc}"
                 return ${rc}
             else
-                wd_logger 2 "File ${newest_file_name##*/} has been closed after a wait of $(( SECONDS - start_second )) seconds"
+                local date_time_list=( $(stat $newest_file_name | awk '/Modify/{printf "%s %s", $2, $3} ') )
+                local date=${date_time_list[0]}
+                local hhmmss=${date_time_list[1]%.*}
+                local microseconds=${date_time_list[1]##*.}
+                local seconds=$(( 10#${hhmmss##*:} ))                  ### converts second 00-59 to a decimal integer 
+                local max_delay_secs=${RECORDING_MAX_DELAY_SECONDS-2}  ### If 'stat' reports last write is greater than 2 seconds 
+                local min_early_secs=${RECORDING_MIN_EARLY_SECONDS-59} ### and it is earlier than second 59, then log error
+                if (( (seconds > max_delay_secs) && (seconds < min_early_secs) )); then
+                    wd_loggeer 1 "ERROR: File ${newest_file_name##*/} last write time ${date_time_list[*]} is not in second 00"
+                else
+                    wd_logger 1 "File ${newest_file_name##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds after a wait of $(( SECONDS - start_second )) seconds"
+                fi
                 return 0
             fi
         fi
