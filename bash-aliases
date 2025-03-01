@@ -3,6 +3,34 @@
 
 shopt -s -o nounset
 
+function wd-show-file-write-time() {
+    local files_list=( $@ )
+
+    if (( ${#files_list[@]} == 0 )); then
+        echo "usage: $0 <FILE0> [<FILE2> ...]"
+        return
+    fi
+    local file
+    for file in ${files_list[@]}; do
+        if lsof $file > /dev/null; then
+            continue
+        fi
+        local date_time_list=( $(stat $file | awk '/Modify/{printf "%s %s", $2, $3} ') )
+        local date=${date_time_list[0]}
+        local hhmmss=${date_time_list[1]%.*}
+        local microseconds=${date_time_list[1]##*.}
+        local seconds=$(( 10#${hhmmss##*:} ))                  ### converts second 00-59 to a decimal integer
+        local max_delay_secs=${RECORDING_MAX_DELAY_SECONDS-2}  ### If 'stat' reports last write is greater than 2 seconds
+        local min_early_secs=${RECORDING_MIN_EARLY_SECONDS-59} ### and it is earlier than second 59, then log error
+        if (( (seconds > max_delay_secs) && (seconds < min_early_secs) )); then
+            echo "ERROR: File ${file##*/} last write time ${date_time_list[*]} is not in second 00"
+        else
+            echo "File ${file##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds"
+        fi
+    done
+    return 0
+}
+
 function get_pid_start_epoch() {
     local pid="$1"
 
