@@ -215,7 +215,6 @@ function wd-killall() {
         rmdir ${mutex_dir_list[@]}
     fi
     local active_cpus_files_list=( $(find ${wd_temp_root_dir} -type f -name active_cpus_count) )
-    (( ++verbosity ))
     if (( ${#active_cpus_files_list[@]} )); then
         (( verbosity > 1 )) && printf "Found ${#active_cpus_files_list[@]} active_cpus_count files\n"
         local active_cpu_file
