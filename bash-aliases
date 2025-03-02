@@ -12,7 +12,7 @@ function wd-show-file-write-time() {
     fi
     local file
     for file in ${files_list[@]}; do
-        if lsof $file > /dev/null; then
+        if lsof $file >& /dev/null; then
             continue
         fi
         local date_time_list=( $(stat $file | awk '/Modify/{printf "%s %s", $2, $3} ') )
