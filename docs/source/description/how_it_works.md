@@ -13,16 +13,22 @@ WD runs on almost any Debian Linux system running Ubuntu 22.04 LTS on x86. Altho
 - grape recording, conversion to digital_rf, and reporting to HamSCI
 - pskreporter
 
+![](../_images/wd-file-structure.png)
+
 ## A running instance of wsprdaemon performs several tasks:
 
 - configuration and installation checks
 - preparation of recording and posting directories
 - "listening" functions for KIWI and KA9Q receiver definitions
+- decoding wspr and 
 - monitoring and logging results and errors 
+
+![](../_images/wd-functions.png)
 
 ## What will make it not start or then stop working?
 
 - data stream not defined -- wd requires at least one receiver (KIWI or KA9Q)
 - schedule not defined
 - [See Troubleshooting](../troubleshooting/overview.md)
+
 
