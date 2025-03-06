@@ -79,6 +79,7 @@ enum sync_state_t
   sync_state_armed,             // second :59; waiting for data to arrive in second :00 to sync
   sync_state_active,            // recording data to file, wait for final samples to complete file
   sync_state_resync,
+  sync_state_done,
 };
 
 // Simplified .wav file header
@@ -334,7 +335,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
-      fputs("wsprdaemon mode (-W): v0.8\n",stdout);
+      fputs("wsprdaemon mode (-W): v0.9\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
@@ -606,6 +607,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
   if (!wd_mode || NULL == sp){
     return;
   }
+  int status;
   struct timespec now;
   clock_gettime(CLOCK_REALTIME,&now);
 
@@ -671,7 +673,7 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
     }
 
     // save to file until error or file is complete
-    int status = wd_write(sp,samples,buffer_size,now);
+    status = wd_write(sp,samples,buffer_size,now);
 
     if (-1 == status){
       // something went wrong...should we delete the file?
@@ -679,19 +681,38 @@ static void wd_state_machine(struct session * const sp,struct sockaddr const *se
       close_file(sp);
     }
     else if (1 == status){
-      // file complete, start next one
-      session_file_init(sp,sender);
-      sp->sync_state = sync_state_active;
+      // file complete, start new file next time
+      sp->sync_state = sync_state_done;
+    }
+    break;
 
-      // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
-      wd_log(1, "Start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
-             sp->ssrc,
-             sp->rtp_state.seq,
-             sp->rtp_state.timestamp,
-             sp->rtp_state.timestamp / sp->samprate);
+  case sync_state_done:
+    // last time through the file was complete, so start a new one
+    session_file_init(sp,sender);
+    sp->sync_state = sync_state_active;
 
-      start_wav_stream(sp);
-      sp->file_time = now;
+    // spit out the estimated start time of the stream, based on sample rate and RTP timestamp, ignoring rollovers
+    wd_log(1, "Start file on SSRC %d with seq %u timestamp %u, estimated stream start is %u s ago\n",
+           sp->ssrc,
+           sp->rtp_state.seq,
+           sp->rtp_state.timestamp,
+           sp->rtp_state.timestamp / sp->samprate);
+
+    start_wav_stream(sp);
+    sp->file_time = now;
+
+    // save to file until error or file is complete
+    status = wd_write(sp,samples,buffer_size,now);
+
+    if (-1 == status){
+      // something went wrong...should we delete the file?
+      sp->sync_state = sync_state_startup;
+      close_file(sp);
+    }
+    else if (1 == status){
+      // file complete, start new file next time
+      sp->sync_state = sync_state_done;
+
     }
     break;
 
