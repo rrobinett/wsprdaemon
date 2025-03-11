@@ -165,7 +165,7 @@ function wd_get_config_value() {
             case ${return_variable_type} in
                 CALLSIGN)
                     eval ${__return_variable_name}=\${receiver_call}
-                    wd_logger 2 "Assigned ${__return_variable_name}=${receiver_call}"
+                    wd_logger 2 "Receiver ${receiver_name} is reporting as ${receiver_call} to return variable ${__return_variable_name}"
                     return 0
                     ;;
                 LOCATOR)
@@ -1424,13 +1424,12 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         for config_variable in CALLSIGN LOCATOR ANTENNA; do
             local config_value
             wd_get_config_value "config_value" ${config_variable}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
                 return ${rc}
             fi
             local variable_line="${config_variable}=${config_value}"
-            if grep -q "${variable_line}" ${psk_conf_file} ; then
+            if grep -wq "${variable_line}" ${psk_conf_file} ; then
                 wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
