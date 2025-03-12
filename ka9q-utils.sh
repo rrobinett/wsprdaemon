@@ -917,6 +917,18 @@ function build_ka9q_radio() {
                  ;;
          esac
     done
+    if grep -q "m[0-9]*k" ${ka9q_conf_file_path} ; then
+        ### 3/12/25 - RR   The template radiod@rx888-wsprdaemon.conf included in Ka9q-radio installations to date includes an invalid 17m FT4 band frequency specification "18m10k000"
+        ###           This section repairs that and any other similarly corrupted frequency specs
+        wd_logger 1 "Fixing corrupt frequency value(s) '$(grep -oE "m[0-9]*k" ${ka9q_conf_file_path})' found in  ${ka9q_conf_file_path}"
+        sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}' => $rc, so failed to correct corrupt freq line(s)"
+        else
+            wd_logger 1 "Fixed correct corrupt freq line(s), so restart radiod"
+            radio_restart_needed="yes"
+        fi
+    fi
 
    ### Make sure the wisdomf needed for effecient execution of radiod exists
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
@@ -1047,8 +1059,7 @@ function ka9q-ft-setup() {
     local rc
     local radiod_conf_file_name
     ka9q-get-configured-radiod "radiod_conf_file_name"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name'"
         return ${rc}
     fi
@@ -1057,8 +1068,7 @@ function ka9q-ft-setup() {
     wd_logger 2 "Find the multicast DNS name of the stream"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name'"
         return ${rc}
     fi
