@@ -23,7 +23,7 @@ function wd-pcmrecord-filetimes()
     local wav_file
     for wav_file in ${wav_files_list[@]}; do
         local file_stat_list=($( stat $wav_file  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
-        echo "${file_stat_list[*]}"
+        echo "${file_stat_list[0]} ${file_stat_list[1]} ${file_stat_list[3]} ${file_stat_list[2]}"
     done
 }
 
