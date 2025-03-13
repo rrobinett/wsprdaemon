@@ -7,36 +7,71 @@ function wd-pcmrecord-version() {
     ~/wsprdaemon/ka9q-radio/pcmrecord --version
 }
 
-function wd-pcmrecord-errors() {
-   local receiver_dir_list=( $( find /dev/shm/wsprdaemon/recording.d -maxdepth 1 -type d -name 'KA9Q*' ) )
-   local pcmrecord_log_dir
+function wd-pcmrecord-filetimes()
+{
+    local band=${1-20}
+    local tuning_freq=${KA9Q_band_freq[${band}]}
 
-   case ${#receiver_dir_list[@]} in
-       0)
-          echo "Can find any KA9Q* directories in  /dev/shm/wsprdaemon/recording.d"
-          return 0
-          ;;
-      1)
-          pcmrecord_log_dir=${receiver_dir_list[0]}
-          read -p "tail -f ${pcmrecord_log_dir}? [Yn] => "
-          ;;
-      *)
-          local index
-          for (( index=0; index < ${#receiver_dir_list[@]}; ++index )) do
-              echo "${index}: ${receiver_dir_list[index]}"
-          done
-          read -p "There are multiple KA9Q receivers.  Which of their pcmrecord-errors.log files do you want to view? [0-$((  ${#receiver_dir_list[@]} - 1 ))] (default = 0) => "
-          [[ -z "$REPLY" ]] && index=0 || index=$REPLY
-          pcmrecord_log_dir=${receiver_dir_list[index]}
-          ;;
-  esac
-  local pcmrecord_error_log_file="${pcmrecord_log_dir}/pcmrecord-errors.log"
-  if [[ ! -f ${pcmrecord_error_log_file} ]]; then
-      echo "Can't find ${pcmrecord_error_log_file}"
-      return 1
-  fi
-  echo  "Running 'tail -f ${pcmrecord_error_log_file}':"
-  tail -f ${pcmrecord_error_log_file}
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && return $rc
+
+    local wav_files_list=( $(find $pcmrecord_log_dir -maxdepth 1 -type f -name "*Z_${tuning_freq}*.wav") )
+    (( ${#wav_files_list[@]} == 0 )) && echo "Can'find any '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir" && return 1
+    echo "Found  ${#wav_files_list[@]} '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir"
+
+    local wav_file
+    for wav_file in ${wav_files_list[@]}; do
+        local file_stat_list=($( stat $wav_file  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
+        echo "${file_stat_list[*]}"
+    done
+}
+
+function wd-pcmrecord-errors() 
+{
+    local rc
+
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && return $rc
+
+    local pcmrecord_error_log_file="${pcmrecord_log_dir}/pcmrecord-errors.log"
+    if [[ ! -f ${pcmrecord_error_log_file} ]]; then
+        echo "Can't find ${pcmrecord_error_log_file}"
+        return 1
+    fi
+    read -p "Run tail -f ${pcmrecord_log_dir}? [Yn] => "
+    tail -f ${pcmrecord_error_log_file}
+}
+
+function wd-get-ka9q-receiver-dir() 
+{
+    local __return_var_name=$1
+
+    local wd_recording_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local receiver_dir_list=( $( find ${wd_recording_root_dir} -maxdepth 1 -type d -name 'KA9Q*' ) )
+
+    local ka9q_receiver_dir
+    case ${#receiver_dir_list[@]} in
+        0)
+            echo "Can't find any KA9Q* directories in ${wd_recording_root_dir}"
+            return 1
+            ;;
+        1)
+            ka9q_receiver_dir=${receiver_dir_list[0]}
+            ;;
+        *)
+            local index
+            for (( index=0; index < ${#receiver_dir_list[@]}; ++index )) do
+                echo "${index}:  ${receiver_dir_list[index]}"
+            done
+            read -p "There are multiple KA9Q receivers.  Which of their pcmrecord-errors.log files do you want to view? [0-$((  ${#receiver_dir_list[@]} - 1 ))] (default = 0) => "
+            [[ -z "$REPLY" ]] && index=0 || index=$REPLY
+            ka9q_receiver_dir=${receiver_dir_list[index]}
+            ;;
+    esac
+    eval $__return_var_name=\${ka9q_receiver_dir}
+    return 0
 }
 
 function wd-show-file-write-time() {
