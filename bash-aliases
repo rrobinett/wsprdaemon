@@ -35,7 +35,7 @@ function wd-pcmrecord-filetimes()
                 rc=$? ; if (( rc )) ; then
                     echo "Pid $(< ${pcmrecord_parent_pid_file_list[0]}) in ${pcmrecord_parent_pid_file_list[0]} is not active"
                 else
-                    echo "pcmrecord has been running for $pid_run_time"
+                    echo "$(date): pcmrecord has been running for $pid_run_time"
                 fi
                 ;;
             *)
