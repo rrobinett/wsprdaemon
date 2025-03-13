@@ -18,7 +18,31 @@ function wd-pcmrecord-filetimes()
 
     local wav_files_list=( $(find $pcmrecord_log_dir -maxdepth 1 -type f -name "*Z_${tuning_freq}*.wav") )
     (( ${#wav_files_list[@]} == 0 )) && echo "Can'find any '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir" && return 1
-    echo "Found  ${#wav_files_list[@]} '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir"
+    (( ${verbosity-0} )) && echo "Found  ${#wav_files_list[@]} '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir"
+
+    local pcmrecord_errors_file="$pcmrecord_log_dir/pcmrecord-errors.log"
+    if [[ ! -f $pcmrecord_errors_file ]]; then
+        echo "WARNING: can't file expected file $pcmrecord_errors_file"
+    else
+        local pcmrecord_parent_pid_file_list=( $(find $pcmrecord_log_dir -maxdepth 1 -name "*pid") )
+        case ${#pcmrecord_parent_pid_file_list[@]} in
+            0)
+                echo "Can't find the expect .pid file in $pcmrecord_log_dir"
+                ;;
+            1) 
+                local pid_run_time
+                pid_run_time=$( ps -o etime --ppid $(< ${pcmrecord_parent_pid_file_list[0]}) --no-headers )
+                rc=$? ; if (( rc )) ; then
+                    echo "Pid $(< ${pcmrecord_parent_pid_file_list[0]}) in ${pcmrecord_parent_pid_file_list[0]} is not active"
+                else
+                    echo "pcmrecord has been running for $pid_run_time"
+                fi
+                ;;
+            *)
+                echo "ERROR: found ${#pcmrecord_parent_pid_file_list[@]} pid files:\n ${pcmrecord_parent_pid_file_list[*]}"
+                ;;
+        esac
+    fi
 
     local wav_file
     for wav_file in ${wav_files_list[@]}; do
