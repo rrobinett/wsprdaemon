@@ -73,7 +73,7 @@ function wd-get-ka9q-receiver-dir()
     local __return_var_name=$1
 
     local wd_recording_root_dir="/dev/shm/wsprdaemon/recording.d"
-    local receiver_dir_list=( $( find ${wd_recording_root_dir} -maxdepth 1 -type d -name 'KA9Q*' ) )
+    local receiver_dir_list=( $( find ${wd_recording_root_dir} -maxdepth 1 -type d -name 'KA9Q*' | sort -t _ -k 3,3 -k 2,2n) )     ### sort so list is 'KA9Q_0 KA9Q_1 KA9Q_0_WWV KA9Q_1_WWV
 
     local ka9q_receiver_dir
     case ${#receiver_dir_list[@]} in
