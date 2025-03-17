@@ -1,5 +1,7 @@
 # Example radiod@rx888-wsprdaemon.conf
-## set up for wspr, ft4 and ft8 only.
+
+## set up on a single computer for wspr, ft4 and ft8 only.
+
 ```
 [global]
 hardware = rx888 # use built-in rx888 driver, configured in [rx888]
@@ -15,7 +17,7 @@ description = "AC0G @EM38ww dipole" # good to put callsign and antenna descripti
 samprate =   64800000     # or 129600000
 
 [WSPR]
-encoding=float
+encoding = float
 disable = no
 data = opi5-wspr-pcm.local
 agc=0
