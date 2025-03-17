@@ -135,15 +135,16 @@
              
   <section id="preparing-for-installation">
 <h1>Preparing for installation<a class="headerlink" href="#preparing-for-installation" title="Link to this heading"></a></h1>
-<p>You will install and run the wsprdaemon software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.  Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
-<p>N.B.  In either case, this account needs sudo privileges as several component installations and process management require it.</p>
+<p>You will clone from github.com and then run the wsprdaemon software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.<br />
+Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
+<p>N.B.  In either case, the account running wsprdaemon needs sudo privileges as several component installations and process management require it.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
 <p>To avoid entering the su password all the time:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">visudo</span>
 </pre></div>
 </div>
-<p>Edit the %sudo line to allow members of group sudo to execute any command:</p>
+<p>Edit the line starting with “%sudo” to allow members of group sudo to execute any command:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">sudo</span>   <span class="n">ALL</span><span class="o">=</span><span class="p">(</span><span class="n">ALL</span><span class="p">:</span><span class="n">ALL</span><span class="p">)</span> <span class="n">NOPASSWD</span><span class="p">:</span> <span class="n">ALL</span>
 </pre></div>
 </div>
@@ -153,18 +154,19 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">adduser</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>Subsequent installation and management of wd must happen as user “wsprdaemon”.</p>
-<p>You can login to the machine as “wsprdaemon” or with another username.  In the latter case, to make it easier to change to the wsprdaemon user, create an alias:</p>
+<p>Subsequent installation and management of wd will then happen as user “wsprdaemon”.</p>
+<p>You should then login to the machine as “wsprdaemon.”
+If you login with another username, you can make it easier to change to the wsprdaemon user, by creating an alias:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span>  <span class="s2">&quot;alias wd=&#39;sudo su - wsprdaemon&#39;&quot;</span> <span class="o">&gt;&gt;</span> <span class="o">~/.</span><span class="n">bashrc</span>
 </pre></div>
 </div>
-<p>This enables you to operate as the wsprdaemon user.</p>
+<p>Executing <code class="docutils literal notranslate"><span class="pre">wd</span></code> then enables you to operate as the wsprdaemon user.</p>
 <p>Add wsprdaemon (or your username) to groups sudo, plugdev:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">sudo</span> <span class="n">wsprdaemon</span>
 <span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">plugdev</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>wsprdaemon includes the ka9q-radio package which creates a “radio” group.  Once the wsprdaemon script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
+<p>wsprdaemon includes and installs the ka9q-radio package which creates a “radio” group.  So, once the wsprdaemon script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
@@ -172,11 +174,11 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">hostnamectl</span> <span class="nb">set</span><span class="o">-</span><span class="n">hostname</span> <span class="n">W3USR</span><span class="o">-</span><span class="n">B1</span><span class="o">-</span><span class="mi">1</span>
 </pre></div>
 </div>
-<p>After changing the hostname, you may need to update the /etc/hosts file to reflect the change.</p>
+<p>After changing the hostname, check or update the /etc/hosts file to reflect the change.</p>
 </section>
 <section id="remote-access-setup">
 <h3>Remote Access Setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>
-<p>If installing wsprdaemon on a remote computer, from your present computer, make it easier to login to the other computer.
+<p>If installing wsprdaemon on a remote computer from your local computer, you can make it much easier to login to the other computer.
 First, make sure you have a public key :</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">keygen</span>
 </pre></div>
@@ -206,7 +208,7 @@ First, make sure you have a public key :</p>
 </pre></div>
 </div>
 <p>If using iTerm on macOS, goto iTerm2 &gt; Preferences &gt; “General” tab, and in the “Selection” section, check “Applications in terminal may access clipboard”.</p>
-<p>You can now proceed to the cloning wsprdaemon from GitHub.</p>
+<p>You can now proceed to <a class="reference internal" href="git.html"><span class="std std-doc">clone wsprdaemon from GitHub</span></a>.</p>
 </section>
 </section>
 </section>

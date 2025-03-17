@@ -128,18 +128,19 @@
 <p>A typical configuration of this section for wsprdaemon use follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="k">global</span><span class="p">]</span>
 <span class="c1"># these next two establish defaults for all demod sections</span>
-<span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span> <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
-<span class="n">status</span> <span class="o">=</span> <span class="n">hf</span><span class="o">.</span><span class="n">local</span>       <span class="c1"># DNS name for receiver status and commands</span>
-<span class="c1"># data = hf-data.local    # not strictly necessary</span>
-<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>        <span class="c1"># default output sample rate</span>
-<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>              <span class="c1"># default receive mode</span>
+<span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span>            <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
+<span class="c1"># status = hf-status.local         # DNS name for receiver status and commands</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">bee1</span><span class="o">-</span><span class="n">hf</span><span class="o">-</span><span class="n">status</span><span class="o">.</span><span class="n">local</span>   <span class="c1"># add &quot;bee1&quot; or the like when using more than one computer/RX888</span>
+<span class="c1"># data = hf-data.local      # not strictly necessary</span>
+<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>            <span class="c1"># default output sample rate</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>                  <span class="c1"># default receive mode</span>
 <span class="c1"># rest are defaults</span>
-<span class="c1">#ttl = 1</span>
-<span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c1"># Too many WD sites don&#39;t have IGMP aware ethernet swtiches, so don&#39;t send radiod multicast packets out the ethernet port.</span>
+<span class="c1">#ttl = 1                # if you mean to present RTP (multicast) streams to other computers -- requires an IGMP-aware ethernet switch.</span>
+<span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c1"># if you only intend RTP streams for local interprocess communication.</span>
 <span class="c1">#fft-threads = 2</span>
 <span class="c1">#blocktime = 20 # allowable Opus block times: 2.5, 5, 10, 20, 40, 60, 80, 100, 120</span>
 <span class="c1">#overlap = 5 # don&#39;t change unless you know what you&#39;re doing</span>
-<span class="c1">#iface = enp1s0</span>
+<span class="c1">#iface = enp1s0         # uncomment to confine RTP multicast to one of several NICs, irrelevant if ttl = 0</span>
 </pre></div>
 </div>
 <p><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:</p>

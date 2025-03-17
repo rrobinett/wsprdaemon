@@ -1,6 +1,6 @@
 # Getting the software with GIT
 
-GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  Version 3.3.1 remains in a development branch.
+GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  The latest version 3.3.1 remains in a development branch.
 
 ## Clone wsprdaemon from github.com
 
@@ -22,9 +22,9 @@ Subsequently, to apply any updates of the latest version, use:
 git pull
 ```
 
-To switch to a different branch, e.g., 3.2.0, use:
+To switch to a different branch, e.g., 3.3.1, use:
 ```
-git checkout 3.2.0
+git checkout 3.3.1
 git pull
 ```
 

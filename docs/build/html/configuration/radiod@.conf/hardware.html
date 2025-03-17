@@ -128,13 +128,13 @@
 <p>A typical configuration of this section for wsprdaemon use follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">rx888</span><span class="p">]</span>
 <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;rx888&quot;</span> <span class="c1"># required so it won&#39;t be seen as a demod section</span>
-<span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;rx888 wsprdaemon&quot;</span> <span class="c1"># good to put callsign and antenna description in here</span>
+<span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;AC0G @EM38ww longwire&quot;</span> <span class="c1"># good to put callsign and antenna description in here</span>
 <span class="c1">#gain = 20 # dB</span>
 <span class="c1"># rest are defaults</span>
 <span class="c1">#description = &quot;rx888&quot;</span>
 <span class="c1">#number = 0</span>
 <span class="c1">#samprate = 129600000     # Hz</span>
-<span class="n">samprate</span> <span class="o">=</span>   <span class="mi">64800000</span>     <span class="c1"># 128 Msps will eventual burn out the stock RX888 Mk II, and this 64 Msps frees much CPU on older CPUs</span>
+<span class="n">samprate</span> <span class="o">=</span>   <span class="mi">64800000</span>     <span class="c1"># 129.6 Msps may heat stress the stock RX888 Mk II, but an improved heatpad seems to fix this</span>
 <span class="c1">#calibrate = 0            # 1e-6 is +1 ppm</span>
 <span class="c1">#firmware = SDDC_FX3.img</span>
 <span class="c1">#queuedepth = 16          # buffers in USB queue</span>
