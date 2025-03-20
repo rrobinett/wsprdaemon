@@ -979,7 +979,7 @@ function build_ka9q_radio() {
              radiod_cores="$RADIOD_CPU_CORES"
              wd_logger 1 "RADIOD_CPU_CORES='$RADIOD_CPU_CORES' in WD.conf, so configure radiod to run in those cores"
          else
-             radiod_cores="$(( cpu_core_count - ${RADIOD_RESERVED_CORES-2}))-$(( cpu_core_count - 1 ))"
+             radiod_cores="$(< /sys/devices/system/cpu/cpu0/topology/thread_siblings_list )"
              wd_logger 1 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
         fi
         local radio_service_file_path="/etc/systemd/system/radiod@.service"
