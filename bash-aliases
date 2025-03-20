@@ -279,7 +279,7 @@ function wd-killall() {
     local rc
     local rc1
 
-    verbosity=${verbosity-0}
+    local verbosity=${verbosity-0}
 
     ### Stop all services
     local services_list=(  wsprdaemon ft4-decoded ft8-decoded  pskreporter@ft4 pskreporter@ft8   pskreporter@wspr )
@@ -360,7 +360,16 @@ function wd-killall() {
         local cgroup_path="${wd_cgroups_root_path}/${cgroup_name}"
         if [[ -d ${cgroup_path} ]]; then
             (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
+            local rc
             sudo rmdir  ${cgroup_path}
+            rc=$? ; if (( rc )); then
+                local proc_list=( $(<  ${cgroup_path}/cgroup.procs ) )
+                local proc_pid
+                for proc_pid in ${proc_list[@]}; do
+                    echo "Killing zombie command '$(ps -o comm= $proc_pid)' "
+                    sudo kill  $proc_pid
+                done
+            fi
         else
             (( verbosity > 1 ))  && printf "Cgroup ${cgroup_path} is not configured\n"
         fi
