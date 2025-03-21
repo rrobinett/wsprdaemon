@@ -1,4 +1,14 @@
 # Example of a working wsprdaemon.conf
+
+Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams, then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.  
+
+You will find further details on these parameters and definitions in 
+- [Computer-related parameters](./computer.md)
+- [ka9q-radio/web parameters](./ka9q-radio.md)
+- [reporting parameters](./reporting.md)
+- [receiver definitions](./receivers.md)
+- [schedule definitions](./schedule.md)
+
 ```
         # 1. Computer-related parameters:
         # RAC setup
@@ -15,7 +25,7 @@
         KA9Q_RUNS_ONLY_REMOTELY="no" 
         KA9Q_CONF_NAME="ac0g-bee1-rx888"
         KA9Q_WEB_COMMIT_CHECK="main"
-        KA9Q_WEB_TITLE="AC0G_@EM38ww_Longwire_Antenna"
+        KA9Q_WEB_TITLE="AC0G_@EM38ww_Longwire"
 
         # 3. Reporting parameters
         GRAPE_PSWS_ID="S000171_172"

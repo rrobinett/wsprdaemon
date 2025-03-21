@@ -1,5 +1,7 @@
 # Compatible Radios
 
+Please note, for the present and in collaboration with HamSCI efforts, wsprdaemon supports kiwiSDR and RX888.  The documentation here also primarily addresses the configuration and use of wsprdaemon with those two radios.  
+
 ## KiwiSDR
 
 ## Radios that work with ka9q-radio
@@ -16,10 +18,20 @@ The kit is available at [the TAPR web store](https://tapr.org/product/rx888-cloc
 
 ### Airspy variants
 
+- Airspy R2
+- Airspy HF+
+
 ### RTL-SDR
 
 ### SDRPLAY variants
 
+Not directly suppported by radiod.  
+- RSPduo
+- RSPdx
+
 ### FobosSDR
 
 ### Others...
+
+- Funcube Dongle
+- OpenHPSDR variants

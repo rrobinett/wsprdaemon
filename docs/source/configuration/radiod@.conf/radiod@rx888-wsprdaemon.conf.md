@@ -2,6 +2,15 @@
 
 ## minimalist setup on a single computer for wspr, wwv, ft4 and ft8.
 
+The following directs radiod to use a RX888 to present simultaneous multicast streams of 16 wspr channels, streams of 7 wwv and 3 chu channels, and streams of 9 ft4 and 11 ft8 channels.
+
+You will find more detailed descriptions of these sections in:
+- [global](./global.md)
+- [hardware](./hardware.md)
+- [channels](./channels.md)
+
+---
+
 ```
 [global]
 hardware = rx888 

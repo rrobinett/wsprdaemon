@@ -36,9 +36,9 @@ If you choose to run wsprdaemon as the user "wsprdaemon", create a wsprdaemon us
 ```
 sudo adduser wsprdaemon
 ```
-Subsequent installation and management of wd will then happen as user "wsprdaemon".
 
-You should then login to the machine as "wsprdaemon." 
+Subsequent installation and management of wd will then happen as user "wsprdaemon".  You should then login to the machine as "wsprdaemon." 
+
 If you login with another username, you can make it easier to change to the wsprdaemon user, by creating an alias: 
 ```
 echo  "alias wd='sudo su - wsprdaemon'" >> ~/.bashrc
@@ -50,6 +50,7 @@ Add wsprdaemon (or your username) to groups sudo, plugdev:
 sudo usermod -a -G sudo wsprdaemon
 sudo usermod -a -G plugdev wsprdaemon
 ```
+
 wsprdaemon includes and installs the ka9q-radio package which creates a "radio" group.  So, once the wsprdaemon script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:
 
 ```
@@ -57,10 +58,10 @@ sudo usermod -a -G radio wsprdaemon
 ```
 
 If dedicating this computer to exclusive wsprdaemon use, you may also want the hostname of your computer to reflect this.  To do so:
-
 ```
 sudo hostnamectl set-hostname W3USR-B1-1
 ```
+
 After changing the hostname, check or update the /etc/hosts file to reflect the change. 
 
 ### Remote Access Setup

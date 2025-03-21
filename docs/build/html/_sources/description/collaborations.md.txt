@@ -1,15 +1,15 @@
 # Collaborations
 
-## wsprnet.org
+## [wsprnet.org](https://wsprnet.org/)
 
-## HamSCI
+## [HamSCI](https://hamsci.org/) 
 
-## SuperDARN
+## [SuperDARN](https://superdarn.ca/)
 
-## WSPR.rocks
+## [WSPR.rocks](https://wspr.rocks)
 
-## WSPR.live
+## [WSPR.live](https://wspr.live)
 
-## PSKReporter
+## [PSKReporter](https://pskreporter.info)
 
 

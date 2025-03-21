@@ -127,6 +127,14 @@
 <h1>Example radiod&#64;rx888-wsprdaemon.conf<a class="headerlink" href="#example-radiod-rx888-wsprdaemon-conf" title="Link to this heading"></a></h1>
 <section id="minimalist-setup-on-a-single-computer-for-wspr-wwv-ft4-and-ft8">
 <h2>minimalist setup on a single computer for wspr, wwv, ft4 and ft8.<a class="headerlink" href="#minimalist-setup-on-a-single-computer-for-wspr-wwv-ft4-and-ft8" title="Link to this heading"></a></h2>
+<p>The following directs radiod to use a RX888 to present simultaneous multicast streams of 16 wspr channels, streams of 7 wwv and 3 chu channels, and streams of 9 ft4 and 11 ft8 channels.</p>
+<p>You will find more detailed descriptions of these sections in:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="global.html"><span class="std std-doc">global</span></a></p></li>
+<li><p><a class="reference internal" href="hardware.html"><span class="std std-doc">hardware</span></a></p></li>
+<li><p><a class="reference internal" href="channels.html"><span class="std std-doc">channels</span></a></p></li>
+</ul>
+<hr class="docutils" />
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="k">global</span><span class="p">]</span>
 <span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span> 
 <span class="n">status</span> <span class="o">=</span> <span class="n">bee1</span><span class="o">-</span><span class="n">hf</span><span class="o">-</span><span class="n">status</span><span class="o">.</span><span class="n">local</span> 

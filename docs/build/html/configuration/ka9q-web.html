@@ -132,10 +132,10 @@
 <h1>ka9q-web<a class="headerlink" href="#ka9q-web" title="Link to this heading"></a></h1>
 <p>This software builds in reference to ka9q-radio and requires no specific configuration.<br />
 wsprdaemon typically starts it automatically.  You invoke it manually, if necessary, thus:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ka9q</span><span class="o">-</span><span class="n">web</span> <span class="o">-</span><span class="n">m</span> <span class="n">your</span><span class="o">-</span><span class="n">radiod</span><span class="o">-</span><span class="n">status</span><span class="o">-</span><span class="n">stream</span><span class="o">.</span><span class="n">local</span> <span class="o">&amp;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ka9q</span><span class="o">-</span><span class="n">web</span> <span class="o">-</span><span class="n">m</span> <span class="n">your</span><span class="o">-</span><span class="n">radiod</span><span class="o">-</span><span class="n">status</span><span class="o">-</span><span class="n">stream</span><span class="o">.</span><span class="n">local</span> <span class="o">-</span><span class="n">p</span> <span class="mi">8081</span> <span class="o">-</span><span class="n">n</span> <span class="s2">&quot;callsign grid antenna&quot;</span> <span class="o">&amp;</span>
 </pre></div>
 </div>
-<p>where “your-radiod-status-stream” is the name specified in your radiod&#64;.conf (often hf.local or hf-status.local)</p>
+<p>where “your-radiod-status-stream” is the name specified in the [GLOBAL] of your radiod&#64;.conf (often hf.local or hf-status.local)</p>
 <section id="viewing-the-ka9q-web-spectrum-display">
 <h2>Viewing the ka9q-web spectrum display<a class="headerlink" href="#viewing-the-ka9q-web-spectrum-display" title="Link to this heading"></a></h2>
 <p>Logged in an running everything locally, direct your browser to http://localhost:8081.</p>

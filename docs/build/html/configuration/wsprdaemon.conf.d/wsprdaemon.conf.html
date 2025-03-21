@@ -125,6 +125,15 @@
              
   <section id="example-of-a-working-wsprdaemon-conf">
 <h1>Example of a working wsprdaemon.conf<a class="headerlink" href="#example-of-a-working-wsprdaemon-conf" title="Link to this heading"></a></h1>
+<p>Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams, then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.</p>
+<p>You will find further details on these parameters and definitions in</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="computer.html"><span class="std std-doc">Computer-related parameters</span></a></p></li>
+<li><p><a class="reference internal" href="ka9q-radio.html"><span class="std std-doc">ka9q-radio/web parameters</span></a></p></li>
+<li><p><a class="reference internal" href="reporting.html"><span class="std std-doc">reporting parameters</span></a></p></li>
+<li><p><a class="reference internal" href="receivers.html"><span class="std std-doc">receiver definitions</span></a></p></li>
+<li><p><a class="reference internal" href="schedule.html"><span class="std std-doc">schedule definitions</span></a></p></li>
+</ul>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        # 1. Computer-related parameters:
         # RAC setup
         REMOTE_ACCESS_CHANNEL=27
@@ -140,7 +149,7 @@
         KA9Q_RUNS_ONLY_REMOTELY=&quot;no&quot; 
         KA9Q_CONF_NAME=&quot;ac0g-bee1-rx888&quot;
         KA9Q_WEB_COMMIT_CHECK=&quot;main&quot;
-        KA9Q_WEB_TITLE=&quot;AC0G_@EM38ww_Longwire_Antenna&quot;
+        KA9Q_WEB_TITLE=&quot;AC0G_@EM38ww_Longwire&quot;
 
         # 3. Reporting parameters
         GRAPE_PSWS_ID=&quot;S000171_172&quot;
