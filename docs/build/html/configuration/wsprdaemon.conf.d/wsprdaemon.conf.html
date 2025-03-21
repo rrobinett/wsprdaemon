@@ -61,7 +61,7 @@
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -125,7 +125,8 @@
              
   <section id="example-of-a-working-wsprdaemon-conf">
 <h1>Example of a working wsprdaemon.conf<a class="headerlink" href="#example-of-a-working-wsprdaemon-conf" title="Link to this heading"></a></h1>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        # RAC setup
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        # 1. Computer-related parameters:
+        # RAC setup
         REMOTE_ACCESS_CHANNEL=27
         REMOTE_ACCESS_ID=&quot;AC0G-BEE1&quot;
 
@@ -134,22 +135,29 @@
         WD_CPU_CORES=&quot;8-15&quot;
         RADIOD_CPU_CORES=&quot;0-7&quot;
 
-        # KA9Q-RADIO/WEB config
+        # 2. ka9q-radio/web parameters
         KA9Q_RADIO_COMMIT=&quot;main&quot;
-        KA9Q_WEB_COMMIT_CHECK=&quot;main&quot;
-        KA9Q_RUNS_ONLY_REMOTELY=&quot;no&quot;         ### If &quot;yes&quot; then WD will not install and configure its own copy of KA9Q-radio and thus assuemes the user has installed and configured it him/her self.
-        KA9Q_GIT_PULL_ENABLED=&quot;yes&quot;
+        KA9Q_RUNS_ONLY_REMOTELY=&quot;no&quot; 
         KA9Q_CONF_NAME=&quot;ac0g-bee1-rx888&quot;
+        KA9Q_WEB_COMMIT_CHECK=&quot;main&quot;
         KA9Q_WEB_TITLE=&quot;AC0G_@EM38ww_Longwire_Antenna&quot;
 
-        # REPORTING
+        # 3. Reporting parameters
         GRAPE_PSWS_ID=&quot;S000171_172&quot;
-        SIGNAL_LEVEL_UPLOAD=&quot;noise&quot;           ### Whether and how to upload extended spots to wsprdaemon.org.  WD always attempts to upload spots to wsprnet.org
-        SIGNAL_LEVEL_UPLOAD_ID=&quot;AC0G_LW&quot;     ### The name put in upload log records, the title bar of the graph, and the name used to view spots and noise at that server.
-        SIGNAL_LEVEL_UPLOAD_GRAPHS=&quot;yes&quot;   ### If this variable is defined as &quot;yes&quot; AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://wsprdaemon.org/graphs/SIGNAL_LEVEL_UPLOAD_ID
+        SIGNAL_LEVEL_UPLOAD=&quot;noise&quot;  
+        SIGNAL_LEVEL_UPLOAD_ID=&quot;AC0G_BEE1&quot;
+        SIGNAL_LEVEL_UPLOAD_GRAPHS=&quot;yes&quot;  
 
+        # 4. Receiver definitions
+        # two radiod receivers -- one for wspr and one for wwv
+        declare RECEIVER_LIST=(
+                &quot;KA9Q_0                     wspr-pcm.local     AI6VN         CM88mc    NULL&quot;    
+                &quot;KA9Q_0_WWV_IQ                wwv-iq.local     AI6VN         CM88mc    NULL&quot;     
+        )
+
+        # 5. Schedule definitions
         # SCHEDULE
-        declare receiver=&quot;KA9Q_LONGWIRE&quot;
+        declare receiver=&quot;KA9Q_0&quot;
         declare WSPR_SCHEDULE=(
             &quot;00:00  ${receiver},2200,W2:F2:F5:F15:F30      ${receiver},630,W2:F2:F5      ${receiver},160,W2:F2:F5
                     ${receiver},80,W2:F2:F5                ${receiver},80eu,W2:F2:F5     ${receiver},60,W2:F2:F5

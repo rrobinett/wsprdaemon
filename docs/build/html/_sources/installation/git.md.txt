@@ -1,6 +1,6 @@
-# Getting the software with GIT
+# Download the software with GIT
 
-GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  The latest version 3.3.1 remains in a development branch.
+GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  The latest version 3.3.1 remains in a development branch.  
 
 ## Clone wsprdaemon from github.com
 
@@ -17,6 +17,7 @@ git checkout master
 git status
 git log
 ```
+
 Subsequently, to apply any updates of the latest version, use:
 ```
 git pull
@@ -34,10 +35,10 @@ source bash-aliases ../.bash_aliases
 ```
 
 Having prepared and cloned the wsprdaemon software, now you can run it:
-
 ```
 wd
 ```
+
 This sets the stage and prompts you to configure your setup:
 - [wsprdaemon configuration](../configuration/wd_conf.md)
 - [radiod configuration](../configuration/radiod_conf.md)
