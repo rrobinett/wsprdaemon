@@ -5,13 +5,13 @@ A typical configuration of this section for wsprdaemon use follows:
 ```
 [rx888]
 device = "rx888" # required so it won't be seen as a demod section
-description = "rx888 wsprdaemon" # good to put callsign and antenna description in here
+description = "AC0G @EM38ww longwire" # good to put callsign and antenna description in here
 #gain = 20 # dB
 # rest are defaults
 #description = "rx888"
 #number = 0
 #samprate = 129600000     # Hz
-samprate =   64800000     # 128 Msps will eventual burn out the stock RX888 Mk II, and this 64 Msps frees much CPU on older CPUs
+samprate =   64800000     # 129.6 Msps may heat stress the stock RX888 Mk II, but an improved heatpad seems to fix this
 #calibrate = 0            # 1e-6 is +1 ppm
 #firmware = SDDC_FX3.img
 #queuedepth = 16          # buffers in USB queue

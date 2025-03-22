@@ -3,9 +3,9 @@
 This software builds in reference to ka9q-radio and requires no specific configuration.  
 wsprdaemon typically starts it automatically.  You invoke it manually, if necessary, thus:
 ```
-ka9q-web -m your-radiod-status-stream.local &
+ka9q-web -m your-radiod-status-stream.local -p 8081 -n "callsign grid antenna" &
 ```
-where "your-radiod-status-stream" is the name specified in your radiod@.conf (often hf.local or hf-status.local)
+where "your-radiod-status-stream" is the name specified in the [GLOBAL] of your radiod@.conf (often hf.local or hf-status.local)
 
 ## Viewing the ka9q-web spectrum display
 

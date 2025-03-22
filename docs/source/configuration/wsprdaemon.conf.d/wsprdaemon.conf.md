@@ -1,5 +1,16 @@
 # Example of a working wsprdaemon.conf
+
+Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams, then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.  
+
+You will find further details on these parameters and definitions in 
+- [Computer-related parameters](./computer.md)
+- [ka9q-radio/web parameters](./ka9q-radio.md)
+- [reporting parameters](./reporting.md)
+- [receiver definitions](./receivers.md)
+- [schedule definitions](./schedule.md)
+
 ```
+        # 1. Computer-related parameters:
         # RAC setup
         REMOTE_ACCESS_CHANNEL=27
         REMOTE_ACCESS_ID="AC0G-BEE1"
@@ -9,22 +20,29 @@
         WD_CPU_CORES="8-15"
         RADIOD_CPU_CORES="0-7"
 
-        # KA9Q-RADIO/WEB config
+        # 2. ka9q-radio/web parameters
         KA9Q_RADIO_COMMIT="main"
-        KA9Q_WEB_COMMIT_CHECK="main"
-        KA9Q_RUNS_ONLY_REMOTELY="no"         ### If "yes" then WD will not install and configure its own copy of KA9Q-radio and thus assuemes the user has installed and configured it him/her self.
-        KA9Q_GIT_PULL_ENABLED="yes"
+        KA9Q_RUNS_ONLY_REMOTELY="no" 
         KA9Q_CONF_NAME="ac0g-bee1-rx888"
-        KA9Q_WEB_TITLE="AC0G_@EM38ww_Longwire_Antenna"
+        KA9Q_WEB_COMMIT_CHECK="main"
+        KA9Q_WEB_TITLE="AC0G_@EM38ww_Longwire"
 
-        # REPORTING
+        # 3. Reporting parameters
         GRAPE_PSWS_ID="S000171_172"
-        SIGNAL_LEVEL_UPLOAD="noise"           ### Whether and how to upload extended spots to wsprdaemon.org.  WD always attempts to upload spots to wsprnet.org
-        SIGNAL_LEVEL_UPLOAD_ID="AC0G_LW"     ### The name put in upload log records, the title bar of the graph, and the name used to view spots and noise at that server.
-        SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"   ### If this variable is defined as "yes" AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://wsprdaemon.org/graphs/SIGNAL_LEVEL_UPLOAD_ID
+        SIGNAL_LEVEL_UPLOAD="noise"  
+        SIGNAL_LEVEL_UPLOAD_ID="AC0G_BEE1"
+        SIGNAL_LEVEL_UPLOAD_GRAPHS="yes"  
 
+        # 4. Receiver definitions
+        # two radiod receivers -- one for wspr and one for wwv
+        declare RECEIVER_LIST=(
+                "KA9Q_0                     wspr-pcm.local     AI6VN         CM88mc    NULL"    
+                "KA9Q_0_WWV_IQ                wwv-iq.local     AI6VN         CM88mc    NULL"     
+        )
+
+        # 5. Schedule definitions
         # SCHEDULE
-        declare receiver="KA9Q_LONGWIRE"
+        declare receiver="KA9Q_0"
         declare WSPR_SCHEDULE=(
             "00:00  ${receiver},2200,W2:F2:F5:F15:F30      ${receiver},630,W2:F2:F5      ${receiver},160,W2:F2:F5
                     ${receiver},80,W2:F2:F5                ${receiver},80eu,W2:F2:F5     ${receiver},60,W2:F2:F5
