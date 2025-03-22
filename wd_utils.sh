@@ -32,6 +32,16 @@ trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} 
 
 ###  Returns 0 if arg is an unsigned integer, else 1
 function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; esac ;}
+function is_positive_integer()
+{
+    local test_value="$1"
+    if [[ "$test_value" =~ ^[1-9][0-9]*$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 
 ###
 function wd_logger_flush_all_logs {
@@ -753,7 +763,6 @@ function wd_kill_pid_file()
     return 0
 }
 
-
 function spawn_daemon() 
 {
     local daemon_function_name=$1
@@ -765,11 +774,11 @@ function spawn_daemon()
     wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
-        if ps ${daemon_pid} > /dev/null ; then
+        if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
             wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
             return 0
         else
-            wd_logger 1 "found a stale file '${daemon_pid_file_path}' with pid ${daemon_pid}, so deleting it"
+            wd_logger 1 "Found a stale pid file '${daemon_pid_file_path}' which contains '${daemon_pid}', so deleting it"
             rm -f ${daemon_pid_file_path}
         fi
     fi
