@@ -1036,3 +1036,77 @@ function  wd_ip_is_valid() {
     wd_logger 1 "ERROR: this line should never be executed"
     return 5
 }
+
+### Given the path to an ini file like /etc/radio/radiod@rx888-wsprdemon.conf, ~/bin/frpc_wd.ini or /etc/systemd/system/wsprdaemon.service
+### This function searches for a variable in a section and:
+### 1)  If is isn't found, it adds the variable = value to the section
+### 2)  If the variable is found it verifies its value and changes it if the new value differs from what what there before
+###     As a special case, if variable = '#', then remarks out the line with a '#' as the first character of the line
+### Mostly created by chatgbt
+function update_ini_file_section_variable() {
+    local file="$1"          ### The ini file to be verified or modified if needed
+    local section="$2"       ### The section which contains the variable of interest
+    local variable="$3"      ### The variable which is to be verified or modified
+    local new_value="$4"     ### The desired value of that variable
+    local rc=0
+
+    if [[ ! -f "${file}" ]]; then
+        wd_logger 1 "ERROR: ini file '${file}' does not exist"
+        return 3
+    fi
+
+    # Escape special characters in section and variable for use in regex
+    local section_esc=$(printf "%s\n" "$section" | sed 's/[][\/.^$*]/\\&/g')
+    local variable_esc=$(printf "%s\n" "$variable" | sed 's/[][\/.^$*]/\\&/g')
+
+    wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
+
+    # Check if section exists
+    if ! grep -q "^\[$section_esc\]" "$file"; then
+        # Add section if it doesn't exist
+        wd_logger 1 "iERROR: expected section [$section] doesn't exist in '$file'"
+        return 4
+    fi
+
+    # Find section start and end lines
+    local section_start=$(grep -n "^\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_end=$(awk -v start=$section_start 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
+
+    # If no next section is found, set section_end to end of file
+    [[ -z "$section_end" ]] && section_end=$(wc -l < "$file")
+
+    # Check if variable exists within the section
+    if sed -n "${section_start},${section_end}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
+        ### The variable is defined.  See if it needs to be changed
+        local temp_file="${file}.tmp"
+
+        if [[ "$new_value" == "#" ]]; then
+            wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
+            sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
+        else
+            wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
+            sed  "${section_start},${section_end}s|^\s*\($variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
+        fi
+        if ! diff "$file" "$temp_file" > diff.log; then
+            wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
+            mv "${temp_file}"  "$file"
+            return 1
+        else
+            rm "${temp_file}"
+            wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
+            return 0
+        fi
+    else
+        # Append the variable inside the section
+         if [[ "$new_value" == "#" ]]; then
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
+            return 0
+        else
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
+            sed -i "${section_start}a\\$variable=$new_value" "$file"
+            return 1
+         fi
+    fi
+    ### Code should never get here
+    return 2
+}
