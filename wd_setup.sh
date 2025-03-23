@@ -123,11 +123,14 @@ function wd_run_in_cgroup() {
     else
         local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
         if ((  cpu_core_count < 8 )); then
-            wd_logger 2 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+            wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
             return 0
         fi
-        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - ${RADIO_CPU_CORES-2} ))}
-        wd_core_range="0-$(( max_cpu_core - 1 ))"
+        ### Most CPUs seem to have one of its pair of high performance chyperthreaded cores at 0-1
+        #### So leave those cores for radiod and restrict WD to the other cores of the CPU
+        #### It would be better to learn which cores are running radiod and then exclude WD from using them, but there is only so much coding time in life...
+        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 1 ))}
+        local wd_core_range="2-$max_cpu_core"
         wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
     fi
  
