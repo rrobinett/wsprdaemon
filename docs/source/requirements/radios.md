@@ -1,6 +1,6 @@
 # Compatible Radios
 
-Please note, for the present and in collaboration with HamSCI efforts, wsprdaemon supports kiwiSDR and RX888.  The documentation here also primarily addresses the configuration and use of wsprdaemon with those two radios.  
+Please note, for the present and in collaboration with HamSCI efforts, WD supports kiwiSDR and RX888.  The documentation here also primarily addresses the configuration and use of WD with those two radios.  
 
 ## KiwiSDR
 

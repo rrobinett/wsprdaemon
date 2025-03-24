@@ -1,4 +1,4 @@
-# Monitoring wsprdaemon operation
+# Monitoring WD operation
 
 ## recordings
 
@@ -7,6 +7,8 @@
 ## logs
 
 ## using BTOP 
+
+![](../_images/btop.png)
 
 ## Useful wd aliases
 

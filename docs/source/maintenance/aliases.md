@@ -1,4 +1,4 @@
-# Aliases for monitoring and interacting with wsprdaemon
+# Aliases for monitoring and interacting with WD
 
 These aliases (in ~wsprdaemon/bash-aliases) can provide very useful functions with a few keystrokes.  The documentation for what they do remains minimal.  Also, take note that some of them will only work in a particular directory.
 
