@@ -116,6 +116,7 @@ declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 ### Restrict WD and its children so two CPU cores are always free for KA9Q-radio
 # This should be undone later on systems not running KA9Q-radio
 function wd_run_in_cgroup() {
+    local rc
     local wd_core_range
     if [[ -n "${WD_CPU_CORES+set}" ]]; then
         wd_core_range="$WD_CPU_CORES"
@@ -130,9 +131,36 @@ function wd_run_in_cgroup() {
         #### So leave those cores for radiod and restrict WD to the other cores of the CPU
         #### It would be better to learn which cores are running radiod and then exclude WD from using them, but there is only so much coding time in life...
         local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 1 ))}
-        local wd_core_range="2-$max_cpu_core"
+        wd_core_range="2-$max_cpu_core"
         wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
     fi
+
+    ### Fix up the wsprdaemon.service file so the CPUAffinity is assigned by systemctl when it starts WD
+    local wd_service_file="/etc/systemd/system/wsprdaemon.service"
+    if [[ ! -f $wd_service_file ]]; then
+        wd_logger 1 "WARNING: this WD server has not been setup to autostart"
+    else
+         update_ini_file_section_variable $wd_service_file "Service" "CPUAffinity" "$wd_core_range"
+         rc=$?
+         case $rc in
+             0)
+                 wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was already setup"
+                 ;;
+             1)
+                 wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was added or changed"
+                 sudo systemctl daemon-reload
+                 ;;
+             *)
+                 wd_logger 1 "ERROR: 'update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range' => $rc"
+                 ;;
+         esac
+    fi
+
+    if [ -n "${INVOCATION_ID-}" ]; then
+        wd_logger 1 "WD is being run by systemctld which is in control of CPUAffinity.  So don't try to reassign WD to other cores"
+        return 0
+    fi
+    wd_logger 1 "WD is being run by a terminal session, so set CPUAffinity to run on cores '$wd_core_range'"
  
     echo  "+cpuset"         | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
     sudo mkdir -p  "${WD_CPUSET_PATH}"
