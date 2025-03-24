@@ -820,6 +820,7 @@ function build_ka9q_radio() {
     "${ka9q_conf_file_path}  WSPR    low       1300"
     "${ka9q_conf_file_path}  WSPR    high      1700"
     "${ka9q_conf_file_path}  WSPR    encoding float"
+    "${ka9q_conf_file_path}  WWV-IQ  disable     no"
     "${ka9q_conf_file_path}  WWV-IQ  agc          0"
     "${ka9q_conf_file_path}  WWV-IQ  gain         0"
     "${ka9q_conf_file_path}  WWV-IQ  encoding float"
