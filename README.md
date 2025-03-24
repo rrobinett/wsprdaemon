@@ -4,4 +4,4 @@ Wsprdaemon (WD) is Linux service which decodes WSPR and FST4W spots from one or 
 
 After configuration, WD is designed to run like a home appliance: it recovers on its own from power and Internet outages and caches all spots and other data it gathers until it is confirmed delivered by wsprnet.org and/or wsprdaemon.net.  Most of the 20+ 'top spotting' sites at http://wspr.rocks/topspotters/ are running WD, and in aggregate they report about 33% of the 7+M spots recorded each day at wsprnet.org. 
 
-For further documentation on prerequisites, installation, configuration, and running WD, please refer to the [documentation](./docs/build/html/index.html).
+For further documentation on prerequisites, installation, configuration, and running WD, please refer to the [documentation](https://wsprdaemon.readthedocs.io/en/3.3.1/).
