@@ -1039,10 +1039,13 @@ function  wd_ip_is_valid() {
 
 ### Given the path to an ini file like /etc/radio/radiod@rx888-wsprdemon.conf, ~/bin/frpc_wd.ini or /etc/systemd/system/wsprdaemon.service
 ### This function searches for a variable in a section and:
-### 1)  If is isn't found, it adds the variable = value to the section
-### 2)  If the variable is found it verifies its value and changes it if the new value differs from what what there before
-###     As a special case, if variable = '#', then remarks out the line with a '#' as the first character of the line
+### returns 0: if no changes were made
+### returns 1: 1)  If the variable isn't found and '$variable=$value' was added to the $section
+###            2)  If the variable is found but it was changed to '$variable=$value'
+###            3) As a special case, if variable = '#', then remarks out the line with a '#' as the first character of the line
+### returns 2: If there is a bug in the function, since it should always return 0 or 1
 ### Mostly created by chatgbt
+#
 function update_ini_file_section_variable() {
     local file="$1"          ### The ini file to be verified or modified if needed
     local section="$2"       ### The section which contains the variable of interest
@@ -1062,30 +1065,30 @@ function update_ini_file_section_variable() {
     wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
 
     # Check if section exists
-    if ! grep -q "^\[$section_esc\]" "$file"; then
+    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
         # Add section if it doesn't exist
         wd_logger 1 "iERROR: expected section [$section] doesn't exist in '$file'"
         return 4
     fi
 
     # Find section start and end lines
-    local section_start=$(grep -n "^\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
-    local section_end=$(awk -v start=$section_start 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
+    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
 
-    # If no next section is found, set section_end to end of file
-    [[ -z "$section_end" ]] && section_end=$(wc -l < "$file")
+    # If no next section is found, set section_end_line_number to end of file
+    [[ -z "$section_end_line_number" ]] && section_end_line_number=$(wc -l < "$file")
 
     # Check if variable exists within the section
-    if sed -n "${section_start},${section_end}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
+    if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
         ### The variable is defined.  See if it needs to be changed
         local temp_file="${file}.tmp"
 
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
-            sed "${section_start},${section_end}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
+            sed "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
         else
             wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
-            sed  "${section_start},${section_end}s|^\s*\($variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
+            sed  "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
         fi
         if ! diff "$file" "$temp_file" > diff.log; then
             wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
@@ -1103,7 +1106,7 @@ function update_ini_file_section_variable() {
             return 0
         else
             wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
-            sed -i "${section_start}a\\$variable=$new_value" "$file"
+            sed -i "${section_start_line_number}a\\$variable=$new_value" "$file"
             return 1
          fi
     fi
