@@ -1,6 +1,6 @@
 # WSPR spots
 
-WSPR, which stands for Weak Signal Propagation Reporter, is a protocol used in amateur radio for assessing radio signal propagation. It allows users to send and receive very low-power transmissions over long distances, which are then automatically reported by receiving stations. Here are some key points about WSPR:
+WSPR, which stands for Weak Signal Propagation Reporter, defines a protocol used in amateur radio for assessing radio signal propagation. It allows users to send and receive very low-power transmissions over long distances, that a receiving station then decodes and reports. Here are some key points about WSPR:
 
 **Purpose**: WSPR is primarily used for scientific and testing purposes, helping amateur radio operators analyze radio wave propagation conditions.
 
@@ -21,12 +21,12 @@ Presents an interface to a Clickhouse DB courtesy of Arne at wspr.live and hoste
 
 ## WSPR.Live
 
-WSPR.live allows you to do analysis on the real time wspr spot data. The database contains all spots ever reported to wsprnet.org and allows public access to the data.
+WSPR.live allows you to do analysis on the real-time wspr spot data. The database contains all spots ever reported to wsprnet.org and allows public access to the data.
 
 [wspr.live](https://wspr.live)
 
 ## WSPRnet
 
-The Weak Signal Propagation Reporter Network is a group of amateur radio operators using K1JT's MEPT_JT digital mode to probe radio frequency propagation conditions using very low power (QRP/QRPp) transmissions. The software is open source, and the data collected are available to the public through [this site](https://wsprnet.org/).
+Amateur radio operators using K1JT's MEPT_JT digital mode collaborate via the Weak Signal Propagation Reporter Network to probe radio frequency propagation conditions using very low power (QRP/QRPp) transmissions. The software is open source, and the data collected are available to the public through [this site](https://wsprnet.org/).
 
 
