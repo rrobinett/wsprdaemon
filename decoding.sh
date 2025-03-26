@@ -777,6 +777,29 @@ function file_is_open() {
     fi
 }
 
+declare last_wav_file_name=""
+declare wav_file_create_time_log_file="./wav_file_create_time.log"  ### each RX888 band has its own create lime log file
+
+function log_wav_file_create_times() {
+    local wav_file_name="$1"
+
+    wd_logger 1 "Logging wav file '$wav_file_name' create time line to $wav_file_create_time_log_file"
+
+    if [[ ! -f "$wav_file_name" ]]; then
+        wd_logger 1 "ERROR: can't find '$wav_file_name'"
+        return 1
+    fi
+
+    if [[ -z "$last_wav_file_name" ]]; then
+        echo "$(date): ================ starting decoding ==============="  >> "$wav_file_create_time_log_file"
+        last_wav_file_name="$wav_file_name"
+    fi
+    local file_stat_list=($( stat "$wav_file_name"  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
+    echo "${file_stat_list[0]} ${file_stat_list[1]} ${file_stat_list[3]} ${file_stat_list[2]}"  >> "$wav_file_create_time_log_file"
+    truncate_file "$wav_file_create_time_log_file" ${MAX_CREATE_TIME_LOG-1000000}
+    return 0
+}
+
 function file_is_closed_or_last_write_was_seconds_ago() {
     local file_path="${1}"
     local wait_for_no_writes_seconds=${2}                ### Tyypicaly we wait for 60+ seconds for a one minute file to be filled
@@ -796,6 +819,8 @@ function file_is_closed_or_last_write_was_seconds_ago() {
             wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait -e close ${newest_file_name}' => ${rc}"
                 return ${rc}
             else
+                log_wav_file_create_times "$newest_file_name"
+
                 local date_time_list=( $(stat $newest_file_name | awk '/Modify/{printf "%s %s", $2, $3} ') )
                 local date=${date_time_list[0]}
                 local hhmmss=${date_time_list[1]%.*}
