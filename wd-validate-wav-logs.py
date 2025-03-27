@@ -19,13 +19,13 @@ def parse_time(timestamp):
         return None
 
 def parse_birth_time(birth_time):
-    """Parses a birth time in HH:MM:SS.microseconds format and returns microseconds if seconds == 00."""
+    """Parses a birth time in HH:MM:SS.nanoseconds format and returns nanoseconds if seconds == 00."""
     try:
-        h, m, s_micro = birth_time.split(':')
-        s, micro = map(int, s_micro.split('.'))
+        h, m, s_nano = birth_time.split(':')
+        s, nano = map(int, s_nano.split('.'))
         if int(s) != 0:
             return None  # Ignore if seconds are not 00
-        return micro
+        return nano
     except ValueError:
         return None
 
@@ -49,13 +49,13 @@ def process_log_file(filepath, max_filename_length):
             break
     
     prev_time = None
-    birth_microseconds = []
+    birth_nanoseconds = []
     for line in lines[start_index:]:
         match = re.search(r'(\d{8}T\d{6}Z)_\d+_[a-z]+\.wav: Size:(\d+) Birth:(\d{2}:\d{2}:\d{2}\.\d+)', line)
         if match:
             curr_time = parse_time(match.group(1)[9:14])  # Extract HH:MM from the timestamp
             size_value = int(match.group(2))
-            birth_micro = parse_birth_time(match.group(3))
+            birth_nano = parse_birth_time(match.group(3))
             
             if prev_time and not is_one_minute_later(prev_time, curr_time):
                 print(f"Timestamp error in file {filepath}: {line.strip()}")
@@ -63,17 +63,17 @@ def process_log_file(filepath, max_filename_length):
             if size_value != 2880252:
                 print(f"Error: Incorrect size value {size_value} in file {filepath}, line: {line.strip()}")
             
-            if birth_micro is not None:
-                birth_microseconds.append(birth_micro)
+            if birth_nano is not None:
+                birth_nanoseconds.append(birth_nano)
             
             prev_time = curr_time
         else:
             print(f"Unmatched line: {line.strip()}")
     
-    if birth_microseconds:
-        min_birth = min(birth_microseconds) / 1000
-        max_birth = max(birth_microseconds) / 1000
-        avg_birth = (sum(birth_microseconds) / len(birth_microseconds)) / 1000
+    if birth_nanoseconds:
+        min_birth = min(birth_nanoseconds) / 1_000_000
+        max_birth = max(birth_nanoseconds) / 1_000_000
+        avg_birth = (sum(birth_nanoseconds) / len(birth_nanoseconds)) / 1_000_000
         print(f"{filepath.ljust(max_filename_length)} Min: {min_birth:.2f} ms  Max: {max_birth:.2f} ms  Avg: {avg_birth:.2f} ms")
     else:
         print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
