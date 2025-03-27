@@ -52,7 +52,9 @@ def process_log_file(filepath, max_filename_length):
     birth_nanoseconds = []
     first_10_samples = []
     last_10_samples = []
+    total_lines_processed = 0
     for line in lines[start_index:]:
+        total_lines_processed += 1
         match = re.search(r'(\d{8}T\d{6}Z)_\d+_[a-z]+\.wav: Size:(\d+) Birth:(\d{2}:\d{2}:\d{2}\.\d+)', line)
         if match:
             curr_time = parse_time(match.group(1)[9:14])  # Extract HH:MM from the timestamp
@@ -88,7 +90,8 @@ def process_log_file(filepath, max_filename_length):
         
         # Print summary with all stats aligned
         print(f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
-              f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms")
+              f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
+              f"Total Lines Processed: {total_lines_processed:5}")
     else:
         print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
 
