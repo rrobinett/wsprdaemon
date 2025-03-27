@@ -74,7 +74,7 @@ def process_log_file(filepath, max_filename_length):
         min_birth = min(birth_nanoseconds) / 1_000_000
         max_birth = max(birth_nanoseconds) / 1_000_000
         avg_birth = (sum(birth_nanoseconds) / len(birth_nanoseconds)) / 1_000_000
-        print(f"{filepath.ljust(max_filename_length)} Min: {min_birth:.2f} ms  Max: {max_birth:.2f} ms  Avg: {avg_birth:.2f} ms")
+        print(f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms")
     else:
         print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
 
