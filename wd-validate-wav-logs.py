@@ -1,5 +1,6 @@
 import re
 import sys
+import matplotlib.pyplot as plt
 from pathlib import Path
 
 def extract_sort_key(filepath):
@@ -92,6 +93,17 @@ def process_log_file(filepath, max_filename_length):
         print(f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
               f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
               f"Total Lines Processed: {total_lines_processed:5}")
+
+        # Plot birth time graph (in milliseconds)
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(len(birth_nanoseconds)), [birth / 1_000_000 for birth in birth_nanoseconds], marker='o', linestyle='-', color='b')
+        plt.title(f"Birth Time Graph for {filepath}")
+        plt.xlabel("Sample Index")
+        plt.ylabel("Birth Time (ms)")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(f"{filepath}_birth_time_graph.png")  # Save the graph as a PNG file
+        plt.show()  # Display the graph
     else:
         print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
 
