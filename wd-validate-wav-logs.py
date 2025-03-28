@@ -52,6 +52,8 @@ def process_log_file(filepath, max_filename_length):
 
     prev_time = None
     birth_nanoseconds = []
+    first_10_samples = []
+    last_10_samples = []
     total_lines_processed = 0
     for line in lines[start_index:]:
         total_lines_processed += 1
@@ -69,6 +71,11 @@ def process_log_file(filepath, max_filename_length):
 
             if birth_nano is not None:
                 birth_nanoseconds.append(birth_nano)
+                if len(first_10_samples) < 10:
+                    first_10_samples.append(birth_nano)
+                last_10_samples.append(birth_nano)
+                if len(last_10_samples) > 10:
+                    last_10_samples.pop(0)
 
             prev_time = curr_time
         else:
@@ -79,10 +86,18 @@ def process_log_file(filepath, max_filename_length):
         max_birth = max(birth_nanoseconds) / 1_000_000
         avg_birth = (sum(birth_nanoseconds) / len(birth_nanoseconds)) / 1_000_000
 
-        summary = f"Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  {filepath.ljust(max_filename_length)}"
+        # Calculate average for first and last 10 samples
+        avg_first_10 = (sum(first_10_samples) / len(first_10_samples)) / 1_000_000 if first_10_samples else 0
+        avg_last_10 = (sum(last_10_samples) / len(last_10_samples)) / 1_000_000 if last_10_samples else 0
+
+        # Print summary with all stats aligned, including first 10 and last 10 averages
+        summary = (f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  "
+                   f"Avg: {avg_birth:9.2f} ms  First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
+                   f"Total Lines Processed: {total_lines_processed:5}")
+
         return summary, birth_nanoseconds
     else:
-        return f"No valid birth times found {filepath.ljust(max_filename_length)}", None
+        return f"{filepath.ljust(max_filename_length)} No valid birth times found", None
 
 def plot_birth_times(filepath, birth_nanoseconds):
     """Plots birth time graph and saves it as a PNG."""
