@@ -1,7 +1,10 @@
+import matplotlib
+matplotlib.use('TkAgg')  # Set the backend to TkAgg (GUI-supported)
+
 import re
 import sys
-import os
 import matplotlib.pyplot as plt
+import os
 from pathlib import Path
 
 def extract_sort_key(filepath):
@@ -55,6 +58,7 @@ def process_log_file(filepath, max_filename_length):
     first_10_samples = []
     last_10_samples = []
     total_lines_processed = 0
+
     for line in lines[start_index:]:
         total_lines_processed += 1
         match = re.search(r'(\d{8}T\d{6}Z)_\d+_[a-z]+\.wav: Size:(\d+) Birth:(\d{2}:\d{2}:\d{2}\.\d+)', line)
@@ -90,14 +94,15 @@ def process_log_file(filepath, max_filename_length):
         avg_first_10 = (sum(first_10_samples) / len(first_10_samples)) / 1_000_000 if first_10_samples else 0
         avg_last_10 = (sum(last_10_samples) / len(last_10_samples)) / 1_000_000 if last_10_samples else 0
 
-        # Print summary with all stats aligned, including first 10 and last 10 averages
-        summary = (f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  "
-                   f"Avg: {avg_birth:9.2f} ms  First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
-                   f"Total Lines Processed: {total_lines_processed:5}")
+        # Print summary with all stats aligned
+        print(f"{str(len(birth_nanoseconds)).ljust(4)} {filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
+              f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
+              f"Total Lines Processed: {total_lines_processed:5}")
 
-        return summary, birth_nanoseconds
+        return birth_nanoseconds
     else:
-        return f"{filepath.ljust(max_filename_length)} No valid birth times found", None
+        print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
+        return None
 
 def plot_birth_times(filepath, birth_nanoseconds):
     """Plots birth time graph and saves it as a PNG."""
@@ -114,38 +119,42 @@ def plot_birth_times(filepath, birth_nanoseconds):
     plt.tight_layout()
     plot_filename = f"{filepath}_birth_time_graph.png"
     plt.savefig(plot_filename)
-    plt.show()
+    plt.show()  # This will block and keep the plot open until closed by the user
+
+    # Print plot saved message after the plot is closed
     print(f"Plot saved: {plot_filename}")
 
 def main(filenames):
-    """Main function to process sorted log files and interactively plot."""
+    """Main function to process sorted log files."""
     sorted_files = sorted(filenames, key=extract_sort_key, reverse=True)
     max_filename_length = max(len(f) for f in sorted_files) + 2
+    birth_times = {}
 
-    summaries = []
-    birth_data = []
+    # Collect summaries
+    for index, file in enumerate(sorted_files):
+        print(f"Processing {file}")  # Add this for debugging to check if files are being processed
+        birth_nanoseconds = process_log_file(file, max_filename_length)
+        if birth_nanoseconds:
+            birth_times[index] = birth_nanoseconds
 
-    for file in sorted_files:
-        summary, birth_nanoseconds = process_log_file(file, max_filename_length)
-        summaries.append(summary)
-        birth_data.append((file, birth_nanoseconds))
+    # Check if DISPLAY is set and allow plotting
+    if 'DISPLAY' in os.environ:
+        while True:
+            # Ask the user for the index of the summary to plot
+            index_input = input("\nEnter the index to plot (or press Enter to skip): ").strip()
 
-    # Print indexed summary with fixed-width index
-    for i, summary in enumerate(summaries):
-        print(f"[{i:>3}] {summary}")
+            if not index_input:  # User pressed Enter without typing anything, exit the loop
+                print("Exiting...")
+                break
 
-    # If DISPLAY is set, prompt user to plot a selection
-    if "DISPLAY" in os.environ:
-        try:
-            index = input("\nEnter index to plot (or press Enter to skip): ").strip()
-            if index:
-                index = int(index)
-                if 0 <= index < len(birth_data):
-                    plot_birth_times(birth_data[index][0], birth_data[index][1])
+            try:
+                index = int(index_input)
+                if 0 <= index < len(sorted_files):
+                    plot_birth_times(sorted_files[index], birth_times.get(index))
                 else:
-                    print("Invalid index.")
-        except ValueError:
-            print("Invalid input. Skipping plot.")
+                    print(f"Invalid index. Please enter a number between 0 and {len(sorted_files)-1}.")
+            except ValueError:
+                print("Invalid input. Please enter a valid index or press Enter to exit.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
