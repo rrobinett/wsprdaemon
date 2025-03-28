@@ -79,10 +79,10 @@ def process_log_file(filepath, max_filename_length):
         max_birth = max(birth_nanoseconds) / 1_000_000
         avg_birth = (sum(birth_nanoseconds) / len(birth_nanoseconds)) / 1_000_000
 
-        summary = f"{filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
+        summary = f"Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  {filepath.ljust(max_filename_length)}"
         return summary, birth_nanoseconds
     else:
-        return f"{filepath.ljust(max_filename_length)} No valid birth times found", None
+        return f"No valid birth times found {filepath.ljust(max_filename_length)}", None
 
 def plot_birth_times(filepath, birth_nanoseconds):
     """Plots birth time graph and saves it as a PNG."""
@@ -115,9 +115,9 @@ def main(filenames):
         summaries.append(summary)
         birth_data.append((file, birth_nanoseconds))
 
-    # Print indexed summary
+    # Print indexed summary with fixed-width index
     for i, summary in enumerate(summaries):
-        print(f"[{i}] {summary}")
+        print(f"[{i:>3}] {summary}")
 
     # If DISPLAY is set, prompt user to plot a selection
     if "DISPLAY" in os.environ:
