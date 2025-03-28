@@ -1,10 +1,12 @@
 import matplotlib
-matplotlib.use('TkAgg')  # Set the backend to TkAgg (GUI-supported)
+import os
+
+# Force TkAgg backend for GUI plotting
+matplotlib.use('TkAgg')
 
 import re
 import sys
 import matplotlib.pyplot as plt
-import os
 from pathlib import Path
 
 def extract_sort_key(filepath):
@@ -42,7 +44,7 @@ def is_one_minute_later(prev_time, curr_time):
     curr_h, curr_m = curr_time
     return (prev_h == curr_h and curr_m == prev_m + 1) or (curr_h == prev_h + 1 and curr_m == 0 and prev_m == 59)
 
-def process_log_file(filepath, max_filename_length):
+def process_log_file(filepath, max_filename_length, index):
     """Processes a log file to check timestamp continuity, size validity, and birth time statistics."""
     with open(filepath, 'r') as file:
         lines = file.readlines()
@@ -94,8 +96,8 @@ def process_log_file(filepath, max_filename_length):
         avg_first_10 = (sum(first_10_samples) / len(first_10_samples)) / 1_000_000 if first_10_samples else 0
         avg_last_10 = (sum(last_10_samples) / len(last_10_samples)) / 1_000_000 if last_10_samples else 0
 
-        # Print summary with all stats aligned
-        print(f"{str(len(birth_nanoseconds)).ljust(4)} {filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
+        # Print summary with index as fixed-width (4 characters)
+        print(f"[{str(index).rjust(3)}] {filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
               f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
               f"Total Lines Processed: {total_lines_processed:5}")
 
@@ -105,7 +107,7 @@ def process_log_file(filepath, max_filename_length):
         return None
 
 def plot_birth_times(filepath, birth_nanoseconds):
-    """Plots birth time graph and saves it as a PNG."""
+    """Plots birth time graph and displays it interactively."""
     if not birth_nanoseconds:
         print("No valid birth times to plot.")
         return
@@ -117,12 +119,9 @@ def plot_birth_times(filepath, birth_nanoseconds):
     plt.ylabel("Birth Time (ms)")
     plt.grid(True)
     plt.tight_layout()
-    plot_filename = f"{filepath}_birth_time_graph.png"
-    plt.savefig(plot_filename)
-    plt.show()  # This will block and keep the plot open until closed by the user
 
-    # Print plot saved message after the plot is closed
-    print(f"Plot saved: {plot_filename}")
+    # Show plot interactively without saving it to a file
+    plt.show()
 
 def main(filenames):
     """Main function to process sorted log files."""
@@ -130,9 +129,9 @@ def main(filenames):
     max_filename_length = max(len(f) for f in sorted_files) + 2
     birth_times = {}
 
-    # Collect summaries
-    for file in sorted_files:
-        birth_nanoseconds = process_log_file(file, max_filename_length)
+    # Collect summaries and process files
+    for idx, file in enumerate(sorted_files, start=1):
+        birth_nanoseconds = process_log_file(file, max_filename_length, idx)
         if birth_nanoseconds:
             birth_times[file] = birth_nanoseconds
 
@@ -148,10 +147,10 @@ def main(filenames):
 
             try:
                 index = int(index_input)
-                if 0 <= index < len(sorted_files):
-                    plot_birth_times(sorted_files[index], birth_times.get(sorted_files[index]))
+                if 0 < index <= len(sorted_files):
+                    plot_birth_times(sorted_files[index - 1], birth_times.get(sorted_files[index - 1]))
                 else:
-                    print(f"Invalid index. Please enter a number between 0 and {len(sorted_files)-1}.")
+                    print(f"Invalid index. Please enter a number between 1 and {len(sorted_files)}.")
             except ValueError:
                 print("Invalid input. Please enter a valid index or press Enter to exit.")
 
