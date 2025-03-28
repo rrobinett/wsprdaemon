@@ -131,11 +131,10 @@ def main(filenames):
     birth_times = {}
 
     # Collect summaries
-    for index, file in enumerate(sorted_files):
-        print(f"Processing {file}")  # Add this for debugging to check if files are being processed
+    for file in sorted_files:
         birth_nanoseconds = process_log_file(file, max_filename_length)
         if birth_nanoseconds:
-            birth_times[index] = birth_nanoseconds
+            birth_times[file] = birth_nanoseconds
 
     # Check if DISPLAY is set and allow plotting
     if 'DISPLAY' in os.environ:
@@ -150,7 +149,7 @@ def main(filenames):
             try:
                 index = int(index_input)
                 if 0 <= index < len(sorted_files):
-                    plot_birth_times(sorted_files[index], birth_times.get(index))
+                    plot_birth_times(sorted_files[index], birth_times.get(sorted_files[index]))
                 else:
                     print(f"Invalid index. Please enter a number between 0 and {len(sorted_files)-1}.")
             except ValueError:
