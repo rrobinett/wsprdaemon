@@ -33,7 +33,28 @@ declare -A KA9Q_time_band_freq_list=(
   [14.67]="14670000"
 )
 
+### USAGE: wd-pcmrecord-file-summaries [band]
+### USAGE: wdpfs [band]
+### USAGE:   Runs the python program which validates the pcmrecord.log files  Defaults to 20m for WSPR and 10 MHz for WWV
+alias wdps='wd-pcmrecord-summaries'
+function wd-pcmrecord-summaries()
+{
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && echo "Can't find any KA9Q_* directories" && return $rc
 
+    local create_time_file_list=($( find $pcmrecord_log_dir -type f -name wav_file_create_time.log ))
+    if (( ${#create_time_file_list[@]} == 0 )); then
+        echo "Can't find any 'wav_file_create_time.log' files under $pcmrecord_log_dir"
+        return 1
+    fi
+
+    python3 ~/wsprdaemon/wd-validate-wav-logs.py ${create_time_file_list[@]}
+}
+
+### USAGE: wd-pcmrecord-filetime [band]
+### USAGE: wdpf [band]
+### USAGE:     Lists the create and last write times of the wav files of the band.  Defaults to 20m for WSPR and 10 MHz for WWV
 alias wdpf='wd-pcmrecord-filetimes'
 function wd-pcmrecord-filetimes()
 {
