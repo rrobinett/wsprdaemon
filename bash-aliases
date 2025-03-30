@@ -7,15 +7,50 @@ function wd-pcmrecord-version() {
     ~/wsprdaemon/ka9q-radio/pcmrecord --version
 }
 
+declare -A KA9Q_wspr_band_freq_list=(
+    [160]="1836600"
+    [80]="3568600"
+    [60]="5287200"
+    [40]="7038600"
+    [30]="10138700"
+    [20]="14095600"
+    [17]="18104600"
+    [15]="21094600"
+    [12]="24924600"
+    [10]="28124600"
+     [6]="50293000"
+)
+
+declare -A KA9Q_time_band_freq_list=(
+    [2.5]="2500000"
+      [5]="5000000"
+     [10]="10000000"
+     [15]="15000000"
+     [20]="20000000"
+     [25]="25000000"
+   [3.33]="330000"
+   [7.85]="785000"
+  [14.67]="14670000"
+)
+
+
+alias wdpf='wd-pcmrecord-filetimes'
 function wd-pcmrecord-filetimes()
 {
-    local band=${1-20}
-    local tuning_freq=${KA9Q_band_freq[${band}]}
-
     local pcmrecord_log_dir
     wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
-    rc=$? && (( rc )) && return $rc
+    rc=$? && (( rc )) && echo "Can't find any KA9Q_* directories" && return $rc
 
+    local band
+    local tuning_freq
+    if [[ $pcmrecord_log_dir =~ WWV|CHU ]]; then
+        band=${1-10}     ### Defaults to WWV_10
+        tuning_freq="${KA9Q_time_band_freq_list[${band}]}_iq"
+    else
+        band=${1-20}      ### Defaults to 20m
+        tuning_freq="${KA9Q_wspr_band_freq_list[${band}]}_usb"
+    fi
+ 
     local wav_files_list=( $(find $pcmrecord_log_dir -maxdepth 1 -type f -name "*Z_${tuning_freq}*.wav") )
     (( ${#wav_files_list[@]} == 0 )) && echo "Can'find any '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir" && return 1
     (( ${verbosity-0} )) && echo "Found  ${#wav_files_list[@]} '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir"
@@ -1436,24 +1471,10 @@ function wd-9qstats() {
     done
 }
 
-declare -A KA9Q_band_freq=(
-    [160]="1836600"
-    [80]="3568600"
-    [60]="5287200"
-    [40]="7038600"
-    [30]="10138700"
-    [20]="14095600"
-    [17]="18104600"
-    [15]="21094600"
-    [12]="24924600"
-    [10]="28124600"
-     [6]="50293000"
-)
-
 function wd-radiod-control()
 {
     local band=${1-20}
-    local tuning_freq=${KA9Q_band_freq[${band}]}
+    local tuning_freq=${KA9Q_wspr_band_freq_list[${band}]}
     local mc_url
 
     local radiod_conf_base_name=$(wd-get_ka9q-conf_file-base_name)
@@ -1491,8 +1512,8 @@ function wd-9m()
 {
     local header_printed="no"
     local band
-    for band in $( IFS=$'\n'; echo "${!KA9Q_band_freq[*]}" | sort -n ); do
-        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_band_freq[${band}]} hf.local)
+    for band in $( IFS=$'\n'; echo "${!KA9Q_wspr_band_freq_list[*]}" | sort -n ); do
+        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_wspr_band_freq_list[${band}]} hf.local)
         local rf_gain=$(echo "${metadump_out}" | awk '/rf gain/{print $(NF - 1) }')
         local if_power=$(echo "${metadump_out}" | awk '/IF pwr/{print $(NF - 1) }')
         local noise_level=$(echo "${metadump_out}" | awk '/N0 /{print $(NF - 1) }')
