@@ -1,9 +1,9 @@
 #!/bin/bash
 
-### This WD module implemewnts WD's Remote Access Channel service which allows WD admins with access to ports on the wd0.wsprdaemon.org server to ssh to 
-### WD devices running the Linux wsprdaemon_remote_access.serice
+### This WD module implements WD's Remote Access Channel service which allows WD admins with access to ports on the wd0.wsprdaemon.org server to ssh to 
+### WD devices running the Linux wsprdaemon_remote_access.service
 ###
-### ED sites enable access by adding two lines to their wsprdaemon.conf file:
+### WD sites enable access by adding two lines to their wsprdaemon.conf file:
 #
 ### REMOTE_ACCESS_CHANNEL=1           ### Defaults to "".  When it is an integer in the range 0-1000, allow the wsprdemon.org administrator ssh access to this WD server if you also provide a user/password on this server
 ### REMOTE_ACCESS_ID="KPH-Beelink-1"
@@ -146,7 +146,7 @@ function remote_access_connection_status() {
         close_rac="yes"
     else
         if  ! is_uint "${wd_conf_rac_channel-}";  then
-            wd_logger 1 "ERROR: The RAC or REMOTE_ACCESS_CHANNEL defined in ${WSPRDAEMON_CONFIG_FILE} is not an INREGER, so we have ensured it isn't running"
+            wd_logger 1 "ERROR: The RAC or REMOTE_ACCESS_CHANNEL defined in ${WSPRDAEMON_CONFIG_FILE} is not an INTEGER, so we have ensured it isn't running"
             close_rac="yes"
         fi
     fi
@@ -197,12 +197,12 @@ function remote_access_connection_status() {
 
     local frpc_ini_section
     for frpc_ini_section in ${frpc_ini_section_list[@]}; do
-        local exepcted_section_info_list=( ${frpc_ini_section//,/ } )
-        if (( ${#exepcted_section_info_list[@]} < 3  )); then
-            wd_logger 1 "INTERNAL ERROR: expect at least 3 expected fields, but found only ${#exepcted_section_info_list[@]} fields"
+        local expected_section_info_list=( ${frpc_ini_section//,/ } )
+        if (( ${#expected_section_info_list[@]} < 3  )); then
+            wd_logger 1 "INTERNAL ERROR: expected at least 3 fields, but found only ${#expected_section_info_list[@]} fields"
             exit 1
         fi
-        local section_name=${exepcted_section_info_list[0]}
+        local section_name=${expected_section_info_list[0]}
         local section_string="$( sed -n "/\[${section_name//\//[/]}\]/,/^\[/p" ${FRPC_INI_FILE} )"        ### A lot of sed regex work so sections can have very common RAC names with '/' like 'KFS/OMNI'
         if [[ -z "${section_string}" ]]; then
             wd_logger 1 "Can't find [${section_name}] in ${FRPC_INI_FILE} "
@@ -211,9 +211,9 @@ function remote_access_connection_status() {
         wd_logger 2 "Checking section ${section_name} for one or more expected <VARIABLE> = <VALUE> lines"
         wd_logger 3 "${section_string}"
 
-        local serach_info_list=( ${exepcted_section_info_list[@]:1} )
+        local search_info_list=( ${expected_section_info_list[@]:1} )
         local search_info
-        for search_info in ${serach_info_list[@]}; do
+        for search_info in ${search_info_list[@]}; do
             local search_name_expected_value_list=( ${search_info[@]/:/ } )
             if (( ${#search_name_expected_value_list[@]} != 2  )); then
                 wd_logger 1 "INTERNAL ERROR: expected 2 fields, but found ${#search_name_expected_value_list[@]} fields"
@@ -254,12 +254,12 @@ function remote_access_connection_status() {
         return 5
     fi
     wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is configured, enabled and running"
-    wd_logger 1 "So authorized WD devlopers can ssh to this server at IP port ${wd0_rac_ssh_ip_port} and also open the KSA9Q-web UI on this server (if there is a RX888 attached to it) at ${wd0_rac_web_ip_port=}"
+    wd_logger 1 "So authorized WD developers can ssh to this server at IP port ${wd0_rac_ssh_ip_port} and also open the KA9Q-web UI on this server (if there is a RX888 attached to it) at ${wd0_rac_web_ip_port=}"
     return 0
 }
 
 ### If REVERSE_PROXY == "" (the default), disables and stops the ${WD_REMOTE_ACCESS_SERVICE_NAME}
-### Else, if the ${WD_REMOTE_ACCESS_SERVICE_NAME} is not already running,  configure, enqble and start it
+### Else, if the ${WD_REMOTE_ACCESS_SERVICE_NAME} is not already running,  configure, enable and start it
 function wd_remote_access_service_manager() {
     local rc
 
@@ -267,7 +267,7 @@ function wd_remote_access_service_manager() {
 
     if [[ -z "${REMOTE_ACCESS_CHANNEL-}" && ${HOSTNAME} =~ ^WSPRSONDE-GW- ]]; then
         ### Hostnames which start with "WSPSRSONDE-GW-nnn" are (typically) a Raspberry Pi 3b connected to the USB port of a Wspsrsonde-8
-        ### Those Pi 3bs provoide a remote access gateway for mointoring and control of the WS-8 and only the wdremoteaccess service is automatically run on them, WD isn't running
+        ### Those Pi 3bs provide a remote access gateway for monitoring and control of the WS-8 and only the wd_remote_access_service is automatically run on them, WD isn't running
         local ws_gw_number=${HOSTNAME#WSPRSONDE-GW-}
         local rac_channel=$(( ${WSPRSONDE_ID_BASE} + ${ws_gw_number} ))
         REMOTE_ACCESS_CHANNEL=${rac_channel}
