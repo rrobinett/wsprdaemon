@@ -779,6 +779,11 @@ function file_is_open() {
 
 declare last_wav_file_name=""
 declare wav_file_create_time_log_file="./wav_file_create_time.log"  ### each RX888 band has its own create lime log file
+declare WWV_START_CMD="${WSPRDAEMON_ROOT_DIR}/wwv_start.py"
+if ! [[ -x $WWV_START_CMD ]]; then
+    wd_logger 1 "ERROR: can't find expected program '$WWV_START_CMD'"
+    return 1
+fi
 
 function log_wav_file_create_times() {
     local wav_file_name="$1"
@@ -795,8 +800,16 @@ function log_wav_file_create_times() {
         last_wav_file_name="$wav_file_name"
     fi
     local file_stat_list=($( stat "$wav_file_name"  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
-    echo "${file_stat_list[0]} ${file_stat_list[1]} ${file_stat_list[3]} ${file_stat_list[2]}"  >> "$wav_file_create_time_log_file"
-    truncate_file "$wav_file_create_time_log_file" ${MAX_CREATE_TIME_LOG-1000000}
+
+    file_stat_list[4]="Tone_burst_offset:Not_measured"
+    if [[ ${WWV_TONE_BURST_LOGGING-no} == "yes" && "$wav_file_name" =~ WWV ]]; then
+        local wwv_burst_offset_msecs=0
+        wwv_burst_offset_msecs=$( $WWV_START_CMD "$wav_file_name" )
+        file_stat_list[4]="Tone_burst_offset:${wwv_burst_offset_msecs// /_}"      ### For ease of parsing, replace' 's with '_'s
+        wd_logger 1 "The tone burst which starts each second is $wwv_burst_offset_msecs from the begining of '$wav_file_name'"
+    fi
+    echo "${file_stat_list[0]}  ${file_stat_list[1]}  ${file_stat_list[3]}  ${file_stat_list[2]}  ${file_stat_list[4]}"  >> "$wav_file_create_time_log_file"
+    truncate_file "$wav_file_create_time_log_file" ${MAX_CREATE_TIME_LOG-2000000}     ### Default is to truncate this log file to 2 MB 
     return 0
 }
 
@@ -1900,7 +1913,7 @@ function decoding_daemon() {
             fi
 
             local wd_string="${wav_time_list[*]}"
-            wd_logger 1 "\nFor WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[@]##*/}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[@]##*/}"
             ### End of diagnostic code
 
             if [[ ${receiver_modes_list[0]} =~ ^[IJK] ]]; then
