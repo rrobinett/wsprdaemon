@@ -228,7 +228,6 @@ function get_conf_section_variable() {
     return 0
 }
 
-
 function get_current_commit_sha() {
     local __return_commit_sha_variable=$1
     local git_directory=$2
@@ -788,7 +787,7 @@ function build_ka9q_radio() {
         exit 1
     fi
  
-    ### Setup the radiod@conf files before starting or restarting  it
+    ### Setup the radiod@conf files before starting or restarting it
     local ka9q_conf_name
     get_config_file_variable  "ka9q_conf_name" "KA9Q_CONF_NAME"
     if [[ -n "${ka9q_conf_name}" ]]; then
@@ -1158,7 +1157,7 @@ function ka9q-ft-setup() {
         fi
     fi
 
-    ### CEnsure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
+    ### Ensure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
     local logrotate_job_file_name="/etc/logrotate.d/${ft_type}.rotate"
     local create_job_file="no"
     if [[ ! -f ${logrotate_job_file_name} ]]; then
