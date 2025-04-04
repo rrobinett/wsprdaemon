@@ -1,5 +1,10 @@
 import matplotlib
 import os
+import warnings
+
+# Suppress specific Matplotlib warning
+warnings.filterwarnings("ignore", category=UserWarning,
+                        message=".*Unable to import Axes3D.*")
 
 # Force TkAgg backend for GUI plotting
 matplotlib.use('TkAgg')
@@ -36,6 +41,13 @@ def parse_birth_time(birth_time):
     except ValueError:
         return None
 
+def parse_tone_burst_offset(offset):
+    """Parses the Tone_burst_offset in milliseconds and returns the value."""
+    try:
+        return float(offset)
+    except ValueError:
+        return None
+
 def is_one_minute_later(prev_time, curr_time):
     """Checks if curr_time is exactly one minute later than prev_time."""
     if not prev_time or not curr_time:
@@ -55,24 +67,31 @@ def process_log_file(filepath, max_filename_length, index):
             start_index = i + 1
             break
 
+    regex_pattern = ('(\d{8}T\d{6}Z)_(\d+)_[a-z]+.wav:\s+Size:(\d+)\s+'
+    'Birth:(\d{2}:\d{2}:\d{2}\.\d+)\s+'
+    'Change:(\d{2}:\d{2}:\d{2}\.\d+)\s+'
+    'Tone_burst_offset:(\d+\.\d+)_ms')
+
     prev_time = None
     birth_nanoseconds = []
+    tone_burst_offsets = []
     first_10_samples = []
     last_10_samples = []
     total_lines_processed = 0
 
     for line in lines[start_index:]:
         total_lines_processed += 1
-        match = re.search(r'(\d{8}T\d{6}Z)_\d+_[a-z]+\.wav: Size:(\d+) Birth:(\d{2}:\d{2}:\d{2}\.\d+)', line)
+        match = re.search(regex_pattern, line)
         if match:
             curr_time = parse_time(match.group(1)[9:14])  # Extract HH:MM from the timestamp
-            size_value = int(match.group(2))
-            birth_nano = parse_birth_time(match.group(3))
+            size_value = int(match.group(3))
+            birth_nano = parse_birth_time(match.group(4))
+            tone_burst_offset = parse_tone_burst_offset(match.group(6))
 
             if prev_time and not is_one_minute_later(prev_time, curr_time):
                 print(f"Timestamp error in file {filepath}: {line.strip()}")
 
-            if size_value != 2880252:
+            if size_value not in (7680252, 2880252):
                 print(f"Error: Incorrect size value {size_value} in file {filepath}, line: {line.strip()}")
 
             if birth_nano is not None:
@@ -82,6 +101,9 @@ def process_log_file(filepath, max_filename_length, index):
                 last_10_samples.append(birth_nano)
                 if len(last_10_samples) > 10:
                     last_10_samples.pop(0)
+
+            if tone_burst_offset is not None:
+                tone_burst_offsets.append(tone_burst_offset)
 
             prev_time = curr_time
         else:
@@ -96,9 +118,17 @@ def process_log_file(filepath, max_filename_length, index):
         avg_first_10 = (sum(first_10_samples) / len(first_10_samples)) / 1_000_000 if first_10_samples else 0
         avg_last_10 = (sum(last_10_samples) / len(last_10_samples)) / 1_000_000 if last_10_samples else 0
 
+        if tone_burst_offsets:
+            min_tone_burst = min(tone_burst_offsets)
+            max_tone_burst = max(tone_burst_offsets)
+            avg_tone_burst = sum(tone_burst_offsets) / len(tone_burst_offsets)
+        else:
+            min_tone_burst = max_tone_burst = avg_tone_burst = 0
+
         # Print summary with index as fixed-width (4 characters)
         print(f"[{str(index).rjust(3)}] {filepath.ljust(max_filename_length)} Min: {min_birth:9.2f} ms  Max: {max_birth:9.2f} ms  Avg: {avg_birth:9.2f} ms  "
               f"First 10 Avg: {avg_first_10:6.2f} ms  Last 10 Avg: {avg_last_10:6.2f} ms  "
+              f"Tone Burst Min: {min_tone_burst:6.2f} ms  Max: {max_tone_burst:6.2f} ms  Avg: {avg_tone_burst:6.2f} ms  "
               f"Total Lines Processed: {total_lines_processed:5}")
 
         return birth_nanoseconds
