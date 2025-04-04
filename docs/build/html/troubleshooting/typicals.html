@@ -44,7 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -82,10 +81,10 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Troubleshooting wsprdaemon</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Some typical problems</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#consider-usb-loading-issues">consider usb loading issues.</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#consider-system-service-issues">consider system service issues</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#consider-avahi-address-translation-issues">consider avahi address translation issues</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#consider-ethernet-hubs-architecture">consider ethernet hubs/architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#consider-usb-loading-issues">Consider usb loading issues.</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#consider-system-service-issues">Consider system service issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#consider-avahi-address-translation-issues">Consider avahi address translation issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#consider-ethernet-hubs-architecture">Consider ethernet hubs/architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#brute-force-recovery">Brute force recovery</a></li>
 </ul>
 </li>
@@ -130,33 +129,34 @@
   <section id="some-typical-problems">
 <h1>Some typical problems<a class="headerlink" href="#some-typical-problems" title="Link to this heading"></a></h1>
 <section id="consider-usb-loading-issues">
-<h2>consider usb loading issues.<a class="headerlink" href="#consider-usb-loading-issues" title="Link to this heading"></a></h2>
+<h2>Consider usb loading issues.<a class="headerlink" href="#consider-usb-loading-issues" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>RX888 plugged into a USB3 superspeed socket?</p></li>
-<li><p>radiod successfully loading the firmware?</p></li>
+<li><p>is the RX888 plugged into a USB3 superspeed socket?</p></li>
+<li><p>has radiod successfully loading the firmware to the RX888?</p></li>
 </ul>
 </section>
 <section id="consider-system-service-issues">
-<h2>consider system service issues<a class="headerlink" href="#consider-system-service-issues" title="Link to this heading"></a></h2>
+<h2>Consider system service issues<a class="headerlink" href="#consider-system-service-issues" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>systemctl service enabled?</p></li>
 <li><p>configured to always restart on boot?</p></li>
 <li><p>does your computer or OS support what you want the RX888 or wsprdaemon to do?</p></li>
 <li><p>for Beelink, set the fan to ‘auto’ with the fan turning on at 40C and getting to max speed at 60C with at ramp of ‘8’</p></li>
+<li><p>have you configured the computer to resume function after loss/restoration of power?</p></li>
 </ul>
 </section>
 <section id="consider-avahi-address-translation-issues">
-<h2>consider avahi address translation issues<a class="headerlink" href="#consider-avahi-address-translation-issues" title="Link to this heading"></a></h2>
+<h2>Consider avahi address translation issues<a class="headerlink" href="#consider-avahi-address-translation-issues" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>avahi installed (see pre-requisite libraries)</p></li>
 </ul>
 </section>
 <section id="consider-ethernet-hubs-architecture">
-<h2>consider ethernet hubs/architecture<a class="headerlink" href="#consider-ethernet-hubs-architecture" title="Link to this heading"></a></h2>
+<h2>Consider ethernet hubs/architecture<a class="headerlink" href="#consider-ethernet-hubs-architecture" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>ttl = 0 by default (assuming a stand-alone setup) so as not to flood the LAN or WLAN with multicast packets</p></li>
 <li><p>if using multicast between computers, ttl = 1 required on sending computer and on the right NIC</p></li>
-<li><p>multicast will require an IGMP-capable switch with snooping ON to isolate the computers using radiod multicast from the rest of your LAN or WLAN.</p></li>
+<li><p>multicast will require an IGMP-capable switch with snooping ON to isolate the computers using radiod multicast from the rest of your LAN or WLAN, particularly if your LAN uses WiFi.</p></li>
 <li><p>have you defined and enabled a device in radiod&#64;rx888-XXX.conf?</p></li>
 </ul>
 </section>
@@ -164,31 +164,31 @@
 <h2>Brute force recovery<a class="headerlink" href="#brute-force-recovery" title="Link to this heading"></a></h2>
 <p>One method of recovery involves, in effect, starting from (almost) scratch.</p>
 <p>The important “almost” refers to preserving your configuration.  DON’T FORGET THIS!</p>
-<p>First, critically, copy your ~/wsprdaemon/wsprdaemon.conf file to the home directory:</p>
+<p>First, critically, copy your ~/wsprdaemon/wsprdaemon.conf file to somewhere safe, e.g., the home directory:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span> <span class="o">~/</span><span class="n">wsprdaemon</span><span class="o">/</span><span class="n">wsprdaemon</span><span class="o">.</span><span class="n">conf</span> <span class="o">~</span>
 </pre></div>
 </div>
-<p>The delete the wsprdaemon subdirectory:</p>
+<p>Then delete the wsprdaemon subdirectory:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">rm</span> <span class="o">-</span><span class="n">rf</span> <span class="o">~/</span><span class="n">wsprdaemon</span><span class="o">/</span>
 </pre></div>
 </div>
-<p>clone the repository (in ~):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">rrobinett</span><span class="o">/</span><span class="n">wsprdaemon</span><span class="o">.</span><span class="n">git</span>
-</pre></div>
-</div>
-<p>move the wsprdaemon.conf back:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span> <span class="o">~/</span><span class="n">wsprdaemon</span><span class="o">.</span><span class="n">conf</span> <span class="o">~/</span><span class="n">wsrdaemon</span>
-</pre></div>
-</div>
-<p>run wd to get everything built and installed:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wd</span>
-</pre></div>
-</div>
-<p>clean out /shm/wsprdaemon:</p>
+<p>Clean out /shm/wsprdaemon:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">rm</span> <span class="o">-</span><span class="n">rf</span> <span class="o">/</span><span class="n">shm</span><span class="o">/</span><span class="n">wsprdaemon</span><span class="o">/*</span>
 </pre></div>
 </div>
-<p>restart WD:</p>
+<p>Clone the WD repository (while in /home/wsprdaemon/):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">rrobinett</span><span class="o">/</span><span class="n">wsprdaemon</span><span class="o">.</span><span class="n">git</span>
+</pre></div>
+</div>
+<p>Copy the wsprdaemon.conf back into the new ~/wsprdaemon:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span> <span class="o">~/</span><span class="n">wsprdaemon</span><span class="o">.</span><span class="n">conf</span> <span class="o">~/</span><span class="n">wsrdaemon</span>
+</pre></div>
+</div>
+<p>Run wd to get everything built and installed:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wd</span>
+</pre></div>
+</div>
+<p>Restart WD:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wda</span>
 </pre></div>
 </div>

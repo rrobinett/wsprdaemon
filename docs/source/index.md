@@ -4,8 +4,6 @@
 ```{toctree}
 :maxdepth: 2
 :caption: Description
-description/history.md
-description/collaborations.md
 description/how_it_works.md
 description/validity.md
 ```

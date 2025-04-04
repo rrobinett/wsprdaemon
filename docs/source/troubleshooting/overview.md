@@ -27,7 +27,7 @@ Then enter the sub-directory for a receiver and channel, for instance, the follo
 ```
 cd recording.d/KA9Q_0/20/
 ```
-Here, you can invoke the wdww alias that dynamically lists the wav files for that channel.  A problem exists if you don't see regular increments of the latest file.
+Here, you can invoke the wdww alias that dynamically lists the wav files for that channel.  A problem exists if you see no files or don't see regular incrementing of the latest file size.
 
 ```
 wdww
