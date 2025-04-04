@@ -26,7 +26,6 @@ samprate =   64800000     # 129.6 Msps may heat stress the stock RX888 Mk II, bu
 [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 ## Hardware Configuration
-----------------------
 
 This document describes the hardware definition section in a *radiod*
 config file.  The section name must match the **hardware** entry in
@@ -45,7 +44,6 @@ In this example the name of the hardware definition section matches
 the device type, but this is not required.
 
 ### Supported Hardware
-------------------
 
 Six SDR front ends are currently supported in *ka9q-radio*:
 

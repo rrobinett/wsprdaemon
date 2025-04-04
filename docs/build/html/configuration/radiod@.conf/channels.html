@@ -62,6 +62,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -170,7 +171,8 @@
 
 </pre></div>
 </div>
-<p><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:</p>
+<section id="phil-karn-s-comprehensive-documentation-of-this-section">
+<h2><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:<a class="headerlink" href="#phil-karn-s-comprehensive-documentation-of-this-section" title="Link to this heading"></a></h2>
 <p>A <em>radiod</em> configuration file may contain one or more sections
 configuring receiver channels. This
 is necessarily the most complex part of the configuration since
@@ -179,7 +181,7 @@ it depends on your specific applications.</p>
 output multicast stream and sample rate, differing only in frequency. What follows
 is a list of parameter settings with their default values:</p>
 <section id="mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum">
-<h2>mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum<a class="headerlink" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum" title="Link to this heading"></a></h2>
+<h3>mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum<a class="headerlink" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum" title="Link to this heading"></a></h3>
 <p>No default. Required unless specified in [global].</p>
 <p>A “mode” would be more accurately called a “preset” because it
 actually refers to a group of parameters (demodulator type, sample
@@ -192,12 +194,12 @@ add a new mode to <em>/var/lib/ka9q-radio/modes.conf</em>. Be careful to back
 it up; it may be overwritten by the next “make install.</p>
 </section>
 <section id="dns-no-yes-default-no">
-<h2>dns = no | yes (default no)<a class="headerlink" href="#dns-no-yes-default-no" title="Link to this heading"></a></h2>
+<h3>dns = no | yes (default no)<a class="headerlink" href="#dns-no-yes-default-no" title="Link to this heading"></a></h3>
 <p>Use the domain name system to resolve the name in the <em>data</em> parameter. See
 the discussion in <a class="reference internal" href="#ka9q-radio.md"><span class="xref myst">ka9q-radio.md</span></a>.</p>
 </section>
 <section id="data">
-<h2>data =<a class="headerlink" href="#data" title="Link to this heading"></a></h2>
+<h3>data =<a class="headerlink" href="#data" title="Link to this heading"></a></h3>
 <p>No default. Required unless specified in [global].</p>
 <p>Specifies the DNS name of the multicast group to be used for receiver
 output streams. If not specified in the [global] section, it must be
@@ -206,6 +208,7 @@ individually specified in each subsequent section.</p>
 and advertise an IPv4 multicast address in the 239.0.0.0/8 block,
 along with a SRV DNS record of type _rtp._udp advertising this name.
 See the discussion of this parameter in the [global] section.</p>
+</section>
 </section>
 <section id="parameters-in-modes-conf">
 <h2>Parameters in <em>modes.conf</em><a class="headerlink" href="#parameters-in-modes-conf" title="Link to this heading"></a></h2>

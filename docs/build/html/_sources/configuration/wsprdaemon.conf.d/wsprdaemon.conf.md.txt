@@ -1,6 +1,6 @@
 # Example of a working wsprdaemon.conf
 
-Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams, then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.  
+Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams from radiod (ka9q-radio), then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.  
 
 You will find further details on these parameters and definitions in 
 - [Computer-related parameters](./computer.md)

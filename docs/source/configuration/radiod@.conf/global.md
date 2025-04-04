@@ -22,7 +22,6 @@ ttl = 0                 # if you only intend RTP streams for local interprocess 
 [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 ## The [global] Section
---------------------
 
 This is the only reserved section name, and it must appear exactly once in
 every *radiod* configuration file. Entries in the **[global]** section include:
