@@ -131,12 +131,12 @@ def process_log_file(filepath, max_filename_length, index):
               f"Tone Burst Min: {min_tone_burst:6.2f} ms  Max: {max_tone_burst:6.2f} ms  Avg: {avg_tone_burst:6.2f} ms  "
               f"Total Lines Processed: {total_lines_processed:5}")
 
-        return birth_nanoseconds
+        return birth_nanoseconds, tone_burst_offsets
     else:
         print(f"{filepath.ljust(max_filename_length)} No valid birth times found")
         return None
 
-def plot_birth_times(filepath, birth_nanoseconds):
+def plot_birth_times(filepath, birth_nanoseconds, tone_burst_offsets):
     """Plots birth time graph and displays it interactively."""
     if not birth_nanoseconds:
         print("No valid birth times to plot.")
@@ -144,7 +144,10 @@ def plot_birth_times(filepath, birth_nanoseconds):
 
     plt.figure(figsize=(10, 6))
     plt.plot(range(len(birth_nanoseconds)), [b / 1_000_000 for b in birth_nanoseconds], marker='o', linestyle='-', color='b')
-    plt.title(f"Birth Time Graph for {filepath}")
+    if tone_burst_offsets:
+        plt.plot(range(len(tone_burst_offsets)), [b for b in tone_burst_offsets], marker='o', linestyle='-', color='r')
+
+    plt.title(f"Birth Time / WWV Offset Graph for {filepath}")
     plt.xlabel("Sample Index")
     plt.ylabel("Birth Time (ms)")
     plt.grid(True)
@@ -158,12 +161,15 @@ def main(filenames):
     sorted_files = sorted(filenames, key=extract_sort_key, reverse=True)
     max_filename_length = max(len(f) for f in sorted_files) + 2
     birth_times = {}
+    tone_bursts = {}
 
     # Collect summaries and process files
     for idx, file in enumerate(sorted_files, start=1):
-        birth_nanoseconds = process_log_file(file, max_filename_length, idx)
+        birth_nanoseconds, tone_burst_offsets = process_log_file(file, max_filename_length, idx)
         if birth_nanoseconds:
             birth_times[file] = birth_nanoseconds
+        if tone_burst_offsets:
+            tone_bursts[file] = tone_burst_offsets
 
     # Check if DISPLAY is set and allow plotting
     if 'DISPLAY' in os.environ:
@@ -178,7 +184,7 @@ def main(filenames):
             try:
                 index = int(index_input)
                 if 0 < index <= len(sorted_files):
-                    plot_birth_times(sorted_files[index - 1], birth_times.get(sorted_files[index - 1]))
+                    plot_birth_times(sorted_files[index - 1], birth_times.get(sorted_files[index - 1]), tone_bursts.get(sorted_files[index - 1]))
                 else:
                     print(f"Invalid index. Please enter a number between 1 and {len(sorted_files)}.")
             except ValueError:
