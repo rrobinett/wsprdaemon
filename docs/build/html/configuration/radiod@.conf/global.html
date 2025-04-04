@@ -42,7 +42,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/validity.html">Validity of data path and results</a></li>
@@ -52,11 +51,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/os.html">Operating Sytems</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/network.html">Networking</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../network/multicast.html">Multicast Requirements</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
@@ -144,11 +138,13 @@
 <span class="c1">#iface = enp1s0         # uncomment to confine RTP multicast to one of several NICs, irrelevant if ttl = 0</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:</p>
+<section id="phil-karn-s-comprehensive-documentation-of-this-section">
+<h2><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:<a class="headerlink" href="#phil-karn-s-comprehensive-documentation-of-this-section" title="Link to this heading"></a></h2>
 <section id="the-global-section">
-<h2>The [global] Section<a class="headerlink" href="#the-global-section" title="Link to this heading"></a></h2>
+<h3>The [global] Section<a class="headerlink" href="#the-global-section" title="Link to this heading"></a></h3>
 <p>This is the only reserved section name, and it must appear exactly once in
 every <em>radiod</em> configuration file. Entries in the <strong>[global]</strong> section include:</p>
+</section>
 <section id="hardware-no-default-required">
 <h3>hardware = (no default, required)<a class="headerlink" href="#hardware-no-default-required" title="Link to this heading"></a></h3>
 <p>Gives the name of the config file section that describes the
@@ -333,7 +329,7 @@ starts, but to avoid long startup times only minimal effort is expended.</p>
 <p>FFTW3 also uses the “global wisdom” file <em>/etc/fftw/wisdomf</em>, which
 can be created with significantly more effort (and CPU time). Right
 now I generate the latter file by hand with a fairly esoteric set of
-commands, see <a class="reference internal" href="#FFTW3.md"><span class="xref myst">FFTW3.md</span></a>. FFTW <em>can</em> generate this information
+commands, see <a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs/FFTW3.md">FFTW3.md</a>. FFTW <em>can</em> generate this information
 automatically when first run but can take <em>hours</em> to do so. I am
 working on a better way, e.g., by automatically starting wisdom
 generation in the background so that <em>radiod</em> starts immediately,

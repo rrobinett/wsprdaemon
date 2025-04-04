@@ -52,19 +52,20 @@ So, if you use another version, you may find its interaction with WD problematic
 
 For details of ka9q-radio installation, consult the docs sub-directory in the ka9q-radio created after performing a `git clone`.
 
-[KA9Q_RADIO_GIT_URL](https://github.com/ka9q/ka9q-radio.git)
-[KA9Q_FT8_GIT_URL](https://github.com/ka9q/ft8_lib.git)
-[PSK_UPLOADER_GIT_URL](https://github.com/pjsg/ftlib-pskreporter.git)
+- [KA9Q_RADIO_GIT_URL](https://github.com/ka9q/ka9q-radio.git)
+- [KA9Q_FT8_GIT_URL](https://github.com/ka9q/ft8_lib.git)
+- [PSK_UPLOADER_GIT_URL](https://github.com/pjsg/ftlib-pskreporter.git)
 
 ## To install ka9q-web:
 
 ka9q-web requires ka9q-radio of course, but also the web server package, onion, produced by David Moreno, so install it first.
 
-[ONION_GIT_URL](https://github.com/davidmoreno/onion)
+- [ONION_GIT_URL](https://github.com/davidmoreno/onion)
 
 Use the following bash scripts as scripts or just as a guide to installation:
 
-`declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
+```
+declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
 if [[ ${OS_RELEASE} =~ 24.04 ]]; then
     ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
@@ -90,10 +91,12 @@ function build_onion() {
      fi
      wd_logger 2 "Done"
     return 0
-}`
+}
+```
 
-[KA9Q_WEB_GIT_URL](https://github.com/scottnewell/ka9q-web)
+- [KA9Q_WEB_GIT_URL](https://github.com/scottnewell/ka9q-web)
 
+```
 function build_ka9q_web() {
     local project_subdir=$1
     local project_logfile="${project_subdir}_build.log"
@@ -111,3 +114,4 @@ function build_ka9q_web() {
     wd_logger 2 "Done"
     return 0
 }
+```

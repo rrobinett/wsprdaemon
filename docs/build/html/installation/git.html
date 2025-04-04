@@ -44,7 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
@@ -54,11 +53,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul class="current">
@@ -180,60 +174,69 @@
 Keep in mind that Rob checks out a particular version of ka9q-radio that he knows works with WD.<br />
 So, if you use another version, you may find its interaction with WD problematic. YMMV.</p>
 <p>For details of ka9q-radio installation, consult the docs sub-directory in the ka9q-radio created after performing a <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span></code>.</p>
-<p><a class="reference external" href="https://github.com/ka9q/ka9q-radio.git">KA9Q_RADIO_GIT_URL</a>
-<a class="reference external" href="https://github.com/ka9q/ft8_lib.git">KA9Q_FT8_GIT_URL</a>
-<a class="reference external" href="https://github.com/pjsg/ftlib-pskreporter.git">PSK_UPLOADER_GIT_URL</a></p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/ka9q/ka9q-radio.git">KA9Q_RADIO_GIT_URL</a></p></li>
+<li><p><a class="reference external" href="https://github.com/ka9q/ft8_lib.git">KA9Q_FT8_GIT_URL</a></p></li>
+<li><p><a class="reference external" href="https://github.com/pjsg/ftlib-pskreporter.git">PSK_UPLOADER_GIT_URL</a></p></li>
+</ul>
 <section id="to-install-ka9q-web">
 <h2>To install ka9q-web:<a class="headerlink" href="#to-install-ka9q-web" title="Link to this heading"></a></h2>
 <p>ka9q-web requires ka9q-radio of course, but also the web server package, onion, produced by David Moreno, so install it first.</p>
-<p><a class="reference external" href="https://github.com/davidmoreno/onion">ONION_GIT_URL</a></p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/davidmoreno/onion">ONION_GIT_URL</a></p></li>
+</ul>
 <p>Use the following bash scripts as scripts or just as a guide to installation:</p>
-<p>`declare ONION_LIBS_NEEDED=”libgnutls28-dev libgcrypt20-dev cmake”
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>declare ONION_LIBS_NEEDED=&quot;libgnutls28-dev libgcrypt20-dev cmake&quot;
 if [[ ${OS_RELEASE} =~ 24.04 ]]; then
-ONION_LIBS_NEEDED=”${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20”
-fi</p>
-<p>function build_onion() {
-local project_subdir=$1
-local project_logfile=”${project_subdir}-build.log”</p>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>wd_logger 2 &quot;Building ${project_subdir}&quot;
-(
-cd ${project_subdir}
-mkdir -p build
-cd build
-cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
-make
-sudo make install
-sudo ldconfig
-)     &gt;&amp; ${project_logfile}
-rc=$?
-if [[ ${rc} -ne 0 ]]; then
-     wd_logger 1 &quot;ERROR: compile of &#39;${project_subdir}&#39; returned ${rc}:\n$( &lt; ${project_logfile} )&quot;
-     exit 1
- fi
- wd_logger 2 &quot;Done&quot;
-return 0
-</pre></div>
-</div>
-<p>}`</p>
-<p><a class="reference external" href="https://github.com/scottnewell/ka9q-web">KA9Q_WEB_GIT_URL</a></p>
-<p>function build_ka9q_web() {
-local project_subdir=$1
-local project_logfile=”${project_subdir}_build.log”</p>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>wd_logger 2 &quot;Building ${project_subdir}&quot;
-(
-cd  ${project_subdir}
-make
-sudo make install
-) &gt;&amp;  ${project_logfile}
-rc=$? ; if (( rc )); then
-    wd_logger 1 &quot;ERROR: compile of &#39;ka9q-web&#39; returned ${rc}:\n$(&lt; ${project_logfile})&quot;
-    exit 1
+    ONION_LIBS_NEEDED=&quot;${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20&quot;
 fi
-wd_logger 2 &quot;Done&quot;
-return 0
+
+function build_onion() {
+    local project_subdir=$1
+    local project_logfile=&quot;${project_subdir}-build.log&quot;
+
+    wd_logger 2 &quot;Building ${project_subdir}&quot;
+    (
+    cd ${project_subdir}
+    mkdir -p build
+    cd build
+    cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
+    make
+    sudo make install
+    sudo ldconfig
+    )     &gt;&amp; ${project_logfile}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+         wd_logger 1 &quot;ERROR: compile of &#39;${project_subdir}&#39; returned ${rc}:\n$( &lt; ${project_logfile} )&quot;
+         exit 1
+     fi
+     wd_logger 2 &quot;Done&quot;
+    return 0
+}
 </pre></div>
 </div>
-<p>}</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/scottnewell/ka9q-web">KA9Q_WEB_GIT_URL</a></p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>function build_ka9q_web() {
+    local project_subdir=$1
+    local project_logfile=&quot;${project_subdir}_build.log&quot;
+
+    wd_logger 2 &quot;Building ${project_subdir}&quot;
+    (
+    cd  ${project_subdir}
+    make
+    sudo make install
+    ) &gt;&amp;  ${project_logfile}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 &quot;ERROR: compile of &#39;ka9q-web&#39; returned ${rc}:\n$(&lt; ${project_logfile})&quot;
+        exit 1
+    fi
+    wd_logger 2 &quot;Done&quot;
+    return 0
+}
+</pre></div>
+</div>
 </section>
 </section>
 

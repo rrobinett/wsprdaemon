@@ -21,14 +21,6 @@ requirements/network.md
 
 ```{toctree}
 :maxdepth: 2
-:caption: Network
-
-network/basics.md
-network/multicast.md
-```
-
-```{toctree}
-:maxdepth: 2
 :caption: Software Installation
 
 installation/preparation.md

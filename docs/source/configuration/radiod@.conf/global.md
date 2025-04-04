@@ -19,9 +19,9 @@ ttl = 0                 # if you only intend RTP streams for local interprocess 
 #iface = enp1s0         # uncomment to confine RTP multicast to one of several NICs, irrelevant if ttl = 0
 ```
 
-[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
+## [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
-## The [global] Section
+### The [global] Section
 
 This is the only reserved section name, and it must appear exactly once in
 every *radiod* configuration file. Entries in the **[global]** section include:
@@ -228,7 +228,7 @@ starts, but to avoid long startup times only minimal effort is expended.
 FFTW3 also uses the "global wisdom" file */etc/fftw/wisdomf*, which
 can be created with significantly more effort (and CPU time). Right
 now I generate the latter file by hand with a fairly esoteric set of
-commands, see [FFTW3.md](FFTW3.md). FFTW *can* generate this information
+commands, see [FFTW3.md](https://github.com/ka9q/ka9q-radio/tree/main/docs/FFTW3.md). FFTW *can* generate this information
 automatically when first run but can take *hours* to do so. I am
 working on a better way, e.g., by automatically starting wisdom
 generation in the background so that *radiod* starts immediately,

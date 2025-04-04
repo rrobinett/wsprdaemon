@@ -6,4 +6,4 @@ However, ka9q-radio uses RTP (multicast) streams to manage interprocess communic
 
 When running on a stand-alone computer, one should set the parameter ttl = 0 in radiod@.conf.  This directs radiod to put no RTP streams on the LAN.  When distributing the functions between computers, however, one sets ttl = 1 in radiod@.conf and, especially with a connected WiFi LAN, interposes an IGMP-aware ethernet switch (with IGMP snooping ON) between the computers using RTP and the rest of your network.  This will confine the RTP streams to the connections between your radiod and WD computers so they don't flood the rest of your LAN.  
 
-[For more details](../network/multicast.md).
+![](../_images/IGMP_switch.png)

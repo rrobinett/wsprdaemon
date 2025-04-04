@@ -76,7 +76,7 @@ it up; it may be overwritten by the next "make install.
 ### dns = no | yes (default no)
 
 Use the domain name system to resolve the name in the *data* parameter. See
-the discussion in [ka9q-radio.md](ka9q-radio.md).
+the discussion in [ka9q-radio.md](../wsprdaemon.conf.d/ka9q-radio.md).
 
 ### data = 
 
