@@ -55,7 +55,7 @@ clean out /shm/wsprdaemon:
 rm -rf /shm/wsprdaemon/*
 ```
 
-restart wsprdaemon:
+restart WD:
 ```
 wda
 ```

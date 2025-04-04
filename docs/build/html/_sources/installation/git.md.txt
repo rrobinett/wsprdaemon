@@ -1,6 +1,6 @@
 # Download the software with GIT
 
-GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  The latest version 3.3.1 remains in a development branch.  
+GitHub hosts the repository for all versions of WD.  Presently, the current master provides version 3.2.3.  The latest development version, 3.3.1, remains in a branch.  
 
 ## Clone wsprdaemon from github.com
 
@@ -29,7 +29,7 @@ git checkout 3.3.1
 git pull
 ```
 
-wsprdaemon provides lots of "aliases" for important and otherwise useful functions.  To have immediate access to these, run:
+WD provides lots of shell "aliases" to important and otherwise useful functions.  To have immediate access to these, run:
 ```
 source bash-aliases ../.bash_aliases
 ```

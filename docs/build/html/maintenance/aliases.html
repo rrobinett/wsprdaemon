@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aliases for monitoring and interacting with wsprdaemon &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>Aliases for monitoring and interacting with WD &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -20,7 +20,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Troubleshooting wsprdaemon" href="../troubleshooting/overview.html" />
-    <link rel="prev" title="Monitoring wsprdaemon operation" href="monitoring.html" /> 
+    <link rel="prev" title="Monitoring WD operation" href="monitoring.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -79,10 +79,11 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Aliases for monitoring and interacting with wsprdaemon</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#latest-aliases-from-branch-3-3-1">Latest Aliases from branch 3.3.1</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Aliases for monitoring and interacting with WD</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#useful-functions">Useful functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#comprehensive-list-of-aliases-from-branch-3-3-1">Comprehensive List of Aliases from branch 3.3.1</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems">This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#each-element-containsa-the-function-name-a-comma-seperated-list-of-its-aliases-and-a-description-of-it">Each element containsa the function name, a comma-seperated list of its aliases, and a description of it</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#add-sourcing-this-file-to-bash-aliases-so-that-these-bash-aliases-and-functions-are-defined-in-every-bash-session">Add sourcing this file to ~/.bash_aliases so that these bash aliases and functions are defined in every bash session</a></li>
@@ -136,7 +137,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Aliases for monitoring and interacting with wsprdaemon</li>
+      <li class="breadcrumb-item active">Aliases for monitoring and interacting with WD</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/maintenance/aliases.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -146,11 +147,29 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="aliases-for-monitoring-and-interacting-with-wsprdaemon">
-<h1>Aliases for monitoring and interacting with wsprdaemon<a class="headerlink" href="#aliases-for-monitoring-and-interacting-with-wsprdaemon" title="Link to this heading"></a></h1>
+  <section id="aliases-for-monitoring-and-interacting-with-wd">
+<h1>Aliases for monitoring and interacting with WD<a class="headerlink" href="#aliases-for-monitoring-and-interacting-with-wd" title="Link to this heading"></a></h1>
 <p>These aliases (in ~wsprdaemon/bash-aliases) can provide very useful functions with a few keystrokes.  The documentation for what they do remains minimal.  Also, take note that some of them will only work in a particular directory.</p>
-<section id="latest-aliases-from-branch-3-3-1">
-<h2>Latest Aliases from branch 3.3.1<a class="headerlink" href="#latest-aliases-from-branch-3-3-1" title="Link to this heading"></a></h2>
+<section id="useful-functions">
+<h2>Useful functions<a class="headerlink" href="#useful-functions" title="Link to this heading"></a></h2>
+<p>Programs which print information about Wsprdaemon (WD) system:
+Command       Can also be executed by    Description
+wd-help       wd-h wd-                   Prints this help message
+wd-start      wd-a wda                   Start or keep running WD
+wd-stop       wd-z wdz                   Stop WD if it is running
+wd-status     wd-s wds                   Show the status of a running WD
+wd-upload-wn  wd-un wdln                 Watch the ‘upload to wsprnet’ log
+wd-upload-wd  wd-uw wdlw                 Watch the ‘upload to wsprdaemon’ log
+wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged ‘ERROR’ lines
+wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files
+wd-query      wd-q wdq                   Query the wsprdaemon database for spots
+wd-gc                                    Execute git commit
+wd-gp                                    Execute git push
+wq-gl                                    Execute git log
+wd-gc-ssh                                Execute git remote set-ur + git config</p>
+</section>
+<section id="comprehensive-list-of-aliases-from-branch-3-3-1">
+<h2>Comprehensive List of Aliases from branch 3.3.1<a class="headerlink" href="#comprehensive-list-of-aliases-from-branch-3-3-1" title="Link to this heading"></a></h2>
 <section id="this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems">
 <h3>This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems<a class="headerlink" href="#this-file-wsprdaemon-bash-aliases-includes-functions-and-aliases-which-are-helpful-in-running-and-debugging-wd-systems" title="Link to this heading"></a></h3>
 <ul class="simple">
@@ -464,7 +483,7 @@ scp -p ~/.vimrc ~/.bash_aliases ${remote_ip}:</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="monitoring.html" class="btn btn-neutral float-left" title="Monitoring wsprdaemon operation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="monitoring.html" class="btn btn-neutral float-left" title="Monitoring WD operation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../troubleshooting/overview.html" class="btn btn-neutral float-right" title="Troubleshooting wsprdaemon" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

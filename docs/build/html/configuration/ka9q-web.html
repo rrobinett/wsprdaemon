@@ -82,9 +82,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -131,7 +131,7 @@
   <section id="ka9q-web">
 <h1>ka9q-web<a class="headerlink" href="#ka9q-web" title="Link to this heading"></a></h1>
 <p>This software builds in reference to ka9q-radio and requires no specific configuration.<br />
-wsprdaemon typically starts it automatically.  You invoke it manually, if necessary, thus:</p>
+WD typically starts it automatically.  You invoke it manually, if necessary, thus:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ka9q</span><span class="o">-</span><span class="n">web</span> <span class="o">-</span><span class="n">m</span> <span class="n">your</span><span class="o">-</span><span class="n">radiod</span><span class="o">-</span><span class="n">status</span><span class="o">-</span><span class="n">stream</span><span class="o">.</span><span class="n">local</span> <span class="o">-</span><span class="n">p</span> <span class="mi">8081</span> <span class="o">-</span><span class="n">n</span> <span class="s2">&quot;callsign grid antenna&quot;</span> <span class="o">&amp;</span>
 </pre></div>
 </div>
@@ -144,7 +144,7 @@ wsprdaemon typically starts it automatically.  You invoke it manually, if necess
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span> <span class="o">-</span><span class="n">L</span> <span class="mi">8081</span><span class="p">:</span><span class="n">localhost</span><span class="p">:</span><span class="mi">8081</span> <span class="n">wsprdaemon</span><span class="nd">@aa</span><span class="o">.</span><span class="n">bb</span><span class="o">.</span><span class="n">cc</span><span class="o">.</span><span class="n">dd</span>
 </pre></div>
 </div>
-<p>where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)</p>
+<p>where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running WD eponymously.)</p>
 <p>Then direct your browser to http://localhost:8081 to view ka9q-web served from the aa.bb.cc.dd remote computer.
 If you happen to be using port 8081 on your local computer for another purpose, simply replace the port number after -L in the command above to an unused port YYYY. Then direct your browser to http://localhost:YYYY.</p>
 <p>The port will disappear when you close the ssh session.</p>

@@ -67,7 +67,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#computer-requirements">Computer requirements</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#operating-system">Operating system</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#sudo-access">sudo access</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#determine-the-wsprdaemon-user">Determine the wsprdaemon user</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#determine-the-user-to-run-wd">Determine the user to run WD</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#remote-access-setup">Remote Access Setup</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#system-pre-requisites-and-useful-utilities">System Pre-requisites and Useful Utilities:</a></li>
 </ul>
@@ -90,9 +90,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -138,23 +138,24 @@
              
   <section id="preparing-for-installation">
 <h1>Preparing for installation<a class="headerlink" href="#preparing-for-installation" title="Link to this heading"></a></h1>
-<p>You will clone from github.com and then run the wsprdaemon software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.<br />
-Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
-<p>N.B.  In either case, the account running wsprdaemon needs sudo privileges as several component installations and process management require it.</p>
+<p>You will clone from github.com and then run the WD software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.<br />
+Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon.
+However, you can run it under your own (or another’s) account.  In which case, for any references in these documents to the “wsprdaemon” user, simply substitute the username you have selected.</p>
+<p>N.B.  In either case, the account running WD needs sudo privileges as several component installations and process management require it.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
 <section id="computer-requirements">
 <h3>Computer requirements<a class="headerlink" href="#computer-requirements" title="Link to this heading"></a></h3>
-<p>One has lots of options for a computer and network architecture that supports ka9q-radio and wsprdaemon.  However, in order to run it all on one computer, it needs sufficient CPU and memory power and superspeed USB 3 (the RX888 samples at 64.8 or 129.6 MHz!).  CPU and memory (RAM and cache) structures vary widely and some, even nominally “powerful” new computers may not, in their default configuration, manage the core and cache optimally.  Computers using the Ryzen 5800 chipsets and above work without adjustment.</p>
-<p>One can run ka9q-radio (radiod) on a “slower” computer, as long as it has USB 3.  It will multicast its output via RTP streams to another computer for processing.  This setup will usually require an IGMP-aware ethernet switch to shield your LAN (especially if it relies on WiFi).  The prodigious multicast output from radiod can bring a WiFi LAN to a clogged halt.</p>
+<p>You have lots of options for a computer and network architecture that supports ka9q-radio and WD.  However, in order to run it all on one computer, it will need sufficient CPU and memory power and superspeed USB 3 (the RX888 samples at 64.8 or 129.6 MHz!).  CPU and memory (RAM and cache) structures vary widely and some, even nominally “powerful” new computers, in their default configuration, may not manage the core and cache optimally.  Computers using the Ryzen 5800 chipsets and above seem to work without adjustment.</p>
+<p>You can run ka9q-radio (radiod) on a “slower” computer, as long as it has USB 3.  It can multicast its output via RTP streams to another computer for processing.  This setup will usually require an IGMP-aware ethernet switch to shield your LAN (especially if it relies on WiFi).  The prodigious multicast output from radiod can bring a WiFi LAN to a clogged halt.</p>
 </section>
 <section id="operating-system">
 <h3>Operating system<a class="headerlink" href="#operating-system" title="Link to this heading"></a></h3>
-<p>The current version of wsprdaemon runs on <a class="reference external" href="https://ubuntu.com/download/server">Ubuntu 24.04 LTS</a>.  Ubuntu seems determined to push “snap” software which has sometimes broken wsprdaemon through automatic updates that changed critical dependencies.  Clint Turner has developed a <a class="reference external" href="http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd">method to “de-snap”</a> a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative – <a class="reference external" href="https://www.linuxmint.com/download.php">Mint</a> – which does not use snaps or their progenitor <a class="reference external" href="https://www.debian.org/distrib/">Debian</a>.</p>
+<p>The current version of WD runs on <a class="reference external" href="https://ubuntu.com/download/server">Ubuntu 24.04 LTS</a>.  Ubuntu seems determined to push “snap” software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a <a class="reference external" href="http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd">method to “de-snap”</a> a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative – <a class="reference external" href="https://www.linuxmint.com/download.php">Mint</a> – which does not use snaps or their progenitor, <a class="reference external" href="https://www.debian.org/distrib/">Debian</a>.</p>
 </section>
 <section id="sudo-access">
 <h3>sudo access<a class="headerlink" href="#sudo-access" title="Link to this heading"></a></h3>
-<p>Installation and proper function of wsprdaemon requires root access, best done using <code class="docutils literal notranslate"><span class="pre">sudo</span></code>.</p>
+<p>Installation and proper function of WD requires root access, best done using <code class="docutils literal notranslate"><span class="pre">sudo</span></code>.</p>
 <p>To avoid entering the su password all the time:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">visudo</span>
 </pre></div>
@@ -164,28 +165,23 @@ Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdae
 </pre></div>
 </div>
 </section>
-<section id="determine-the-wsprdaemon-user">
-<h3>Determine the wsprdaemon user<a class="headerlink" href="#determine-the-wsprdaemon-user" title="Link to this heading"></a></h3>
-<p>If you choose to run wsprdaemon as the user “wsprdaemon”, create a wsprdaemon user:</p>
+<section id="determine-the-user-to-run-wd">
+<h3>Determine the user to run WD<a class="headerlink" href="#determine-the-user-to-run-wd" title="Link to this heading"></a></h3>
+<p>To run WD as the user “wsprdaemon”, create a wsprdaemon user:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">adduser</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>Subsequent installation and management of wd will then happen as user “wsprdaemon”.  You should then login to the machine as “wsprdaemon.”</p>
-<p>If you login with another username, you can make it easier to change to the wsprdaemon user, by creating an alias:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span>  <span class="s2">&quot;alias wd=&#39;sudo su - wsprdaemon&#39;&quot;</span> <span class="o">&gt;&gt;</span> <span class="o">~/.</span><span class="n">bashrc</span>
-</pre></div>
-</div>
-<p>Executing <code class="docutils literal notranslate"><span class="pre">wd</span></code> then enables you to operate as the wsprdaemon user.</p>
+<p>Subsequent installation and management of WD will then happen as user “wsprdaemon”.  You should then login to the machine as “wsprdaemon.”</p>
 <p>Add wsprdaemon (or your username) to groups sudo, plugdev:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">sudo</span> <span class="n">wsprdaemon</span>
 <span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">plugdev</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>wsprdaemon includes and installs the ka9q-radio package which creates a “radio” group.  So, once the wsprdaemon script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
+<p>WD includes and installs the ka9q-radio package which creates a “radio” group.  So, once the WD script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>If dedicating this computer to exclusive wsprdaemon use, you may also want the hostname of your computer to reflect this.  To do so:</p>
+<p>If dedicating this computer to exclusive WD use, you may also want the hostname of your computer to reflect this.  For instance:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">hostnamectl</span> <span class="nb">set</span><span class="o">-</span><span class="n">hostname</span> <span class="n">W3USR</span><span class="o">-</span><span class="n">B1</span><span class="o">-</span><span class="mi">1</span>
 </pre></div>
 </div>
@@ -193,8 +189,8 @@ Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdae
 </section>
 <section id="remote-access-setup">
 <h3>Remote Access Setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>
-<p>If installing wsprdaemon on a computer you intend to manage remotely, you can make it much easier to login to the other computer via ssh.</p>
-<p>First, make sure you have a public key :</p>
+<p>If installing WD on a computer you intend to manage remotely, you can make it much easier to login to the other computer via ssh.</p>
+<p>First, make sure you have a public key:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">keygen</span>
 </pre></div>
 </div>
@@ -213,7 +209,7 @@ Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdae
 </section>
 <section id="system-pre-requisites-and-useful-utilities">
 <h3>System Pre-requisites and Useful Utilities:<a class="headerlink" href="#system-pre-requisites-and-useful-utilities" title="Link to this heading"></a></h3>
-<p>This includes what will prove needed or useful for wsprdaemon and ka9q-radio.  As of wsprdaemon v3.3.1, many but not all of these will get installed automatically. You can safely run the following either way.</p>
+<p>The following list of packages includes what will prove needed or useful for WD and ka9q-radio.  As of WD v3.3.1, many but not all of these will get installed automatically. You can safely run the following either way.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span> <span class="n">install</span> <span class="n">btop</span> <span class="n">nmap</span> <span class="n">git</span> <span class="n">tmux</span> <span class="n">vim</span> <span class="n">net</span><span class="o">-</span><span class="n">tools</span> <span class="n">iputils</span><span class="o">-</span><span class="n">ping</span> <span class="n">avahi</span><span class="o">-</span><span class="n">daemon</span> <span class="n">libnss</span><span class="o">-</span><span class="n">mdns</span> <span class="n">mdns</span><span class="o">-</span><span class="n">scan</span> <span class="n">avahi</span><span class="o">-</span><span class="n">utils</span> <span class="n">avahi</span><span class="o">-</span><span class="n">discover</span> <span class="n">build</span><span class="o">-</span><span class="n">essential</span> <span class="n">make</span> <span class="n">cmake</span> <span class="n">gcc</span> <span class="n">libairspy</span><span class="o">-</span><span class="n">dev</span> <span class="n">libairspyhf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libavahi</span><span class="o">-</span><span class="n">client</span><span class="o">-</span><span class="n">dev</span> <span class="n">libbsd</span><span class="o">-</span><span class="n">dev</span> <span class="n">libfftw3</span><span class="o">-</span><span class="n">dev</span> <span class="n">libhackrf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libiniparser</span><span class="o">-</span><span class="n">dev</span> <span class="n">libncurses5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libopus</span><span class="o">-</span><span class="n">dev</span> <span class="n">librtlsdr</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="mf">1.0</span><span class="o">-</span><span class="mi">0</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="n">dev</span> <span class="n">portaudio19</span><span class="o">-</span><span class="n">dev</span> <span class="n">libasound2</span><span class="o">-</span><span class="n">dev</span> <span class="n">uuid</span><span class="o">-</span><span class="n">dev</span> <span class="n">rsync</span> <span class="n">sox</span> <span class="n">libsox</span><span class="o">-</span><span class="n">fmt</span><span class="o">-</span><span class="nb">all</span> <span class="n">opus</span><span class="o">-</span><span class="n">tools</span> <span class="n">flac</span> <span class="n">tcpdump</span> <span class="n">wireshark</span> <span class="n">libhdf5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libsamplerate</span><span class="o">-</span><span class="n">dev</span>
 </pre></div>
 </div>
