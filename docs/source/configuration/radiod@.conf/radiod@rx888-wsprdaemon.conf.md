@@ -22,7 +22,7 @@ fft-threads = 0
 
 [rx888]
 device = "rx888" 
-description = "AC0G @EM38ww dipole" # good to put callsign and antenna description in here
+description = "AC0G @EM38ww dipole" # good to put callsign, gridsquare, and antenna description in here
 samprate =   64800000     # or 129600000
 
 [WSPR]
