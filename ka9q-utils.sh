@@ -656,7 +656,8 @@ function ka9q_web_daemon() {
 function ka9q_web_service_daemon() {
     local status_dns_name=$1             ### Where to get the spectrum stream (e.g. hf.local)
     local server_ip_port=$2              ### On what IP port to offer the UI
-    local server_description="${3//_/ }" ### The description string at the top of the UI page.  Change all '_' to ' '
+    local server_description="${3:-}"    ### KA9Q_WEB_TITLE, if defined.
+    server_description="${server_description//_/ }" ### Replace all '_' with ' '
 
     while true; do
         if [[ ! -x ${KA9Q_WEB_CMD} ]]; then
@@ -669,7 +670,7 @@ function ka9q_web_service_daemon() {
         wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}"
 
         # Conditionally add -n "${server_description}" if KA9Q_WEB_TITLE is defined
-        if [[ -n "${KA9Q_WEB_TITLE}" ]]; then
+        if [[ -n "${server_description}" ]]; then
             ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}
         else
             ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} >& ${daemon_log_file}
