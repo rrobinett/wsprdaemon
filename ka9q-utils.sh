@@ -640,7 +640,7 @@ function ka9q_web_daemon() {
         wd_logger 1 "ERROR: can't file ka9q_radiod_status_dns"
     else
         ka9q_service_daemons_list=()
-        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE:-WD_RX888}"         ### This is hack to get this one service imlmewntationb working
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE}"  ### This is hack to get this one service implementation working
 
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
@@ -667,7 +667,14 @@ function ka9q_web_service_daemon() {
         fi
         local daemon_log_file="ka9q_web_service_${server_ip_port}.log"
         wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}"
-        ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}   ### DANGER: nothing limits the size of this log file!!!
+
+        # Conditionally add -n "${server_description}" if KA9Q_WEB_TITLE is defined
+        if [[ -n "${KA9Q_WEB_TITLE}" ]]; then
+            ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}
+        else
+            ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} >& ${daemon_log_file}
+        fi
+
         rc=$?
         if [[ ${rc} -ne 0 ]]; then
             wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${web_page_title}' => ${rc}:\n$(<  ${daemon_log_file})"
