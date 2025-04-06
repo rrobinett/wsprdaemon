@@ -2,6 +2,7 @@ import matplotlib
 import os
 import warnings
 import argparse  # Import argparse for command line argument handling
+import datetime
 
 # Suppress specific Matplotlib warning
 warnings.filterwarnings("ignore", category=UserWarning,
@@ -18,6 +19,10 @@ from pathlib import Path
 
 # Global variable for verbosity
 verbosity = 1
+
+# Initialize variables to accumulate offset values
+offset_sum = 0
+offset_count = 0
 
 def extract_sort_key(filepath):
     """Extracts the first directory starting with a number for sorting."""
@@ -59,10 +64,22 @@ def is_one_minute_later(prev_time, curr_time):
         return False
     prev_h, prev_m = prev_time
     curr_h, curr_m = curr_time
-    return (prev_h == curr_h and curr_m == prev_m + 1) or (curr_h == prev_h + 1 and curr_m == 0 and prev_m == 59)
+    return (prev_h == curr_h and curr_m == prev_m + 1) or (curr_h == prev_h + 1 and curr_m == 0 and prev_m == 59) or (prev_h == 23 and curr_h == 0 and prev_m == 59 and curr_m == 0 )
+
+def log_offset(offset):
+    global offset_sum, offset_count
+    offset_sum += offset
+    offset_count += 1
+
+def get_average_offset():
+    global offset_sum, offset_count
+    if offset_count > 0:
+        return offset_sum / offset_count
+    return 0
 
 def process_log_file(filepath, max_filename_length, index, summarize_last_day=False):
     """Processes a log file to check timestamp continuity, size validity, and birth time statistics."""
+    global offset_sum, offset_count
     with open(filepath, 'r') as file:
         lines = file.readlines()
 
@@ -91,14 +108,15 @@ def process_log_file(filepath, max_filename_length, index, summarize_last_day=Fa
         total_lines_processed += 1
         match = re.search(regex_pattern, line)
         if match:
-            curr_time = parse_time(match.group(1)[9:14])  # Extract HH:MM from the timestamp
+            curr_time = parse_time(match.group(1)[9:11] + ":" + match.group(1)[11:13])  # Extract HH:MM from the timestamp
+            #print(f"cur_time={curr_time}, match.group(1)={match.group(1)}, time_stamp={match.group(1)[9:14]}")
             size_value = int(match.group(3))
             birth_nano = parse_birth_time(match.group(4))
             tone_burst_offset = parse_tone_burst_offset(match.group(6))
 
             if prev_time and not is_one_minute_later(prev_time, curr_time):
                 if verbosity > 0:
-                    print(f"Timestamp error in file {filepath}: {line.strip()}")
+                    print(f"Timestamp error in file {filepath}: {line.strip()} prev_time={prev_time} not one minute earlier than curr_time={curr_time}")
 
             if size_value not in (7680252, 2880252):
                 if verbosity > 0:
@@ -112,8 +130,17 @@ def process_log_file(filepath, max_filename_length, index, summarize_last_day=Fa
                 if len(last_10_samples) > 10:
                     last_10_samples.pop(0)
 
+            #print(f"Checking tone_burst_offset")
             if tone_burst_offset is not None:
+                #if curr_time:
+                    #
+                    #print(f"curr_time[1] = {curr_time[1]}")
+                if curr_time and curr_time[1] == 0:  # If minutes == 00, log the average offset instead
+                    average_offset = get_average_offset()
+                    #print(f"At minute {curr_time[1]} changing {tone_burst_offset} to {average_offset}")
+                    tone_burst_offset = average_offset
                 tone_burst_offsets.append(tone_burst_offset)
+                log_offset(tone_burst_offset)
 
             prev_time = curr_time
         else:
