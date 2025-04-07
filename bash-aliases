@@ -1655,7 +1655,7 @@ function wd-watch-wavs() {
 }
 alias wdww='wd-watch-wavs'
 
-alias wdps='ps aux | grep "wd-record\|pcmrecord" | grep -v grep'
+alias wdpss='ps aux | grep "wd-record\|pcmrecord" | grep -v grep'
 
 function wd-ssh-to-wdclient() {
     local rac_id=${1:-usage}
