@@ -45,6 +45,8 @@ def parse_birth_time(birth_time):
     try:
         h, m, s_nano = birth_time.split(':')
         s, nano = map(int, s_nano.split('.'))
+        if int(s) == 59:
+            return 0
         if int(s) != 0:
             return None  # Ignore if seconds are not 00
         return nano
@@ -122,6 +124,9 @@ def process_log_file(filepath, max_filename_length, index, summarize_last_day=Fa
                 if verbosity > 0:
                     print(f"Error: Incorrect size value {size_value} in file {filepath}, line: {line.strip()}")
 
+            if birth_nano is None or tone_burst_offset is None:
+                print(f"Parsing ERROR: missing birth_nano={birth_nano} or tone_burst_offset={tone_burst_offset} in line={line}")
+
             if birth_nano is not None:
                 birth_nanoseconds.append(birth_nano)
                 if len(first_10_samples) < 10:
@@ -179,6 +184,10 @@ def plot_birth_times(filepath, birth_nanoseconds, tone_burst_offsets):
     if not birth_nanoseconds:
         print("No valid birth times to plot.")
         return
+
+    # Print the number of birth-time samples and tone burst samples
+    print(f"Number of birth-time samples: {len(birth_nanoseconds)}")
+    print(f"Number of tone burst samples: {len(tone_burst_offsets)}")
 
     avg_birth = (sum(birth_nanoseconds) / len(birth_nanoseconds)) / 1_000_000 if birth_nanoseconds else 0
     avg_tone_burst = sum(tone_burst_offsets) / len(tone_burst_offsets) if tone_burst_offsets else 0
