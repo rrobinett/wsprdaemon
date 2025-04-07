@@ -1,0 +1,51 @@
+#!/home/wsprdaemon/n5tnl/venv/bin/python3
+
+import numpy as np
+import os
+import soundfile as sf
+import sys
+from pathlib import Path
+from scipy import signal
+
+def cross_file(filename):
+    # look for 0.8 seconds of 1 kHz (eventually, also 1.5 kHz at top of hour)
+
+    # read first 3 seconds from wav file
+    wav_sample_rate = sf.info(filename).samplerate
+    samples, wav_sample_rate = sf.read(filename, frames = (3 * wav_sample_rate))
+
+    # Convert to a 1d array of complex values
+    samples_c = samples.view(dtype = np.complex128)
+
+    # demod, remove DC offset, convert to 1d array
+    wav_amp = np.abs(samples_c)
+    wav_demod = wav_amp - np.mean(wav_amp);
+    wav_demod = wav_demod.squeeze()
+
+    # generate demod wav file for testing
+    # sf.write('demod.wav', wav_demod, wav_sample_rate, subtype="FLOAT")
+
+    # create 0.8 seconds of sine wav at 1 kHz
+    x = np.linspace(0, 0.8, int(0.8 * wav_sample_rate))
+    beep = 0.05 * np.sin(2 * x * np.pi * 1000)
+
+    # normalize amplitudes
+    beep = (beep - np.mean(beep)) / np.std(beep)
+    wav_demod = (wav_demod - np.mean(wav_demod)) / np.std(wav_demod)
+
+    # cross corr
+    corr = signal.correlate(wav_demod, beep, mode='full', method='fft')
+    lags = signal.correlation_lags(len(wav_demod), len(beep), mode='full')
+
+    peak = np.argmax(corr)
+    wav_peak = lags[peak];
+    peak_value = corr[peak]
+
+    print(f'{1000.0 * (wav_peak / wav_sample_rate):.2f} ms')
+    return
+
+def main():
+    cross_file(sys.argv[1])
+
+if __name__ == '__main__':
+    main()

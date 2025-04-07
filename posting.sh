@@ -88,7 +88,7 @@ function posting_daemon()
         ### If a schedule change disables this receiver, we will want to signal to the real receivers that we are no longer listening to their spots
         ### To find those receivers, create a posting dir under each real receiver and make a symbolic link from our posting subdir to that real posting dir
         ### Since both dirs are under /tmp, create a hard link between that new dir and a dir under the real receiver where it will copy its spots
-        local real_receiver_dir_path=$(get_recording_dir_path ${real_receiver_name} ${posting_receiver_band})
+        local real_receiver_dir_path=$(get_decoding_dir_path ${real_receiver_name} ${posting_receiver_band})
         local real_receiver_posting_dir_path=${real_receiver_dir_path}/${DECODING_CLIENTS_SUBDIR}/${posting_receiver_name}
         ### Since this posting daemon may be running before it's supplier decoding_daemon(s), create the dir path for that supplier
         mkdir -p ${real_receiver_posting_dir_path}
@@ -538,7 +538,7 @@ function kill_posting_daemon() {
     local posting_suppliers_root_dir=${posting_dir}/${POSTING_SUPPLIERS_SUBDIR}
     local real_receiver_name
     for real_receiver_name in ${real_receiver_list[@]} ; do
-        local real_receiver_posting_dir=$(get_recording_dir_path ${real_receiver_name} ${receiver_band})/${DECODING_CLIENTS_SUBDIR}/${receiver_name}
+        local real_receiver_posting_dir=$(get_decoding_dir_path ${real_receiver_name} ${receiver_band})/${DECODING_CLIENTS_SUBDIR}/${receiver_name}
         wd_logger 1 "Signaling real receiver ${real_receiver_name} to stop posting to ${real_receiver_posting_dir}"
         if [[ ! -d ${real_receiver_posting_dir} ]]; then
             wd_logger 1 "ERROR: kill_posting_daemon(${receiver_name},${receiver_band}) WARNING: expect posting directory  ${real_receiver_posting_dir} does not exist"

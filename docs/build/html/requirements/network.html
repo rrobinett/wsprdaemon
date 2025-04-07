@@ -19,7 +19,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Basic Network Requirements" href="../network/basics.html" />
+    <link rel="next" title="Preparing for installation" href="../installation/preparation.html" />
     <link rel="prev" title="Compatible Radios" href="radios.html" /> 
 </head>
 
@@ -44,8 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -55,15 +53,11 @@
 <li class="toctree-l1"><a class="reference internal" href="radios.html">Compatible Radios</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -79,9 +73,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -127,10 +121,10 @@
              
   <section id="networking">
 <h1>Networking<a class="headerlink" href="#networking" title="Link to this heading"></a></h1>
-<p>wsprdaemon using ka9q-radio runs on a stand-alone computer.  In this scenario, a standard ethernet or WiFi connection to the computer will suffice for remote management and for reporting.</p>
-<p>However, ka9q-radio uses RTP (multicast) streams to manage interprocess communications which means one can run ka9q-radio with a hardware radio on one computer and process the output on another. This results in significant network traffic, so much so that is can bring a WiFi network to a standstill.</p>
-<p>When running on a stand-alone computer, one should set the parameter ttl = 0 in radiod&#64;.conf.  This directs radiod to put no RTP streams on the LAN.  When distributing the functions between computers, however, you set ttl = 1 in radiod&#64;.conf and, especially with a connected WiFi LAN, interpose an IGMP-aware ethernet switch (with IGMP snooping ON) between the computers using RTP and the rest of your network.  This will confine the RTP streams to the connections between your radiod and wsprdaemon computers so they don’t flood the rest of your LAN.</p>
-<p><a class="reference internal" href="../network/multicast.html"><span class="std std-doc">For more details</span></a>.</p>
+<p>WD using ka9q-radio typically runs on a stand-alone computer.  In this scenario, a standard ethernet or WiFi connection to the computer will suffice for remote management and for reporting.</p>
+<p>However, ka9q-radio uses RTP (multicast) streams to manage interprocess communications.  This means one can run ka9q-radio with a hardware radio on one computer and process the output on another. However, multicast streams produce significant network traffic – enough to bring a WiFi network to a standstill.</p>
+<p>When running on a stand-alone computer, one should set the parameter ttl = 0 in radiod&#64;.conf.  This directs radiod to put no RTP streams on the LAN.  When distributing the functions between computers, however, one sets ttl = 1 in radiod&#64;.conf and, especially with a connected WiFi LAN, interposes an IGMP-aware ethernet switch (with IGMP snooping ON) between the computers using RTP and the rest of your network.  This will confine the RTP streams to the connections between your radiod and WD computers so they don’t flood the rest of your LAN.</p>
+<p><img alt="" src="../_images/IGMP_switch.png" /></p>
 </section>
 
 
@@ -138,7 +132,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="radios.html" class="btn btn-neutral float-left" title="Compatible Radios" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../network/basics.html" class="btn btn-neutral float-right" title="Basic Network Requirements" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../installation/preparation.html" class="btn btn-neutral float-right" title="Preparing for installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -24,7 +24,7 @@ declare -i verbosity=${verbosity:-1}              ### default to level 1, but ca
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 
-### This ensures that 'bc's floating point calulations of spot frequencies give those numbers in a known format irrespecrtive of the LOCALE environment of the host computer
+### This ensures that 'bc's floating point calculations of spot frequencies give those numbers in a known format irrespective of the LOCALE environment of the host computer
 export LC_ALL="C"
 
 ### This gets called when there is a system error and helps me find those lines DOESN'T WORK - TODO: debug
@@ -32,6 +32,16 @@ trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} 
 
 ###  Returns 0 if arg is an unsigned integer, else 1
 function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; esac ;}
+function is_positive_integer()
+{
+    local test_value="$1"
+    if [[ "$test_value" =~ ^[1-9][0-9]*$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 
 ###
 function wd_logger_flush_all_logs {
@@ -135,10 +145,10 @@ function wd_logger_check_all_logs
         fi
         
         if [[ -z "${new_log_lines}" ]]; then
-            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to be printed"
+            wd_logger 2 "There are no lines or no new lines in ${log_file_path} to print"
         else
             local new_log_lines_count=$( echo "${new_error_log_lines}" | wc -l  )
-            wd_logger 1 "There are ${new_log_lines_count} new lines to be printed"
+            wd_logger 1 "There are ${new_log_lines_count} new lines to print"
             local new_last_printed_line=$( echo "${new_error_log_lines}" | tail -1)
             echo "${new_last_printed_line}" > ${log_file_last_printed}
             local new_lines_to_print=$( echo "${new_log_lines}" | awk "{print \"${log_file_path}: \" \$0}")
@@ -190,7 +200,7 @@ function log_file_viewing()
 }
 
 function wd_logger() {
-    if [[ $# -ne 2 ]]; then
+    if (( $# != 2 )); then
         local prefix_str=$(TZ=UTC printf "${WD_TIME_FMT}: ${FUNCNAME[1]}()")
         local bad_args="$@"
         echo "${prefix_str} called from function ${FUNCNAME[1]} in file ${BASH_SOURCE[1]} line #${BASH_LINENO[0]} with bad number of arguments: '${bad_args}'"
@@ -200,11 +210,11 @@ function wd_logger() {
     local printout_string=$2
 
     local print_time_and_calling_function_name="yes"
-    if [[ $1 -lt 0 ]]; then
+    if (( log_at_level < 0 )); then
         print_time_and_calling_function_name="no"
-        log_at_level=$((- ${log_at_level} )) 
+        log_at_level=$((- log_at_level )) 
     fi
-    [[ ${verbosity} -lt ${log_at_level} ]] && return 0
+    (( verbosity < log_at_level )) && return 0
 
     ### printf "${WD_TIME_FMT}: ${FUNCNAME[1]}() passed FORMAT: %s\n" -1 "${format_string}"
     local time_and_calling_function_name=""
@@ -214,7 +224,7 @@ function wd_logger() {
     local printout_line="${time_and_calling_function_name}${printout_string}"
 
     if [[ "${TERM}" = "screen" ]] || [ -t 0 -a -t 1 -a -t 2 ]; then
-        ### This program is not a daemon, it is running in a tmxu window or attached to a terminal.  So echo to that terminal
+        ### This program is not a daemon, it is running in a tmux window or attached to a terminal.  So echo to that terminal
         echo -e "${printout_line}"                                              ### use [ -t 0 ...] to test if this is being run from a terminal session
     fi
 
@@ -224,15 +234,28 @@ function wd_logger() {
     fi
 
     ### WD_LOGFILE is defined, so truncate if it has grown too large, then append the new log line(s)
-    [[ ! -f ${WD_LOGFILE} ]] && touch ${WD_LOGFILE}       ### In case it doesn't yet exist
-    local logfile_size=$( ${GET_FILE_SIZE_CMD} ${WD_LOGFILE} )
-    if [[ ${logfile_size} -ge ${WD_LOGFILE_SIZE_MAX} ]]; then
-        local logfile_lines=$(wc -l < ${WD_LOGFILE})
-        local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
-        printf "${WD_TIME_FMT}: ${FUNCNAME[0]}() logfile '${WD_LOGFILE}' size ${logfile_size} and lines ${logfile_lines} has grown too large, so truncating the first ${logfile_lines_to_trim} lines of it\n" >> ${WD_LOGFILE}
-        sed -i "1,${logfile_lines_to_trim} d" ${WD_LOGFILE}
+    if [[ ! -f $WD_LOGFILE ]] ; then
+        local rc
+        local log_file_path
+        log_file_path=$(realpath  $WD_LOGFILE )
+        rc=$? ; if (( rc )) ; then
+            local log_file_dir="${WD_LOGFILE%/*}"
+            echo "$(TZ=UTC date): wd_logger(): ERROR: 'realpath  $WD_LOGFILE' => $rc, so 'mkdir -p $log_file_dir'" 1>&2   ### Send this message to stderr
+            mkdir -p $log_file_dir
+            echo "$(TZ=UTC date): wd_logger(): ERROR: had to create $log_file_dir" >  $WD_LOGFILE
+        else
+            echo "$(TZ=UTC date): wd_logger(): creating new $log_file_path" >  $WD_LOGFILE
+        fi
     fi
-    echo -e "${printout_line}" >> ${WD_LOGFILE}
+
+    local logfile_size=$( ${GET_FILE_SIZE_CMD} $WD_LOGFILE )
+    if (( logfile_size > WD_LOGFILE_SIZE_MAX )); then
+        local logfile_lines=$(wc -l < $WD_LOGFILE )
+        local logfile_lines_to_trim=$(( logfile_lines / 4 ))       ### Trim off the first 25% of the lines
+        printf "$WD_TIME_FMT: ${FUNCNAME[0]}() logfile '$WD_LOGFILE' size $logfile_size and lines $logfile_lines has grown too large, so truncating the first $logfile_lines_to_trim lines of it\n" >> $WD_LOGFILE
+        sed -i "1,$logfile_lines_to_trim d" $WD_LOGFILE
+    fi
+    echo -e "$printout_line" >> $WD_LOGFILE
     return 0
 }
 
@@ -304,17 +327,81 @@ function seconds_until_next_odd_minute() {
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
 declare -r SYSTEMCTL_UNIT_PATH=/etc/systemd/system/wsprdaemon.service
+
+function systemctl_is_setup() {
+    wd_logger 2 "Checking auto-start configuration"
+
+    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
+    if [[ ! -d ${systemctl_dir} ]]; then
+        wd_logger 1 "ERROR: this server appears to not be configured to use the 'systemctl' service needed for auto-start"
+        return 1
+    fi
+    if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
+         wd_logger 1 "This server has not been set up to auto-start wsprdaemon at powerup or reboot"
+         return 1
+    fi
+    if ! grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH} || ! grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
+         return 1
+    fi
+     wd_logger 2 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+     if sudo systemctl is-enabled wsprdaemon.service > /dev/null ; then
+         wd_logger 2 "The WD service is correctly configured and enabled"
+         return 0
+     fi
+     wd_logger 1 "The WD service was configured but not enabled, so enable it"
+     if sudo systemctl enabled wsprdaemon.service ; then
+         wd_logger 1 "The WD service has been enabled"
+         return 0
+     fi
+     wd_logger 1 "ERROR: failed to enable the WD service, so deleting the service file"
+     wd_rm ${SYSTEMCTL_UNIT_PATH}
+     return 1
+}
+
+### Called by wd_setup.sh each time WD is executed
+function check_systemctl_is_setup() {
+    local rc
+
+    wd_logger 2 "Starting"
+    if systemctl_is_setup; then
+       wd_logger 2 "WD is setup to auto-start at powerup and reboot"
+       return 0
+    fi
+    wd_logger 1 "WD needs to be setup to auto-start at powerup and reboot"
+    setup_systemctl_daemon
+    rc=$? ; if (( rc )); then
+       wd_logger 1 "ERROR: failed to setup WD to auto-start"
+       return 1
+    fi
+    wd_logger 1 "WD is now setup to auto-start"
+    return 0
+}
+
+
 function setup_systemctl_daemon() {
     local start_args=${1--A}         ### Defaults to client start/stop args, but '-u a' (run as upload server) will configure with '-u a/z'
     local stop_args=${2--Z} 
-    local systemctl_dir=${SYSTEMCTL_UNIT_PATH%/*}
-    if [[ ! -d ${systemctl_dir} ]]; then
-        echo "$(date): setup_systemctl_daemon() WARNING, this server appears to not be configured to use 'systemctl' needed to start the kiwiwspr daemon at startup"
-        return
+
+    if systemctl_is_setup ; then
+        wd_logger 1 "The WD service is setup and enabled"
+        return 0
     fi
     if [[ -f ${SYSTEMCTL_UNIT_PATH} ]]; then
-        [[ $verbosity -ge 3 ]] && echo "$(date): setup_systemctl_daemon() found this server already has a ${SYSTEMCTL_UNIT_PATH} file. So leaving it alone."
-        return
+        if grep -q "Restart=always" ${SYSTEMCTL_UNIT_PATH}  &&  grep -q "RestartSec=10" ${SYSTEMCTL_UNIT_PATH} ; then
+            wd_logger 1 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
+            if ! sudo systemctl is-enabled wsprdaemon.service ; then
+                wd_logger 1 "The WD service was configured but not enabled, so enabled it"
+                if sudo systemctl enabled wsprdaemon.service ; then
+                    wd_logger 1 "The WD service has been enabled"
+                    return 0
+                fi
+                wd_logger 1 "ERROR: failed to enable the WD service, so re-install it"
+            fi
+        fi
+         wd_logger 1 "The ${SYSTEMCTL_UNIT_PATH} file is missing 'Restart=always' and/or 'RestartSec=10', so recreate that service file"
+         wd_rm ${SYSTEMCTL_UNIT_PATH}
     fi
     if [[ ! $(groups) =~ radio ]]; then
         sudo adduser --quiet --system --group radio
@@ -564,13 +651,13 @@ function wd_kill_all()
             wd_kill ${pid_val}
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'"
             fi
             wd_rm ${pid_file}
             rc1=$?
             if [[ ${rc1} -ne 0 ]]; then
-                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_daemon
                 wd_logger 2 "INFO: failed to rm '${pid_file}'"
             fi
         done
@@ -676,7 +763,6 @@ function wd_kill_pid_file()
     return 0
 }
 
-
 function spawn_daemon() 
 {
     local daemon_function_name=$1
@@ -688,11 +774,11 @@ function spawn_daemon()
     wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
-        if ps ${daemon_pid} > /dev/null ; then
+        if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
             wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
             return 0
         else
-            wd_logger 1 "found a stale file '${daemon_pid_file_path}' with pid ${daemon_pid}, so deleting it"
+            wd_logger 1 "Found a stale pid file '${daemon_pid_file_path}' which contains '${daemon_pid}', so deleting it"
             rm -f ${daemon_pid_file_path}
         fi
     fi
@@ -773,7 +859,7 @@ function get_status_of_daemon() {
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is     running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
@@ -790,7 +876,7 @@ function daemons_list_action()
     local acton_to_perform=$1        ### 'a', 'z', or 's'
     local -n daemon_list_name=$2     ### This is my first use of a 'namedref'ed'  variable, i.e. this is the name of a array variable to be accessed below, like a pointer in C
 
-    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} dameons listed in '${2}'"
+    wd_logger 2 "Perform '${acton_to_perform}' on all the ${#daemon_list_name[@]} daemons listed in '${2}'"
 
     for spawn_line in "${daemon_list_name[@]}"; do
         local daemon_info_list=(${spawn_line})
@@ -821,7 +907,7 @@ function daemons_list_action()
 }
 
 ### Get the current value of a variable stored in a file without perturbing any currently defined variables in the calling function
-### To minimize the possiblity of 'sourcing' an already declare r/o global variable, extract the line with the variable we are searching for
+### To minimize the possibility of 'sourcing' an already declared r/o global variable, extract the line with the variable we are searching for
 ### into a tmp file, and then source only that tmp file
 function get_file_variable()
 {
@@ -837,7 +923,7 @@ function get_file_variable()
 }
 
 ################################################################################################################################################################
-declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Fefaults to 5 seconds
+declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Defaults to 5 seconds
 declare MUTEX_MAX_AGE=${MUTEX_MAX_AGE-30}                  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
 
 function wd_mutex_lock() {
@@ -850,7 +936,7 @@ function wd_mutex_lock() {
         return 1
     fi
 
-    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     wd_logger 2 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
     local mkdir_try_count=1
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
@@ -878,7 +964,7 @@ function wd_mutex_unlock() {
         return 1
     fi
 
-    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}_mutex.d"         ### The lock directory
+    local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     if [[ ! -d ${mutex_lock_dir_name} ]]; then
         wd_logger 1 "ERROR: the expected mutex directory '${mutex_dir}' doesn't exist"
         return 1
@@ -949,4 +1035,81 @@ function  wd_ip_is_valid() {
     fi
     wd_logger 1 "ERROR: this line should never be executed"
     return 5
+}
+
+### Given the path to an ini file like /etc/radio/radiod@rx888-wsprdemon.conf, ~/bin/frpc_wd.ini or /etc/systemd/system/wsprdaemon.service
+### This function searches for a variable in a section and:
+### returns 0: if no changes were made
+### returns 1: 1)  If the variable isn't found and '$variable=$value' was added to the $section
+###            2)  If the variable is found but it was changed to '$variable=$value'
+###            3) As a special case, if variable = '#', then remarks out the line with a '#' as the first character of the line
+### returns 2: If there is a bug in the function, since it should always return 0 or 1
+### Mostly created by chatgbt
+#
+function update_ini_file_section_variable() {
+    local file="$1"          ### The ini file to be verified or modified if needed
+    local section="$2"       ### The section which contains the variable of interest
+    local variable="$3"      ### The variable which is to be verified or modified
+    local new_value="$4"     ### The desired value of that variable
+    local rc=0
+
+    if [[ ! -f "${file}" ]]; then
+        wd_logger 1 "ERROR: ini file '${file}' does not exist"
+        return 3
+    fi
+
+    # Escape special characters in section and variable for use in regex
+    local section_esc=$(printf "%s\n" "$section" | sed 's/[][\/.^$*]/\\&/g')
+    local variable_esc=$(printf "%s\n" "$variable" | sed 's/[][\/.^$*]/\\&/g')
+
+    wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
+
+    # Check if section exists
+    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
+        # Add section if it doesn't exist
+        wd_logger 1 "iERROR: expected section [$section] doesn't exist in '$file'"
+        return 4
+    fi
+
+    # Find section start and end lines
+    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
+
+    # If no next section is found, set section_end_line_number to end of file
+    [[ -z "$section_end_line_number" ]] && section_end_line_number=$(wc -l < "$file")
+
+    # Check if variable exists within the section
+    if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
+        ### The variable is defined.  See if it needs to be changed
+        local temp_file="${file}.tmp"
+
+        if [[ "$new_value" == "#" ]]; then
+            wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
+            sed "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
+        else
+            wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
+            sed  "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
+        fi
+        if ! diff "$file" "$temp_file" > diff.log; then
+            wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
+            mv "${temp_file}"  "$file"
+            return 1
+        else
+            rm "${temp_file}"
+            wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
+            return 0
+        fi
+    else
+        # Append the variable inside the section
+         if [[ "$new_value" == "#" ]]; then
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
+            return 0
+        else
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
+            sed -i "${section_start_line_number}a\\$variable=$new_value" "$file"
+            return 1
+         fi
+    fi
+    ### Code should never get here
+    return 2
 }

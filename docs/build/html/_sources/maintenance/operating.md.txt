@@ -1,4 +1,4 @@
-# Operating wsprdaemon
+# Operating WD
 
 ## Start and Stop
 

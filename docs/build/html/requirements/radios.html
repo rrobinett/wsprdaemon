@@ -44,8 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -67,15 +65,11 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -91,9 +85,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -139,6 +133,7 @@
              
   <section id="compatible-radios">
 <h1>Compatible Radios<a class="headerlink" href="#compatible-radios" title="Link to this heading"></a></h1>
+<p>Please note, for the present and in collaboration with HamSCI efforts, WD supports kiwiSDR and RX888.  The documentation here also primarily addresses the configuration and use of WD with those two radios.</p>
 <section id="kiwisdr">
 <h2>KiwiSDR<a class="headerlink" href="#kiwisdr" title="Link to this heading"></a></h2>
 </section>
@@ -147,24 +142,37 @@
 <section id="rx888">
 <h3>RX888<a class="headerlink" href="#rx888" title="Link to this heading"></a></h3>
 <p>The RX888 connects to your computer via a USB 3 – SuperSpeed connection.  These typically have a BLUE tab on the computer socket as distinct from the white or black for USB 2.</p>
-<p>As delivered the RX888 has sub-optimal thermal protection and for radio science applications it needs an external GPS DO 27 MHz clock.</p>
-<p>Paul WB6CXC created a screwdriver-only kit which enhances the thermal protection and adds a ground-isolated external clock SMA input port. Paul describes the installation and use of his kit on <a class="reference external" href="https://turnislandsystems.com/wp-content/uploads/2024/05/RX888-Kit-2.pdf">his website</a></p>
+<p>As delivered the RX888 has sub-optimal thermal protection and for radio science applications it needs an external GPSDO &#64; 27 MHz clock (although you can alter this).</p>
+<p>Paul Elliott WB6CXC created a screwdriver-only kit which enhances the thermal protection and adds a ground-isolated external clock SMA input port. Paul describes the installation and use of his kit on <a class="reference external" href="https://turnislandsystems.com/wp-content/uploads/2024/05/RX888-Kit-2.pdf">his website</a></p>
 <p>The kit is available at <a class="reference external" href="https://tapr.org/product/rx888-clock-kit-and-thermal-pad/">the TAPR web store</a>.</p>
 </section>
 <section id="airspy-variants">
 <h3>Airspy variants<a class="headerlink" href="#airspy-variants" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Airspy R2</p></li>
+<li><p>Airspy HF+</p></li>
+</ul>
 </section>
 <section id="rtl-sdr">
 <h3>RTL-SDR<a class="headerlink" href="#rtl-sdr" title="Link to this heading"></a></h3>
 </section>
 <section id="sdrplay-variants">
 <h3>SDRPLAY variants<a class="headerlink" href="#sdrplay-variants" title="Link to this heading"></a></h3>
+<p>Not directly suppported by radiod.</p>
+<ul class="simple">
+<li><p>RSPduo</p></li>
+<li><p>RSPdx</p></li>
+</ul>
 </section>
 <section id="fobossdr">
 <h3>FobosSDR<a class="headerlink" href="#fobossdr" title="Link to this heading"></a></h3>
 </section>
 <section id="others">
 <h3>Others…<a class="headerlink" href="#others" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Funcube Dongle</p></li>
+<li><p>OpenHPSDR variants</p></li>
+</ul>
 </section>
 </section>
 </section>

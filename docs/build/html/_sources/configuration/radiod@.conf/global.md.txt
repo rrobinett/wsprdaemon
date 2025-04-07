@@ -4,24 +4,24 @@ A typical configuration of this section for wsprdaemon use follows:
 ```
 [global]
 # these next two establish defaults for all demod sections
-hardware = rx888 # use built-in rx888 driver, configured in [rx888]
-status = hf.local       # DNS name for receiver status and commands
-# data = hf-data.local    # not strictly necessary
-samprate = 12000        # default output sample rate
-mode = usb              # default receive mode
+hardware = rx888            # use built-in rx888 driver, configured in [rx888]
+# status = hf-status.local         # DNS name for receiver status and commands
+status = bee1-hf-status.local   # add "bee1" or the like when using more than one computer/RX888
+# data = hf-data.local      # not strictly necessary
+samprate = 12000            # default output sample rate
+mode = usb                  # default receive mode
 # rest are defaults
-#ttl = 1
-ttl = 0                 # Too many WD sites don't have IGMP aware ethernet swtiches, so don't send radiod multicast packets out the ethernet port.
+#ttl = 1                # if you mean to present RTP (multicast) streams to other computers -- requires an IGMP-aware ethernet switch.
+ttl = 0                 # if you only intend RTP streams for local interprocess communication.
 #fft-threads = 2
 #blocktime = 20 # allowable Opus block times: 2.5, 5, 10, 20, 40, 60, 80, 100, 120
 #overlap = 5 # don't change unless you know what you're doing
-#iface = enp1s0
+#iface = enp1s0         # uncomment to confine RTP multicast to one of several NICs, irrelevant if ttl = 0
 ```
 
-[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
+## [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
-## The [global] Section
---------------------
+### The [global] Section
 
 This is the only reserved section name, and it must appear exactly once in
 every *radiod* configuration file. Entries in the **[global]** section include:
@@ -228,7 +228,7 @@ starts, but to avoid long startup times only minimal effort is expended.
 FFTW3 also uses the "global wisdom" file */etc/fftw/wisdomf*, which
 can be created with significantly more effort (and CPU time). Right
 now I generate the latter file by hand with a fairly esoteric set of
-commands, see [FFTW3.md](FFTW3.md). FFTW *can* generate this information
+commands, see [FFTW3.md](https://github.com/ka9q/ka9q-radio/tree/main/docs/FFTW3.md). FFTW *can* generate this information
 automatically when first run but can take *hours* to do so. I am
 working on a better way, e.g., by automatically starting wisdom
 generation in the background so that *radiod* starts immediately,

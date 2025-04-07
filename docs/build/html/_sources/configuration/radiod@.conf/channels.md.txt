@@ -1,6 +1,6 @@
 # The ka9q-radio [channels] section
 
-wsprdaemon typically manages reception and reporting of 4 types of channels -- WSPR spots, FT4 and FT8 spots, and WWV recordings.  A typical configuration of this section follows:
+wsprdaemon typically manages reception and reporting of 4 types of channels -- WSPR spots, FT4 and FT8 spots, and WWV recordings.  A typical configuration of this section that to receive wspr, ft4, ft8, and WWV/CHU follows:
 
 ```
 [WSPR]
@@ -10,7 +10,7 @@ disable = no
 # encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats
 data = wspr-pcm.local
 agc = 0
-gain = 60               # will change to 0 in 3.3.1 when encoding = float
+gain = 0               # will change to 0 in 3.3.1 when encoding = float
 samprate = 12000
 mode = usb
 low = 1300
@@ -18,7 +18,7 @@ high = 1700
 freq = "136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10m138700 13m553900 14m095600 18m104600 21m094600 24m924600 28m124600 50m293000""
 
 [WSPR-IQ]
-disable = yes
+disable = no           # change to yes if you do not intend to gather PSWS data for upload
 # encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats
 data = wspr-iq.local
 agc = 0
@@ -47,7 +47,7 @@ freq = "3m575000 7m047500 10m140000 14m080000 18m10k000 21m140000 24m919000 28m1
 
 ```
 
-[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
+## [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
 A *radiod* configuration file may contain one or more sections
 configuring receiver channels. This
@@ -76,7 +76,7 @@ it up; it may be overwritten by the next "make install.
 ### dns = no | yes (default no)
 
 Use the domain name system to resolve the name in the *data* parameter. See
-the discussion in [ka9q-radio.md](ka9q-radio.md).
+the discussion in [ka9q-radio.md](../wsprdaemon.conf.d/ka9q-radio.md).
 
 ### data = 
 

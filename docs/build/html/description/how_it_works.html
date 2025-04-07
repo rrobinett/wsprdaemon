@@ -20,7 +20,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Validity of data path and results" href="validity.html" />
-    <link rel="prev" title="Collaborations" href="collaborations.html" /> 
+    <link rel="prev" title="WSPRDAEMON Documentation" href="../index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,8 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="collaborations.html">Collaborations</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How wsprdaemon Works</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#basic-components">Basic components</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#a-running-instance-of-wsprdaemon-performs-several-tasks">A running instance of wsprdaemon performs several tasks:</a></li>
@@ -60,15 +58,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -84,9 +78,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -132,8 +126,8 @@
              
   <section id="how-wsprdaemon-works">
 <h1>How wsprdaemon Works<a class="headerlink" href="#how-wsprdaemon-works" title="Link to this heading"></a></h1>
-<p>Wsprdaemon (WD) is Linux service which decodes WSPR and FST4W spots from one or more Kiwis and/or RX888 SDRs and reliably posts them to wsprnet.org. It includes many features not found in WSJT-x, including multiple band and/or multiple receiver support. WD also records additional information about spots like doppler shift and background noise level which permit much deeper understanding of propagation conditions. For systems like the KiwiSDR which have a limited number of receive channels, schedules can be configured to switch between bands at different hours of the day or at sunrise/sunset-relative times. Spots obtained from multiple receivers on the same band ( e.g a 40M vertical and 500’ Beverage ) can be merged together with only the best SNR posted to wsprnet.org. WD can be configured to create graphs of the background noise level for display locally and/or at graphs.wsprdaemon.org.</p>
-<p>After configuration, WD is designed to run like a home appliance: it recovers on its own from power and Internet outages and caches all spots and other data it gathers until it is confirmed delivered by wsprnet.org and/or wsprdaemon.net. Most of the 20+ ‘top spotting’ sites at http://wspr.rocks/topspotters/ are running WD, and in aggregate they report about 33% of the 7+M spots recorded each day at wsprnet.org.</p>
+<p>Wsprdaemon (WD) runs as a Linux service to decode WSPR and FST4W spots from one or more Kiwis and/or RX888 SDRs and reliably posts them to wsprnet.org. It includes many features not found in WSJT-x, including multiple band and/or multiple receiver support. WD also records additional information about spots like doppler shift and background noise level which permit much deeper understanding of propagation conditions. For systems like the KiwiSDR which have a limited number of receive channels, schedules can be configured to switch between bands at different hours of the day or at sunrise/sunset-relative times. Spots obtained from multiple receivers on the same band ( e.g a 40M vertical and 500’ Beverage ) can be merged together with only the best SNR posted to wsprnet.org. WD can be configured to create graphs of the background noise level for display locally and/or at graphs.wsprdaemon.org.</p>
+<p>After configuration, WD runs like a home appliance: it recovers on its own from power and internet outages and caches all spots and other data it gathers until wsprnet.org and/or wsprdaemon.net confirm delivery.  Most of the 20+ ‘top spotting’ sites at http://wspr.rocks/topspotters/ are running WD, and in aggregate they report about 33% of the 7+M spots recorded each day at wsprnet.org.</p>
 <p>WD runs on almost any Debian Linux system running Ubuntu 22.04 LTS on x86. Although WD on a Pi 4 can decode 10+ bands, most sites run WD on a x86 CPU.</p>
 <section id="basic-components">
 <h2>Basic components<a class="headerlink" href="#basic-components" title="Link to this heading"></a></h2>
@@ -143,21 +137,26 @@
 <li><p>grape recording, conversion to digital_rf, and reporting to HamSCI</p></li>
 <li><p>pskreporter</p></li>
 </ul>
+<p><img alt="" src="../_images/wd-file-structure.png" /></p>
 </section>
 <section id="a-running-instance-of-wsprdaemon-performs-several-tasks">
 <h2>A running instance of wsprdaemon performs several tasks:<a class="headerlink" href="#a-running-instance-of-wsprdaemon-performs-several-tasks" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>configuration and installation checks</p></li>
 <li><p>preparation of recording and posting directories</p></li>
-<li><p>“listening” functions for KIWI and KA9Q receiver definitions</p></li>
+<li><p>“listening” functions for defined KIWI and KA9Q receivers</p></li>
+<li><p>decoding and posting wspr and fst4w spots</p></li>
+<li><p>recording 16 kHz I/Q around WWV and CHU broadcasts for upload to HamSCI</p></li>
 <li><p>monitoring and logging results and errors</p></li>
 </ul>
+<p><img alt="" src="../_images/wd-functions.png" /></p>
 </section>
 <section id="what-will-make-it-not-start-or-then-stop-working">
 <h2>What will make it not start or then stop working?<a class="headerlink" href="#what-will-make-it-not-start-or-then-stop-working" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>data stream not defined – wd requires at least one receiver (KIWI or KA9Q)</p></li>
-<li><p>schedule not defined</p></li>
+<li><p>schedule not defined – wd requires a schedule definition</p></li>
+<li><p>wd requires a working hardware radio (KiwiSDR or RX888) with proper configuration</p></li>
 <li><p><a class="reference internal" href="../troubleshooting/overview.html"><span class="std std-doc">See Troubleshooting</span></a></p></li>
 </ul>
 </section>
@@ -167,7 +166,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="collaborations.html" class="btn btn-neutral float-left" title="Collaborations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../index.html" class="btn btn-neutral float-left" title="WSPRDAEMON Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="validity.html" class="btn btn-neutral float-right" title="Validity of data path and results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

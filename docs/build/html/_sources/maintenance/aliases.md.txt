@@ -1,8 +1,27 @@
-# Aliases for monitoring and interacting with wsprdaemon
+# Aliases for monitoring and interacting with WD
 
 These aliases (in ~wsprdaemon/bash-aliases) can provide very useful functions with a few keystrokes.  The documentation for what they do remains minimal.  Also, take note that some of them will only work in a particular directory.
 
-## Latest Aliases from branch 3.3.1
+## Useful functions
+
+Programs which print information about Wsprdaemon (WD) system:
+Command       Can also be executed by    Description
+wd-help       wd-h wd-                   Prints this help message
+wd-start      wd-a wda                   Start or keep running WD
+wd-stop       wd-z wdz                   Stop WD if it is running
+wd-status     wd-s wds                   Show the status of a running WD
+wd-upload-wn  wd-un wdln                 Watch the 'upload to wsprnet' log
+wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
+wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
+wd-overloads  wd-ov wdov                 Prints all overload events recorded in the wav and ADC log files
+wd-query      wd-q wdq                   Query the wsprdaemon database for spots
+wd-gc                                    Execute git commit
+wd-gp                                    Execute git push
+wq-gl                                    Execute git log
+wd-gc-ssh                                Execute git remote set-ur + git config
+
+
+## Comprehensive List of Aliases from branch 3.3.1
 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 - alias wdtw="test_get_wav_file_list"

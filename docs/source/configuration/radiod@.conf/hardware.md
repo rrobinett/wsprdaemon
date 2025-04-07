@@ -5,13 +5,13 @@ A typical configuration of this section for wsprdaemon use follows:
 ```
 [rx888]
 device = "rx888" # required so it won't be seen as a demod section
-description = "rx888 wsprdaemon" # good to put callsign and antenna description in here
+description = "AC0G @EM38ww longwire" # good to put callsign and antenna description in here
 #gain = 20 # dB
 # rest are defaults
 #description = "rx888"
 #number = 0
 #samprate = 129600000     # Hz
-samprate =   64800000     # 128 Msps will eventual burn out the stock RX888 Mk II, and this 64 Msps frees much CPU on older CPUs
+samprate =   64800000     # 129.6 Msps may heat stress the stock RX888 Mk II, but an improved heatpad seems to fix this
 #calibrate = 0            # 1e-6 is +1 ppm
 #firmware = SDDC_FX3.img
 #queuedepth = 16          # buffers in USB queue
@@ -23,10 +23,9 @@ samprate =   64800000     # 128 Msps will eventual burn out the stock RX888 Mk I
 #gain = 1.5               # AD8370 VGA gain, -25 to +17 dB (low gain mode) or -8 to +34 dB (high gain mode)
 ```
 
-[Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
+## [Phil Karn's comprehensive documentation](https://github.com/ka9q/ka9q-radio/tree/main/docs) of this section:
 
-## Hardware Configuration
-----------------------
+### Hardware Configuration
 
 This document describes the hardware definition section in a *radiod*
 config file.  The section name must match the **hardware** entry in
@@ -45,7 +44,6 @@ In this example the name of the hardware definition section matches
 the device type, but this is not required.
 
 ### Supported Hardware
-------------------
 
 Six SDR front ends are currently supported in *ka9q-radio*:
 

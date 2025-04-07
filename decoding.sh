@@ -17,32 +17,32 @@ function get_decode_mode_list() {
     local receiver_modes_arg=$2
     local receiver_band=$3
     local temp_receiver_modes
+    local rc
 
     temp_receiver_modes=${receiver_modes_arg}
     if [[ ${receiver_modes_arg} == "DEFAULT" ]]; then
         ### Translate DEFAULT mode to a list of modes for this band
         local default_modes=""
         get_default_modes_for_band  default_modes ${receiver_band}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'get_default_modes_for_band default_modes ${receiver_band}' =>  ${ret_code}" 
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'get_default_modes_for_band default_modes ${receiver_band}' =>  ${rc}" 
             sleep 1
-            return ${ret_code}
+            return ${rc}
         fi
         wd_logger 1 "Translated decode mode '${receiver_modes_arg}' to '${default_modes}'"
         temp_receiver_modes=${default_modes}
     fi
     ### Validate the mode list
     is_valid_mode_list  ${temp_receiver_modes}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]] ; then
-        wd_logger 1 "ERROR: 'is_valid_mode_list  ${temp_receiver_modes}' => ${ret_code}" 
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'is_valid_mode_list  ${temp_receiver_modes}' => ${rc}" 
         return 1
     fi
     wd_logger 2 "Returning modes ${temp_receiver_modes}"
     eval ${modes_variable_to_return}=${temp_receiver_modes}
     return 0
 }
+
 
 ##########
 function get_af_db() {
@@ -89,6 +89,7 @@ function calculate_nl_adjustments() {
     local return_rms_corrections_variable_name=$1
     local return_fft_corrections_variable_name=$2
     local receiver_band=$3
+    local rc
 
     local wspr_band_freq_khz=$(get_wspr_band_freq_khz ${receiver_band})
     local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
@@ -100,6 +101,10 @@ function calculate_nl_adjustments() {
     ### In each of these assignments, if cal_vals[] was not defined above from the file 'noise_ca_vals.csv', then use the default value.  e.g. cal_c2_correction will get the default value '-187.7
     local cal_nom_bw=${cal_vals[0]-320}        ### In this code I assume this is 320 hertz
     local cal_ne_bw=${cal_vals[1]-246}
+    if (( cal_ne_bw == 0 )); then
+        wd_logger 1 "ERROR: cal_ne_bw = 0, which is an invalid value.  So assign the default value of '246'"
+        cal_ne_bw=246
+    fi
     local cal_rms_offset=${cal_vals[2]--50.4}
     local cal_fft_offset=${cal_vals[3]--41.0}
     local cal_fft_band=${cal_vals[4]--13.9}
@@ -115,8 +120,7 @@ function calculate_nl_adjustments() {
     fi
     local antenna_factor_adjust
     get_af_db antenna_factor_adjust ${receiver_name} ${receiver_band}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find AF for ${receiver_name} ${receiver_band}"
         exit 1
     fi
@@ -227,6 +231,7 @@ function is_valid_wav_file()
     local wav_filename=$1
     local min_valid_secs=$2
     local max_valid_secs=$3
+    local rc
 
     if [[ ! -f ${wav_filename} ]]; then
         wd_logger 1 "ERROR: no wav file ${wav_filename}"
@@ -237,18 +242,17 @@ function is_valid_wav_file()
         return 1
     fi
     local wav_stats=$(sox ${wav_filename} -n stats 2>&1 )    ### Don't add ' --keep-foreign-metadata"
-    local ret_code=$?    
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' => ${ret_code}"
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' => ${rc}"
         return 1
     fi
     wd_logger 2 "'sox ${wav_filename} -n stats 2>&1' =>\n${wav_stats}"
     local wav_length_line_list=( $(grep '^Length' <<< "${wav_stats}") )
-    if [[ ${#wav_length_line_list[@]} -eq 0 ]]; then
+    if (( ! ${#wav_length_line_list[@]} )); then
          wd_logger 1 "ERROR: can't find wav file 'Length' line in output of 'sox ${wav_filename} -n stats'"
         return 1
     fi
-    if [[ ${#wav_length_line_list[@]} -ne 3 ]]; then
+    if (( ${#wav_length_line_list[@]} != 3 )); then
         wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' ouput 'Length' line has ${#wav_length_line_list[@]} fields in it instead of the expected 3 fields"
         return 1
     fi
@@ -261,7 +265,7 @@ function is_valid_wav_file()
         wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports wav file length ${wav_length_line_list[2]} which doesn't contain an integer number"
         return 1
     fi
-    if [[ ${wav_length_secs} -lt ${min_valid_secs} || ${wav_length_secs} -gt ${max_valid_secs} ]]; then
+    if (( ( wav_length_secs < min_valid_secs ) || ( wav_length_secs > max_valid_secs) )); then
         wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length of ${wav_length_secs} seconds. valid min=${min_valid_secs}, valid max=${max_valid_secs}"
         return 1
     fi
@@ -274,9 +278,10 @@ function get_rms_levels()
     local __return_string_name=$2
     local wav_filename=$3
     local rms_adjust=$4
+    local rc
 
     if ! is_valid_wav_file ${wav_filename} ${MIN_VALID_WSPR_WAV_SECONDS} ${MAX_VALID_WSPR_WAV_SECONDS} ; then
-        local rc=$?
+        rc=$?
         wd_logger 1 "ERROR: 'valid_wav_file ${wav_filename}' => ${rc}"
         return 1
     fi
@@ -288,9 +293,8 @@ function get_rms_levels()
         local sample_length_secs=${sample_line_list[1]}
         local sample_vals
         get_wav_levels  sample_vals ${wav_filename} ${sample_start_sec} ${sample_length_secs} ${rms_adjust}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'get_wav_levels  sample_vals ${wav_filename} ${sample_start_sec} ${sample_length_secs}' => {ret_code}"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'get_wav_levels  sample_vals ${wav_filename} ${sample_start_sec} ${sample_length_secs}' => ${rc}"
             return 1
         fi
         output_line="${output_line} ${sample_vals}"
@@ -326,6 +330,7 @@ function decode_wspr_wav_file() {
     local stdout_file=$4
     local wsprd_cmd_flags="$5"                  ### ${WSPRD_CMD_FLAGS}
     local wsprd_spreading_cmd_flags="$6"        ### ${WSPRD_CMD_FLAGS}
+    local rc
 
     wd_logger 2 "Decode file ${wav_file_name} for frequency ${wspr_decode_capture_freq_hz} and send stdout to ${stdout_file}.  rx_khz_offset=${rx_khz_offset}, wsprd_cmd_flags='${wsprd_cmd_flags}'"
     local wspr_decode_capture_freq_hzx=${wav_file_name#*_}                                                 ### Remove the year/date/time
@@ -340,10 +345,9 @@ function decode_wspr_wav_file() {
     cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
 
     timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${ret_code}"
-        return ${ret_code}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${rc}"
+        return ${rc}
     fi  
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
     mv sort.tmp ALL_WSPR.TXT
@@ -363,10 +367,9 @@ function decode_wspr_wav_file() {
         >  ${stdout_file}.spreading
     else
         timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
-            # return ${ret_code}
+            # return ${rc}
         fi
     fi
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
@@ -383,7 +386,7 @@ function decode_wspr_wav_file() {
     wd_logger 1 "Added the $(wc -l < ALL_WSPR.TXT.new) spots which are the union of the standard and spreading decodes:\n$(< ALL_WSPR.TXT.new)" 
 
     truncate_file  ALL_WSPR.TXT  ${MAX_ALL_WSPR_SIZE}
-    return ${ret_code}
+    return ${rc}
 }
 
 declare WSPRD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
@@ -410,6 +413,7 @@ declare WAV_FILE_MAX_HHMMSSUU=$(( 10000 + ( ${WAV_SECOND_RANGE} * 100) ))       
 function flush_wav_files_older_than()
 {
     local reference_file=$1
+    local rc
 
     if [[ ! -f ${reference_file} ]]; then
         wd_logger 1 "ERROR: can't find expected reference file '${reference_file}"
@@ -417,17 +421,20 @@ function flush_wav_files_older_than()
     fi
     wd_logger 1 "Delete any files older than ${reference_file}"
 
+    find -name '*wav' >& find.log
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'find -name '*wav' > find.log'=> ${rc}:\n$(< find.log)"
+        return ${rc}
+    fi
     local olders=0
     local newers=0
     local wav_file
-    for wav_file in $(find -name '*wav'); do
+    for wav_file in $(<find.log); do
         if [[ ${wav_file} -ot ${reference_file} ]]; then
             (( ++olders ))
             wd_logger 1 "Deleting older wav file '${wav_file}'"
-            local rc
             wd_rm ${wav_file}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: Deleting older wav file '${wav_file}', 'wd_rm ${wav_file}' => ${rc}"
             fi
         elif [[ ${wav_file} -nt ${reference_file} ]]; then
@@ -455,6 +462,7 @@ function sleep_until_raw_file_is_full() {
     local old_file_size=$( ${GET_FILE_SIZE_CMD} ${filename} )
     local new_file_size
     local start_seconds=${SECONDS}
+    local rc
 
     sleep ${WAV_FILE_SIZE_POLL_SECS}
     while [[ -f ${filename} ]] && new_file_size=$( ${GET_FILE_SIZE_CMD} ${filename}) && [[ ${new_file_size} -eq ${WD_RECORD_HDR_SIZE_BYTES} || ${new_file_size} -gt ${old_file_size} ]]; do
@@ -473,17 +481,14 @@ function sleep_until_raw_file_is_full() {
     local file_start_second=${filename:13:2}
     if [[ ${file_start_second} != "00" ]]; then
         wd_logger 2 "'${filename} starts at second ${file_start_second}, not at the required second '00', so delete this file which should be the first file created after startup AND any older wav files"
-        local rc
 
         flush_wav_files_older_than ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
         fi
 
         wd_rm ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'wd_rm ${filename}' => ${rc}"
         fi
         return 2
@@ -498,17 +503,14 @@ function sleep_until_raw_file_is_full() {
 
     if [[ 10#${wav_file_duration_integer} -lt ${WAV_FILE_MIN_HHMMSSUU} ]]; then          ### The 10#... forces bash to treat wav_file_duration_integer as a decimal, since its leading zeros would otherwise identify it at an octal number
         wd_logger 2 "The wav file stabilized at invalid too short duration ${wav_file_duration_hh_mm_sec_msec} which almost always occurs at startup. Flush this file since it can't be used as part of a WSPR wav file"
-        local rc
 
         flush_wav_files_older_than ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: While flushing too short wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
         fi
 
         wd_rm ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: While flushing too shortwav file'${filename}', 'wd_rm ${filename}' => ${rc}"
         fi
         return 2
@@ -526,23 +528,19 @@ function sleep_until_raw_file_is_full() {
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, but can't find any kiwirecorder processes which would be creating it;\n$(soxi ${filename})"
         else
             wd_kill ${kiwirecorder_pids[@]}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: 'wd_kill ${kiwirecorder_pids[*]}' => ${rc}"
             fi
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
         fi
-        local rc
 
         flush_wav_files_older_than ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'flush_wav_files_older_than ${filename}' => ${rc}"
         fi
 
         wd_rm ${filename}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Deleting non 00 second wav file'${filename}', 'wd_rm ${filename}' => ${rc}"
         fi
         return 3
@@ -558,11 +556,11 @@ function get_file_start_time_info()
     local __epoch_return_variable_name=$1
     local __minute_return_variable_name=$2
     local file_name=$3
+    local rc
 
     local epoch_from_file_stat=$( ${GET_FILE_MOD_TIME_CMD} ${file_name})
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: '${GET_FILE_MOD_TIME_CMD} ${file_name}' => ${ret_code}"
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: '${GET_FILE_MOD_TIME_CMD} ${file_name}' => ${rc}"
         return 1
     fi
     local minute_from_file_epoch=$( printf "%(%M)T" ${epoch_from_file_stat}  )
@@ -591,31 +589,91 @@ function get_file_start_time_info()
 
 function epoch_from_filename() 
 {
-    local file_name=$1
+    local file_name=${1##*/}  ## strip off the path leaving only the filename 
+    local rc
 
     local file_date_format="${file_name:0:8} ${file_name:9:2}:${file_name:11:2}:${file_name:13:2}"
     local file_epoch=$(date -d "${file_date_format}" +%s)
+    rc=$? ; if (( rc )); then
+        wd_1ogger 1 "ERROR: 'date -d "${file_date_format}" +%s' => ${rc}"
+        return ${rc}
+    fi
 
     echo "${file_epoch}"
     return 0
 }
 
- 
+### Get the minute from the wav filename
+function minute_from_filename() 
+{
+    local file_name=${1##*/}  ## strip off the path leaving only the filename 
+
+    echo "${file_name:11:2}"
+    return 0
+}
+
+### If filename includes second 59, then rename it to next minute second 00
+declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clock times, so fkilenames can have '59' seconds as start time
+declare MAX_ACCEPTED_GAP=${MAX_ACCEPTED_GAP-70}
+declare FILE_NAME_REJECT_SECONDS_MIN=$(( 60 - MIN_ACCEPTED_GAP ))                 ### Filenames outside the range of 50-59 an 0-10 will be rejected
+declare FILE_NAME_REJECT_SECONDS_MAX=$(( 60 - FILE_NAME_REJECT_SECONDS_MIN ))
+
+function adjust_file_named_59_seconds_to_nearest_minute() {
+    local __return_new_file_path=$1
+    local adjust_current_file_path=$2
+
+    local adjust_current_file_dir=${adjust_current_file_path%/*}
+    local adjust_current_file_name=${adjust_current_file_path##*/}
+    local adjust_current_file_minutes=${adjust_current_file_name:11:2}
+    local adjust_current_file_seconds=${adjust_current_file_name:13:2}
+    local adjust_current_file_Z_to_end="Z_${adjust_current_file_name##*Z_}"
+
+    if [[ "${adjust_current_file_seconds}" == "00" ]]; then
+        wd_logger 2 "File ${adjust_current_file_path##*/} is named for second 0, so nothing to do"
+        eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
+        return 0
+    fi
+
+    if [[ "${ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO-no}" == "no" ]]; then
+        wd_logger 1 "ERROR: ADJUST_FILENAME_TO_NEAREST_SECOND_ZERO is 'no' but '${adjust_current_file_path##*/}' is named for second '${adjust_current_file_seconds}' not the expected '00'"
+        eval ${__return_new_file_path}=${adjust_current_file_path}      ## By default don't rename the file
+        return 0
+    fi
+
+    local current_file_seconds_int=$(( 10#${adjust_current_file_seconds} ))
+    if (( current_file_seconds_int > FILE_NAME_REJECT_SECONDS_MIN && current_file_seconds_int < FILE_NAME_REJECT_SECONDS_MAX )); then
+        wd_logger 1 "ERROR: File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, which is not in the acceptable range of ${FILE_NAME_REJECT_SECONDS_MAX} to ${FILE_NAME_REJECT_SECONDS_MIN} seconds, so dump the file"
+        wd_rm ${adjust_current_file_path}
+        return 1
+    fi
+    ### This file is named for second 50-70, so rename it to second 00 of the nearest minute
+    local adjust_current_file_epoch=$(epoch_from_filename ${adjust_current_file_path} )
+    local nearest_minute_epoch=$(( (adjust_current_file_epoch + 30) /60 * 60 ))
+
+    local nearest_minute_file_path=$(printf "%s/%(%Y%m%dT%H%M%S)T%s" "${adjust_current_file_dir}" "${nearest_minute_epoch}" "${adjust_current_file_Z_to_end}")
+    wd_logger 1 "Renaming the second ${adjust_current_file_seconds} file ${adjust_current_file_path##*/} to the nearest minute ${nearest_minute_file_path##*/}"
+
+    local rc
+    mv ${adjust_current_file_path} ${nearest_minute_file_path}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: failed ' mv ${adjust_current_file_path##*/} ${nearest_minute_file_path}' => ${rc}"
+        return 3
+    fi
+    wd_logger 1 "File ${adjust_current_file_path##*/} is named for second ${adjust_current_file_seconds}, so rename it to second 00 of the nearest minute ${nearest_minute_file_path##*/}"
+    eval ${__return_new_file_path}=${nearest_minute_file_path}      ## By default don't rename the file
+}
+
 ### Given a list of filenames, start from the newest file, the one at the end of the list (i.e. [-1]), and work towards the front of the list
 ### Make sure that each earlier filename is 1 minute earlier.  If not, then flush all the older files from the list
 function cleanup_wav_file_list()
 {
     local __return_clean_files_string_name=$1
     local check_file_list=( $2 )
+    local rc
 
-    if [[ ${#check_file_list[@]} -eq 0 ]]; then
-        wd_logger 1 "Was given an empty file list"
-        eval ${__return_clean_files_string_name}=\"\"
-        return 0
-    fi
     wd_logger 2 "Testing list of ${#check_file_list[@]} raw files: '${check_file_list[*]}'"
 
-    if [[ ${#check_file_list[@]} -lt 1 ]]; then
+    if (( ! ${#check_file_list[@]} )); then
         wd_logger 1 "ERROR: check_file_list[] is empty"
         return 1
     fi
@@ -631,29 +689,25 @@ function cleanup_wav_file_list()
     local return_clean_files_string="${check_file_list[-1]}" ### The last file is clean
 
     ### Now walk backwards through the check_file_list[] verifying that each file is full length and 60 seconds earlier than than its successor file
-    while [[ ${raw_file_index} -ge 0 ]]; do
+    while (( raw_file_index )); do
         local test_file_name
         test_file_name=${check_file_list[${raw_file_index}]}
         wd_logger 2 "Testing file ${test_file_name}"
         if [[ ${flush_files} == "yes" ]]; then
             wd_logger 1 "flush_files == 'yes', so flushing file ${test_file_name}"
             wd_rm ${test_file_name}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: for flush_files == 'yes' ${test_file_name}',  'wd_rm ${test_file_name}' => ${rc}"
             fi
             (( --raw_file_index ))
             continue
         fi
-        local ret_code
         is_valid_wav_file ${test_file_name} ${MIN_VALID_RAW_WAV_SECONDS} ${MAX_VALID_RAW_WAV_SECONDS}
-        ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             ### Found a wav file with invalid size
             wd_logger 1 "ERROR: found wav file '${test_file_name}' has invalid size.  Flush it and all earlier wav files"
             wd_rm ${test_file_name}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: Failed to flush the first invalid file we found, ${test_file_name}',  'wd_rm ${test_file_name}' => ${rc}"
             fi
             flush_files="yes"
@@ -664,15 +718,14 @@ function cleanup_wav_file_list()
     
         local epoch_of_test_file=$( epoch_from_filename ${test_file_name} )
         wd_logger 2 "test_file_name=${test_file_name} = ${epoch_of_test_file} = minute $(( ( ${epoch_of_test_file} % 3600 ) / 60 ))"
-
+: <<'COMMENTED_OUT_LINES'
        ### see if it is one minute (60 second) earlier than the previous file
         local file_epoch_gap=$(( ${epoch_of_last_file} - ${epoch_of_test_file} ))
         if [[ ${file_epoch_gap} -ne 60 ]]; then
             wd_logger 1 "ERROR: test_file_name=${test_file_name} is file_epoch_gap=${file_epoch_gap} seocnds, not 1 minute (60 seconds), earlier than the next file in the list.  So delete it and all earlier files in the list"
             local rc
             wd_rm ${test_file_name}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: Failed to flush ${test_file_name}' which is not one minute earlier than the next wav file in the list: 'wd_rm ${test_file_name}' => ${rc}"
             fi
             flush_files="yes"
@@ -681,11 +734,13 @@ function cleanup_wav_file_list()
             (( --raw_file_index ))
             continue
         fi
+COMMENTED_OUT_LINES
         wd_logger 2 "test_file_name='${test_file_name}' from index ${raw_file_index} is clean and 60 seconds earlier the the next file in the list.  Proceed to check previous file on the list"
         epoch_of_last_file=${epoch_of_test_file}
         return_clean_files_string="${return_clean_files_string} ${test_file_name}"
         (( --raw_file_index ))
     done
+ 
     local clean_files_list=( ${return_clean_files_string} )
 
     wd_logger 2 "Given check_file_list[${#check_file_list[@]}]     ='${check_file_list[*]}'"
@@ -697,19 +752,136 @@ function cleanup_wav_file_list()
     return 0
 } 
 
+function file_is_open() {
+    local file_path="${1}"
+    local kiwirecorder_file_must_be_closed_seconds=${2}  ### If the file is being written by kiwirecorder, then typically wait for it to be 2+ seconds old before report back that the wav file is filled
+
+    local file_directory="${file_path%/*}"
+    if [[ "${file_directory}" != "${PWD}" ]]; then
+        if lsof ${file_path} >& /dev/null; then
+             wd_logger 1 "Running in ${PWD}, ${file_path} is open"
+             return 0
+         else
+             wd_logger 1 "Running in ${PWD}, ${file_path} is closed"
+             return 1
+        fi
+    else
+        local  file_age_seconds=$(( $(date +%s) - $(stat --format=%Y ${file_path}) ))
+         if (( file_age_seconds < kiwirecorder_file_must_be_closed_seconds )); then
+             wd_logger 1 "'${file_path}' has been closed only for ${file_age_seconds}, so we can assume kiwirecorder is still writing to it"
+             return 0
+         else
+             wd_logger 1 "'${file_path}' has been closed for  ${file_age_seconds} which is more than the ${kiwirecorder_file_must_be_closed_seconds} seconds we expect will signal that kiwirecorder is finished writing sampled to it. So consider it a closed file"
+             return 1
+         fi
+    fi
+}
+
+declare last_wav_file_name=""
+declare wav_file_create_time_log_file="./wav_file_create_time.log"  ### each RX888 band has its own create lime log file
+declare WWV_START_CMD="${WSPRDAEMON_ROOT_DIR}/wwv_start.py"
+if ! [[ -x $WWV_START_CMD ]]; then
+    wd_logger 1 "ERROR: can't find expected program '$WWV_START_CMD'"
+    return 1
+fi
+
+function log_wav_file_create_times() {
+    local wav_file_name="$1"
+
+    wd_logger 1 "Logging wav file '$wav_file_name' create time line to $wav_file_create_time_log_file"
+
+    if [[ ! -f "$wav_file_name" ]]; then
+        wd_logger 1 "ERROR: can't find '$wav_file_name'"
+        return 1
+    fi
+
+    if [[ -z "$last_wav_file_name" ]]; then
+        echo "$(date): ================ starting decoding ==============="  >> "$wav_file_create_time_log_file"
+        last_wav_file_name="$wav_file_name"
+    fi
+    local file_stat_list=($( stat "$wav_file_name"  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
+
+    file_stat_list[4]="Tone_burst_offset:Not_measured"
+    if [[ ${WWV_TONE_BURST_LOGGING-no} == "yes" && "$wav_file_name" =~ WWV ]]; then
+        local wwv_burst_offset_msecs=0
+        wwv_burst_offset_msecs=$( $WWV_START_CMD "$wav_file_name" )
+        file_stat_list[4]="Tone_burst_offset:${wwv_burst_offset_msecs// /_}"      ### For ease of parsing, replace' 's with '_'s
+        wd_logger 1 "The tone burst which starts each second is $wwv_burst_offset_msecs from the begining of '$wav_file_name'"
+    fi
+    echo "${file_stat_list[0]}  ${file_stat_list[1]}  ${file_stat_list[3]}  ${file_stat_list[2]}  ${file_stat_list[4]}"  >> "$wav_file_create_time_log_file"
+    truncate_file "$wav_file_create_time_log_file" ${MAX_CREATE_TIME_LOG-2000000}     ### Default is to truncate this log file to 2 MB 
+    return 0
+}
+
+function file_is_closed_or_last_write_was_seconds_ago() {
+    local file_path="${1}"
+    local wait_for_no_writes_seconds=${2}                ### Tyypicaly we wait for 60+ seconds for a one minute file to be filled
+    local kiwirecorder_file_must_be_closed_seconds=${3}  ### If the file is being written by kiwirecorder, then typically wait for it to be 2+ seconds old before report back that the wav file is filled
+
+    local file_directory="${file_path%/*}"
+    if [[ "${file_directory}" != "${PWD}" ]]; then
+        wd_logger 2 "Checking ${file_path} is not in ${PWD}, so assuming it is being written by pcmrecord and ths wait for it to be closed"
+        local start_second=${SECONDS}
+        if ! lsof ${file_path} >& /dev/null; then
+             wd_logger 2 "The file ${file_path} is closed"
+             return 0
+         else
+            wd_logger 1 "The file ${file_path} is open so run 'inotifywait -e close ${newest_file_name}' so we wakeup when it is closed"
+            inotifywait -e close ${newest_file_name} >& /dev/null
+            rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait -e close ${newest_file_name}' => ${rc}"
+                return ${rc}
+            else
+                log_wav_file_create_times "$newest_file_name"
+
+                local date_time_list=( $(stat $newest_file_name | awk '/Modify/{printf "%s %s", $2, $3} ') )
+                local date=${date_time_list[0]}
+                local hhmmss=${date_time_list[1]%.*}
+                local microseconds=${date_time_list[1]##*.}
+                local seconds=$(( 10#${hhmmss##*:} ))                  ### converts second 00-59 to a decimal integer 
+                local max_delay_secs=${RECORDING_MAX_DELAY_SECONDS-2}  ### If 'stat' reports last write is greater than 2 seconds 
+                local min_early_secs=${RECORDING_MIN_EARLY_SECONDS-59} ### and it is earlier than second 59, then log error
+                if (( (seconds > max_delay_secs) && (seconds < min_early_secs) )); then
+                    wd_logger 1 "ERROR: File ${newest_file_name##*/} last write time ${date_time_list[*]} is not in second 00"
+                else
+                    wd_logger 1 "File ${newest_file_name##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds after a wait of $(( SECONDS - start_second )) seconds"
+                fi
+                return 0
+            fi
+        fi
+    fi
+
+    wd_logger 2 "Check that file in ${PWD} has not been written for ${wait_for_no_writes_seconds} seconds since it is probably being written by kiwirecorders which opens and closes the file every second to write new smaples"
+    local file_age_seconds
+    local timeout=${wait_for_no_writes_seconds}
+    while (( --timeout >= 0 )) &&  file_age_seconds=$(( $(date +%s) - $(stat --format=%Y ${newest_file_name}) )) &&  ((file_age_seconds <  kiwirecorder_file_must_be_closed_seconds)) ; do
+        wd_logger 2 "File ${newest_file_name} is only ${file_age_seconds} seconds old, so sleep 1 second and check again"
+        sleep 1
+    done
+    if (( file_age_seconds >= kiwirecorder_file_must_be_closed_seconds )); then
+        wd_logger 2 "File ${newest_file_name} has been closed for ${file_age_seconds} seconds, so we can assume kiwirecorder is really done with it"
+        return 0
+    else
+        wd_logger 1 "ERROR: timeout after ${wait_for_no_writes_seconds} seconds while waiting for ${file_path} to be at least ${kiwirecorder_file_must_be_closed_seconds} seconds old"
+        return 1
+    fi
+}
+
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
+
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
     local receiver_name=$2         ### Used when we need to start or restart the wav recording daemon
     local receiver_band=$3           
     local receiver_modes=$4
-    local wav_archive_dir=$5
+    local rc
+
     local     target_modes_list=( ${receiver_modes//:/ } )     ### Argument has form MODE1[:MODE2...] put it in local array
     local -ia target_minutes_list=( $( IFS=$'\n' ; echo "${target_modes_list[*]/?/}" | sort -nu ) )        ### Chop the "W" or "F" from each mode element to get the minutes for each mode  NOTE THE "s which are requried if arithmatic is being done on each element!!!!
     if [[ " ${target_minutes_list[*]} " =~ " 0 " ]] ; then
         ### The configuration validtor verified that jobs which have mode 'W0' specified will have no other modes
-        ### In mode W0 we are only goign to run the wsprd decoder in order to get the RMS can C2 noise levels
+        ### In mode W0 we are only going to run the wsprd decoder in order to get the RMS can C2 noise levels
         wd_logger 1 "Found that mode 'W0' has been specified"
         target_minutes_list=( 2 )
     fi
@@ -719,208 +891,265 @@ function get_wav_file_list() {
     wd_logger 2 "Start with args '${return_variable_name} ${receiver_name} ${receiver_band} ${receiver_modes}', then receiver_modes => ${target_modes_list[*]} => target_minutes=( ${target_minutes_list[*]} ) => target_seconds=( ${target_seconds_list[*]} )"
     ### This code requires  that the list of wav files to be generated is in ascending seconds order, i.e "120 300 900 1800)
 
-    if ! spawn_wav_recording_daemon ${receiver_name} ${receiver_band} ; then
-        local ret_code=$?
-        wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${ret_code}"
-        return ${ret_code}
+    if [[ "${TEST_RECORDING_DAEMON-yes}" != "yes" ]]; then
+        wd_logger 2 "Configured not to spawn_wav_recording_daemon()"
+    else
+        wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
+        spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+            return ${rc}
+        fi
+        wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
     fi
 
-    local raw_file_list=( $( find -maxdepth 1 \( -name \*.wav -o -name \*.raw \) | sed 's/\.\///' | sort ) ) ### minute-*.raw *_usb.wav)        ### Get list of the one minute long 'raw' wav files being created by the Kiwi (.wav) or SDR ((.raw)
-    wd_logger 2 "Found ${#raw_file_list[@]} raw/wav files: '${raw_file_list[*]}'"
+    ### If the wav file is created from a Kiwi by kiwirecorder.py, then its wav files are stored in the same directory as decoding, i.e. /dev/shm/recording.d/KIWI_0/20/
+    ### If the wav file is createed by pcmrecorder from a KA9Q-radio server, There is one instance of the KA9Q stream recorder which outputs all wav files from the stream in the parent directory, i.e. /dev/shm/recording.d/KA9Q_0/
+    local wav_recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
-    case ${#raw_file_list[@]} in
-        0 )
-            wd_logger 2 "There are no raw files.  Wait up to 10 seconds for the first file to appear"
+    ### Kiwirecorder.py and pcmrecordder create files with the same name format
+    local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
+    local wav_file_regex="*_${band_freq_hz}_*.wav"
 
-            declare WAIT_FOR_FIRST_WAV_SECS=10
-            local timeout=0
-            while     raw_file_list=( $( find -maxdepth 1 \( -name \*.wav -o -name \*.raw \) | sed 's/\.\///' | sort ) ) \
-                   && [[ ${#raw_file_list[@]} -eq 0 ]] \
-                   && [[ ${timeout} -lt ${WAIT_FOR_FIRST_WAV_SECS}  ]]; do
+    wd_logger 2 "Starting 'while (( \${#return_list[@]} == 0 )); do ...'."
+    local wait_for_newest_file_to_close="no"
+    local return_list=()
+    while (( ${#return_list[@]} == 0 )); do
+        ### Get a list of all wav files for this band
+        wd_logger 1 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
+        find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" >& find.log
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex} > find.log:\n$(<find.log)"
+            sleep 1
+            continue
+        fi
+        local find_files_list=()
+        find_files_list=( $( sort -r find.log ) )
+
+        if (( ${#find_files_list[@]} < 1 )); then
+            wd_logger 2 "Found no wav files.  Sleep 1 and then search again"
+            sleep 1
+            continue
+        fi
+        ### There is at least one file on the list
+        wd_logger 1 "find_files_list[] has ${#find_files_list[@]} entries: ${find_files_list[@]##*/}"
+
+        local newest_file_name=${find_files_list[0]}
+
+        if [[ ${wait_for_newest_file_to_close} == "yes" ]]; then
+            ### We previously found a list but couldn't create a return_list[], so wait until the newest file is closed before checking again
+            wd_logger 1 "Waiting for ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} seconds for the newest file ${newest_file_name} to be closed or not written to for ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2} seconds"
+            file_is_closed_or_last_write_was_seconds_ago ${newest_file_name}  ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65}  ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}
+            wd_logger 1 "After waiting for the newest file ${newest_file_name} to be closed, cancel wait_for_newest_file_to_close and check again"
+            wait_for_newest_file_to_close="no"
+            sleep 1
+            continue
+        fi
+
+        if file_is_open ${newest_file_name} ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2} ; then
+            wd_logger 1 "The newest file ${newest_file_name##*/} in the list of ${#find_files_list[@]} files is open, so remove it from find_files_list[]"
+            find_files_list=( ${find_files_list[@]:1} )
+            wd_logger 1 "There are now ${#find_files_list[@]} elements in find_files_list[@]"
+            if (( ${#find_files_list[@]} < 1 )); then
+                wd_logger 2 "There are no closed files on the list, so leave it to the next block of code to sleep until it is closed"
+            fi
+        fi
+        wd_logger 1 "After removing any open files from the find_files_list[], there are now ${#find_files_list[@]} closed files: ${find_files_list[@]##*/}"
+
+        if (( ${#find_files_list[@]} <= 2 )); then
+            wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written"
+            if file_is_closed_or_last_write_was_seconds_ago ${newest_file_name}  ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}; then
+                wd_logger 1 "' ${newest_file_name}' is closed, so start search for files again"
                 sleep 1
-                (( ++timeout ))
-            done
-            if [[ ${#raw_file_list[@]} -eq 0 ]]; then
-                wd_logger 1 "Timeout after ${timeout} seconds while waiting for the first wav file to appear"
             else
-                wd_logger 2 "First file appeared after waiting ${timeout} seconds"
+                wd_logger 1 "ERROR: 'file_is_closed_or_last_write_was_seconds_ago ${newest_file_name} ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}' => $?.  So sleep 1 and start search againi"
+                sleep 1
             fi
-            return 1         ### Signal to  calling function to try again
-            ;;
-        1 )
-            wd_logger 2 "There is only 1 raw file ${raw_file_list[0]} which is for minute ${raw_file_list[0]:11:2}, but all modes need at least 2 one minute wav files. So wait for this file to be filled"
-            local ret_code
-            sleep_until_raw_file_is_full ${raw_file_list[0]}
-            ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "Error:  while waiting for the first  wav file to fill, 'sleep_until_raw_file_is_full ${raw_file_list[0]}' => ${ret_code} "
-            else
-                if [[ -f ${raw_file_list[0]} ]]; then
-                    wd_logger 2 "First file '${raw_file_list[0]}' which is for minute ${raw_file_list[0]:11:2} is filled and good, but since there is only one good file return error 2"
-                else
-                    wd_logger 1 "First file '${raw_file_list[0]}' was filled, but it was flushed"
-                fi
-            fi
-            return 2
-            ;;
-       * )
-            wd_logger 2 "Found ${#raw_file_list[@]} files, so once this file is full we *may* have enough 1 minute wav files to make up a WSPR pkt. Wait until the last file is full, then proceed to process the list."
-            sleep_until_raw_file_is_full ${raw_file_list[-1]}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while waiting for the last of ${#raw_file_list[@]} wav files to fill, 'sleep_until_raw_file_is_full ${raw_file_list[-1]}' => ${ret_code}. Sleep 5 before resuming search"
-                wd_sleep 5
-                return 4
-            fi
-            wd_logger 2 "Check the ${#raw_file_list[@]} files starting with file '${raw_file_list[0]}' which is for minute ${raw_file_list[0]:11:2}"
-            ;;
-    esac
-    wd_logger 2 "Found ${#raw_file_list[@]} full raw files, enough that we *may* have a set which can create a new pkt wav file. First clean the list of raw files"
-
-    local clean_files_string
-    cleanup_wav_file_list  clean_files_string "${raw_file_list[*]}"
-
-    local clean_file_list=( ${clean_files_string} )
-    if [[ ${#clean_file_list[@]} -lt 2 ]]; then
-        wd_logger 1 "ERROR: (not really) after cleanup of raw_file_list[], clean_file_list[] has only ${#clean_file_list[@]} files, not enough to create even a 2 minute wav file"
-        return 5
-    fi
-
-    if [[ ${#clean_file_list[@]} -eq ${#raw_file_list[@]} ]]; then
-        wd_logger 2 "raw_file_list[@] is clean"
-    else
-        if [[ ${#clean_file_list[@]} -lt 2 ]]; then
-            wd_logger 1 "ERROR: (not really) After cleaning, clean_file_list[]='${clean_file_list[*]}' has less than the minimum 2 packets needed for the smallest WSPR packet.  So return error and try again to find a good list"
-            return 6
-        fi
-        raw_file_list=( ${clean_file_list[@]} )
-        wd_logger 1 "ERROR: (not really) Cleanup trimmed $(( ${#raw_file_list[@]} - ${#clean_file_list[@]})) files from raw_file_list[], but there are still enough for a minimm sized WSPR packet"
-        wd_logger 1 "ERROR: raw_file_list[]=  '${raw_file_list[*]}'"
-        wd_logger 1 "ERROR: clean_file_list[]='${clean_file_list[*]}'"
-    fi
-    ### We now have a clean list of two or more full size raw files
-
-    ## Search for newly completed pkt wav files lists 
-    local epoch_of_first_raw_file=$(epoch_from_filename ${raw_file_list[0]})
-    local minute_of_first_raw_file=$(( ( ${epoch_of_first_raw_file} % 3600 ) / 60 ))
-    local epoch_of_last_raw_file=$(epoch_from_filename ${raw_file_list[-1]})
-    local minute_of_last_raw_file=$(( ( ${epoch_of_last_raw_file} % 3600 ) / 60 ))
-    wd_logger 2 "============== Starting to search for newly completed wspr wav files in the ${#raw_file_list[@]} raw files which start at time ${epoch_of_first_raw_file} = minute ${minute_of_first_raw_file} and ends at epoch ${epoch_of_last_raw_file} = minute ${minute_of_last_raw_file} ==================="
-
-    local return_list=()      ### contaains zero or more WAV_SECONDS:WAV_FILE_0,WAV_FILE_1[,WAV_FILE_2...] entries
-    local index_of_last_file_which_should_be_flushed=$(( ${#raw_file_list[@]} - 1 ))  ### By default flush all the raw_wav files, After all searches we will flush the raw_file_list[@] files with indexes up to this, since those wav files are not candidates for future pkt wav files
-    wd_logger 2 "Start by planning to flush all the ${#raw_file_list[@]} raw_file_list[] files up to and including index ${index_of_last_file_which_should_be_flushed}"
-
-    ### For each 2/5/15/30 minute wav file we have been asked to return, serach for earliest run of one minute wav files which satisfy the needed run of needed minute wav files
-    local seconds_in_wspr_pkt
-    for seconds_in_wspr_pkt in  ${target_seconds_list[@]} ; do
-        local minutes_in_wspr_pkt=$(( ${seconds_in_wspr_pkt} / 60 ))
-        local seconds_into_wspr_pkt_of_first_raw_file=$(( ${epoch_of_first_raw_file} % ${seconds_in_wspr_pkt} ))
-        local modulo_of_first_raw_file=$(( ${seconds_into_wspr_pkt_of_first_raw_file} / 60  ))
-        wd_logger 2 "============== Checking for ${seconds_in_wspr_pkt} second = ${minutes_in_wspr_pkt} minute wspr packet which is modulo_of_first_raw_file=${modulo_of_first_raw_file}  in the raw wav list which start at minute ${minute_of_first_raw_file} and ends at ${minute_of_last_raw_file} =============="
-
-        ### Find where to start searching for a start file in the raw_file[]. Check to see if we have returned some of these files in a previous call to this function
-        ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
-        shopt -s nullglob
-        local wav_raw_pkt_sec_list=( *.wav.${seconds_in_wspr_pkt}-secs )
-        shopt -u nullglob
-        local epoch_of_first_unreported_wspr_packet
-        if [[ ${#wav_raw_pkt_sec_list[@]} -eq 0 ]]; then
-            ### No previosuly reported wspr files in the raw list, so search from index 0
-            if [[ ${modulo_of_first_raw_file} -eq 0 ]]; then
-                epoch_of_first_unreported_wspr_packet=${epoch_of_first_raw_file}
-                wd_logger 2 "Found no previously reported ${minutes_in_wspr_pkt} minute wav_secs files and raw_file_list[0] is the first file of this wspr pkt, so first unreported wspr pkt starts in raw_file_list[0]"
-            else
-                epoch_of_first_unreported_wspr_packet=$(( ${epoch_of_first_raw_file} + ${seconds_in_wspr_pkt} - ( ${modulo_of_first_raw_file} * 60 ) ))
-                wd_logger 2 "Found no previously reported ${minutes_in_wspr_pkt} minute wav_secs files and raw_file_list[0] is minute ${modulo_of_first_raw_file} of this wspr pkt, so epoch_of_first_unreported_wspr_packet=${epoch_of_first_unreported_wspr_packet}"
-            fi
-        else
-            ### We have previously reported a wspr file for this wspr pkt length
-            local wav_raw_pkt_sec_list_count=${#wav_raw_pkt_sec_list[@]}
-            if [[ ${wav_raw_pkt_sec_list_count} -gt 1 ]]; then
-                local wav_raw_pkt_sec_list_flush_count=$(( ${wav_raw_pkt_sec_list_count} - 1 ))
-                local wav_raw_pkt_sec_flush_list=( ${wav_raw_pkt_sec_list[@]:0:${wav_raw_pkt_sec_list_flush_count}} )
-                wd_logger 1 "For ${minutes_in_wspr_pkt} minute wspr packet search, found wav_raw_pkt_sec_list_count=${wav_raw_pkt_sec_list_count} files '${wav_raw_pkt_sec_list[*]}', not the one file needed. So flush the first ${wav_raw_pkt_sec_list_flush_count} files: ${wav_raw_pkt_sec_flush_list[*]}"
-                local rc
-                wd_rm ${wav_raw_pkt_sec_flush_list[@]}
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: for ${minutes_in_wspr_pkt} minute wspr packet search, Failed flushing or archiving  extra wav_raw_pkt_sec_list[]: 'flush_or_archive_raw_wav_files ${wav_archive_dir} ${wav_raw_pkt_sec_flush_list[*]}' => ${rc}"
-                fi
-            fi
-            local epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_raw_pkt_sec_list[-1]} )
-            local minute_of_previously_reported_wspr_pkt=$(( (${epoch_of_previously_reported_wspr_pkt} % 3600 ) / 60 ))
-            epoch_of_first_unreported_wspr_packet=$(( ${epoch_of_previously_reported_wspr_pkt} + ${seconds_in_wspr_pkt} ))
-            local minute_of_first_unreported_wspr_packet=$(( ( ${epoch_of_first_unreported_wspr_packet} % 3600 ) / 60 ))
-            wd_logger 2 "We previously reported a wspr packet that started at epoch ${epoch_of_previously_reported_wspr_pkt} = minute ${minute_of_previously_reported_wspr_pkt}, so we are now looking for a raw wav list file which starts at epoch ${epoch_of_first_unreported_wspr_packet} = minute ${minute_of_first_unreported_wspr_packet}"
-        fi
-
-        if [[ ${epoch_of_first_unreported_wspr_packet} -gt ${epoch_of_last_raw_file} ]]; then
-            ### The start of an unreported wspr pkt can't be found in the current raw file list
-            wd_logger 2 "Next unreported wspr pkt will start at epoch ${epoch_of_first_unreported_wspr_packet}, but epoch_of_last_raw_file=${epoch_of_last_raw_file} so start of new wspr pkt isn't in raw file list"
             continue
         fi
-        ### Start of unreported wav file is present in the raw wav file list
-        local index_of_start_wspr_packet=$(( (${epoch_of_first_unreported_wspr_packet} - ${epoch_of_first_raw_file}) / 60  ))
-        if [[ ${index_of_start_wspr_packet} -lt 0 ]]; then
-            wd_logger 1 "ERROR: index_of_start_wspr_packet=${index_of_start_wspr_packet} is less than zero"
-            exit 1
+
+        ### ${#find_files_list[@]} has 2 or more closed files in it list
+        ### [0] is newest file
+
+        ### Cleanup the file list so that it contains only a contiguous list of files, each starting one minute later than the previous file
+        local find_files_count=${#find_files_list[@]}
+        wd_logger 1 "The 'find' command found ${find_files_count} closed wav files in '${wav_recording_dir}': '${find_files_list[*]##*/}'"
+        wd_logger 1 "Removing any files in the list which preceed any gap"
+
+        local last_file_name="${find_files_list[0]}"
+        local checked_files_list=( ${last_file_name} )
+        local index
+        for (( index = 1; index < ${#find_files_list[@]}; ++index )); do
+            local checking_file_name=${find_files_list[index]}
+
+            ### pcmrecord names some the files to second 59 aor second 61.  Rename those files to the nearest second 0
+            local adjusted_file_name
+            adjust_file_named_59_seconds_to_nearest_minute  "adjusted_file_name" "${checking_file_name}"
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'adjust_file_named_59_seconds_to_nearest_minute  'adjusted_file_name' '${checking_file_name}' => ${rc}"
+                continue
+            fi
+            if [[ "${adjusted_file_name}" != "${checking_file_name}" ]]; then
+                wd_logger 1 "File ${checking_file_name} was renamed to ${adjusted_file_name}"
+                find_files_list[index]="${adjusted_file_name}"
+                checking_file_name="${adjusted_file_name}"
+            fi
+
+            wd_logger 2 "Checking that index=${index} with file ${checking_file_name##*/} is one minute older than ${last_file_name##*/}"
+            
+            ### Checking the write times of the wav files differ by between 59 and 61 seconds
+            local checking_file_epoch=$(epoch_from_filename ${checking_file_name})
+            local last_file_epoch=$(epoch_from_filename ${last_file_name})
+            wd_logger 2 "Checking that the filename time of ${checking_file_name##*/} with epoch ${checking_file_epoch} is about one minute older than filename time  ${last_file_name##*/} of the next file with epoch ${last_file_epoch}"
+
+            if (( checking_file_epoch > last_file_epoch )); then
+                ### This file's epoch is newer rather than the expected one minute older than the previous file in the list, so flush it and any subsequent files in the list
+                local flush_files_list=( ${find_files_list[@]:index} )
+                wd_logger 1 "ERROR: at index ${index} unexpected that the checking file ${checking_file_name##*/} epoch ${checking_file_epoch} is newer than the last file ${last_file_name##*/} epoch ${last_file_epoch}"
+                wd_logger 1 "ERROR: So flush it and all the rest of the ${#flush_files_list[@]} files in the rest of the find_fileslist[]: ${flush_files_list[@]##*/}"
+                wd_rm ${flush_files_list[@]}
+                wd_logger 1 "ERROR: After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
+                break
+            fi
+            local write_epoch_gap=$(( last_file_epoch - checking_file_epoch ))
+            if (( write_epoch_gap == 60  )); then
+                wd_logger 2 "Accepting a file ${checking_file_name##*/} which has an expected gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+            else
+                ### The difference between files' epoch is not the expected one minute
+                if (( write_epoch_gap >= MIN_ACCEPTED_GAP && write_epoch_gap <= MAX_ACCEPTED_GAP )); then
+                    if (( write_epoch_gap >= 59 &&  write_epoch_gap <= 61 )); then
+                        wd_logger 2 "Accepting a file ${checking_file_name##*/} which has a commonly found gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                    else
+                        wd_logger 1 "Accepting a file ${checking_file_name##*/} which has a uncommon gap of ${write_epoch_gap} seconds after the previous file ${last_file_name##*/}"
+                    fi
+                 else
+                     local flush_files_list=( ${find_files_list[@]:index} )
+                     wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
+                     wd_logger 1 "ERROR: So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
+                     wd_rm ${flush_files_list[@]}
+                     wd_logger 1 "ERROR: After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
+                     break
+                fi
+            fi
+
+            wd_logger 2 "Adding the checked File ${checking_file_name##*/} to the checked_files_list[] since it's write time preceeds ${last_file_name##*/} by between 59 and 61 seconds"
+            last_file_name=${checking_file_name}
+            checked_files_list=( ${checking_file_name} ${checked_files_list[@]} ) 
+        done          ### Checking the find_files_list[] and creating a list of 2 or more contiguous files
+
+        ### We should have a clean/contiguous list of wav files
+        local checked_files_count=${#checked_files_list[@]}
+        if (( checked_files_count != find_files_count )); then
+            wd_logger 1 "'find' returned a list of ${find_files_count}, but only the last ${checked_files_count} were contiguous one minute long files"
         fi
-        wd_logger 2 "For ${minutes_in_wspr_pkt} minute wspr packet, first raw wav file is at index_of_start_wspr_packet=${index_of_start_wspr_packet}"
-        if [[ ${index_of_start_wspr_packet} -le ${index_of_last_file_which_should_be_flushed} ]]; then
-            ### Don't flush this wspr start file from raw wav file list
-            local new_index_of_last_file_which_should_be_flushed=$(( ${index_of_start_wspr_packet} - 1 ))
-            wd_logger 2 "Found start of an unreported wspr pkt is found at raw wav list index ${index_of_start_wspr_packet} is <= to index_of_last_file_which_should_be_flushed=${index_of_last_file_which_should_be_flushed}, so change it to index ${new_index_of_last_file_which_should_be_flushed}"
-            index_of_last_file_which_should_be_flushed=${new_index_of_last_file_which_should_be_flushed}
-        fi
-        local index_of_end_packet=$(( ${index_of_start_wspr_packet} + ${minutes_in_wspr_pkt} - 1 ))
-        if [[ ${index_of_end_packet} -ge ${#raw_file_list[@]} ]]; then
-            ### Can't find full length wspr packet, so ensure that first unreported raw wav file is preserved
-            wd_logger 2 "First wav file of wspr packet starts at index ${index_of_start_wspr_packet} which is for time ${epoch_of_first_unreported_wspr_packet}, but the last wav file is not yet recorded, so can't yet create wspr pkt"
+        if (( checked_files_count < 2 )); then
+            wd_logger 1 "After checking found only ${checked_files_count} files, so search again"
+            sleep 1
             continue
         fi
-        local epoch_of_last_file_of_unreported_wspr_pkt=$( epoch_from_filename ${raw_file_list[${index_of_end_packet}]} )
-        local epoch_expected_of_last_file_of_unreported_wspr_pkt=$(( ${epoch_of_first_unreported_wspr_packet} + ${seconds_in_wspr_pkt} - 60 ))
-        if [[ ${epoch_of_last_file_of_unreported_wspr_pkt} -ne ${epoch_expected_of_last_file_of_unreported_wspr_pkt} ]]; then
-            wd_logger 1 "ERROR: epoch_of_last_file_of_unreported_wspr_pkt=${epoch_of_last_file_of_unreported_wspr_pkt} != epoch_expected_of_last_file_of_unreported_wspr_pkt=${epoch_expected_of_last_file_of_unreported_wspr_pkt} "
-            exit 1
-        fi
-        wd_logger 2 "Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at index_of_start_wspr_packet=${index_of_start_wspr_packet} for time ${epoch_of_first_unreported_wspr_packet} and ends at index_of_end_packet=${index_of_end_packet}  for epoch ${epoch_of_last_file_of_unreported_wspr_pkt}"
-        local comma_seperated_file_list_of_minute_raw_files=$( IFS=, ; echo -n "${raw_file_list[*]:${index_of_start_wspr_packet}:${minutes_in_wspr_pkt}}" )
-        local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_raw_files}"
-        wd_logger 2 "The raw_file_list[] file ${raw_file_list[${index_of_start_wspr_packet}]} for minute ${epoch_of_first_unreported_wspr_packet} at index ${index_of_start_wspr_packet} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
-        return_list+=( ${add_to_return_list} )
-        local wav_list_returned_file=${raw_file_list[${index_of_start_wspr_packet}]}.${seconds_in_wspr_pkt}-secs
-        touch -r ${raw_file_list[${index_of_start_wspr_packet}]} ${wav_list_returned_file}
-        wd_logger 2 "Created '${wav_list_returned_file}' so we won't return agan this list raw wav files which make up the wspr pkt files"
-    done       ### with search for all the different wspr wav file lengths
-    wd_logger 2 "=========== Finished search for all wspr pkts in raw wav list ============"
 
-    if [[ ${index_of_last_file_which_should_be_flushed} -lt 0 ]] ; then
-        wd_logger 1 "INFO: No raw files should be flushed"
-    else
-        local files_to_flush_count=$(( ${index_of_last_file_which_should_be_flushed} + 1 ))
-        local rc
-        wd_logger 1 "INFO: We can flush or archive raw wav files up to index ${index_of_last_file_which_should_be_flushed}, so flushing raw_wav_file[] entries: '${raw_file_list[@]:0:${files_to_flush_count}}'"
+        ### We have a list of 2 or more contiguous files.  checked_files_list[0] is the oldest, checked_files_list[-1] the newest
+        ### See if any previously unreported list of 2/5/15/30 minute files can be found in this list
 
-        flush_or_archive_raw_wav_files ${wav_archive_dir} ${raw_file_list[@]:0:${files_to_flush_count}}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Failed flushing or archiving  old raw_file_list[]: 'flush_or_archive_raw_wav_files ${wav_archive_dir} ${raw_file_list[@]:0:${files_to_flush_count}}' => ${rc}"
-        fi
-    fi
-    
-    if [[ ${#return_list[@]} -ne 0 ]]; then
-        wd_logger 1 "INFO: Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'"
-    else
-        wd_logger 1 "INFO: Returning no wav file lists"
-    fi
+       ### For each 2/5/15/30 minute wav file we have been asked to return, serach for earliest run of one minute wav files which satisfy the needed run of needed minute wav files
+       local epoch_of_oldest_checked_file=$( epoch_from_filename ${checked_files_list[0]} ) ## instead of stat --format=%Y  ${checked_files_list[0]} )
+       local minute_of_oldest_checked_file
+       minute_of_oldest_checked_file=${checked_files_list[0]##*/}
+       minute_of_oldest_checked_file=${minute_of_oldest_checked_file:11:2}
+       local epoch_of_newest_checked_file=$( epoch_from_filename ${checked_files_list[-1]} )  ## instead of stat --format=%Y ${checked_files_list[-1]} )
+       local minute_of_newest_checked_file
+       minute_of_newest_checked_file=${checked_files_list[-1]##*/}
+       minute_of_newest_checked_file=${minute_of_newest_checked_file:11:2}
+       local index_of_last_file_in_checked_files_list=$(( ${#checked_files_list[@]} - 1 ))
 
-    eval ${return_variable_name}=\"${return_list[*]}\"
-    return 0
+       wd_logger 2 "Found ${#checked_files_list[@]} contiguous and closed files starting at minute ${minute_of_oldest_checked_file} and ending at minute ${minute_of_newest_checked_file}"
+
+       local seconds_in_wspr_pkt
+       for seconds_in_wspr_pkt in ${target_seconds_list[@]} ; do
+           local minutes_in_wspr_pkt=$(( seconds_in_wspr_pkt / 60 ))
+           local seconds_into_wspr_pkt_of_oldest_checked_file=$(( epoch_of_oldest_checked_file % seconds_in_wspr_pkt ))
+           local pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length=$(( seconds_into_wspr_pkt_of_oldest_checked_file / 60 ))
+
+           wd_logger 2 "============== Checked_files_list[0] contains ${#checked_files_list[@]} elements, the first of which is the minute ${pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length} of a ${minutes_in_wspr_pkt} minute long WSPR packet"
+
+           ### Check to see if we have returned some of these files in a previous call to this function
+           ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
+           local index_of_first_minute_of_wspr_pkt
+           local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r ) ) 
+           local epoch_of_previously_reported_wspr_pkt
+           local epoch_of_pkt_we_want
+           if (( ${#wav_checked_pkt_sec_list[@]} > 0 )); then
+               if (( ${#wav_checked_pkt_sec_list[@]} > 1 )); then
+                   wd_logger 2 "Flushing the $(( ${#wav_checked_pkt_sec_list[@]} - 1 )) no longer needed 'pkt has been returned' files: ${wav_checked_pkt_sec_list[@]:1}"
+                   wd_rm ${wav_checked_pkt_sec_list[@]:1}
+               fi
+               epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
+               epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
+               if (( epoch_of_previously_reported_wspr_pkt < epoch_of_oldest_checked_file )); then
+                   wd_logger 1 "ERROR: Flushing wav_checked_pkt_sec_list[0]=${wav_checked_pkt_sec_list[0]##*/} since it is older than the oldest checked_files_list[-1]=${checked_files_list[-1]##*/}"
+                   wd_rm ${wav_checked_pkt_sec_list[0]}
+                   wav_checked_pkt_sec_list=()
+               fi
+           fi
+           if (( ${#wav_checked_pkt_sec_list[@]} == 0 )); then
+               ### There is no previosuly reported wspr pkt of this length,  Check to see if a complete wspr pkt starts and ends in the filled 
+               index_of_first_minute_of_wspr_pkt=$(( (minutes_in_wspr_pkt - pkt_number_of_oldest_checked_file_in_wspsr_pkt_of_this_length) % minutes_in_wspr_pkt ))   ### but this index may not be in checked_files_list[]
+               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+                   wd_logger 1 "ERROR: index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} is< 0 which is an invalid index. So skip to check for next packet length "
+                   continue
+               fi
+           else
+               ### There was a previously reported wspr pkt for this pkt length
+               local seconds_after_oldest_check_file=$(( epoch_of_pkt_we_want - epoch_of_oldest_checked_file ))
+               index_of_first_minute_of_wspr_pkt=$(( seconds_after_oldest_check_file / 60 ))
+               if (( index_of_first_minute_of_wspr_pkt < 0 )); then
+                   wd_logger 1 "ERROR: got invalid index after starting from time of last reported pkt which was saved in file  ${wav_checked_pkt_sec_list[0]##*/}"
+                   wd_logger 1 "ERROR:  index_of_first_minute_of_wspr_pkt=${index_of_first_minute_of_wspr_pkt} epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} from ${wav_checked_pkt_sec_list[0]}"
+                   wd_logger 1 "ERROR:  started with epoch_of_previously_reported_wspr_pkt=${epoch_of_previously_reported_wspr_pkt} of ${wav_checked_pkt_sec_list[0]}"
+                   wd_logger 1 "ERROR:  so the epoch of the first file we want is ${seconds_after_oldest_check_file} seconds after the epoch_of_previously_reported_wspr_pkt"
+                   wd_logger 1 "ERROR:  so the first file we want will be checked_files_list[${index_of_first_minute_of_wspr_pkt}]"
+                   sleep 10
+                   continue
+               fi
+           fi
+          if (( index_of_first_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+               wd_logger 2 "Can't find the first minute of this ${minutes_in_wspr_pkt} minute wspr pkt which would be in checked_files_list[${index_of_first_minute_of_wspr_pkt}] because that is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               continue
+           fi
+           local index_of_last_minute_of_wspr_pkt
+           index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
+           if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
+               wd_logger 2 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last wanted element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               continue
+           fi
+           wd_logger 2 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
+
+           if (( seconds_in_wspr_pkt == ${target_seconds_list[-1]} )) ; then
+               wd_logger 2 "We have found a complete set of minute files for the longest wspr packet we seek, a ${seconds_in_wspr_pkt} second packet, which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}], so we can flush checked_files_list[0:${index_of_first_minute_of_wspr_pkt}]"
+               wd_rm ${checked_files_list[@]:0:${index_of_first_minute_of_wspr_pkt}} 
+           fi
+
+           local comma_seperated_file_list_of_minute_checked_files=$( IFS=, ; echo -n "${checked_files_list[*]:${index_of_first_minute_of_wspr_pkt}:${minutes_in_wspr_pkt}}" )
+           local add_to_return_list="${seconds_in_wspr_pkt}:${comma_seperated_file_list_of_minute_checked_files}"
+           wd_logger 2 "The checked_files_list[] file ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]##*/} file at index ${index_of_first_minute_of_wspr_pkt} is the start of a full ${minutes_in_wspr_pkt} minute WSPR pkt, so add '${add_to_return_list}' to the return list"
+           return_list+=( ${add_to_return_list} )
+
+           local wav_list_returned_file=${checked_files_list[${index_of_first_minute_of_wspr_pkt}]}.${seconds_in_wspr_pkt}-secs
+           touch -r ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]} ${wav_list_returned_file}
+           wd_logger 2 "Created '${wav_list_returned_file##*/}' so we won't again return this list of wav files which make up this wspr pkt"
+       done       ### with search for all the different wspr wav file lengths
+       if (( ${#return_list[@]} == 0 )); then
+           wd_logger 2 "return_list[] is empty, so go back to top of this search and wait for newest open file to be closed, then check again"
+           wait_for_newest_file_to_close="yes"
+       fi
+   done
+
+   wd_logger 2 "Returning ${#return_list[@]} wspr pkt lists: '${return_list[*]}'\n"
+   eval ${return_variable_name}=\"${return_list[*]}\"
+   return 0
 }
 
-function flush_or_archive_raw_wav_files() {
+function flush_or_archive_checked_wav_files() {
     local wav_archive_dir=$1
     local wav_file_list=( ${@:2} )     ### Get list of variable number of arguments from $2 to last argument
     local config_archive_raw_wav_files
@@ -935,28 +1164,26 @@ function flush_or_archive_raw_wav_files() {
     fi
     if [[ "${config_archive_raw_wav_files}" != "yes" ]]; then
         wd_rm ${wav_file_list[@]}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: Failed flushing old raw_file_list[]: 'wd_rum ${wav_file_list[*]}' => ${rc}"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: Failed flushing old checked_lists_list[]: 'wd_rum ${wav_file_list[*]}' => ${rc}"
         fi
         return ${rc}
     else
         local rrc=0
         local raw_wav_file
         for raw_wav_file in ${wav_file_list[@]} ; do
-            queue_wav_file ${raw_wav_file} ${wav_archive_dir}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 1 "INFO: Archived wav file ${raw_wav_file}"
-            else
-                wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' => $?"
+            archive_wav_file ${raw_wav_file} ${receiver_name} ${receiver_band}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'archive_wav_file ${raw_wav_file} ${receiver_name} ${receiver_band}' => $?"
                 rrc=${rc}
+            else
+                wd_logger 1 "INFO: Archived wav file ${raw_wav_file}"
             fi
         done
-        if [[ ${rrc} -eq 0 ]]; then
-            wd_logger 1 "INFO: Archived all wav files"
+        if (( rrc )); then
+            wd_logger 1 "ERROR: 'archive_wav_file ...' failed one or more times=> ${rrc}"
         else
-            wd_logger 1 "ERROR: 'queue_wav_file ${raw_wav_file}' failed one or more times=> $${rrc}"
+            wd_logger 1 "INFO: Archived all wav files"
         fi
         return ${rrc}
     fi
@@ -1052,7 +1279,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         local input_spot_grid_field_index=6
         local input_spot_field_name_list_count=${#input_spot_field_name_list[@]}
         local type1_field_count=${input_spot_field_name_list_count}
-        local type3_field_count=$((  ${type1_field_count} - 1 ))
+        local type3_field_count=$(( ${type1_field_count} - 1 ))
         if [[ ${spot_line_list_count} -eq ${type1_field_count} ]]; then
             wd_logger 2 "Found a spot line with the normal ${type1_field_count} fields of a type 1 spot"
         elif [[ ${spot_line_list_count} -eq ${type3_field_count} ]]; then
@@ -1166,8 +1393,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         done
         ### 
         printf "${output_field_format_string}\n" ${printf_values_list[@]}  >> ${cached_spots_file_name}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             local printf_error_output_lines=$(printf ${output_field_format_string} ${printf_values_list[@]})
             wd_logger 1 "ERROR: output printf reports error ${rc}:\n printf ${output_field_format_string} ${printf_values_list[@]}:\n ${printf_error_output_lines}"
         fi
@@ -1196,8 +1422,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         else
             wd_logger 2 "Creating link from ${cached_spots_file_name} to ${decoding_client_spot_file_name} which is monitored by a posting daemon"
             ln ${cached_spots_file_name} ${decoding_client_spot_file_name}
-            local rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: 'ln ${cached_spots_file_name} ${decoding_client_spot_file_name}' => ${rc}"
             fi
         fi
@@ -1211,12 +1436,12 @@ function get_wsprdaemon_noise_queue_directory()
     local __return_directory_name_return_variable=$1
     local receiver_name=$2
     local receiver_band=$3
+    local rc
 
     local receiver_call_grid
     
     receiver_call_grid=$( get_call_grid_from_receiver_name ${receiver_name} )
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ;if (( rc )); then
         wd_logger 1 "ERROR: can't find receiver '${receiver_name}"
         return 1
     fi
@@ -1246,34 +1471,48 @@ declare SOX_LOG_FILE="./sox.log"                                                
 
 declare SOX_MAX_PEAK_LEVEL="${SOX_MAX_PEAK_LEVEL--1.0}"                              ### Log an ERROR if sox reports the peak level of the wav file it created is greater than this value
 
+declare GET_PEAK_WAV_SAMPLE_CMD="${WSPRDAEMON_ROOT_DIR}/get-peak-wav-sample.py"     ### A little script created by chatgbt
+declare GET_PEAK_WAV_SAMPLE_LOG_FILE="./get-peak-wav-sample.log"                     ### This file should have the peak amplitude in linear and also in dbFS
+
+function is_a_float() {
+    local value=$1
+
+    if [[ -z "${value}" ]]; then
+        wd_logger 1 "'${value}' is empty, so it can't be a float"
+        return 1
+    fi
+    if ! [[ ${value} =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        wd_logger 1 "'${value}' is not a float or int"
+        return 1
+    fi
+    wd_logger 2 "'${value}' is a float"
+    return 0
+}
+
 function decoding_daemon() {
     local receiver_name=$1                ### 'real' as opposed to 'merged' receiver
     local receiver_band=${2}
     local receiver_modes_arg=${3}
     local adc_overloads_print_line_count=0                                 ### Used to determine when to print a  header line in the adc_overloads.log file 
-    local ret_code
     local rc
 
     local receiver_call
     receiver_call=$( get_receiver_call_from_name ${receiver_name} )
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find receiver call from '${receiver_name}"
         return 1
     fi
 
     local receiver_ip_address
     receiver_ip_address=$(get_receiver_ip_from_name ${receiver_name})
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find receiver IP from '${receiver_name}"
         return 1
     fi
 
     local receiver_grid
     receiver_grid=$( get_receiver_grid_from_name ${receiver_name} )
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't find receiver grid 'from ${receiver_name}"
         return 1
     fi
@@ -1287,10 +1526,9 @@ function decoding_daemon() {
 
     local receiver_modes
     get_decode_mode_list  receiver_modes ${receiver_modes_arg} ${receiver_band}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then 
-        wd_logger 1 "ERROR: 'get_decode_mode_list receiver_modes ${receiver_modes_arg}' => ${ret_code}"
-        return ${ret_code}
+    rc=$? ; if (( rc )); then 
+        wd_logger 1 "ERROR: 'get_decode_mode_list receiver_modes ${receiver_modes_arg}' => ${rc}"
+        return ${rc}
     fi
     ### Put the list of configured decoding modes into the array receiver_modes_list[]
     local receiver_modes_list=( ${receiver_modes//:/ } ) 
@@ -1309,23 +1547,12 @@ function decoding_daemon() {
     ### The noise lines created at the end of each wspr cycle can be queued immediately here for upload to logs.wsprdemon.org
     local wsprdaemon_noise_queue_directory
     get_wsprdaemon_noise_queue_directory  "wsprdaemon_noise_queue_directory" ${receiver_name} ${receiver_band}
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: can't get noise file queue directory 'get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}' => ${ret_code}"
-        return ${ret_code}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: can't get noise file queue directory 'get_wsprdaemon_noise_queue_directory  wsprdaemon_noise_queue_directory ${receiver_name} ${receiver_band}' => ${rc}"
+        return ${rc}
     fi
     mkdir -p ${wsprdaemon_noise_queue_directory}
     wd_logger 1 "Queuing wsprdaemon noise files in ${wsprdaemon_noise_queue_directory}"
-
-    ### It is something of a hack to derive it this way, but it avoids adding another function
-    local wav_archive_dir
-    get_wav_archive_queue_directory  wav_archive_dir ${receiver_name} ${receiver_band}
-    local ret_code
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: can't get wav file queue directory 'get_wav_archive_queue_directory  wav_archive_dir  ${receiver_name} ${receiver_band}' => ${ret_code}"
-        return ${ret_code}
-    fi
-    wd_logger 1 "If ARCHIVE_WAV_FILES=\"yes\" is defined in the conf file, then wav files wll be archived to ${wav_archive_dir}"
 
     local rms_nl_adjust
     local fft_nl_adjust
@@ -1334,13 +1561,13 @@ function decoding_daemon() {
 
     local last_adc_overloads_count=-1     ### Remember the count from 2 minutes ago
 
-    ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
+    # ### Rather than the time and effort for altering the code to work on blocks of 12000 samples to get a 1 Hz quantization Gwynn suggested the alternative is simple scaling: multiply reported frequency for out-of-the-box GPS aided
     ### Kiwi by 12001.1/12000 that is 1.00009167. This is a frequency increase of 0.128 Hz at 1400 Hz and 0.147 Hz at 1600 Hz.
     ### So if  SPOT_FREQ_ADJ_HZ is not blank, then modify the frequency of each spot by that floating point HZ value.  SPOT_FREQ_ADJ_HZ defaults to +.1 Hz which is the audio frequency error of a Kiwi using its internal 66.6666 Mhz oscillator 
     local freq_adj_mhz=0
     if [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] ; then
         ### One could learn if the Kiwi is GPS controlled from the Kiwi's status page
-        wd_logger 1 "No frequency adjustment for this KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
+        wd_logger 2 "No frequency adjustment for this KA9Q RX888 or GPS controlled Kiwi '${receiver_name}'"
     elif [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ]]; then
         ### The default is to add 0.1 Hz to spot frequencies, or by the value of SPOT_FREQ_ADJ_HZ specified in the wsprdaemon.conf file
         local freq_adj_hz=${SPOT_FREQ_ADJ_HZ-.1}
@@ -1351,21 +1578,21 @@ function decoding_daemon() {
          wd_logger 1 " [[ ${receiver_name} =~ KA9Q || -n "${GPS_KIWIS-}"  && ${GPS_KIWIS} =~ ${receiver_name} ]] FAILED and [[ -n "${SPOT_FREQ_ADJ_HZ-.1}" ] FAILED so no frequency adjustment for this KIWI"
     fi
 
-    wd_logger 1 "Starting to search for raw or wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
+    wd_logger 1 "Starting to search for wav files from '${receiver_name}' tuned to WSPRBAND '${receiver_band}'"
     local decoded_spots=0             ### Maintain a running count of the total number of spots_decoded
     local old_wsprd_decoded_spots=0   ### If we are comparing the new wsprd against the old wsprd, then this will count how many were decoded by the old wsprd
 
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
-    cd ${recording_dir}
+    local decoding_dir=$(get_decoding_dir_path ${receiver_name} ${receiver_band})
+    cd ${decoding_dir}
     local old_kiwi_ov_count=0
 
     local my_daemon_pid=$(< ${DECODING_DAEMON_PID_FILE})
     local proc_file=/proc/${my_daemon_pid}/status
     local VmRSS_val=$(awk '/VmRSS/{print $2}' ${proc_file})
     local last_rss_epoch
-    wd_logger 1 "At start VmRSS_val=${VmRSS_val} for my PID ${my_daemon_pid} was found in ${PWD}/${DECODING_DAEMON_PID_FILE}"
+    wd_logger 2 "At start VmRSS_val=${VmRSS_val} for my PID ${my_daemon_pid} was found in ${PWD}/${DECODING_DAEMON_PID_FILE}"
     if [[ -n "${VM_RSS_LOG_FILENAME-}" ]]; then
-        wd_logger 1 "Logging VmRSS_val for my PID ${my_daemon_pid} found in ${PWD}/${DECODING_DAEMON_PID_FILE} and finding VmRSS in ${proc_file} and logging it to ${VM_RSS_LOG_FILENAME-}"
+        wd_logger 2 "Logging VmRSS_val for my PID ${my_daemon_pid} found in ${PWD}/${DECODING_DAEMON_PID_FILE} and finding VmRSS in ${proc_file} and logging it to ${VM_RSS_LOG_FILENAME-}"
         printf "${WD_TIME_FMT}: %8d\n" -1 ${VmRSS_val} > ${VM_RSS_LOG_FILENAME}
         last_rss_epoch=${EPOCHSECONDS}
     fi
@@ -1375,9 +1602,20 @@ function decoding_daemon() {
     local wav_file_list=()
     local wav_time_list=()
 
-    rm -f *.raw *.wav*
+    rm -f "*.wav*"
     shopt -s nullglob
-    while [[  -n "$(ls -A ${DECODING_CLIENTS_SUBDIR})" ]]; do    ### Keep decoding as long as there is at least one posting_daemon client
+    wd_logger 1 "Looking for decoding client directories in ${PWD}/${DECODING_CLIENTS_SUBDIR}"
+    while true; do
+        if [[ ! -d ${DECODING_CLIENTS_SUBDIR} ]]; then
+            wd_logger 1 "ERROR: while running in ${PWD} can't find expected dir ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
+            break;
+        fi
+        local posting_clients_list=( $(find ${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d) )
+        if (( ${#posting_clients_list[@]} == 0 )); then
+            wd_logger 1 "While running in ${PWD} can't find any posting_client subdirs in ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
+            break;
+        fi
+
         VmRSS_val=$(awk '/VmRSS/{print $2}' ${proc_file} )
         wd_logger 2 "My PID ${my_daemon_pid} VmRSS_val=${VmRSS_val}"
         if [[ -n "${VM_RSS_LOG_FILENAME-}" && $(( ${EPOCHSECONDS} - ${last_rss_epoch})) -ge 60  ]]; then
@@ -1386,24 +1624,52 @@ function decoding_daemon() {
             last_rss_epoch=${EPOCHSECONDS}
         fi
 
-        wd_logger 2 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
-        local ret_code
+        wd_logger 1 "Asking for a list of MODE:WAVE_FILE... with: 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'"
         local mode_seconds_files=""           ### This string will contain 0 or more space-seperated SECONDS:FILENAME_0[,FILENAME_1...] fields 
-        get_wav_file_list mode_seconds_files  ${receiver_name} ${receiver_band} ${receiver_modes} ${wav_archive_dir}
-        ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "Error ${ret_code} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
+        get_wav_file_list "mode_seconds_files"  ${receiver_name} ${receiver_band} ${receiver_modes} 
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "Error ${rc} returned by 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}'. 'sleep 1' and retry"
             sleep 1
             continue
         fi
         mode_wav_file_list=( ${mode_seconds_files} )        ### I tried to pass the name of this array to get_wav_file_list(), but I couldn't get 'eval...' to populate that array
         if [[ ${#mode_wav_file_list[@]} -le 0 ]]; then
-            wd_logger 2 "ERROR: get_wav_file_list() returned no error, but it unexpectadly has returned no lists.  So sleep 1 and retry"
+            wd_logger 1 "ERROR: get_wav_file_list() returned no error, but it unexpectadly has returned no lists.  So sleep 1 and retry"
             sleep 1
             continue
         fi
         wd_logger 1 "The call 'get_wav_file_list mode_wav_file_list ${receiver_name} ${receiver_band} ${receiver_modes}' returned lists: '${mode_wav_file_list[*]}'"
-        
+        if [[ "${TEST_RECORDING_DAEMON-no}" == "yes" ]]; then
+            local mode_seconds
+            local seconds_files
+            local index
+            wd_logger 2 "get_wav_file_list() returned ${#mode_wav_file_list[@]} wspr packet files lists"
+            for (( index=0; index < ${#mode_wav_file_list[@]}; ++index )); do
+                local mode_seconds="${mode_wav_file_list[index]%%:*}"
+                local mode_minutes=$(( mode_seconds / 60 ))
+                local mode_files_string=${mode_wav_file_list[index]#*:}
+                local mode_files_list=( ${mode_files_string//,/ } )
+                if (( ${#mode_files_list[@]} != mode_minutes )); then
+                    wd_logger 1 "ERROR:  mode_fileslist[${#mode_files_list[@]}] != mode_minutes=${mode_minutes}, so skip to next mode"
+                    continue
+                fi
+                local file_minutes_list=()
+                local one_minutes_list=()
+                local minute
+                local index2
+                for (( index2=0; index2 < ${#mode_files_list[@]}; ++index2 )) ; do
+                    local one_minute_file=${mode_files_list[index2]##*/}
+                    one_minute_file=${one_minute_file%00Z_*}
+                    local file_minute=${one_minute_file:11:2}
+                    one_minutes_list+=( ${file_minute} )
+                    file_minutes_list+=( ${one_minute_file} )
+                done
+                wd_logger 1 "We have been given a list of one minute files which together create a ${mode_minutes} minute wspr pkt of minutes '${one_minutes_list[*]}': ${file_minutes_list[*]}"
+            done
+            wd_logger 1 "Report of retuned lists is complete. Go back and call get_wav_file_list() to get new lists"
+            continue
+        fi
+ 
         ### We append the count of the A/D overload events in the last 2 minutes to the ADC_OVERLOADS_LOG_FILE_NAME file and add them to the spots reported
         local adc_overloads_count=0        ### Report by radiod and KiwiSDR of the number of OVs since radiod started, a 64 bit number
         local ka9q_rf_gain_float="20.0"   ### Report by radiod of setting it's AGC selected
@@ -1415,8 +1681,7 @@ function decoding_daemon() {
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
 
             ka9q_get_current_status_value adc_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
                 adc_overloads_count=0   ## Make sure this is an integer
             else
@@ -1431,136 +1696,138 @@ function decoding_daemon() {
 
             local channel_rf_gain_value
             ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "rf gain"   ### There is also a 'rf gain cal' value in the status file
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 channel_rf_gain_value="-99.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error rf_gain='${channel_rf_gain_value}'"
             fi
             ka9q_rf_gain_float=${channel_rf_gain_value/dB*/}      ### remove the trailing 'dB' returned by metadump
             ka9q_rf_gain_float=${ka9q_rf_gain_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}' => ka9q_rf_gain_float='${ka9q_rf_gain_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}' => ka9q_rf_gain_float='${ka9q_rf_gain_float}'"
 
             local channel_adc_dbfs_value
             ka9q_get_current_status_value "channel_adc_dbfs_value" ${receiver_ip_address} ${receiver_freq_hz} "IF pwr"
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 channel_adc_dbfs_value="-99.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error adc_dbfs='${channel_adc_dbfs_value}'"
             fi
             ka9q_adc_dbfs_float=${channel_adc_dbfs_value/dB*/}      ### remove the trailing 'dB' returned by metadump
             ka9q_adc_dbfs_float=${ka9q_adc_dbfs_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}' => ka9q_adc_dbfs_float='${ka9q_adc_dbfs_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}' => ka9q_adc_dbfs_float='${ka9q_adc_dbfs_float}'"
 
             local channel_n0_value
             ka9q_get_current_status_value "channel_n0_value" ${receiver_ip_address} ${receiver_freq_hz} "N0"
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 channel_n0_value="-999.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error N0='${channel_n0_value}'"
             fi
             ka9q_n0_float=${channel_n0_value/dB*/}   ### remove the trailing 'dB/Hz' returned by metadump
             ka9q_n0_float=${ka9q_n0_float// /}     ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}' => ka9q_n0_float='${ka9q_n0_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}' => ka9q_n0_float='${ka9q_n0_float}'"
 
             local channel_gain_value
             ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "gain"
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 channel_gain_value="60" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
             fi
-            ka9q_channel_gain_float=${channel_gain_value/dB*/}   ### remove the trailing ' dB' returned by metadump
-            ka9q_channel_gain_float=${ka9q_channel_gain_float// /}   ### remove spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' => ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
+            ka9q_channel_gain_float=${channel_gain_value% dB}       ### remove the trailing ' dB' returned by metadump
+            ka9q_channel_gain_float=${ka9q_channel_gain_float##* }   ### remove everything through the last space, which should leave the float
+            wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' which we parse into ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
 
             local channel_output_level_value    ### Report of The output level to the pcm stream and thus ot the wav files.
             ka9q_get_current_status_value "channel_output_level_value" ${receiver_ip_address} ${receiver_freq_hz} "output level"
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 channel_output_level_value="60 dB" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_output_level_value}'"
             fi
             ka9q_channel_output_float=${channel_output_level_value/dB*/}   ### removed the ' db" returned by metadump
             ka9q_channel_output_float=${ka9q_channel_output_float// /}    ### remove the spaces
-            wd_logger 1 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
+            wd_logger 2 "ka9q_get_current_status_value() => channel_output_level_value='${channel_output_level_value}' => ka9q_channel_output_float='${ka9q_channel_output_float}'"
 
             local first_mode_files=${mode_wav_file_list[0]}     ### each entry has the form:  <MODE_SECONDS>:<WAV_FILE_0>,<WAV_FILE_1>[,<WAV_FILE_.>]
                   first_mode_files=${first_mode_files#*:}        ### Chop off the  <MODE_SECONDS>:
             local first_mode_wav_files_list=( ${first_mode_files//,/ } )
             local newest_one_minute_wav_file=${first_mode_wav_files_list[-1]}
 
-            local sox_stats_list=( $(sox ${newest_one_minute_wav_file} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
-            local sox_peak_dBFS_value=${sox_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
-            local sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc ) ### Find the peak RMS level in the last minute wav file and adjust the channel gain so the peak level doesn'
-            wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
+            local sox_peak_dBFS_value=0
+            local sox_channel_level_adjust=0
+            if [[ ! -f ${newest_one_minute_wav_file} ]]; then
+                wd_logger 1 "ERROR: The newest file '${newest_one_minute_wav_file}' in the list of files in '${mode_wav_file_list[*]}' doesn't exist"
+            else
+                sox ${newest_one_minute_wav_file} -n stats >& sox-stats.log
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: 'sox ${newest_one_minute_wav_file}' => ${rc}:\n$(<sox-stats.log)"
+                else
+                    local sox_stats_list=( $(  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' sox-stats.log ) )
+                    if (( ${#sox_stats_list[@]} != 3 )); then
+                        wd_logger 1 "ERROR: awk didn't extract the expected three dB values from sox-stats.log:\n$(<sox-stats.log)"
+                    else
+                        sox_peak_dBFS_value=${sox_stats_list[0]}
+                        sox_channel_level_adjust=$(echo "scale=0; (${SOX_OUTPUT_DBFS_TARGET} - ${sox_peak_dBFS_value})/1" | bc )
+                    fi
+                fi
+            fi
+            if (( sox_channel_level_adjust != 0 )); then
+                wd_logger 1 "sox reports the peak dBFS value of the most recent 2 minute wave file '${newest_one_minute_wav_file##*/}' is ${sox_peak_dBFS_value}, so sox suggests a ${sox_channel_level_adjust} dB adjustment in channel gain"
+            fi
  
             local ka9q_status_ip=""
             ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
             rc=$?
             ka9q_status_ip="${ka9q_status_ip// /}"     ### Removes any leading or trailing spaces present in the status message
-            if [[ ${rc} -ne 0 ]]; then
+            if (( rc )); then
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so can't find ka9q_status_ip => can't change output gain with 'tune'"
             elif ! wd_ip_is_valid "${ka9q_status_ip}" && ! [[ "${ka9q_status_ip}" =~ \.local:[0-9] ]]; then
                 wd_logger 1 "ERROR: got invalid IP address ka9q_get_current_status_value() => ka9q_status_ip='${ka9q_status_ip}', so can't change output gain with 'tune'"
             else
-                wd_logger 1 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
+                wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
                 local ka9q_channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
+                local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} | grep "Sample Encoding: 32-bit Floating Point PCM" )
                 local channel_level_adjust
-                if [[ -n "${last_adc_overloads_count}" && ${last_adc_overloads_count} -eq -1 ]]; then
+                if (( last_adc_overloads_count == -1 )); then
                     ### We are processing the first WSPR packet
-                    wd_logger 1 "Applying the full ka9q_channel_level_adjust channel gain adjustment channel_level_adjust=${ka9q_channel_level_adjust} at startup of WD"
-                    channel_level_adjust=${ka9q_channel_level_adjust}
+                    if [[ -n "${wav_file_is_float}" ]]; then
+                        channel_level_adjust=$(( - $(printf "%.0f" ${ka9q_channel_gain_float}) ))
+                        wd_logger 1 "This is the first decode of 32 bit float wav files, so change the channel gain by ${channel_level_adjust} dB from its radiod setting of ${channel_gain_value} dB so gain is 0  dB"
+                    else
+                        wd_logger 1 "Applying the full ka9q_channel_level_adjust channel gain adjustment channel_level_adjust=${ka9q_channel_level_adjust} at startup of WD"
+                        channel_level_adjust=${ka9q_channel_level_adjust}
+                    fi
                 else
                     ### We are processing the second or subsequent WSPR packet
-                    wd_logger 1 "radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
-                    if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
-                        channel_level_adjust=${sox_channel_level_adjust}
-                        wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
+                    if [[ -n "${wav_file_is_float}" ]]; then
+                        wd_logger 1 "This is is the second or later float file decode leave the gain at 0"
+                        channel_level_adjust=0     ### Signal that channel gain should be left at the '0' gain programed in the first cycle
+                    elif [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
+                         wd_logger 1 "This is is the second or later int file and gain changes on this WWV/CHU channel '${receiver_band}' are disabled"
+                          channel_level_adjust=0
                     else
-                        channel_level_adjust=${ka9q_channel_level_adjust}
-                        wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
-                    fi
-                    if [[ ${channel_level_adjust} -gt 0 && ${channel_level_adjust#-} -gt ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX} ]]; then
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so limiting gain increase to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}"
-                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}
-                    elif [[ ${channel_level_adjust} -lt 0 && ${channel_level_adjust#-} -lt ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} ]]; then
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} up is greater than the max KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}, so limiting gain decrease to ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}"
-                        channel_level_adjust=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX}
-                    else
-                        wd_logger 1 "channel_level_adjust=${channel_level_adjust} is within the range of ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX} to ${KA9Q_CHANNEL_GAIN_ADJUST_UP_MAX}, so apply it"
+                        wd_logger 2 "For this second or later int file decode radiod says adjust channel gain by ${ka9q_channel_level_adjust} dB, while sox says adjust by ${sox_channel_level_adjust} dB"
+                        if [[ ${KA9Q_PEAK_LEVEL_SOURCE} == "WAV" ]]; then
+                            channel_level_adjust=${sox_channel_level_adjust}
+                            wd_logger 1 "Using peak RMS level reported by sox to specify the desired channel gain change to be ${channel_level_adjust}"
+                        else
+                            channel_level_adjust=${ka9q_channel_level_adjust}
+                            wd_logger 1 "Using peak RMS level reported by 'metadump' to specify the desired channel gain change to be ${channel_level_adjust}"
+                        fi
+                        local limited_adjust_value=${channel_level_adjust}
+                        if (( limited_adjust_value != 0 )); then
+                            if (( limited_adjust_value < ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN--10} )); then limited_adjust_value=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MIN--10}; fi
+                            if (( limited_adjust_value > ${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX-10}  )); then limited_adjust_value=${KA9Q_CHANNEL_GAIN_ADJUST_DOWN_MAX-10};  fi
+                        fi
+                        if (( limited_adjust_value != channel_level_adjust )); then
+                            wd_logger 1 "Limiting the channel_adjust value by changing it from ${channel_level_adjust} to ${limited_adjust_value}"
+                            channel_level_adjust=${limited_adjust_value}
+                        fi
                     fi
                 fi
-                local new_channel_level=$(echo "scale=0; (${ka9q_channel_gain_float} + ${channel_level_adjust} )/1" | bc)
-                wd_logger 1 "A channel gain adjustment of ${channel_level_adjust} dB from ${ka9q_channel_gain_float} dB to ${new_channel_level} dB is needed"
-
-                local change_channel_gain="yes"                    ### By default Channel gain AGC is applied to all channels at the end of each WSPR cycle, including to the WWV/CHU channels at the end of the first cycle
-                if [[  ${last_adc_overloads_count} -ne -1 ]]; then
-                    ### This is WSPR cycle #2 or later
-                    if [[  ${KA9Q_CHANNEL_GAIN_ADJUSTMENT_ENABLED-yes} == "no" ]]; then
-                         wd_logger 1 "Changes on all channels are disabled after the first WSPR cycle"
-                         change_channel_gain="no"
-                    fi
-                    if [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
-                       if [[ ${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no} == "no" ]]; then
-                           if [[ $( echo "${sox_peak_dBFS_value} > ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}" | bc ) == 1 ]]; then
-                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled, but the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} is greater than the peak allowed value ${KA9Q_WWV_CHANNEL_MAX_DBFS--6.0}, so reduce the gain"
-                            else
-                                wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are disabled after the first WSPR cycle and the measured sox_peak_dBFS_value=${sox_peak_dBFS_value} shows that the wav file isn't overranging"
-                                change_channel_gain="no"
-                           fi
-                       else
-                           wd_logger 1 "Changes on this WWWV/CHU channel '${receiver_band}' are enabled after the first WSPR cycle becasue WD.conf contains the line:  KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLE='${KA9Q_WWV_CHANNEL_GAIN_ADJUSTMENT_ENABLED-no}"
-                       fi
-                    fi
-                fi
-                if [[ ${change_channel_gain} == "no" ]]; then
-                    wd_logger 1 "Channel gain changes are disabled"
-                else
-                    wd_logger 1 "Changing channel gain to ${new_channel_level}"
-                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}
-                    rc=$?
-                    if [[ ${rc} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_level}i ' => ${rc}"
+                if (( channel_level_adjust != 0 )); then
+                    local ka9q_channel_gain_int=$(printf "%.0f" ${ka9q_channel_gain_float})
+                    local new_channel_gain_dB=$(( ka9q_channel_gain_int + channel_level_adjust ))
+                    wd_logger 1 "Changing channel gain by ${channel_gain_value} dB from ${channel_gain_value} to ${new_channel_gain_dB}"
+                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}i ' => ${rc}"
                     fi
                 fi
             fi
@@ -1569,8 +1836,7 @@ function decoding_daemon() {
             ### Monitor a KiwiSDR
             wd_logger 1 "Getting the new overload count value from the Kiwi '${receiver_name}'"
             get_kiwirecorder_ov_count  adc_overloads_count ${receiver_name}           ### here I'm reusing current_kiwi_ov_count since it also equals the number of OV events since the kiwi started
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
+            rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: 'get_kiwirecorder_ov_count  adc_overloads_count ${receiver_name}'  => ${rc}"
             else
                 wd_logger 1 "'get_kiwirecorder_ov_count  adc_overloads_count ${receiver_name}'  => ${rc}"
@@ -1582,13 +1848,13 @@ function decoding_daemon() {
         ### Calculate overloads which occured during this WSPR cycle
         local new_sdr_overloads_count=0
         if [[ -z "${last_adc_overloads_count}" || ${last_adc_overloads_count} -eq -1 ]]; then
-            wd_logger 1 "This is the first overloads count after startup, so just set last_adc_overloads_count equal to adc_overloads_count=${adc_overloads_count}"
+            wd_logger 2 "This is the first overloads count after startup, so just set last_adc_overloads_count equal to adc_overloads_count=${adc_overloads_count}"
             new_sdr_overloads_count=0
         else
             declare  MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT=${MAX_ACCEPTABLE_ADC_OVERLOADS_COUNT-2147483646}          ### The Timescale field can't store integers larger than this
 
-            new_sdr_overloads_count=$(( ${adc_overloads_count} - ${last_adc_overloads_count} ))
-            wd_logger 1 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
+            new_sdr_overloads_count=$(( adc_overloads_count - last_adc_overloads_count ))
+            wd_logger 2 "adc_overloads_count '${adc_overloads_count}' - last_adc_overloads_count '${last_adc_overloads_count}' =>  new_sdr_overloads_count '${new_sdr_overloads_count}'"
             if [[ ${new_sdr_overloads_count} -lt 0 ]]; then
                 wd_logger 1 "new_sdr_overloads_count '${new_sdr_overloads_count}' is less than 0, so count has rolled over and just use {adc_overloads_count '${adc_overloads_count}'"
                 new_sdr_overloads_count=${adc_overloads_count}
@@ -1601,7 +1867,8 @@ function decoding_daemon() {
         local ov_returned_files=${mode_wav_file_list[0]}
         local ov_comma_separated_files=${ov_returned_files#*:}        ### Chop off the SECONDS: leading the list
         local ov_wav_file_list=( ${ov_comma_separated_files//,/ } )
-        local ov_first_input_wav_filename="${ov_wav_file_list[0]:2:6}_${ov_wav_file_list[0]:9:4}.wav"
+        local ov_wav_file=$(basename ${ov_wav_file_list[0]})
+        local ov_first_input_wav_filename="${ov_wav_file:2:6}_${ov_wav_file:9:4}.wav"
 
         if (( ${adc_overloads_print_line_count} % ${ADC_LOG_HEADER_RATE-16} == 0)) ; then
              printf "DATE_TIME          OV_COUNT  NEW_OVs  RF_GAIN     ADC_DBFS        N0   CH_DBFS   CH_GAIN\n"  >> ${ADC_OVERLOADS_LOG_FILE_NAME}
@@ -1614,26 +1881,28 @@ function decoding_daemon() {
 
         last_adc_overloads_count=${adc_overloads_count}
 
+        ### Decode each of the one or more lists of MODE:file2...., e.g. W2:file1.wav,file2.wav then F5:file1.wav,file2.wav,file3.wav,...
         local returned_files
         for returned_files in ${mode_wav_file_list[@]}; do
             local returned_seconds=${returned_files%:*}
             local returned_minutes=$(( returned_seconds / 60 ))
             local comma_separated_files=${returned_files#*:}
             local wav_files=${comma_separated_files//,/ }
-            wav_file_list=( ${wav_files} )
-            wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_file_list[@]}") )
+            local wav_files_list=( ${wav_files} )
 
-            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_file_list[*]} files '${wav_files}'"
+            wd_logger 1 "For second ${returned_seconds} seconds == ${returned_minutes} minutes got list of ${#wav_files_list[*]} files '${wav_files_list[*]##*/}'"
 
+            ### This is a block of diagnostic code 
+            local  wav_time_list=()                         ### I couldn't get this to work:  $( IFS=$'\n'; cut -c 12-13 <<< "${wav_files_list[@]}") )
             if [[ "${CHECK_WAV_FILES-yes}" == "yes" ]]; then
-                ### This is a block of diagnostic code 
                 local found_all_files="yes"
                 local index
-                for (( index=0; index < ${#wav_file_list[@]}; ++index )); do
-                    local file_to_test=${wav_file_list[${index}]}
-                    wav_time_list+=( ${file_to_test:11:2} )
+                for (( index=0; index < ${#wav_files_list[@]}; ++index )); do
+                    local file_to_test=${wav_files_list[${index}]}
+                    local file_name=${file_to_test##*/}
+                    wav_time_list+=( ${file_name:11:2} )
                     if ! [[ -f ${file_to_test} ]]; then
-                        wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_file_list[${index}] does not exist"
+                        wd_logger 1 "ERROR: minute ${wav_time_list[${index}]} file ${file_to_test} from wav_files_list[${index}] does not exist"
                         found_all_files="no"
                     fi
                 done
@@ -1644,19 +1913,27 @@ function decoding_daemon() {
             fi
 
             local wd_string="${wav_time_list[*]}"
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${comma_separated_files}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[@]##*/}"
             ### End of diagnostic code
 
             if [[ ${receiver_modes_list[0]} =~ ^[IJK] ]]; then
                 wd_logger 1 "We are configured to only record and archive IQ files"
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
-                if [[ ${#wav_file_list[@]} -ne 1 ]]; then
-                    wd_logger 1 "ERROR: IQ recording should return only one 1 minute long file at a time"
+                if (( ${#wav_files_list[@]} != 1 )); then
+                    wd_logger 1 "ERROR: IQ mode records one one1 minute file at a time, but we have been given a list of ${#wav_files_list[@]} wav files. So we will be processing only the first of these:\n${wav_files_list[*]}"
+                else
+                    wd_logger 1 "Compresing and archiving ${wav_files_list[0]}"
                 fi
-                ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
-                local iq_file_name=${wav_file_list[0]/_usb.wav/_iq.wav}
-                mv ${wav_file_list[0]} ${iq_file_name}
+
+                local iq_file_name
+                if [[  ${wav_files_list[0]} =~ _usb.wav ]]; then
+                    ### wd-record names all wav files as '_usr.wav' (Upper Sideband), but in this mode the wav file contains IQ sameples
+                    iq_file_name=${wav_files_list[0]/_usb.wav/_iq.wav}
+                    mv ${wav_files_list[0]} ${iq_file_name}
+                else
+                    iq_file_name="${wav_files_list[0]}"
+                fi
                 local wav_file_stat_list=( $(sox ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
                 local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
                 local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
@@ -1664,7 +1941,7 @@ function decoding_daemon() {
                 local wav_file_RMS_dBFS_value=${wav_file_stats_list[1]}    ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
                 local wav_file_RMS_Trough_value=${wav_file_stats_list[2]}  ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
 
-                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} 16 bit samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
+                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
 
                 local expected_samples
                 case ${receiver_modes_list[0]} in
@@ -1684,23 +1961,23 @@ function decoding_daemon() {
                         ;;
                 esac
 
-                if [[ ${wav_file_samples} -ne ${expected_samples} ]]; then
+                if (( wav_file_samples != expected_samples )); then
                     wd_logger 1 "ERROR: IQ file ' ${iq_file_name}' has ${wav_file_samples} samples, not the expected ${expected_samples} samples, so flush it;\n$(sox  ${iq_file_name} -n stat 2>&1 )"
                     wd_rm ${iq_file_name}
                 else
-                    wd_logger 2 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
-                    queue_wav_file ${iq_file_name} ${wav_archive_dir}
-                    rc=$?
-                    if [[ ${rc} -eq 0 ]]; then
-                        wd_logger 1 "Archived wav file ${iq_file_name}"
+                    wd_logger 1 "IQ file ${iq_file_name} has ${wav_file_samples} samples"
+                    archive_wav_file ${iq_file_name} ${receiver_name} ${receiver_band}
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: 'archive_wav_file ${iq_file_name} ${receiver_name} ${receiver_band}' => ${rc}"
                     else
-                        wd_logger 1 "ERROR: 'queue_wav_file ${iq_file_name}' => $?"
+                        wd_logger 1 "Archived wav file ${iq_file_name}  ${receiver_name} ${receiver_band}"
                     fi
                 fi
+                ### Go back and check for other modes
                 continue
             fi
 
-            local wav_file_freq_hz=${wav_file_list[0]#*_}   ### Remove the year/date/time
+            local wav_file_freq_hz=${wav_files_list[0]##*Z_}   ### Remove the year/date/time
             wav_file_freq_hz=${wav_file_freq_hz%_*}         ### Remove the _usb.wav
 
             local sox_rms_noise_level_float="-999.9"
@@ -1709,40 +1986,81 @@ function decoding_daemon() {
             local processed_wav_files="no"
             local sox_signals_rms_fft_and_overload_info=""  ### This string will be added on to the end of each spot and will contain:  "rms_noise fft_noise ov_count"
             ### The 'wsprd' and 'jt9' commands require a single wav file, so use 'sox to create one from the list of one minute wav files
-            local decoder_input_wav_filename="${wav_file_list[0]:2:6}_${wav_file_list[0]:9:4}.wav"
+            local first_wav_file_name=${wav_files_list[0]##*/}
+            local decoder_input_wav_filename="${first_wav_file_name:2:6}_${first_wav_file_name:9:4}.wav"
             local decoder_input_wav_filepath=$(realpath ${decoder_input_wav_filename})
 
             local sox_effects="${SOX_ASSEMBLE_WAV_FILE_EFFECTS-}"
 
-            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file using '${sox_effects}' effects"
+            wd_logger 1 "sox is creating a 2/5/15/30 minute long wav file ${decoder_input_wav_filepath} using '${sox_effects}' effects"
 
             ### Concatenate the one minute files to create a single 2/5/15/30 minute file
+            ### Since WD 3.3.x pcmrecord may be reording 1 minute 32 bit float files, 
+            ### so add '-b 16 -e signed-integer' to instruct sox to alway output a 16 bit PCM file which is the format accepted by wsprd and jt9
+            ### from: chatgbt:  sox --combine concatenate file1.wav file2.wav -b 16 -e signed-integer output.wav
+
+            ### Get stats on the input files
             local rc
-            sox ${wav_file_list[@]} ${decoder_input_wav_filepath} ${sox_effects} >& ${SOX_LOG_FILE}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sox ${wav_file_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
+            sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}
+            rc=$? ; if (( rc )); then
+                 wd_logger 1 "ERROR: while getting stats for the one minute files with 'sox --combine concatenate ${wav_files_list[@]} -n stat >& ${SOX_LOG_FILE}' => ${rc}:\n$(< ${SOX_LOG_FILE})"
+             fi
+            local max_input_float_amplitude=$(awk  '/Maximum amplitude:/{print $3}' ${SOX_LOG_FILE})
+            local gain_in_db    ### In case we can't get the gain from sox
+            local sox_normalization_dBFS=${SOX_NORMALIZATION_DBFS--1}        ### Default -1 dBFS creates 16 bit int wav file with max value 0.891251
+            local sox_normalization_linear=$(bc -l <<< "scale = 6; e(${sox_normalization_dBFS}/20 * l(10))")
+            if ! is_a_float "${max_input_float_amplitude}" ; then
+                gain=0
+                wd_logger 1 "ERROR: can't get 'Maximum amplitude' of the input wav files from ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
+            elif [[ "${max_input_float_amplitude}" =~ ^-?0+(\.0+)?$ ]]; then
+                gain=0
+                wd_logger "ERROR: ${max_input_float_amplitude} is an int or float zero in ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
+            else
+                ### We are certain that ${max_input_float_amplitude} is not a zero
+                local gain_in_db=$(bc -l <<< "scale = 1; 20 * l( ${sox_normalization_linear} / ${max_input_float_amplitude} ) / l(10)")
+                wd_logger 1 "The 'Maximum amplitude' of the input files is ${max_input_float_amplitude}, so sox will automatically apply ${gain_in_db} dB gain while creating the 16bit PCM wav file"
+            fi
+            wd_logger 2 "Finished getting AGC stats"
+
+            ### Create a 16 bit int wav file from a list of input int or float wav files and normalize the output to -1 dBFS
+            ### Replace the '-' with '_' in the print string or wd_logger's echo command gets confused by them
+            wd_logger 1 "Creating a single 2 minute wav file with: 'sox __combine concatenate ${wav_files_list[@]} _b 16 _e signed_integer ${decoder_input_wav_filepath} __norm=${sox_normalization_dBFS}  ${sox_effects}'"
+
+            sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} --norm=${sox_normalization_dBFS}  ${sox_effects} >& ${SOX_LOG_FILE}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'sox ${wav_files_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
                     local rc1
                     wd_rm ${decoder_input_wav_filepath}
-                    rc1=$?
-                    if [[ ${rc1} -ne 0 ]]; then
+                    rc1=$? ; if (( rc1 )); then
                         wd_logger 1 "ERROR: after sox returned error ${rc}, then 'wd_rm ${decoder_input_wav_filepath} returned error ${rc1}"
                     fi
                 fi
                 sleep 1
                 continue
             fi
-            wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_file_list[@]} one minute wav files"
+            wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_files_list[@]} one minute wav files"
+            wd_logger 2 "     $(sox ${decoder_input_wav_filepath} -n stats 2>&1 )"
 
-            ### Get statistics about the newly created wav file
+            ### Get statistics about the newly created wav file directly from sox
             sox ${decoder_input_wav_filepath} -n stats >& ${SOX_LOG_FILE}
             local sox_peak_level_db_float=$(awk '/^Pk lev/{print $NF}' ${SOX_LOG_FILE})
             rc=$( echo "${sox_peak_level_db_float} > ${SOX_MAX_PEAK_LEVEL}" | bc )
-            if [[ ${rc} -eq 1 ]]; then
+            if (( rc == 1 )); then
                 wd_logger 1 "ERROR: sox reports a wav file overrange: $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
             else
                 wd_logger 1 "sox created a wav file with these characteristics:  $( awk '/^Pk lev/ || /RMS/ { printf "%s, ", $0 }' ${SOX_LOG_FILE})"
+            fi
+
+            ## Get statistics about the max level info directly from the input wav files
+            local python_peak_level_linear_float=0
+            local python_peak_level_dBFS_float=0
+            python3 ${GET_PEAK_WAV_SAMPLE_CMD} ${wav_files_list[@]} >& ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Dump all output to a log file so it can be printed out if there is an error
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'python3 ${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' => ${rc}:\n$(<${GET_PEAK_WAV_SAMPLE_LOG_FILE})"
+            else
+                { read python_peak_level_linear_float; read python_peak_level_dBFS_float; } < ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Very efficient way to extract those two lines into variables
+                wd_logger 1 "python3 '${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' reported python_peak_level_linear_float=${python_peak_level_linear_float}, python_peak_level_dBFS_float=${python_peak_level_dBFS_float}"
             fi
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
@@ -1761,13 +2079,12 @@ function decoding_daemon() {
                 fi
                 local max_job_wait_secs=${DECODE_CPU_MAX_WAIT_SECS-60}   ### Proceed with decoding after 60 seconds whether or not there is a free CPU
                 claim_cpu ${max_running_decodes} ${max_job_wait_secs}
-                rc=$?
-                if [[ ${rc} -eq 0 ]]; then
-                    got_cpu_semaphore="yes"
-                    wd_logger 1 "Got semaphore and so can start decoding"
-                else
+                rc=$? ; if (( rc )); then
                     got_cpu_semaphore="no"
                     wd_logger 1 "ERROR: 'claim_cpu ${max_running_decodes} ${max_job_wait_secs}' => ${rc}, but start decoding anyway"
+                else
+                    got_cpu_semaphore="yes"
+                    wd_logger 1 "Got semaphore and so can start decoding"
                 fi
             fi
 
@@ -1800,25 +2117,32 @@ function decoding_daemon() {
 
                 local start_time=${SECONDS}
                 decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}" "${wsprd_spreading_flags}"
-                local ret_code=$?
+                rc=$?
 
                 rm  ${decoder_input_wav_filename}
                 cd - >& /dev/null
                 ### Back to recording directory
 
-                if [[ ${ret_code} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${ret_code}"
+                if (( rc )); then
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${rc}"
                 else
                     if [[ ! -s ${decode_dir}/ALL_WSPR.TXT.new ]]; then
                         wd_logger 1 "wsprd found no spots"
                     else
-                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
+                        wd_logger 1 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots"
+                        wd_logger 2 "wsprd decoded $(wc -l < ${decode_dir}/ALL_WSPR.TXT.new) spots:\n$(< ${decode_dir}/ALL_WSPR.TXT.new)"
                         awk -v pkt_mode=${returned_minutes} '{printf "%s %s\n", $0, pkt_mode}' ${decode_dir}/ALL_WSPR.TXT.new  >> decodes_cache.txt                       ### Add the wspr pkt mode (== 2 or 15 minutes) to each ALL_WSPR.TXT spot line
                     fi
 
-                    local sdr_noise_level_adjust_float=""
-                    if [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
-                        sdr_noise_level_adjust_float=$( echo "scale=1; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1" | bc )
+                    local sdr_noise_level_adjust_float=0       ## This must be zero or a positive value
+                    if [[ -n "${python_peak_level_dBFS_float}" ]]; then
+                        ### When the one minute wav files are floats, then radiod was set to 0 dB gain and sox was configured to normalize the levels by (python_peak_level_dBFS_float - 1) 
+                        ### So adjust the levels by how much the normalization gain differs from the +60 dB gain assumed by the calculate_nl_adjustments()
+                        sdr_noise_level_adjust_float=$( echo "scale=2; ( -(${python_peak_level_dBFS_float})  - 60  - 1)/1.0" | bc )
+                        wd_logger 1 "Adjust the FFT/C2 and RMS data by ${sdr_noise_level_adjust_float} dB to compensate for the normalization by sox of the decoded wav file"
+                    elif [[ "${ka9q_channel_gain_float}" != "${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}" ]]; then
+                        ### the one minute wav files are ints
+                        sdr_noise_level_adjust_float=$( echo "scale=2; (${ka9q_channel_gain_float} - ${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT})/1.0" | bc )
                         wd_logger 1 "Adjust the FFT/C2 and RMS data by (ka9q_channel_gain_float=${ka9q_channel_gain_float} - KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT-${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}) = ${sdr_noise_level_adjust_float}"
                     fi
 
@@ -1827,18 +2151,25 @@ function decoding_daemon() {
                     ###     'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'        'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB'       'Pk lev dB'  'RMS lev dB'  'RMS Pk dB'  'RMS Tr dB      RMS_noise C2_noise  New_overload_events'
                     local c2_filename="${decode_dir}/000000_0001.c2" ### -c instructs wsprd to create the C2 format file "000000_0001.c2"
                     if [[ ! -f ${C2_FFT_CMD} ]]; then
-                        wd_logger 0 "Can't find the '${C2_FFT_CMD}' script"
-                        exit 1
+                        wd_logger 1 "ERROR: Can't find the '${C2_FFT_CMD}' script"
+                        if [[ ${got_cpu_semaphore} == "yes" ]]; then
+                            free_cpu
+                            rc=$? ; if (( rc )); then
+                            wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since we are aborting decoding because '${C2_FFT_CMD}' doesn't exist"
+                        else
+                            wd_logger 1 "Put cpu_busy semaphore now that decoding is done"
+                            fi
+                        fi
+                        sleep 1
+                        return 1
                     fi
                     local c2_fft_noise_level_float
-                    local ret_code
                     nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
-                    ret_code=$?
-                    if [[ ${ret_code} -eq 0 ]]; then
-                        c2_fft_noise_level_float=$(< ${c2_filename}.out)
-                   else
-                        wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${ret_code}:\n$(< ${c2_filename}.stderr)"
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${rc}:\n$(< ${c2_filename}.stderr)"
                         c2_fft_noise_level_float="0.0"
+                    else
+                        c2_fft_noise_level_float=$(< ${c2_filename}.out)
                     fi
                     fft_noise_level_float=$(bc <<< "scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};(var * 100)/100")
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
@@ -1850,9 +2181,16 @@ function decoding_daemon() {
                     wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
  
                     get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
-                    ret_code=$?
-                    if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level_float rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${ret_code}"
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR:  'get_rms_levels  sox_rms_noise_level_float rms_line ${decoder_input_wav_filename} ${rms_nl_adjust}' => ${rc}"
+                        if [[ ${got_cpu_semaphore} == "yes" ]]; then
+                            free_cpu
+                            rc=$? ; if (( rc )); then
+                            wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since we are aborting decoding because of a sox error"
+                        else
+                            wd_logger 1 "Put semaphore now that decoding is done"
+                            fi
+                        fi
                         return 1
                     fi
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
@@ -1901,11 +2239,9 @@ function decoding_daemon() {
                     wd_logger 2 "Found last spot previously decoded which is found in file '${decode_dir_path}/fst4_decodes.dat':\n${old_fst4_decodes_dat_last_spot}"
                 fi
 
-                local rc
                 local start_time=${SECONDS}
                 ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc}"   ### This will be logged in the './F_xxx' sub directory
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
@@ -1917,17 +2253,16 @@ function decoding_daemon() {
                 fi
                 local rc1
                 wd_rm ${decode_dir_path}/${decoder_input_wav_filename}
-                rc1=$?
-                if [[ ${rc1} -ne 0 ]]; then
+                rc1=$? ; if (( rc1 )); then
                     wd_logger 1 "ERROR: 'wd_rm ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc1}"
                 fi
 
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${ret_code}"
+                if (( rc )); then
+                    wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${rc}"
                 else
                     ### jt9 succeeded 
                     if [[ ! -s ${decode_dir_path}/decoded.txt ]]; then
-                        wd_logger 1 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
+                        wd_logger 2 "FST4W found no spots after $(( SECONDS - start_time )) seconds"
                     else
                         ### jt9 found spots
                         local spot_date="${decoder_input_wav_filename:0:6}"
@@ -1935,7 +2270,7 @@ function decoding_daemon() {
                         local pkt_mode=$(( ${returned_minutes} + 1 ))  ### FST4W packet length in minutes reported to WD are 'packet_minutes + 1', i.e. 3 => FST4W-120,  6 => FST4W-300, ...
                         if [[ -n "${sox_signals_rms_fft_and_overload_info}" ]]; then
                             ### This wav was processed by wsprd, so 'wsprd' created rms_noise, fft_noise and ov_count data.  But the mode field must be incremented to mark this as an FST4W spot
-                            wd_logger 1 "FST4W spot lines can include the noise level information '${sox_signals_rms_fft_and_overload_info}' which was just generated by wsprd"
+                            wd_logger 2 "FST4W spot lines can include the noise level information '${sox_signals_rms_fft_and_overload_info}' which was just generated by wsprd"
                         else
                             ### This wav file was not processed by 'wsprd', so there is no sox signal_level, rms_noise, fft_noise, or ov_count data 
                             wd_logger 1 "FST4W spot lines have no noise level information from a wsprd decode, so use filler noise level values of -999.0"
@@ -1956,13 +2291,11 @@ function decoding_daemon() {
                                 sed 's/./& /56;s/\*\*\*\*\*\*\*\*\*/999999.99/' ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/new_fst4w_decodes.dat 
                             else
                                 grep -A 100000 "${old_fst4_decodes_dat_last_spot}" ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/last_and_new_fst4w_decodes.dat
-                                local rc=$?
-                                if [[ ${rc} -ne 0 ]]; then
+                                rc=$? ; if (( rc )); then
                                     wd_logger 1 "ERROR: 'grep -A 100000 \"${old_fst4_decodes_dat_last_spot}\" ${decode_dir_path}/fst4_decodes.dat > ${decode_dir_path}/last_and_new_fst4w_decodes.dat' => ${rc}"
                                 else
                                     grep -v "${old_fst4_decodes_dat_last_spot}" ${decode_dir_path}/last_and_new_fst4w_decodes.dat > ${decode_dir_path}/new_fst4w_decodes.dat
-                                    rc=$?
-                                    if [[ ${rc} -ne 0 ]]; then
+                                    rc=$? ; if (( rc )); then
                                         wd_logger 1 "ERROR: can't find expected new FST4W high res spot lines in ${decode_dir_path}/last_and_new_fst4w_decodes.dat"
                                     else
                                         wd_logger 2 "Found these newly decoded FST4W high res spot lines:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
@@ -1978,7 +2311,7 @@ function decoding_daemon() {
                                 mv ${decode_dir_path}/decoded.tmp ${decode_dir_path}/new_fst4w_decodes.dat
                             fi
                             if [[ ! -s ${decode_dir_path}/new_fst4w_decodes.dat ]]; then
-                                wd_logger 1 "Found no new FST4W high res spots after filtering out '<...>' spots:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
+                                wd_logger 2 "Found no new FST4W high res spots after filtering out '<...>' spots:\n$(< ${decode_dir_path}/new_fst4w_decodes.dat)"
                             fi
                             ### Fields in the FST4W fst4-decodes.dat file as of October 2022 in v2.5.4
                             ### Thanks to Gwyn G3ZIL
@@ -2108,11 +2441,10 @@ function decoding_daemon() {
 
             if [[ ${got_cpu_semaphore} == "yes" ]]; then
                 free_cpu
-                rc=$?
-                if [[ ${rc} -eq 0 ]]; then
-                    wd_logger 1 "Put semaphore now that decoding is done"
-                else
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'free_cpu' => ${rc}, but ignoring since decoding is done"
+                else
+                    wd_logger 1 "Put semaphore now that decoding is done"
                 fi
             fi
 
@@ -2123,50 +2455,51 @@ function decoding_daemon() {
             if [[ "${config_archive_wav_files}" != "yes" ]]; then
                 local rc
                 wd_rm ${decoder_input_wav_filepath}
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'wd_rm ${decoder_input_wav_filepath}' => ${rc}"
                 fi
             else
                 ### Queue the wav file to a directory in the /dev/shrm/wsprdaemon file system.  The watchdog daemon calls a function every odd minute which
                 ### Compresses those wav files into files which are saved in non-volatile storage under ~/wsprdaemon
-                if queue_wav_file ${decoder_input_wav_filepath} ${wav_archive_dir}; then
-                    wd_logger 1 "Archived wav file ${decoder_input_wav_filepath}"
+                if archive_wav_file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band} ; then
+                    wd_logger 1 "Archived wav file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band}"
                 else
-                    wd_logger 1 "ERROR: 'queue_wav_file ${decoder_input_wav_filepath}' => $?"
+                    wd_logger 1 "ERROR: 'archive_wav_file ${decoder_input_wav_filepath} ${receiver_name} ${receiver_band}' => $?"
                 fi
             fi
             if [[ ${processed_wav_files} == "yes" ]]; then 
-                wd_logger 1 "Processed files '${wav_files}' concatenated into '${decoder_input_wav_filename}' for packet of length ${returned_seconds} seconds"
+                wd_logger 2 "Processed files '${wav_files}' concatenated into '${decoder_input_wav_filename}' for packet of length ${returned_seconds} seconds"
             else
                 wd_logger 1 "ERROR: created a wav file of ${returned_seconds}, but the conf file didn't specify a mode for that length"
             fi
 
             ### Obtain wav and ADC overlaod information so they can be appended to the spot lines
-            wd_logger 1 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
+            wd_logger 2 "Flushing wav stats file ${decoder_input_wav_filepath}.stats"
             if [[ -f ${decoder_input_wav_filepath}.stats ]]; then
-                local rc
                 wd_rm ${decoder_input_wav_filepath}.stats
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'wd_rm ${decoder_input_wav_filepath}.stats' => ${rc}"
                 fi
             fi
 
             ### Record the 12 signal levels + rms_noise + fft_noise + new_overloads to the ../signal_levels/...csv log files
-            local wspr_decode_capture_date=${wav_file_list[0]/T*}
-                  wspr_decode_capture_date=${wspr_decode_capture_date:2:8}      ## chop off the '20' from the front
-            local wspr_decode_capture_time=${wav_file_list[0]#*T}
-                  wspr_decode_capture_time=${wspr_decode_capture_time/Z*}
+            local wspr_decode_capture_date=${wav_files_list[0]##*/}
+                  wspr_decode_capture_date=${wspr_decode_capture_date%T*}
+                  wspr_decode_capture_date=${wspr_decode_capture_date:2:6}      ## chop off the '20' from the front to get YYMMDD
+            local wspr_decode_capture_time=${wav_files_list[0]##*/}
+                  wspr_decode_capture_time=${wspr_decode_capture_time#*T}
                   wspr_decode_capture_time=${wspr_decode_capture_time:0:4}
-            local wspr_decode_capture_freq_hz=${wav_file_list[0]#*_}
-                  wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz/_*} + (${rx_khz_offset} * 1000)" )
+            local wspr_decode_capture_freq_hz=${wav_files_list[0]##*Z_}
+                  wspr_decode_capture_freq_hz=${wspr_decode_capture_freq_hz%_*}
+                  wspr_decode_capture_freq_hz=$( bc <<< "${wspr_decode_capture_freq_hz} + (${rx_khz_offset} * 1000)" )
 
             ### Log the noise for the noise_plot which generates the graphs, and create a time-stamped file with all the noise data for upload to wsprdaemon.org
+            wd_logger 2 "Execute: queue_noise_signal_levels_to_wsprdaemon  '${wspr_decode_capture_date}' '${wspr_decode_capture_time}' '${sox_signals_rms_fft_and_overload_info}' '${wspr_decode_capture_freq_hz}' '${signal_levels_log_file}' '${wsprdaemon_noise_queue_directory}'"
             queue_noise_signal_levels_to_wsprdaemon  ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_signals_rms_fft_and_overload_info}" ${wspr_decode_capture_freq_hz} ${signal_levels_log_file} ${wsprdaemon_noise_queue_directory}
 
             ### Record the spots in decodes_cache.txt plus the sox_signals_rms_fft_and_overload_info to wsprdaemon.org
-            ### The start time and frequency of the spot lines will be extracted from the first wav file of the wav file list
+            ### The start time and frequency of the spot lineszz will be extracted from the first wav file of the wav file list
+            wd_logger 2 "Execute: create_enhanced_spots_file_and_queue_to_posting_daemon   'decodes_cache.txt' '${wspr_decode_capture_date}' '${wspr_decode_capture_time}' '${sox_rms_noise_level_float}' '${fft_noise_level_float}' '${new_sdr_overloads_count}' '${receiver_call}' '${receiver_grid}' '${freq_adj_mhz}'"
             create_enhanced_spots_file_and_queue_to_posting_daemon   "decodes_cache.txt" ${wspr_decode_capture_date} ${wspr_decode_capture_time} "${sox_rms_noise_level_float}" "${fft_noise_level_float}" "${new_sdr_overloads_count}" ${receiver_call} ${receiver_grid} ${freq_adj_mhz}
         done
         sleep 1
@@ -2179,11 +2512,12 @@ function spawn_decoding_daemon() {
     local receiver_name=$1
     local receiver_band=$2
     local receiver_modes=$3
-    wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
 
-    mkdir -p ${recording_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
-    cd ${recording_dir}
+    wd_logger 2 "Starting with args  '${receiver_name},${receiver_band},${receiver_modes}'"
+    local decoding_dir=$(get_decoding_dir_path ${receiver_name} ${receiver_band})
+
+    mkdir -p ${decoding_dir}/${DECODING_CLIENTS_SUBDIR}     ### The posting_daemon() should have created this already
+    cd ${decoding_dir}
     local decoding_pid
     if [[ -f ${DECODING_DAEMON_PID_FILE} ]] ; then
         local decoding_pid=$(< ${DECODING_DAEMON_PID_FILE})
@@ -2206,17 +2540,18 @@ function spawn_decoding_daemon() {
 function kill_decoding_daemon() {
     local receiver_name=$1
     local receiver_band=$2
+    local rc
 
     wd_logger 1 "Kill '${receiver_name},${receiver_band},${receiver_modes}'"
 
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+    local decoding_dir=$(get_decoding_dir_path ${receiver_name} ${receiver_band})
 
-    if [[ ! -d ${recording_dir} ]]; then
-        wd_logger 1 "ERROR: ${recording_dir} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
+    if [[ ! -d ${decoding_dir} ]]; then
+        wd_logger 1 "ERROR: ${decoding_dir} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist"
         return 1
     fi
 
-    local decoding_pid_file=${recording_dir}/${DECODING_DAEMON_PID_FILE}
+    local decoding_pid_file=${decoding_dir}/${DECODING_DAEMON_PID_FILE}
  
     if [[ ! -s ${decoding_pid_file} ]] ; then
         wd_logger 1 "ERROR: Decoding pid file '${decoding_pid_file} for '${receiver_name},${receiver_band},${receiver_modes}' does not exist or is empty"
@@ -2225,23 +2560,20 @@ function kill_decoding_daemon() {
  
     local decoding_pid=$( < ${decoding_pid_file} )
     wd_rm ${decoding_pid_file}
-    local rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
          cd - > /dev/null
         wd_logger 1 "ERROR: 'wd_rm ${decoding_pid_file}' => ${rc}"
         return 3
     fi
 
     wd_kill_and_wait_for_death  ${decoding_pid}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_kill_and_wait_for_death ${decoding_pid}' => ${ret_code}"
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'wd_kill_and_wait_for_death ${decoding_pid}' => ${rc}"
         return 4
     fi
  
     kill_wav_recording_daemon ${receiver_name} ${receiver_band}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?"
         return 5
     fi
@@ -2253,7 +2585,7 @@ function kill_decoding_daemon() {
 function get_decoding_status() {
     local get_decoding_status_receiver_name=$1
     local get_decoding_status_receiver_band=$2
-    local get_decoding_status_receiver_decoding_dir=$(get_recording_dir_path ${get_decoding_status_receiver_name} ${get_decoding_status_receiver_band})
+    local get_decoding_status_receiver_decoding_dir=$(get_decoding_dir_path ${get_decoding_status_receiver_name} ${get_decoding_status_receiver_band})
     local get_decoding_status_receiver_decoding_pid_file=${get_decoding_status_receiver_decoding_dir}/${DECODING_DAEMON_PID_FILE}
 
     if [[ ! -d ${get_decoding_status_receiver_decoding_dir} ]]; then
@@ -2291,6 +2623,7 @@ function claim_cpu()
 {
     local semaphore_max_count=$1
     local semaphore_timeout=$2        ### How many seconds to wait
+    local rc
 
     local start_epoch=${EPOCHSECONDS}
     local end_epoch=$(( ${start_epoch} + ${semaphore_timeout} ))
@@ -2299,36 +2632,33 @@ function claim_cpu()
 
     wd_logger 1 "Starting an attempt to get one of the ${semaphore_max_count} semaphores in ${ACTIVE_DECODING_CPU_DIR}. Timeout after ${semaphore_timeout} seconds"
 
-    while [[ ${EPOCHSECONDS} -lt ${end_epoch} ]]; do
-        local rc
+    while (( EPOCHSECONDS < end_epoch )); do
         wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
-        rc=$?
-        if [[ ${rc} -ne 0 ]] ; then
+        rc=$? ; if (( rc )) ; then
             wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
         else
-            wd_logger 2 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+            wd_logger 1 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
             if [[ ! -f ${semaphore_count_filename} ]]; then
                 wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
                 echo "0" > ${semaphore_count_filename}
             fi
             local current_semaphore_count=$(< ${semaphore_count_filename})
             local new_semaphore_count=-1
-            if [[ ${current_semaphore_count} -lt ${semaphore_max_count} ]]; then
+            if (( current_semaphore_count < semaphore_max_count )); then
                 new_semaphore_count=$(( current_semaphore_count + 1 ))
                 echo ${new_semaphore_count} > ${semaphore_count_filename}
             fi
             wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
-            rc=$?
-            if [[ ${rc} -eq 0 ]]; then
-                wd_logger 2 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
-            else
+            rc=$? ; if (( rc )) ; then
                 wd_logger 1 "ERROR: When freeing ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} muxtex, got unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}"
+            else
+                wd_logger 1 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
             fi
-            if [[ ${new_semaphore_count} -gt 0 ]]; then
+            if (( new_semaphore_count > 0 )); then
                 wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
                 return 0
             else
-                wd_logger 2 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
+                wd_logger 1 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
             fi
         fi
         wd_logger 2 "Sleeping 1 second"
@@ -2345,8 +2675,7 @@ function free_cpu()
 
     local rc
     wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR} 
-    rc=$?
-    if [[ ${rc} -ne 0 ]] ; then
+    rc=$? ; if (( rc )) ; then
         wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
         return 1
     else
@@ -2355,19 +2684,20 @@ function free_cpu()
             wd_logger 1 "ERROR: expected count file ${semaphore_count_filename} does not exist, so wd_semaphore_pget() never ran" 
         else
             local current_semaphore_count=$(< ${semaphore_count_filename})
-            if [[ ${current_semaphore_count} -lt 1 ]]; then
-                wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
-            else
+            wd_logger 1 "current_semaphore_count=${current_semaphore_count}"
+            if (( current_semaphore_count )); then
                 (( --current_semaphore_count ))
                 echo ${current_semaphore_count} > ${semaphore_count_filename}
+                wd_logger 1 "Decremented and wrote new current_semaphore_count=${current_semaphore_count} to ${semaphore_count_filename}"
+            else
+                wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
             fi
         fi
         wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
-        rc=$?
-        if [[ ${rc} -eq 0 ]]; then
-            wd_logger 1 "Decremented semaphore count to ${current_semaphore_count} and returning"
-        else
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}, but anyway decremented semaphore count to ${current_semaphore_count} and returning"
+        else
+            wd_logger 1 "Decremented semaphore count to ${current_semaphore_count} and returning"
         fi
         return 0
     fi

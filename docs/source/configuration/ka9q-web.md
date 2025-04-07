@@ -1,11 +1,11 @@
 # ka9q-web 
 
 This software builds in reference to ka9q-radio and requires no specific configuration.  
-wsprdaemon typically starts it automatically.  You invoke it manually, if necessary, thus:
+WD typically starts it automatically.  You invoke it manually, if necessary, thus:
 ```
-ka9q-web -m your-radiod-status-stream.local &
+ka9q-web -m your-radiod-status-stream.local -p 8081 -n "callsign grid antenna" &
 ```
-where "your-radiod-status-stream" is the name specified in your radiod@.conf (often hf.local or hf-status.local)
+where "your-radiod-status-stream" is the name specified in the [GLOBAL] of your radiod@.conf (often hf.local or hf-status.local)
 
 ## Viewing the ka9q-web spectrum display
 
@@ -17,7 +17,7 @@ From your local machine, run:
 ```
 ssh -L 8081:localhost:8081 wsprdaemon@aa.bb.cc.dd
 ```
-where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running wsprdaemon eponymously.)
+where aa.bb.cc.dd is the ip address or name of the remote computer running ka9q-web. (Substitute another username if not running WD eponymously.)
 
 Then direct your browser to http://localhost:8081 to view ka9q-web served from the aa.bb.cc.dd remote computer.
 If you happen to be using port 8081 on your local computer for another purpose, simply replace the port number after -L in the command above to an unused port YYYY. Then direct your browser to http://localhost:YYYY.

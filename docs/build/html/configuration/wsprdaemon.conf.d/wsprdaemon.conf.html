@@ -42,8 +42,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -53,15 +51,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -77,9 +71,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -125,42 +119,63 @@
              
   <section id="example-of-a-working-wsprdaemon-conf">
 <h1>Example of a working wsprdaemon.conf<a class="headerlink" href="#example-of-a-working-wsprdaemon-conf" title="Link to this heading"></a></h1>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        # RAC setup
-        REMOTE_ACCESS_CHANNEL=27
-        REMOTE_ACCESS_ID=&quot;AC0G-BEE1&quot;
+<p>Minimalist configuration for a stand-alone machine that listens to wspr and WWV/CHU streams from radiod (ka9q-radio), then processes and uploads the results to wsprnet, wsprdaemon.org, pskreporter, and pswsnetwork.caps.ua.edu.</p>
+<p>You will find further details on these parameters and definitions in</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="computer.html"><span class="std std-doc">Computer-related parameters</span></a></p></li>
+<li><p><a class="reference internal" href="ka9q-radio.html"><span class="std std-doc">ka9q-radio/web parameters</span></a></p></li>
+<li><p><a class="reference internal" href="reporting.html"><span class="std std-doc">reporting parameters</span></a></p></li>
+<li><p><a class="reference internal" href="receivers.html"><span class="std std-doc">receiver definitions</span></a></p></li>
+<li><p><a class="reference internal" href="schedule.html"><span class="std std-doc">schedule definitions</span></a></p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Computer-related parameters:</span>
+<span class="c1"># RAC setup enables WD supporters to access your machine remotely.  Get a RAC # from Rob Robinett.</span>
+<span class="c1"># WD will run without this </span>
+<span class="n">REMOTE_ACCESS_CHANNEL</span><span class="o">=</span><span class="mi">27</span>
+<span class="n">REMOTE_ACCESS_ID</span><span class="o">=</span><span class="s2">&quot;AC0G-BEE1&quot;</span>
 
-        # CPU/CORE TUNING if neccessary
-        # the following will restrict wd processes to particular cores if necessary (e.g., Ryzen 7 - 5700 series)
-        WD_CPU_CORES=&quot;8-15&quot;
-        RADIOD_CPU_CORES=&quot;0-7&quot;
+<span class="c1"># CPU/CORE TUNING if neccessary</span>
+<span class="c1"># the following will restrict wd processes to particular cores if necessary (e.g., Ryzen 7 - 5700 series)</span>
+<span class="c1"># WD will run without this</span>
+<span class="n">WD_CPU_CORES</span><span class="o">=</span><span class="s2">&quot;2-15&quot;</span>
+<span class="n">RADIOD_CPU_CORES</span><span class="o">=</span><span class="s2">&quot;0-1&quot;</span>
 
-        # KA9Q-RADIO/WEB config
-        KA9Q_RADIO_COMMIT=&quot;main&quot;
-        KA9Q_WEB_COMMIT_CHECK=&quot;main&quot;
-        KA9Q_RUNS_ONLY_REMOTELY=&quot;no&quot;         ### If &quot;yes&quot; then WD will not install and configure its own copy of KA9Q-radio and thus assuemes the user has installed and configured it him/her self.
-        KA9Q_GIT_PULL_ENABLED=&quot;yes&quot;
-        KA9Q_CONF_NAME=&quot;ac0g-bee1-rx888&quot;
-        KA9Q_WEB_TITLE=&quot;AC0G_@EM38ww_Longwire_Antenna&quot;
+<span class="c1"># 2. ka9q-radio/web parameters</span>
+<span class="n">KA9Q_RADIO_COMMIT</span><span class="o">=</span><span class="s2">&quot;main&quot;</span>
+<span class="n">KA9Q_RUNS_ONLY_REMOTELY</span><span class="o">=</span><span class="s2">&quot;no&quot;</span> 
+<span class="n">KA9Q_CONF_NAME</span><span class="o">=</span><span class="s2">&quot;ac0g-bee1-rx888&quot;</span>
+<span class="n">KA9Q_WEB_COMMIT_CHECK</span><span class="o">=</span><span class="s2">&quot;main&quot;</span>
+<span class="c1"># If you don&#39;t set the title here, it will default to the description in the radiod@config file</span>
+<span class="n">KA9Q_WEB_TITLE</span><span class="o">=</span><span class="s2">&quot;AC0G_@EM38ww_Longwire&quot;</span>
 
-        # REPORTING
-        GRAPE_PSWS_ID=&quot;S000171_172&quot;
-        SIGNAL_LEVEL_UPLOAD=&quot;noise&quot;           ### Whether and how to upload extended spots to wsprdaemon.org.  WD always attempts to upload spots to wsprnet.org
-        SIGNAL_LEVEL_UPLOAD_ID=&quot;AC0G_LW&quot;     ### The name put in upload log records, the title bar of the graph, and the name used to view spots and noise at that server.
-        SIGNAL_LEVEL_UPLOAD_GRAPHS=&quot;yes&quot;   ### If this variable is defined as &quot;yes&quot; AND SIGNAL_LEVEL_UPLOAD_ID is defined, then FTP graphs of the last 24 hours to http://wsprdaemon.org/graphs/SIGNAL_LEVEL_UPLOAD_ID
+<span class="c1"># 3. Reporting parameters</span>
+<span class="c1"># for contributing to HamSCI monitoring of WWV/CHU</span>
+<span class="n">GRAPE_PSWS_ID</span><span class="o">=</span><span class="s2">&quot;S000171_172&quot;</span>
+<span class="c1"># for reporting to wsprdaemon.org</span>
+<span class="n">SIGNAL_LEVEL_UPLOAD</span><span class="o">=</span><span class="s2">&quot;noise&quot;</span>  
+<span class="n">SIGNAL_LEVEL_UPLOAD_ID</span><span class="o">=</span><span class="s2">&quot;AC0G_BEE1&quot;</span>
+<span class="n">SIGNAL_LEVEL_UPLOAD_GRAPHS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>  
 
-        # SCHEDULE
-        declare receiver=&quot;KA9Q_LONGWIRE&quot;
-        declare WSPR_SCHEDULE=(
-            &quot;00:00  ${receiver},2200,W2:F2:F5:F15:F30      ${receiver},630,W2:F2:F5      ${receiver},160,W2:F2:F5
-                    ${receiver},80,W2:F2:F5                ${receiver},80eu,W2:F2:F5     ${receiver},60,W2:F2:F5
-                    ${receiver},60eu,W2:F2:F5              ${receiver},40,W2:F2:F5       ${receiver},30,W2:F2:F5
-                    ${receiver},22,W2                      ${receiver},20,W2:F2:F5       ${receiver},17,W2:F2:F5
-                    ${receiver},15,W2:F2:F5                ${receiver},12,W2:F2:F5       ${receiver},10,W2:F2:F5
+<span class="c1"># 4. Receiver definitions -- REQUIRED</span>
+<span class="c1"># two radiod receivers -- one for wspr and one for wwv</span>
+<span class="n">declare</span> <span class="n">RECEIVER_LIST</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">&quot;KA9Q_0_WSPR                  wspr-pcm.local     AI6VN         CM88mc    NULL&quot;</span>    
+        <span class="s2">&quot;KA9Q_0_WWV_IQ                wwv-iq.local       AI6VN         CM88mc    NULL&quot;</span>     
+<span class="p">)</span>
 
-                    ${receiver}_WWV,WWV_2_5,I1             ${receiver}_WWV,WWV_5,I1      ${receiver}_WWV,WWV_10,I1
-                    ${receiver}_WWV,WWV_15,I1              ${receiver}_WWV,WWV_20,I1     ${receiver}_WWV,WWV_25,I1
-                    ${receiver}_WWV,CHU_3,I1               ${receiver}_WWV,CHU_7,I1      ${receiver}_WWV,CHU_14,I1&quot;
-        )
+<span class="c1"># 5. Schedule definitions -- REQUIRED</span>
+<span class="c1"># SCHEDULE</span>
+<span class="n">declare</span> <span class="n">WSPR_SCHEDULE</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">&quot;00:00  KA9Q_0_WSPR,2200,W2:F2:F5:F15:F30      KA9Q_0_WSPR,630,W2:F2:F5      KA9Q_0_WSPR,160,W2:F2:F5</span>
+                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">80</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">80</span><span class="n">eu</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>     <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">60</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>
+                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">60</span><span class="n">eu</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>              <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">40</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>       <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">30</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>
+                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">22</span><span class="p">,</span><span class="n">W2</span>                      <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>       <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">17</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>
+                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">15</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>                <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>       <span class="n">KA9Q_0_WSPR</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="n">W2</span><span class="p">:</span><span class="n">F2</span><span class="p">:</span><span class="n">F5</span>
+
+                <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_2_5</span><span class="p">,</span><span class="n">I1</span>               <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_5</span><span class="p">,</span><span class="n">I1</span>        <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_10</span><span class="p">,</span><span class="n">I1</span>
+                <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_15</span><span class="p">,</span><span class="n">I1</span>                <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_20</span><span class="p">,</span><span class="n">I1</span>       <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">WWV_25</span><span class="p">,</span><span class="n">I1</span>
+                <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">CHU_3</span><span class="p">,</span><span class="n">I1</span>                 <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">CHU_7</span><span class="p">,</span><span class="n">I1</span>        <span class="n">KA9Q_0_WWV_IQ</span><span class="p">,</span><span class="n">CHU_14</span><span class="p">,</span><span class="n">I1</span><span class="s2">&quot;</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </section>

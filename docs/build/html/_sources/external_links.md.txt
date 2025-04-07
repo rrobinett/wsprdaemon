@@ -7,3 +7,4 @@
 ## [WSPR Rocks!](https://wspr.rocks)
 ## [WSPR.net](https://wsprnet.org)
 ## [PSKReporter](https://pskreporter.info)
+## [SuperDARN](https://superdarn.ca/)

@@ -19,8 +19,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Getting the software with GIT" href="git.html" />
-    <link rel="prev" title="Multicast Requirements" href="../network/multicast.html" /> 
+    <link rel="next" title="Download the software with GIT" href="git.html" />
+    <link rel="prev" title="Networking" href="../requirements/network.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,8 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -55,23 +53,22 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Preparing for installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#determine-the-wsprdaemon-user">Determine the wsprdaemon user</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#computer-requirements">Computer requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#operating-system">Operating system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sudo-access">sudo access</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#determine-the-user-to-run-wd">Determine the user to run WD</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#remote-access-setup">Remote Access Setup</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#system-pre-requisites-and-useful-utilities">System Pre-requisites and Useful Utilities:</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -87,9 +84,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -135,49 +132,59 @@
              
   <section id="preparing-for-installation">
 <h1>Preparing for installation<a class="headerlink" href="#preparing-for-installation" title="Link to this heading"></a></h1>
-<p>You will install and run the wsprdaemon software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.  Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon but you can run it under your own (or another’s) account.</p>
-<p>N.B.  In either case, this account needs sudo privileges as several component installations and process management require it.</p>
+<p>You will clone from github.com and then run the WD software in a “wsrdaemon” sub-directory of a regular linux user account, e.g., /home/username/wsprdaemon.<br />
+Typically, you will create a separate “wsprdaemon” user, e.g., /home/wsprdaemon.
+However, you can run it under your own (or another’s) account.  In which case, for any references in these documents to the “wsprdaemon” user, simply substitute the username you have selected.</p>
+<p>N.B.  In either case, the account running WD needs sudo privileges as several component installations and process management require it.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<section id="computer-requirements">
+<h3>Computer requirements<a class="headerlink" href="#computer-requirements" title="Link to this heading"></a></h3>
+<p>You have lots of options for a computer and network architecture that supports ka9q-radio and WD.  However, in order to run it all on one computer, it will need sufficient CPU and memory power and superspeed USB 3 (the RX888 samples at 64.8 or 129.6 MHz!).  CPU and memory (RAM and cache) structures vary widely and some, even nominally “powerful” new computers, in their default configuration, may not manage the core and cache optimally.  Computers using the Ryzen 5800 chipsets and above seem to work without adjustment.</p>
+<p>You can run ka9q-radio (radiod) on a “slower” computer, as long as it has USB 3.  It can multicast its output via RTP streams to another computer for processing.  This setup will usually require an IGMP-aware ethernet switch to shield your LAN (especially if it relies on WiFi).  The prodigious multicast output from radiod can bring a WiFi LAN to a clogged halt.</p>
+</section>
+<section id="operating-system">
+<h3>Operating system<a class="headerlink" href="#operating-system" title="Link to this heading"></a></h3>
+<p>The current version of WD runs on <a class="reference external" href="https://ubuntu.com/download/server">Ubuntu 24.04 LTS</a>.  Ubuntu seems determined to push “snap” software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a <a class="reference external" href="http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd">method to “de-snap”</a> a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative – <a class="reference external" href="https://www.linuxmint.com/download.php">Mint</a> – which does not use snaps or their progenitor, <a class="reference external" href="https://www.debian.org/distrib/">Debian</a>.</p>
+</section>
+<section id="sudo-access">
+<h3>sudo access<a class="headerlink" href="#sudo-access" title="Link to this heading"></a></h3>
+<p>Installation and proper function of WD requires root access, best done using <code class="docutils literal notranslate"><span class="pre">sudo</span></code>.</p>
 <p>To avoid entering the su password all the time:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">visudo</span>
 </pre></div>
 </div>
-<p>Edit the %sudo line to allow members of group sudo to execute any command:</p>
+<p>Edit the line starting with “%sudo” to allow members of group sudo to execute any command:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">sudo</span>   <span class="n">ALL</span><span class="o">=</span><span class="p">(</span><span class="n">ALL</span><span class="p">:</span><span class="n">ALL</span><span class="p">)</span> <span class="n">NOPASSWD</span><span class="p">:</span> <span class="n">ALL</span>
 </pre></div>
 </div>
-<section id="determine-the-wsprdaemon-user">
-<h3>Determine the wsprdaemon user<a class="headerlink" href="#determine-the-wsprdaemon-user" title="Link to this heading"></a></h3>
-<p>If you choose to run wsprdaemon as the user “wsprdaemon”, create a wsprdaemon user:</p>
+</section>
+<section id="determine-the-user-to-run-wd">
+<h3>Determine the user to run WD<a class="headerlink" href="#determine-the-user-to-run-wd" title="Link to this heading"></a></h3>
+<p>To run WD as the user “wsprdaemon”, create a wsprdaemon user:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">adduser</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>Subsequent installation and management of wd must happen as user “wsprdaemon”.</p>
-<p>You can login to the machine as “wsprdaemon” or with another username.  In the latter case, to make it easier to change to the wsprdaemon user, create an alias:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span>  <span class="s2">&quot;alias wd=&#39;sudo su - wsprdaemon&#39;&quot;</span> <span class="o">&gt;&gt;</span> <span class="o">~/.</span><span class="n">bashrc</span>
-</pre></div>
-</div>
-<p>This enables you to operate as the wsprdaemon user.</p>
+<p>Subsequent installation and management of WD will then happen as user “wsprdaemon”.  You should then login to the machine as “wsprdaemon.”</p>
 <p>Add wsprdaemon (or your username) to groups sudo, plugdev:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">sudo</span> <span class="n">wsprdaemon</span>
 <span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">plugdev</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>wsprdaemon includes the ka9q-radio package which creates a “radio” group.  Once the wsprdaemon script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
+<p>WD includes and installs the ka9q-radio package which creates a “radio” group.  So, once the WD script has finished compiling and installing the ka9q-radio package, check that user wsprdaemon (or your username) has been added to the radio group in /etc/group.  If not, then:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">usermod</span> <span class="o">-</span><span class="n">a</span> <span class="o">-</span><span class="n">G</span> <span class="n">radio</span> <span class="n">wsprdaemon</span>
 </pre></div>
 </div>
-<p>If dedicating this computer to exclusive wsprdaemon use, you may also want the hostname of your computer to reflect this.  To do so:</p>
+<p>If dedicating this computer to exclusive WD use, you may also want the hostname of your computer to reflect this.  For instance:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">hostnamectl</span> <span class="nb">set</span><span class="o">-</span><span class="n">hostname</span> <span class="n">W3USR</span><span class="o">-</span><span class="n">B1</span><span class="o">-</span><span class="mi">1</span>
 </pre></div>
 </div>
-<p>After changing the hostname, you may need to update the /etc/hosts file to reflect the change.</p>
+<p>After changing the hostname, check or update the /etc/hosts file to reflect the change.</p>
 </section>
 <section id="remote-access-setup">
 <h3>Remote Access Setup<a class="headerlink" href="#remote-access-setup" title="Link to this heading"></a></h3>
-<p>If installing wsprdaemon on a remote computer, from your present computer, make it easier to login to the other computer.
-First, make sure you have a public key :</p>
+<p>If installing WD on a computer you intend to manage remotely, you can make it much easier to login to the other computer via ssh.</p>
+<p>First, make sure you have a public key:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ssh</span><span class="o">-</span><span class="n">keygen</span>
 </pre></div>
 </div>
@@ -196,17 +203,19 @@ First, make sure you have a public key :</p>
 </section>
 <section id="system-pre-requisites-and-useful-utilities">
 <h3>System Pre-requisites and Useful Utilities:<a class="headerlink" href="#system-pre-requisites-and-useful-utilities" title="Link to this heading"></a></h3>
-<p>This includes what will prove needed or useful for wsprdaemon and ka9q-radio.  As of wsprdaemon v3.3.1, many but not all of these will get installed automatically. You can safely run the following either way.</p>
+<p>The following list of packages includes what will prove needed or useful for WD and ka9q-radio.  As of WD v3.3.1, many but not all of these will get installed automatically. You can safely run the following either way.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span> <span class="n">install</span> <span class="n">btop</span> <span class="n">nmap</span> <span class="n">git</span> <span class="n">tmux</span> <span class="n">vim</span> <span class="n">net</span><span class="o">-</span><span class="n">tools</span> <span class="n">iputils</span><span class="o">-</span><span class="n">ping</span> <span class="n">avahi</span><span class="o">-</span><span class="n">daemon</span> <span class="n">libnss</span><span class="o">-</span><span class="n">mdns</span> <span class="n">mdns</span><span class="o">-</span><span class="n">scan</span> <span class="n">avahi</span><span class="o">-</span><span class="n">utils</span> <span class="n">avahi</span><span class="o">-</span><span class="n">discover</span> <span class="n">build</span><span class="o">-</span><span class="n">essential</span> <span class="n">make</span> <span class="n">cmake</span> <span class="n">gcc</span> <span class="n">libairspy</span><span class="o">-</span><span class="n">dev</span> <span class="n">libairspyhf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libavahi</span><span class="o">-</span><span class="n">client</span><span class="o">-</span><span class="n">dev</span> <span class="n">libbsd</span><span class="o">-</span><span class="n">dev</span> <span class="n">libfftw3</span><span class="o">-</span><span class="n">dev</span> <span class="n">libhackrf</span><span class="o">-</span><span class="n">dev</span> <span class="n">libiniparser</span><span class="o">-</span><span class="n">dev</span> <span class="n">libncurses5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libopus</span><span class="o">-</span><span class="n">dev</span> <span class="n">librtlsdr</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="mf">1.0</span><span class="o">-</span><span class="mi">0</span><span class="o">-</span><span class="n">dev</span> <span class="n">libusb</span><span class="o">-</span><span class="n">dev</span> <span class="n">portaudio19</span><span class="o">-</span><span class="n">dev</span> <span class="n">libasound2</span><span class="o">-</span><span class="n">dev</span> <span class="n">uuid</span><span class="o">-</span><span class="n">dev</span> <span class="n">rsync</span> <span class="n">sox</span> <span class="n">libsox</span><span class="o">-</span><span class="n">fmt</span><span class="o">-</span><span class="nb">all</span> <span class="n">opus</span><span class="o">-</span><span class="n">tools</span> <span class="n">flac</span> <span class="n">tcpdump</span> <span class="n">wireshark</span> <span class="n">libhdf5</span><span class="o">-</span><span class="n">dev</span> <span class="n">libsamplerate</span><span class="o">-</span><span class="n">dev</span>
 </pre></div>
 </div>
-<p>For ethernet transport, make sure to enable the appropriate NIC device in /etc/avahi/avahi-daemon.conf.  This primarily pertains to systems that have more than one NIC and setups that will use multicast between systems, not just on one system.</p>
+<p>For ethernet transport, radiod will use your default network interface (NIC).  You can enable a specific NIC device in /etc/radio/radiod&#64;.conf and in /etc/avahi/avahi-daemon.conf.  This primarily pertains to systems that have more than one NIC and setups that will use multicast between computers, not just on a stand-alone system.</p>
+<p>The program “tmux” usefully enables multiple text windows, preserves a session between different logins, and enables two or more users to concurrently join a session.</p>
 <p>To enable tmux mouse control, edit .tmux.conf (logged in as wsprdaemon) with</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span> <span class="o">-</span><span class="n">g</span> <span class="n">mouse</span> <span class="n">on</span>
 </pre></div>
 </div>
-<p>If using iTerm on macOS, goto iTerm2 &gt; Preferences &gt; “General” tab, and in the “Selection” section, check “Applications in terminal may access clipboard”.</p>
-<p>You can now proceed to the cloning wsprdaemon from GitHub.</p>
+<p>When accessing the system with a Mac using iTerm, you can enable mouse “cut and paste”.  Goto iTerm2 &gt; Preferences &gt; “General” tab, and in the “Selection” section, check “Applications in terminal may access clipboard”.</p>
+<hr class="docutils" />
+<p>You can now proceed to <a class="reference internal" href="git.html"><span class="std std-doc">clone wsprdaemon from GitHub</span></a>.</p>
 </section>
 </section>
 </section>
@@ -215,8 +224,8 @@ First, make sure you have a public key :</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../network/multicast.html" class="btn btn-neutral float-left" title="Multicast Requirements" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="git.html" class="btn btn-neutral float-right" title="Getting the software with GIT" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../requirements/network.html" class="btn btn-neutral float-left" title="Networking" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="git.html" class="btn btn-neutral float-right" title="Download the software with GIT" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

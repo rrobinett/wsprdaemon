@@ -3,9 +3,506 @@
 
 shopt -s -o nounset
 
-function wd-flush-hash-files() {
-     find /dev/shm/wsprdaemon/ -name hashtable.txt -delete
- }
+function wd-pcmrecord-version() {
+    ~/wsprdaemon/ka9q-radio/pcmrecord --version
+}
+
+declare -A KA9Q_wspr_band_freq_list=(
+    [160]="1836600"
+    [80]="3568600"
+    [60]="5287200"
+    [40]="7038600"
+    [30]="10138700"
+    [20]="14095600"
+    [17]="18104600"
+    [15]="21094600"
+    [12]="24924600"
+    [10]="28124600"
+     [6]="50293000"
+)
+
+declare -A KA9Q_time_band_freq_list=(
+    [2.5]="2500000"
+      [5]="5000000"
+     [10]="10000000"
+     [15]="15000000"
+     [20]="20000000"
+     [25]="25000000"
+   [3.33]="330000"
+   [7.85]="785000"
+  [14.67]="14670000"
+)
+
+### USAGE: wd-pcmrecord-file-summaries [band]
+### USAGE: wdpfs [band]
+### USAGE:   Runs the python program which validates the pcmrecord.log files  Defaults to 20m for WSPR and 10 MHz for WWV
+alias wdps='wd-pcmrecord-summaries'
+function wd-pcmrecord-summaries()
+{
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && echo "Can't find any KA9Q_* directories" && return $rc
+
+    local create_time_file_list=($( find $pcmrecord_log_dir -type f -name wav_file_create_time.log ))
+    if (( ${#create_time_file_list[@]} == 0 )); then
+        echo "Can't find any 'wav_file_create_time.log' files under $pcmrecord_log_dir"
+        return 1
+    fi
+
+    python3 ~/wsprdaemon/wd-validate-wav-logs.py ${create_time_file_list[@]}
+}
+
+### USAGE: wd-pcmrecord-filetime [band]
+### USAGE: wdpf [band]
+### USAGE:     Lists the create and last write times of the wav files of the band.  Defaults to 20m for WSPR and 10 MHz for WWV
+alias wdpf='wd-pcmrecord-filetimes'
+function wd-pcmrecord-filetimes()
+{
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && echo "Can't find any KA9Q_* directories" && return $rc
+
+    local band
+    local tuning_freq
+    if [[ $pcmrecord_log_dir =~ WWV|CHU ]]; then
+        band=${1-10}     ### Defaults to WWV_10
+        tuning_freq="${KA9Q_time_band_freq_list[${band}]}_iq"
+    else
+        band=${1-20}      ### Defaults to 20m
+        tuning_freq="${KA9Q_wspr_band_freq_list[${band}]}_usb"
+    fi
+ 
+    local wav_files_list=( $(find $pcmrecord_log_dir -maxdepth 1 -type f -name "*Z_${tuning_freq}*.wav") )
+    (( ${#wav_files_list[@]} == 0 )) && echo "Can'find any '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir" && return 1
+    (( ${verbosity-0} )) && echo "Found  ${#wav_files_list[@]} '*Z_${tuning_freq}*.wav' files in $pcmrecord_log_dir"
+
+    local pcmrecord_errors_file="$pcmrecord_log_dir/pcmrecord-errors.log"
+    if [[ ! -f $pcmrecord_errors_file ]]; then
+        echo "WARNING: can't file expected file $pcmrecord_errors_file"
+    else
+        local pcmrecord_parent_pid_file_list=( $(find $pcmrecord_log_dir -maxdepth 1 -name "*pid") )
+        case ${#pcmrecord_parent_pid_file_list[@]} in
+            0)
+                echo "Can't find the expect .pid file in $pcmrecord_log_dir"
+                ;;
+            1) 
+                local pid_run_time
+                pid_run_time=$( ps -o etime --ppid $(< ${pcmrecord_parent_pid_file_list[0]}) --no-headers )
+                rc=$? ; if (( rc )) ; then
+                    echo "Pid $(< ${pcmrecord_parent_pid_file_list[0]}) in ${pcmrecord_parent_pid_file_list[0]} is not active"
+                else
+                    echo "$(date): pcmrecord has been running for $pid_run_time"
+                fi
+                ;;
+            *)
+                echo "ERROR: found ${#pcmrecord_parent_pid_file_list[@]} pid files:\n ${pcmrecord_parent_pid_file_list[*]}"
+                ;;
+        esac
+    fi
+
+    local wav_file
+    for wav_file in ${wav_files_list[@]}; do
+        local file_stat_list=($( stat $wav_file  | awk '/File/{printf "%s:", $2} /Size/{printf " Size:%s", $2} /Birth/{printf " Birth:%s", $3} /Change/{printf " Change:%s", $3}  END {printf "\n"}' ))
+        echo "${file_stat_list[0]} ${file_stat_list[1]} ${file_stat_list[3]} ${file_stat_list[2]}"
+    done
+}
+
+function wd-pcmrecord-errors() 
+{
+    local rc
+
+    local pcmrecord_log_dir
+    wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
+    rc=$? && (( rc )) && return $rc
+
+    local pcmrecord_error_log_file="${pcmrecord_log_dir}/pcmrecord-errors.log"
+    if [[ ! -f ${pcmrecord_error_log_file} ]]; then
+        echo "Can't find ${pcmrecord_error_log_file}"
+        return 1
+    fi
+    read -p "Run tail -f ${pcmrecord_log_dir}? [Yn] => "
+    tail -f ${pcmrecord_error_log_file}
+}
+
+function wd-get-ka9q-receiver-dir() 
+{
+    local __return_var_name=$1
+
+    local wd_recording_root_dir="/dev/shm/wsprdaemon/recording.d"
+    local receiver_dir_list=( $( find ${wd_recording_root_dir} -maxdepth 1 -type d -name 'KA9Q*' | sort -t _ -k 3,3 -k 2,2n) )     ### sort so list is 'KA9Q_0 KA9Q_1 KA9Q_0_WWV KA9Q_1_WWV
+
+    local ka9q_receiver_dir
+    case ${#receiver_dir_list[@]} in
+        0)
+            echo "Can't find any KA9Q* directories in ${wd_recording_root_dir}"
+            return 1
+            ;;
+        1)
+            ka9q_receiver_dir=${receiver_dir_list[0]}
+            ;;
+        *)
+            local index
+            for (( index=0; index < ${#receiver_dir_list[@]}; ++index )) do
+                echo "${index}:  ${receiver_dir_list[index]}"
+            done
+            read -p "There are multiple KA9Q receivers.  Which of their pcmrecord-errors.log files do you want to view? [0-$((  ${#receiver_dir_list[@]} - 1 ))] (default = 0) => "
+            [[ -z "$REPLY" ]] && index=0 || index=$REPLY
+            ka9q_receiver_dir=${receiver_dir_list[index]}
+            ;;
+    esac
+    eval $__return_var_name=\${ka9q_receiver_dir}
+    return 0
+}
+
+function wd-show-file-write-time() {
+    local files_list=( $@ )
+
+    if (( ${#files_list[@]} == 0 )); then
+        echo "usage: $0 <FILE0> [<FILE2> ...]"
+        return
+    fi
+    local file
+    for file in ${files_list[@]}; do
+        if lsof $file >& /dev/null; then
+            continue
+        fi
+        local date_time_list=( $(stat $file | awk '/Modify/{printf "%s %s", $2, $3} ') )
+        local date=${date_time_list[0]}
+        local hhmmss=${date_time_list[1]%.*}
+        local microseconds=${date_time_list[1]##*.}
+        local seconds=$(( 10#${hhmmss##*:} ))                  ### converts second 00-59 to a decimal integer
+        local max_delay_secs=${RECORDING_MAX_DELAY_SECONDS-2}  ### If 'stat' reports last write is greater than 2 seconds
+        local min_early_secs=${RECORDING_MIN_EARLY_SECONDS-59} ### and it is earlier than second 59, then log error
+        if (( (seconds > max_delay_secs) && (seconds < min_early_secs) )); then
+            echo "ERROR: File ${file##*/} last write time ${date_time_list[*]} is not in second 00"
+        else
+            echo "File ${file##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds"
+        fi
+    done
+    return 0
+}
+
+function get_pid_start_epoch() {
+    local pid="$1"
+
+    local CLK_TCK=$(getconf CLK_TCK)
+    local boot_epoch=$(awk '/btime/ {print $2}' /proc/stat)
+    local start_ticks=$(awk '{print $22}' /proc/"$pid"/stat)
+    local start_epoch=$((boot_epoch + (start_ticks / CLK_TCK)))
+
+    echo $start_epoch
+}
+
+### Looks at the most recent 400 wspr cycles and looks for missing cycles
+### It expects at least 1 spot in every 2 minute cycle and accomodates 5 minute cycles with spots
+alias wdlc='wd-wsprlog-check'      ## == "WD wspr log check
+function wd-wsprlog-check() {
+    local wspr_cycles_to_search=${1-400}
+
+    local verbosity=${verbosity-0}
+    local wd_watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
+    local wd_watchdog_start_epoch=0
+
+    if [[ ! -f $wd_watchdog_pid_file ]]; then
+        printf "WD isn't running, since there is no  wd_watchdog_pid_file '$wd_watchdog_pid_file'"
+    else
+        local  wd_watchdog_pid=$(<$wd_watchdog_pid_file)
+        if ! ps $wd_watchdog_pid > /dev/null; then
+            printf "The WD watchdog PID $wd_watchdog_pid recorded in '$wd_watchdog_pid_file' is not active"
+        else
+            wd_watchdog_start_epoch=$(get_pid_start_epoch $wd_watchdog_pid)
+            #printf "The currently running WD started at epoch %s which is %s\n"  "$wd_watchdog_start_epoch" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%Y-%m-%d %H:%M:%S")"
+        fi
+    fi
+
+    local wspr_log_files="/var/log/wspr.log"
+    if [[ ! -f $wspr_log_files ]]; then
+        echo "ERROR: the expected file  $wspr_log_files doesn't exist"
+        return 1
+    fi
+    if [[ -f /var/log/wspr.log.1 ]]; then
+        wspr_log_files="/var/log/wspr.log.1 $wspr_log_files"
+    fi
+    awk '{printf "%s %s\n", $1, $2}' $wspr_log_files | sort | uniq -c | tail -n $wspr_cycles_to_search > /tmp/wspr-spots-counts.log
+
+    local last_line
+    local last_line_epoch=0
+    local contiguous_cycles_count=0
+    local spot_count_line
+    local spot_count_line_list
+
+    while read spot_count_line; do
+        spot_count_line_list=( $spot_count_line )
+
+        if (( ${#spot_count_line_list[@]} != 3 )) ; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+
+        local this_line_epoch=$( TZ=UTC date -d "20${spot_count_line_list[1]:0:2}-${spot_count_line_list[1]:2:2}-${spot_count_line_list[1]:4:2} ${spot_count_line_list[2]:0:2}:${spot_count_line_list[2]:2:2}" +%s )
+
+        if [[ -z "$this_line_epoch" ]]; then
+            echo "ERROR: bad line $spot_count_line"
+            return
+        fi
+        if (( wd_watchdog_start_epoch && ( this_line_epoch > wd_watchdog_start_epoch ) )); then
+            if false && (( contiguous_cycles_count )); then
+                printf "(%d) contiguous cycles\n"  $contiguous_cycles_count
+                contiguous_cycles_count=0
+            fi
+            printf "%s: is the currently running WD start time\n" "$(TZ=UTC date -d @$wd_watchdog_start_epoch "+%y%m%d %H%M")"
+            wd_watchdog_start_epoch=0
+        fi
+ 
+        if (( last_line_epoch == 0 )) ; then
+            printf "%s %s: with %3d spots is the first cycle of the log\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            last_line="$spot_count_line"
+            last_line_epoch=$this_line_epoch
+            continue
+        fi
+
+        local last_line_list=( $last_line )
+        (( verbosity > 1 ))  && printf "\n\nThis epoch is %d at %s %s, last epoch is %d at %s %s\n" $this_line_epoch ${spot_count_line_list[1]} ${spot_count_line_list[2]} $last_line_epoch "${last_line_list[1]}"  "${last_line_list[2]}"
+        local expected_line_epoch
+        local last_line_minute_digit="${last_line: -1}"
+        if [[ "${last_line: -1}" == "5" ]]; then
+            ### After a 5/15/25/35/45/55 minute spot, the next onw should be one minute later
+            (( verbosity > 1 )) && echo "Last line was a 5/15/25/..., so this line should be 60 seconds later"
+            expected_line_epoch=$(( last_line_epoch + 60 ))
+        else
+            if (( this_line_epoch == (last_line_epoch + 60) )); then
+                (( verbosity > 1 )) && echo "This line is 60 sesconds after the last"
+                expected_line_epoch=$(( last_line_epoch + 60 ))   ### This a 5/15/... minute packet
+            else
+                (( verbosity > 1 )) && echo "this line should be 120 seconds after the last line"
+                expected_line_epoch=$(( last_line_epoch + 120 ))
+            fi
+        fi
+
+        if (( this_line_epoch ==  expected_line_epoch )) ; then
+            (( verbosity > 1 )) && printf "%s %s: %3d spots as expected\n" ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]}
+            (( ++contiguous_cycles_count ))
+        else
+            printf "%s %s: has %3d spots. After %d contiguous spot reports found gap of %2d WSPR cycles. The last cycle reported '%s'\n" \
+                    ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count $(( ( (this_line_epoch - last_line_epoch) / 120) - 1 )) "$last_line"
+            contiguous_cycles_count=0
+        fi
+        last_line="$spot_count_line"
+        last_line_epoch=$this_line_epoch
+    done <  <(cat /tmp/wspr-spots-counts.log)
+
+    spot_count_line_list=( $(tail -n 1 /tmp/wspr-spots-counts.log) )
+    printf "%s %s: is the most recent cycle which has %3d spots. It ends a run of %d contiguous wspr cycles\n" \
+               ${spot_count_line_list[1]} ${spot_count_line_list[2]} ${spot_count_line_list[0]} $contiguous_cycles_count
+}
+
+### ka9q-web-control was written for ON5KQ, but it may be useful elsewhere
+function ka9q-web-control-usage() {
+    echo "$0:
+    -h   => print this help message
+    -a   => kill all running ka9q-web servers and start them again
+    -z   => kill all running ka9q-web servers
+    -s   => show status of running ka9q-web servers"
+}
+
+function ka9q-web-control() {
+    if [[ -z "$@" || "$@" == "-h" ]] ; then
+        ka9q-web-control-usage
+        return 0
+    fi
+
+    if [[ "${1-}" == "-s" ]]; then
+        ps aux | grep ka9q-web | grep -v 'grep\|ka9q-web-control'
+        return 0
+    fi
+
+    sudo killall ka9q-web
+
+    if [[ "${1-}" == "-k" ]]; then
+        echo "Killed all ka9q-web services"
+        return 0
+    fi
+
+    /usr/local/sbin/ka9q-web -m hf.local  -p 8081 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8081.log &
+    /usr/local/sbin/ka9q-web -m hf1.local -p 8082 -n ON5KQ-JO10os_2x60m-terminated_dipole_1m-high >& ~/wsprdaemon.ka9q-web-8082.log &
+
+    echo "Spawned two ka9q-web services, one on port 8081 and port 8082"
+    return 0
+}
+
+### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
+function wd-killall() {
+    local rc
+    local rc1
+
+    local verbosity=${verbosity-0}
+
+    ### Stop all services
+    local services_list=(  wsprdaemon ft4-decoded ft8-decoded  pskreporter@ft4 pskreporter@ft8   pskreporter@wspr )
+    local service_name
+    for   service_name in ${services_list[@]}; do 
+        (( verbosity > 1 )) && printf "Stopping service '${service_name}"
+        local service_clean=${service_name%.service}
+        sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
+        rc=$? ; if (( rc )); then
+            printf "'ERROR: systemctl stop ${service_clean} => $rc:\m$(</tmp/wd-killall.log)\n"
+        else
+             (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
+        fi
+    done
+    wd-radiod-action stop
+
+    ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
+    local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
+    local pid_file_list=( $(find ${wd_temp_root_dir} ${WSPRDAEMON_ROOT_DIR=~/wsprdaemon} -name '*.pid') )
+    if (( ! ${#pid_file_list[@]} )); then
+        (( verbosity > 1 )) && printf "Found no pid files\n"
+    else
+        (( verbosity )) && printf "Found ${#pid_file_list[@]} pid files to kill\n" ###: '${pid_file_list[*]}'\n"
+
+        local pid_file
+        for pid_file in ${pid_file_list[@]}; do
+            local pid_val=$(< ${pid_file})
+            (( verbosity > 1 )) && printf "Killing PID ${pid_val} found in  pid file '${pid_file}'\n"
+            sudo kill ${pid_val} >& /tmp/wd-killall.log
+            rc=$?
+            if (( rc )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                (( verbosity )) && printf "INFO: failed to kill PID ${pid_val} found in pid file '${pid_file}'\n"
+            fi
+            rm ${pid_file}
+            rc1=$?
+            if (( rc1 )); then
+                ### This commonly occurs for wav_recording_daemon.pid files, they are children of an already killed decoding_dameon
+                (( verbosity )) && printf "INFO: failed to rm '${pid_file}'\n"
+            fi
+            if (( ! rc && ! rc1 )); then
+                (( verbosity > 1 )) && printf "Killed PID  ${pid_val} found in pid file '${pid_file}' and deleted that file\n" 
+            fi
+        done
+   fi
+
+    ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decoded\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
+    if (( ${#zombie_pid_list[@]} )); then
+        printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
+        sudo kill ${zombie_pid_list[@]}
+    fi
+    local mutex_dir_list=( $(find /dev/shm/wsprdaemon -type d -name '*mutex.lock') )
+    if (( ${#mutex_dir_list[@]} )) ; then
+        echo "Purging ${#mutex_dir_list[@]} zombie *mutex.lock directories"
+        rmdir ${mutex_dir_list[@]}
+    fi
+    local active_cpus_files_list=( $(find ${wd_temp_root_dir} -type f -name active_cpus_count) )
+    if (( ${#active_cpus_files_list[@]} )); then
+        (( verbosity > 1 )) && printf "Found ${#active_cpus_files_list[@]} active_cpus_count files\n"
+        local active_cpu_file
+        for active_cpu_file in ${active_cpus_files_list[@]}; do
+            local cpu_count=$(<${active_cpu_file})
+            if (( cpu_count )); then
+                 (( verbosity )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so flush that file\n"
+                 rm ${active_cpu_file}
+             else
+                 (( verbosity > 1 )) && printf "Found active_cpu_file=${active_cpu_file} has count ${cpu_count}, so leave it alone\n"
+            fi
+        done
+    fi
+
+    ### Clear the CPU affinity settings if they have been set by WD.  Only on the Orange Pi 5 for now.
+    local wd_cgroups_root_path="/sys/fs/cgroup"
+    local wd_cgroups_list=( wsprdaemon radiod linux )
+    local cgroup_name
+    for cgroup_name in ${wd_cgroups_list[@]} ; do
+        local cgroup_path="${wd_cgroups_root_path}/${cgroup_name}"
+        if [[ -d ${cgroup_path} ]]; then
+            (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
+            local rc
+            sudo rmdir  ${cgroup_path}
+            rc=$? ; if (( rc )); then
+                local proc_list=( $(<  ${cgroup_path}/cgroup.procs ) )
+                local proc_pid
+                for proc_pid in ${proc_list[@]}; do
+                    echo "Killing zombie command '$(ps -o comm= $proc_pid)' "
+                    sudo kill  $proc_pid
+                done
+            fi
+        else
+            (( verbosity > 1 ))  && printf "Cgroup ${cgroup_path} is not configured\n"
+        fi
+    done
+}
+
+function wd-flush-hashtables() {
+    wc $(find /dev/shm/wsprdaemon/ -type f -name hashtable.txt) | sort -n
+    read -p "Flush these hashtable.txt files? => "
+    find /dev/shm/wsprdaemon/ -type f -name hashtable.txt -delete
+}
+
+function wd-restart() {
+    wdz     ### stops radiod if it is being run as a Linux service: i.e. auto-started during boot or by 'wda' 
+    wd -Z   ### Stops WD if it had been started by 'wd -A'
+    wdrz    ### Stops radiod and the pktreporter services
+    wd -A    ### Starts WD which starts the radiod services if they are not running
+}
+
+alias wdtw="test_get_wav_file_list"
+function test_get_wav_file_list() {
+    local sleep_seconds_between_creating_new_wav_files=${1-2}   ### defult to 2 seconds
+
+    local testing_receiver_name="KA9Q_0"
+    local testing_receiver_band="20"
+    #local testing_frequency=$( get_wspr_band_freq_hz ${testing_receiver_band} )
+    local testing_frequency="14095600"
+    local testing_modes="W2:F2:W5"
+    #local testing_wav_recording_dir=$(get_recording_dir_path ${testing_receiver_name} ${testing_receiver_band})
+    local testing_wav_recording_dir=" /dev/shm/wsprdaemon/recording.d/KA9Q_0"
+    local template_wav_file="${testing_wav_recording_dir%/*}/one-minute.wav"
+
+    if [[ ! -f ${template_wav_file} ]]; then
+        echo "WARNING: Can't find '${template_wav_file}', so 'cp  ~/one-minute.wav ${template_wav_file}'"
+        cp ~/one-minute.wav ${template_wav_file}
+    fi
+
+    local skip_reads=0
+
+    while true; do
+        local testing__epoch
+
+        local test_wav_file_name_list=( $( find ${testing_wav_recording_dir} -type f -name "20*Z_${testing_frequency}_usb.wav"  | sort ) )
+        if (( ${#test_wav_file_name_list[@]} == 0 )); then
+            local current_epoch=$(date +%s)
+            local first_wav_file_epoch=$(( current_epoch - (current_epoch % 3600) ))
+            testing_epoch=${first_wav_file_epoch}
+        else
+            local most_recent_file_name=${test_wav_file_name_list[-1]##*/}
+            local most_recent_file_date_format="${most_recent_file_name:0:8} ${most_recent_file_name:9:2}:${most_recent_file_name:11:2}:${most_recent_file_name:13:2}"
+            local most_recent_epoch=$(date -d "${most_recent_file_date_format}" +%s)
+            testing_epoch=$(( most_recent_epoch + 60 ))
+        fi
+
+        local test_wav_file_time=$(date -d @${testing_epoch} "+%Y%m%dT%H%M%S")
+        local test_wav_file_name="${testing_wav_recording_dir}/${test_wav_file_time}Z_${testing_frequency}_usb.wav"
+        cp ${template_wav_file} ${test_wav_file_name}
+
+        if (( skip_reads ==  0 )); then
+            echo ""
+            read -p "For testing_epoch ${testing_epoch} created ${test_wav_file_name}. Create the next one minute file? => "
+            if [[ "${REPLY}" =~ ^[0-9]+$ ]]; then
+                if (( REPLY > 0 )); then
+                    skip_reads=$(( ${REPLY} - 1 ))
+                fi
+            fi
+        else
+            (( --skip_reads ))
+            echo -n "Sleeping ${sleep_seconds_between_creating_new_wav_files} seconds.. "
+            sleep ${sleep_seconds_between_creating_new_wav_files}
+        fi
+
+
+
+    done
+}
+
 
 function wd-restart-web() {
     local ka9q_web_pid_file=~/wsprdaemon/ka9q_web_daemon.pid
@@ -368,8 +865,8 @@ alias tfw='tf ~/wsprdaemon/watchdog_daemon.log'
 alias g='git'
 alias gc='git commit'
 alias gd='git diff'
-alias gs='git status'
-alias gl='git log'
+alias gs='git status | grep -B 100 "Untracked files"'
+alias gl='git log | head'
 
 ### Get pub file for a copy/past to remote server's .ssh/authorized_keys file
 alias catss='cat ~/.ssh/*pub'
@@ -508,10 +1005,12 @@ alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wdld='wd -l d'
-alias wda='wd -a'
-alias wdz='wd -z'
+alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
+alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wds='wd -s'
 alias wdv='wd -V'
+alias wdvv='(cd ~/wsprdaemon; echo "$(git symbolic-ref --short HEAD 2>/dev/null)-$(git rev-list --count HEAD)" )'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD
 alias wddd='wd -D'      ### Decrement
 
@@ -622,6 +1121,7 @@ function wd-wav-clean() {
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
 
+alias wdwaf=wd-wav-archive-fix
 function wd-wav-archive-fix(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
@@ -633,7 +1133,7 @@ function wd-wav-archive-fix(){
         return 0
     fi
     local date_dir
-    for date_dir in $(find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
+    for date_dir in $(find -L ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort ); do 
         #echo "date_dir = ${date_dir}"
         local reporter_dir
         for reporter_dir in $(find ${date_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
@@ -641,9 +1141,10 @@ function wd-wav-archive-fix(){
             local receiver_dir
             for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
                 echo  "Examining  ${receiver_dir} "
-                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]]; then
-                    read -p "Fix ${receiver_dir} to become ${receiver_dir}_${GRAPE_PSWS_ID#*_}? "
-                    mv  ${receiver_dir} ${receiver_dir}_${GRAPE_PSWS_ID#*_}
+                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]] || [[ ${receiver_dir##*@} =~ "NOT_DEFINED" ]]; then
+                    local new_file_name="${receiver_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}"
+                    read -p "Fix ${receiver_dir} to become ${new_file_name} ? => "
+                    mv  ${receiver_dir} ${new_file_name}
                 elif ! [[ ${receiver_dir} =~ "@" ]]; then
                    read -p  "Fix receiver directory ${receiver_dir} by renaming it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
                    mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}
@@ -652,7 +1153,6 @@ function wd-wav-archive-fix(){
         done
     done
 }
-alias wdwaf=wd-wav-archive-fix
 
 function wd-ssh-psws(){
     source ~/wsprdaemon/wsprdaemon.conf
@@ -841,7 +1341,7 @@ function wd-get_ka9q-conf_file-base_name() {
         [[ ${verbosity-0} -gt 0 ]] && echo "Using conf base name KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf" 1>&2
         conf_base_name="${KA9Q_CONF_NAME}"
     else
-        [[ ${verbosity-0} -gt 0 ]] && echo "Using default conf base name 'rx888-wsprsdaemon'" 1>&2
+        [[ ${verbosity-0} -gt 0 ]] && echo "Using default conf base name 'rx888-wsprdaemon'" 1>&2
          conf_base_name="rx888-wsprdaemon"
     fi
 
@@ -853,7 +1353,6 @@ function wd-get_ka9q-conf_file-base_name() {
         [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
     fi
     echo "${conf_base_name}"
-    set +x
 }
 
 function wd-get-ka9q-conf-file-path () {
@@ -993,24 +1492,10 @@ function wd-9qstats() {
     done
 }
 
-declare -A KA9Q_band_freq=(
-    [160]="1836600"
-    [80]="3568600"
-    [60]="5287200"
-    [40]="7038600"
-    [30]="10138700"
-    [20]="14095600"
-    [17]="18104600"
-    [15]="21094600"
-    [12]="24924600"
-    [10]="28124600"
-     [6]="50293000"
-)
-
 function wd-radiod-control()
 {
     local band=${1-20}
-    local tuning_freq=${KA9Q_band_freq[${band}]}
+    local tuning_freq=${KA9Q_wspr_band_freq_list[${band}]}
     local mc_url
 
     local radiod_conf_base_name=$(wd-get_ka9q-conf_file-base_name)
@@ -1048,8 +1533,8 @@ function wd-9m()
 {
     local header_printed="no"
     local band
-    for band in $( IFS=$'\n'; echo "${!KA9Q_band_freq[*]}" | sort -n ); do
-        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_band_freq[${band}]} hf.local)
+    for band in $( IFS=$'\n'; echo "${!KA9Q_wspr_band_freq_list[*]}" | sort -n ); do
+        local metadump_out=$(metadump -n -c 1 -s ${KA9Q_wspr_band_freq_list[${band}]} hf.local)
         local rf_gain=$(echo "${metadump_out}" | awk '/rf gain/{print $(NF - 1) }')
         local if_power=$(echo "${metadump_out}" | awk '/IF pwr/{print $(NF - 1) }')
         local noise_level=$(echo "${metadump_out}" | awk '/N0 /{print $(NF - 1) }')
@@ -1161,9 +1646,16 @@ function  wd-git-to-ssh(){
 
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
-alias wd-watch-wavs='watch "ls -lr *.wav"'  ### watch for wd-record or kiwirecorder to create wav files in cwd
+alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
+function wd-watch-wavs() {
+    local band_freq=${1-14}
+    local band_dir=${PWD##*/}
+
+    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
+}
 alias wdww='wd-watch-wavs'
-alias wdps='ps aux | grep wd-record | grep -v grep'
+
+alias wdps='ps aux | grep "wd-record\|pcmrecord" | grep -v grep'
 
 function wd-ssh-to-wdclient() {
     local rac_id=${1:-usage}

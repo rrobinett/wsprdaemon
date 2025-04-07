@@ -70,7 +70,7 @@ fi
 
 ### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-declare -r VERSION=$(cd ${WSPRDAEMON_ROOT_DIR}; git describe --tags --abbrev=0)-$(cd ${WSPRDAEMON_ROOT_DIR}; git rev-list --count HEAD)
+declare -r VERSION="$(cd ${WSPRDAEMON_ROOT_DIR}; git symbolic-ref --short HEAD 2>/dev/null)-$(cd ${WSPRDAEMON_ROOT_DIR}; git rev-list --count HEAD)"
 
 declare -r RUNNING_IN_DIR=${PWD}        ### Used by the '-d' and '-D' commands so they know where to look for *.pid files
 ################# Check that our recordings go to a tmpfs (i.e. RAM disk) file system ################
@@ -107,7 +107,7 @@ source ${WSPRDAEMON_ROOT_DIR}/upload_server_utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
-source ${WSPRDAEMON_ROOT_DIR}/wav_archive.sh
+source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
@@ -164,6 +164,7 @@ while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
             ;;
         g)
             grape_menu -$OPTARG
+            echo "Finished running 'grape_menu -$OPTARG' => $?"
             ;;
         v)
             ((verbosity++))

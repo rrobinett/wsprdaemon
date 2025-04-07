@@ -4,8 +4,6 @@
 ```{toctree}
 :maxdepth: 2
 :caption: Description
-description/history.md
-description/collaborations.md
 description/how_it_works.md
 description/validity.md
 ```
@@ -17,14 +15,6 @@ description/validity.md
 requirements/os.md
 requirements/radios.md
 requirements/network.md
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Network
-
-network/basics.md
-network/multicast.md
 ```
 
 ```{toctree}

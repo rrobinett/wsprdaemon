@@ -42,8 +42,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -53,15 +51,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -77,9 +71,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -125,7 +119,7 @@
              
   <section id="the-ka9q-radio-channels-section">
 <h1>The ka9q-radio [channels] section<a class="headerlink" href="#the-ka9q-radio-channels-section" title="Link to this heading"></a></h1>
-<p>wsprdaemon typically manages reception and reporting of 4 types of channels – WSPR spots, FT4 and FT8 spots, and WWV recordings.  A typical configuration of this section follows:</p>
+<p>wsprdaemon typically manages reception and reporting of 4 types of channels – WSPR spots, FT4 and FT8 spots, and WWV recordings.  A typical configuration of this section that to receive wspr, ft4, ft8, and WWV/CHU follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">WSPR</span><span class="p">]</span>
 <span class="c1"># Bottom of 200 Hz WSPR segments on each band. Center is 1500 Hz higher</span>
 <span class="c1"># sample rate must be 12 kHz as required by wsprd</span>
@@ -133,7 +127,7 @@
 <span class="c1"># encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats</span>
 <span class="n">data</span> <span class="o">=</span> <span class="n">wspr</span><span class="o">-</span><span class="n">pcm</span><span class="o">.</span><span class="n">local</span>
 <span class="n">agc</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="n">gain</span> <span class="o">=</span> <span class="mi">60</span>               <span class="c1"># will change to 0 in 3.3.1 when encoding = float</span>
+<span class="n">gain</span> <span class="o">=</span> <span class="mi">0</span>               <span class="c1"># will change to 0 in 3.3.1 when encoding = float</span>
 <span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>
 <span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>
 <span class="n">low</span> <span class="o">=</span> <span class="mi">1300</span>
@@ -141,7 +135,7 @@
 <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;136k000 474k200 1m836600 3m568600 3m592600 5m287200 5m364700 7m038600 10m138700 13m553900 14m095600 18m104600 21m094600 24m924600 28m124600 50m293000&quot;&quot;</span>
 
 <span class="p">[</span><span class="n">WSPR</span><span class="o">-</span><span class="n">IQ</span><span class="p">]</span>
-<span class="n">disable</span> <span class="o">=</span> <span class="n">yes</span>
+<span class="n">disable</span> <span class="o">=</span> <span class="n">no</span>           <span class="c1"># change to yes if you do not intend to gather PSWS data for upload</span>
 <span class="c1"># encoding = float      # default for 3.2.3 is int but 3.3.1 supports floats</span>
 <span class="n">data</span> <span class="o">=</span> <span class="n">wspr</span><span class="o">-</span><span class="n">iq</span><span class="o">.</span><span class="n">local</span>
 <span class="n">agc</span> <span class="o">=</span> <span class="mi">0</span>
@@ -170,7 +164,8 @@
 
 </pre></div>
 </div>
-<p><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:</p>
+<section id="phil-karn-s-comprehensive-documentation-of-this-section">
+<h2><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:<a class="headerlink" href="#phil-karn-s-comprehensive-documentation-of-this-section" title="Link to this heading"></a></h2>
 <p>A <em>radiod</em> configuration file may contain one or more sections
 configuring receiver channels. This
 is necessarily the most complex part of the configuration since
@@ -179,7 +174,7 @@ it depends on your specific applications.</p>
 output multicast stream and sample rate, differing only in frequency. What follows
 is a list of parameter settings with their default values:</p>
 <section id="mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum">
-<h2>mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum<a class="headerlink" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum" title="Link to this heading"></a></h2>
+<h3>mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum<a class="headerlink" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum" title="Link to this heading"></a></h3>
 <p>No default. Required unless specified in [global].</p>
 <p>A “mode” would be more accurately called a “preset” because it
 actually refers to a group of parameters (demodulator type, sample
@@ -192,12 +187,12 @@ add a new mode to <em>/var/lib/ka9q-radio/modes.conf</em>. Be careful to back
 it up; it may be overwritten by the next “make install.</p>
 </section>
 <section id="dns-no-yes-default-no">
-<h2>dns = no | yes (default no)<a class="headerlink" href="#dns-no-yes-default-no" title="Link to this heading"></a></h2>
+<h3>dns = no | yes (default no)<a class="headerlink" href="#dns-no-yes-default-no" title="Link to this heading"></a></h3>
 <p>Use the domain name system to resolve the name in the <em>data</em> parameter. See
-the discussion in <a class="reference internal" href="#ka9q-radio.md"><span class="xref myst">ka9q-radio.md</span></a>.</p>
+the discussion in <a class="reference internal" href="../wsprdaemon.conf.d/ka9q-radio.html"><span class="std std-doc">ka9q-radio.md</span></a>.</p>
 </section>
 <section id="data">
-<h2>data =<a class="headerlink" href="#data" title="Link to this heading"></a></h2>
+<h3>data =<a class="headerlink" href="#data" title="Link to this heading"></a></h3>
 <p>No default. Required unless specified in [global].</p>
 <p>Specifies the DNS name of the multicast group to be used for receiver
 output streams. If not specified in the [global] section, it must be
@@ -206,6 +201,7 @@ individually specified in each subsequent section.</p>
 and advertise an IPv4 multicast address in the 239.0.0.0/8 block,
 along with a SRV DNS record of type _rtp._udp advertising this name.
 See the discussion of this parameter in the [global] section.</p>
+</section>
 </section>
 <section id="parameters-in-modes-conf">
 <h2>Parameters in <em>modes.conf</em><a class="headerlink" href="#parameters-in-modes-conf" title="Link to this heading"></a></h2>

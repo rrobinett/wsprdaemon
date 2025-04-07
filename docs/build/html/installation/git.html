@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Getting the software with GIT &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>Download the software with GIT &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -44,8 +44,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -55,16 +53,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting the software with GIT</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Download the software with GIT</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#clone-wsprdaemon-from-github-com">Clone wsprdaemon from github.com</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#to-install-ka9q-web">To install ka9q-web:</a></li>
 </ul>
 </li>
 </ul>
@@ -82,9 +79,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -118,7 +115,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Getting the software with GIT</li>
+      <li class="breadcrumb-item active">Download the software with GIT</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/installation/git.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -128,9 +125,9 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="getting-the-software-with-git">
-<h1>Getting the software with GIT<a class="headerlink" href="#getting-the-software-with-git" title="Link to this heading"></a></h1>
-<p>GitHub provides the repository for all versions of wsprdaemon.  Presently, the current master provides version 3.2.3.  Version 3.3.1 remains in a development branch.</p>
+  <section id="download-the-software-with-git">
+<h1>Download the software with GIT<a class="headerlink" href="#download-the-software-with-git" title="Link to this heading"></a></h1>
+<p>GitHub hosts the repository for all versions of WD.  Presently, the current master provides version 3.2.3.  The latest development version, 3.3.1, remains in a branch.</p>
 <section id="clone-wsprdaemon-from-github-com">
 <h2>Clone wsprdaemon from github.com<a class="headerlink" href="#clone-wsprdaemon-from-github-com" title="Link to this heading"></a></h2>
 <p>From /home/wsprdaemon (or the installing user’s home directory) <a class="reference internal" href="preparation.html"><span class="std std-doc">See Preparing the Installation</span></a></p>
@@ -149,12 +146,12 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">pull</span>
 </pre></div>
 </div>
-<p>To switch to a different branch, e.g., 3.2.0, use:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="mf">3.2.0</span>
+<p>To switch to a different branch, e.g., 3.3.1, use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="mf">3.3.1</span>
 <span class="n">git</span> <span class="n">pull</span>
 </pre></div>
 </div>
-<p>wsprdaemon provides lots of “aliases” for important and otherwise useful functions.  To have immediate access to these, run:</p>
+<p>WD provides lots of shell “aliases” to important and otherwise useful functions.  To have immediate access to these, run:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">source</span> <span class="n">bash</span><span class="o">-</span><span class="n">aliases</span> <span class="o">../.</span><span class="n">bash_aliases</span>
 </pre></div>
 </div>
@@ -168,6 +165,77 @@
 <li><p><a class="reference internal" href="../configuration/radiod_conf.html"><span class="std std-doc">radiod configuration</span></a></p></li>
 <li><p>KiwiSDR</p></li>
 </ul>
+</section>
+</section>
+<section id="to-install-ka9q-radio-independently">
+<h1>To install ka9q-radio independently:<a class="headerlink" href="#to-install-ka9q-radio-independently" title="Link to this heading"></a></h1>
+<p>ka9q-radio has many uses outside its integrated role with WD. You can install and run it without WD.
+Keep in mind that Rob checks out a particular version of ka9q-radio that he knows works with WD.<br />
+So, if you use another version, you may find its interaction with WD problematic. YMMV.</p>
+<p>For details of ka9q-radio installation, consult the docs sub-directory in the ka9q-radio created after performing a <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span></code>.</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/ka9q/ka9q-radio.git">KA9Q_RADIO_GIT_URL</a></p></li>
+<li><p><a class="reference external" href="https://github.com/ka9q/ft8_lib.git">KA9Q_FT8_GIT_URL</a></p></li>
+<li><p><a class="reference external" href="https://github.com/pjsg/ftlib-pskreporter.git">PSK_UPLOADER_GIT_URL</a></p></li>
+</ul>
+<section id="to-install-ka9q-web">
+<h2>To install ka9q-web:<a class="headerlink" href="#to-install-ka9q-web" title="Link to this heading"></a></h2>
+<p>ka9q-web requires ka9q-radio of course, but also the web server package, onion, produced by David Moreno, so install it first.</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/davidmoreno/onion">ONION_GIT_URL</a></p></li>
+</ul>
+<p>Use the following bash scripts as scripts or just as a guide to installation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>declare ONION_LIBS_NEEDED=&quot;libgnutls28-dev libgcrypt20-dev cmake&quot;
+if [[ ${OS_RELEASE} =~ 24.04 ]]; then
+    ONION_LIBS_NEEDED=&quot;${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20&quot;
+fi
+
+function build_onion() {
+    local project_subdir=$1
+    local project_logfile=&quot;${project_subdir}-build.log&quot;
+
+    wd_logger 2 &quot;Building ${project_subdir}&quot;
+    (
+    cd ${project_subdir}
+    mkdir -p build
+    cd build
+    cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
+    make
+    sudo make install
+    sudo ldconfig
+    )     &gt;&amp; ${project_logfile}
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+         wd_logger 1 &quot;ERROR: compile of &#39;${project_subdir}&#39; returned ${rc}:\n$( &lt; ${project_logfile} )&quot;
+         exit 1
+     fi
+     wd_logger 2 &quot;Done&quot;
+    return 0
+}
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/scottnewell/ka9q-web">KA9Q_WEB_GIT_URL</a></p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>function build_ka9q_web() {
+    local project_subdir=$1
+    local project_logfile=&quot;${project_subdir}_build.log&quot;
+
+    wd_logger 2 &quot;Building ${project_subdir}&quot;
+    (
+    cd  ${project_subdir}
+    make
+    sudo make install
+    ) &gt;&amp;  ${project_logfile}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 &quot;ERROR: compile of &#39;ka9q-web&#39; returned ${rc}:\n$(&lt; ${project_logfile})&quot;
+        exit 1
+    fi
+    wd_logger 2 &quot;Done&quot;
+    return 0
+}
+</pre></div>
+</div>
 </section>
 </section>
 

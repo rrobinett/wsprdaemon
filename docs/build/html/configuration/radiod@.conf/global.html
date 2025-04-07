@@ -42,8 +42,6 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Description</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../description/history.html">History</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../description/collaborations.html">Collaborations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/how_it_works.html">How wsprdaemon Works</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../description/validity.html">Validity of data path and results</a></li>
 </ul>
@@ -53,15 +51,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../requirements/network.html">Networking</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Network</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../network/basics.html">Basic Network Requirements</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../network/multicast.html">Multicast Requirements</a></li>
-</ul>
 <p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/preparation.html">Preparing for installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Getting the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
 <ul>
@@ -77,9 +71,9 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating wsprdaemon</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring wsprdaemon operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
 <ul>
@@ -128,26 +122,28 @@
 <p>A typical configuration of this section for wsprdaemon use follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="k">global</span><span class="p">]</span>
 <span class="c1"># these next two establish defaults for all demod sections</span>
-<span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span> <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
-<span class="n">status</span> <span class="o">=</span> <span class="n">hf</span><span class="o">.</span><span class="n">local</span>       <span class="c1"># DNS name for receiver status and commands</span>
-<span class="c1"># data = hf-data.local    # not strictly necessary</span>
-<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>        <span class="c1"># default output sample rate</span>
-<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>              <span class="c1"># default receive mode</span>
+<span class="n">hardware</span> <span class="o">=</span> <span class="n">rx888</span>            <span class="c1"># use built-in rx888 driver, configured in [rx888]</span>
+<span class="c1"># status = hf-status.local         # DNS name for receiver status and commands</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">bee1</span><span class="o">-</span><span class="n">hf</span><span class="o">-</span><span class="n">status</span><span class="o">.</span><span class="n">local</span>   <span class="c1"># add &quot;bee1&quot; or the like when using more than one computer/RX888</span>
+<span class="c1"># data = hf-data.local      # not strictly necessary</span>
+<span class="n">samprate</span> <span class="o">=</span> <span class="mi">12000</span>            <span class="c1"># default output sample rate</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="n">usb</span>                  <span class="c1"># default receive mode</span>
 <span class="c1"># rest are defaults</span>
-<span class="c1">#ttl = 1</span>
-<span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c1"># Too many WD sites don&#39;t have IGMP aware ethernet swtiches, so don&#39;t send radiod multicast packets out the ethernet port.</span>
+<span class="c1">#ttl = 1                # if you mean to present RTP (multicast) streams to other computers -- requires an IGMP-aware ethernet switch.</span>
+<span class="n">ttl</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c1"># if you only intend RTP streams for local interprocess communication.</span>
 <span class="c1">#fft-threads = 2</span>
 <span class="c1">#blocktime = 20 # allowable Opus block times: 2.5, 5, 10, 20, 40, 60, 80, 100, 120</span>
 <span class="c1">#overlap = 5 # don&#39;t change unless you know what you&#39;re doing</span>
-<span class="c1">#iface = enp1s0</span>
+<span class="c1">#iface = enp1s0         # uncomment to confine RTP multicast to one of several NICs, irrelevant if ttl = 0</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:</p>
+<section id="phil-karn-s-comprehensive-documentation-of-this-section">
+<h2><a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs">Phil Karn’s comprehensive documentation</a> of this section:<a class="headerlink" href="#phil-karn-s-comprehensive-documentation-of-this-section" title="Link to this heading"></a></h2>
 <section id="the-global-section">
-<h2>The [global] Section<a class="headerlink" href="#the-global-section" title="Link to this heading"></a></h2>
-<hr class="docutils" />
+<h3>The [global] Section<a class="headerlink" href="#the-global-section" title="Link to this heading"></a></h3>
 <p>This is the only reserved section name, and it must appear exactly once in
 every <em>radiod</em> configuration file. Entries in the <strong>[global]</strong> section include:</p>
+</section>
 <section id="hardware-no-default-required">
 <h3>hardware = (no default, required)<a class="headerlink" href="#hardware-no-default-required" title="Link to this heading"></a></h3>
 <p>Gives the name of the config file section that describes the
@@ -332,7 +328,7 @@ starts, but to avoid long startup times only minimal effort is expended.</p>
 <p>FFTW3 also uses the “global wisdom” file <em>/etc/fftw/wisdomf</em>, which
 can be created with significantly more effort (and CPU time). Right
 now I generate the latter file by hand with a fairly esoteric set of
-commands, see <a class="reference internal" href="#FFTW3.md"><span class="xref myst">FFTW3.md</span></a>. FFTW <em>can</em> generate this information
+commands, see <a class="reference external" href="https://github.com/ka9q/ka9q-radio/tree/main/docs/FFTW3.md">FFTW3.md</a>. FFTW <em>can</em> generate this information
 automatically when first run but can take <em>hours</em> to do so. I am
 working on a better way, e.g., by automatically starting wisdom
 generation in the background so that <em>radiod</em> starts immediately,

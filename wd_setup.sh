@@ -48,10 +48,11 @@ CPU_ARCH=$(uname -m)
 
 wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
 
-declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns \
+declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
-                libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev libncurses-dev \
-                libsamplerate0  libsamplerate0-dev )      ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
+                libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
+                libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
+                ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
 declare LIB_QT5_CORE="libqt5core5a"
@@ -72,22 +73,22 @@ case ${CPU_ARCH} in
         fi
         ;;
     aarch64)
+        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
          if [[ "${OS_RELEASE}" == "12" ]]; then
-            ### The 64 bit Pi 5 OS is based upon  Debian 12
-            wd_logger 2 "Installing on a Pi 5 which is based upon Debian ${OS_RELEASE}"
-            PACKAGE_NEEDED_LIST+=(  python3-matplotlib libgfortran5 ${LIB_QT5_CORE} )
-        else
-            ### This is a 64 bit bullseye Pi4 and the OrangePi
-            PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
+            ### The 64 bit Pi5 OS is based upon Debian 12
+            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
+            PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
         wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
         if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
-            ### Ubuntu 22.04 and Debian doesn't use qt5-default
+            ### Ubuntu 22.04 and Debian don't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
+        elif [[ "${OS_RELEASE}" =~ 24.10 ]]; then
+            PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 libqt5core5t64 python3-psycopg2 )
         elif grep -q 'Linux Mint' /etc/os-release; then
             PACKAGE_NEEDED_LIST+=( libgfortran5:amd64 python3-psycopg2 python3-numpy ${LIB_QT5_LINUX_MINT} )
         else
@@ -99,7 +100,81 @@ case ${CPU_ARCH} in
         exit 1
         ;;
 esac
-#### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which casues kiwiwrecorder.py to crash if there are no active ssh sessions
+
+function is_orange_pi_5() {
+    if grep -q 'Rockchip RK3588' /proc/cpuinfo 2>/dev/null || \
+       grep -q "Orange Pi 5" /sys/firmware/devicetree/base/model 2>/dev/null; then
+        return 0  # Success (Orange Pi5 detected)
+    else
+        return 1  # Failure (Not an Orange Pi5)
+    fi
+}
+
+declare CPU_CGROUP_PATH="/sys/fs/cgroup"
+declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
+
+### Restrict WD and its children so two CPU cores are always free for KA9Q-radio
+# This should be undone later on systems not running KA9Q-radio
+function wd_run_in_cgroup() {
+    local rc
+    local wd_core_range
+    if [[ -n "${WD_CPU_CORES+set}" ]]; then
+        wd_core_range="$WD_CPU_CORES"
+        wd_logger 1 "MAX_WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
+    else
+        local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
+        if ((  cpu_core_count < 8 )); then
+            wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+            return 0
+        fi
+        ### Most CPUs seem to have one of its pair of high performance chyperthreaded cores at 0-1
+        #### So leave those cores for radiod and restrict WD to the other cores of the CPU
+        #### It would be better to learn which cores are running radiod and then exclude WD from using them, but there is only so much coding time in life...
+        local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 1 ))}
+        wd_core_range="2-$max_cpu_core"
+        wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
+    fi
+
+    ### Fix up the wsprdaemon.service file so the CPUAffinity is assigned by systemctl when it starts WD
+    local wd_service_file="/etc/systemd/system/wsprdaemon.service"
+    if [[ ! -f $wd_service_file ]]; then
+        wd_logger 1 "WARNING: this WD server has not been setup to autostart"
+    else
+         update_ini_file_section_variable $wd_service_file "Service" "CPUAffinity" "$wd_core_range"
+         rc=$?
+         case $rc in
+             0)
+                 wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was already setup"
+                 ;;
+             1)
+                 wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was added or changed"
+                 sudo systemctl daemon-reload
+                 ;;
+             *)
+                 wd_logger 1 "ERROR: 'update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range' => $rc"
+                 ;;
+         esac
+    fi
+
+    if [ -n "${INVOCATION_ID-}" ]; then
+        wd_logger 1 "WD is being run by systemctld which is in control of CPUAffinity.  So don't try to reassign WD to other cores"
+        return 0
+    fi
+    wd_logger 1 "WD is being run by a terminal session, so set CPUAffinity to run on cores '$wd_core_range'"
+ 
+    echo  "+cpuset"         | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
+    sudo mkdir -p  "${WD_CPUSET_PATH}"
+    echo  "+cpuset"         | sudo tee "${WD_CPUSET_PATH}/cgroup.subtree_control"  > /dev/null
+    echo  0                 | sudo tee "${WD_CPUSET_PATH}/cpuset.mems"             > /dev/null  ### This must be done before the next line
+    echo  ${wd_core_range}  | sudo tee "${WD_CPUSET_PATH}/cpuset.cpus"             > /dev/null  ###
+    echo $$                 | sudo tee "${WD_CPUSET_PATH}/cgroup.procs"            > /dev/null
+
+    wd_logger 1 "Restricted current WD shell $$ and its children to CPU cores ${wd_core_range}"
+}
+wd_run_in_cgroup
+
+
+#### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
 function setup_wd_auto_ssh()
 {
@@ -210,7 +285,7 @@ if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
         exit 1
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
-        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in  the wd_template.conf file"
+        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
         exit 2
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
@@ -305,7 +380,7 @@ function check_for_kiwirecorder_cmd() {
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
+            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
     if [[ ${get_kiwirecorder} == "yes" ]]; then
@@ -444,7 +519,7 @@ function find_wsjtx_commands()
             if [[ ${bin_file} =~ bin/wsprd.spread ]]; then
                 wd_logger 2 "Found that WSPRD_SPREADING_CMD='${bin_file}' runs on this server"
                 if [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
-                    wd_logger 1 "Warning: ignaoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
+                    wd_logger 1 "Warning: ignoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
                 else
                     WSPRD_SPREADING_CMD="${bin_file}"
                 fi
@@ -505,11 +580,11 @@ function find_wsjtx_commands()
             exit 1
         fi
         WSPRD_CMD=$(realpath bin/wsprd)
-        wd_logger 1 "Installed missing bin/wspsrd from the 'wsjtx' package"
+        wd_logger 1 "Installed missing bin/wsprd from the 'wsjtx' package"
     fi
     if [[ -z "${WSPRD_SPREADING_CMD-}" ]]; then
         if grep -q "Ubuntu 20" /etc/os-release ; then
-            wd_logger 1 "On Ubuntu 20 installting bin/wsprd as wsprd.spread.ubuntu.20.x86"
+            wd_logger 1 "On Ubuntu 20 installing bin/wsprd as wsprd.spread.ubuntu.20.x86"
             cp bin/wsprd bin/wsprd.spread.ubuntu.20.x86
             WSPRD_SPREADING_CMD=$(realpath bin/wsprd.spread.ubuntu.20.x86)
         else
@@ -529,3 +604,9 @@ if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
     exit 1
 fi
+
+if ! check_systemctl_is_setup ; then
+    wd_logger 1 "ERROR: failed to setup this server to auto-start"
+    exit 1
+fi
+

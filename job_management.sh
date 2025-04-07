@@ -159,7 +159,7 @@ function check_for_zombies() {
             local receiver_band=${running_job_fields[1]}
             local receiver_modes=${running_job_fields[2]-ALL}
 
-            local rx_dir_path=$(get_recording_dir_path ${receiver_name} ${receiver_band})
+            local rx_dir_path=$(get_decoding_dir_path ${receiver_name} ${receiver_band})
             shopt -s nullglob
             local rx_pid_file_list=( ${rx_dir_path}/*pid )
             shopt -u nullglob
@@ -345,7 +345,7 @@ function tail_wspr_decode_job_log() {
             printf "%2s: %12s,%-4s capture  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})"
             printf "%2s: %12s,%-4s decode   %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})"
             printf "%2s: %12s,%-4s posting  %s\n" ${job_index} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})"
-            local decode_log_file=$(get_recording_dir_path ${receiver_name} ${receiver_band})/decode.log
+            local decode_log_file=$(get_decoding_dir_path ${receiver_name} ${receiver_band})/decode.log
             if [[ -f ${decode_log_file} ]]; then
                 less +F ${decode_log_file}
             else
@@ -754,12 +754,12 @@ function stop_running_jobs() {
             local running_modes=${running_job_fields[2]-ALL}       ### The mode field is optional and will not be present in legacy config files
             if [[ ${stop_receiver} == "all" ]] || ( [[ ${stop_receiver} == ${running_receiver} ]] && [[ ${stop_band} == ${running_band} ]]) ; then
                 wd_logger 1 "Checking to see if job ${running_receiver},${running_band} is still running"
-                local recording_dir=$(get_recording_dir_path ${running_receiver} ${running_band})
-                if [[ -f ${recording_dir}/recording.stop ]]; then
-                    wd_logger 1 "INFO: found file '${recording_dir}/recording.stop'"
+                local decoding_dir=$(get_decoding_dir_path ${running_receiver} ${running_band})
+                if [[ -f ${decoding_dir}/recording.stop ]]; then
+                    wd_logger 1 "INFO: found file '${decoding_dir}/recording.stop'"
                     found_running_file="yes"
                 else
-                    wd_logger 1 "no file '${recording_dir}/recording.stop'"
+                    wd_logger 1 "no file '${decoding_dir}/recording.stop'"
                 fi
             fi
         done
