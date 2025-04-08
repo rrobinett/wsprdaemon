@@ -417,17 +417,17 @@ function wd-killall() {
         if [[ -d ${cgroup_path} ]]; then
             (( verbosity )) && printf "Disabling Cgroup ${cgroup_path}\n"
             local rc
-            sudo rmdir  ${cgroup_path}
+            sudo rmdir  ${cgroup_path} >& /dev/null
             rc=$? ; if (( rc )); then
                 local proc_list=( $(<  ${cgroup_path}/cgroup.procs ) )
                 local proc_pid
                 for proc_pid in ${proc_list[@]}; do
-                    echo "Killing zombie command '$(ps -o comm= $proc_pid)' "
-                    sudo kill  $proc_pid
+                    (( verbosity )) && echo "Killing zombie command '$(ps -o comm= $proc_pid)' "
+                    sudo kill  $proc_pid >& /dev/null
                 done
             fi
         else
-            (( verbosity > 1 ))  && printf "Cgroup ${cgroup_path} is not configured\n"
+            (( verbosity ))  && printf "Cgroup ${cgroup_path} is not configured\n"
         fi
     done
 }
