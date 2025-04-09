@@ -1,4 +1,4 @@
-#!/home/wsprdaemon/n5tnl/venv/bin/python3
+#!/home/wsprdaemon/wsprdaemon/venv/bin/python3
 
 import numpy as np
 import os

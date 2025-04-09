@@ -438,13 +438,6 @@ function wd-flush-hashtables() {
     find /dev/shm/wsprdaemon/ -type f -name hashtable.txt -delete
 }
 
-function wd-restart() {
-    wdz     ### stops radiod if it is being run as a Linux service: i.e. auto-started during boot or by 'wda' 
-    wd -Z   ### Stops WD if it had been started by 'wd -A'
-    wdrz    ### Stops radiod and the pktreporter services
-    wd -A    ### Starts WD which starts the radiod services if they are not running
-}
-
 alias wdtw="test_get_wav_file_list"
 function test_get_wav_file_list() {
     local sleep_seconds_between_creating_new_wav_files=${1-2}   ### defult to 2 seconds
@@ -1008,6 +1001,7 @@ alias wdld='wd -l d'
 alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
 alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
+alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
 alias wds='wd -s'
 alias wdv='wd -V'
 alias wdvv='(cd ~/wsprdaemon; echo "$(< wd_version.txt)-$(git rev-list --count HEAD)" )'
