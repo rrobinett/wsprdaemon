@@ -43,7 +43,7 @@ function wd-pcmrecord-summaries()
     wd-get-ka9q-receiver-dir "pcmrecord_log_dir"
     rc=$? && (( rc )) && echo "Can't find any KA9Q_* directories" && return $rc
 
-    local create_time_file_list=($( find $pcmrecord_log_dir -type f -name wav_file_create_time.log ))
+    local create_time_file_list=($( find $pcmrecord_log_dir -type f -name wav_file_create_time.log | grep WWV_[1-9] ))
     if (( ${#create_time_file_list[@]} == 0 )); then
         echo "Can't find any 'wav_file_create_time.log' files under $pcmrecord_log_dir"
         return 1
