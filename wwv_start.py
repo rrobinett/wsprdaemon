@@ -14,7 +14,7 @@ def cross_file(filename):
     # determine tone burst frequency from filename, if possible
     # expects a filename such as 20250405T044300Z_5000000_iq.wav
     tone = 1000
-    regex_pattern = '(\d{8})T(\d{2})(\d{2})(\d{2})Z_(\d+)_([a-z]+).wav'
+    regex_pattern = r'(\d{8})T(\d{2})(\d{2})(\d{2})Z_(\d+)_([a-z]+).wav'
     match = re.search(regex_pattern, filename)
     if match:
         if int(match.group(3)) == 0:
