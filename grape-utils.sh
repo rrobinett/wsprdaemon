@@ -238,7 +238,7 @@ function grape_test_ssh_auto_login() {
     local rc
 
     wd_logger 2 "Starting by trying to execute a 'ssh..."
-    timeout 5 ssh -o ConnectTimeout=3 -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=${GRAPE_PSWS_CONNECTION_TIMEOUT-10} ${PSWS_URL} true # &>/dev/null
+    timeout ${PSWS_SSH_TIMEOUT-5} ssh -o ConnectTimeout=3 -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=${GRAPE_PSWS_CONNECTION_TIMEOUT-10} ${PSWS_URL} true # &>/dev/null
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'ssh ...' => $rc  So can't autologin to account '${station_id}'"
     else
