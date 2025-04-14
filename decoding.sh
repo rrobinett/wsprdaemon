@@ -2530,7 +2530,7 @@ function spawn_decoding_daemon() {
         fi
     fi
     wd_logger 1 "Spawning decode daemon in $PWD"
-    WD_LOGFILE=${DECODING_DAEMON_LOG_FILE}  decoding_daemon ${receiver_name} ${receiver_band} ${receiver_modes} &
+    WD_LOGFILE=$( realpath ${DECODING_DAEMON_LOG_FILE} )  decoding_daemon ${receiver_name} ${receiver_band} ${receiver_modes} &
     echo $! > ${DECODING_DAEMON_PID_FILE}
     cd - > /dev/null
     wd_logger 1 "Finished.  Spawned new decode  job '${receiver_name},${receiver_band},${receiver_modes}' with PID '$!'"
