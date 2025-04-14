@@ -667,7 +667,7 @@ function ka9q_web_service_daemon() {
             continue
         fi
         local daemon_log_file="ka9q_web_service_${server_ip_port}.log"
-        wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}"
+        wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}'"
 
         # Conditionally add -n "${server_description}" if KA9Q_WEB_TITLE is defined
         if [[ -n "${server_description}" ]]; then
@@ -676,9 +676,8 @@ function ka9q_web_service_daemon() {
             ${KA9Q_WEB_CMD} ${WF_BIT_DEPTH_ARG--b1} -m ${status_dns_name} -p ${server_ip_port} >& ${daemon_log_file}
         fi
 
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${web_page_title}' => ${rc}:\n$(<  ${daemon_log_file})"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: '${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n '${server_description}' => ${rc}:\n$(<  ${daemon_log_file})"
         fi
         wd_logger 1 "Sleeping for 5 seconds before restarting"
         wd_sleep 5
