@@ -140,10 +140,10 @@ def process_log_file(filepath, max_filename_length, index, summarize_last_day=Fa
                 #if curr_time:
                     #
                     #print(f"curr_time[1] = {curr_time[1]}")
-                if curr_time and curr_time[1] == 0:  # If minutes == 00, log the average offset instead
-                    average_offset = get_average_offset()
+                #if curr_time and curr_time[1] == 0:  # If minutes == 00, log the average offset instead
+                #    average_offset = get_average_offset()
                     #print(f"At minute {curr_time[1]} changing {tone_burst_offset} to {average_offset}")
-                    tone_burst_offset = average_offset
+                #    tone_burst_offset = average_offset
                 tone_burst_offsets.append(tone_burst_offset)
                 log_offset(tone_burst_offset)
 
