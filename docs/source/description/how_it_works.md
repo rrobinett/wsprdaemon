@@ -35,4 +35,12 @@ WD runs on almost any Debian Linux system running Ubuntu 22.04 LTS on x86. Altho
 
 ## What happens to the data?
 
+WD sends the collected data to several upstream servers (depending on configuration):
+- 1. wsprdaemon.org (wspr spots and other information)
+- 2. wspr.net (wspr spots only)
+- 3. pskreporter.info (FT4 and FT8 spots)
+- 4. pswsnetwork.caps.ua.edu (WWV/H and CHU monitoring)
+
+A diagram of the WSPR reports:
+
 ![](../_images/WD-data-architecture.png)
