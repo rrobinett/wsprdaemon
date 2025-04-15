@@ -59,6 +59,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#antenna-system">Antenna System</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#computer-requirements">Computer requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#power-management">Power Management</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#operating-system">Operating system</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#sudo-access">sudo access</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#determine-the-user-to-run-wd">Determine the user to run WD</a></li>
@@ -162,6 +163,10 @@ However, you can run it under your own (or another’s) account.  In which case,
 <h3>Computer requirements<a class="headerlink" href="#computer-requirements" title="Link to this heading"></a></h3>
 <p>You have lots of options for a computer and network architecture that supports ka9q-radio and WD.  However, in order to run it all on one computer, it will need sufficient CPU and memory power and superspeed USB 3 (the RX888 samples at 64.8 or 129.6 MHz!).  CPU and memory (RAM and cache) structures vary widely and some, even nominally “powerful” new computers, in their default configuration, may not manage the core and cache optimally.  Computers using the Ryzen 5800 chipsets and above seem to work without adjustment.</p>
 <p>You can run ka9q-radio (radiod) on a “slower” computer, as long as it has USB 3.  It can multicast its output via RTP streams to another computer for processing.  This setup will usually require an IGMP-aware ethernet switch to shield your LAN (especially if it relies on WiFi).  The prodigious multicast output from radiod can bring a WiFi LAN to a clogged halt.</p>
+</section>
+<section id="power-management">
+<h3>Power Management<a class="headerlink" href="#power-management" title="Link to this heading"></a></h3>
+<p>Running an RX888 and wsprdaemon 24x7 remotely poses some unique problems.  One annoying such involves the disappearance of the RX888 from the USB bus.  When this happens, a power cycle of the computer + RX888 provides the most reliable way to recover this.  This means installing and configuring a network-controlled power socket that will reboot the computer + RX888.  We cannot provide instruction for all the ways you might accomplish this but still recommend that you set up a solution to enable remote power-cycling.</p>
 </section>
 <section id="operating-system">
 <h3>Operating system<a class="headerlink" href="#operating-system" title="Link to this heading"></a></h3>

@@ -32,6 +32,10 @@ You have lots of options for a computer and network architecture that supports k
 
 You can run ka9q-radio (radiod) on a "slower" computer, as long as it has USB 3.  It can multicast its output via RTP streams to another computer for processing.  This setup will usually require an IGMP-aware ethernet switch to shield your LAN (especially if it relies on WiFi).  The prodigious multicast output from radiod can bring a WiFi LAN to a clogged halt.  
 
+### Power Management
+
+Running an RX888 and wsprdaemon 24x7 remotely poses some unique problems.  One annoying such involves the disappearance of the RX888 from the USB bus.  When this happens, a power cycle of the computer + RX888 provides the most reliable way to recover this.  This means installing and configuring a network-controlled power socket that will reboot the computer + RX888.  We cannot provide instruction for all the ways you might accomplish this but still recommend that you set up a solution to enable remote power-cycling.  
+
 ### Operating system
 
 The current version of WD runs on [Ubuntu 24.04 LTS](https://ubuntu.com/download/server).  Ubuntu seems determined to push "snap" software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a [method to "de-snap"](http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd) a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative -- [Mint](https://www.linuxmint.com/download.php) -- which does not use snaps or their progenitor, [Debian](https://www.debian.org/distrib/).  
