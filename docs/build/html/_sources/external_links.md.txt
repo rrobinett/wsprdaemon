@@ -1,5 +1,6 @@
 # External Links
 
+## [Technical Descriptions](https://wsprdaemon.org/technical.html)
 ## [wsprdaemon](https://github.com/rrobinett/wsprdaemon.git)
 ## [ka9q-radio](https://ka9q-radio.org)
 ## [Personal Space Weather Station Data](https://pswsnetwork.caps.ua.edu/home)

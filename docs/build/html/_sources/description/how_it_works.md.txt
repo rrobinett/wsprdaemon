@@ -33,4 +33,6 @@ WD runs on almost any Debian Linux system running Ubuntu 22.04 LTS on x86. Altho
 - wd requires a working hardware radio (KiwiSDR or RX888) with proper configuration
 - [See Troubleshooting](../troubleshooting/overview.md)
 
+## What happens to the data?
 
+![](../_images/WD-data-architecture.png)
