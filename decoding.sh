@@ -2577,7 +2577,7 @@ function kill_decoding_daemon() {
         wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?"
         return 5
     fi
-    wd_logger 1 "Killed  $receiver_name} ${receiver_band} => $?"
+    wd_logger 1 "Killed  $receiver_name ${receiver_band} => $?"
     return 0
 }
 

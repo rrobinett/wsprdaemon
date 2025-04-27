@@ -539,33 +539,36 @@ function kill_wav_recording_daemon()
     local receiver_name=$1
     local receiver_rx_band=$2
 
-    local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
-    local pid_file="${recording_dir}/wav-recorder-${rx_band}.pid"
-    if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
-        pid_file="${recording_dir}/wav-recorder-all.pid"
+    if [[ $receiver_name =~ KA9Q ]]; then
+        wd_logger 1 "Don't kill the 'pcmrecord' wav-recording daemon for a KA9Q receiver $receiver_name,$receiver_rx_band since there is only one instance of it (pcmrecord) for all bands.  WD expects there will be no schedule changes for KA9Q channels and not killing it will result in zobie wav files"
+        return 0
     fi
- 
-    if [[ ! -d ${recording_dir} ]]; then
-        wd_logger 1 "ERROR: '${recording_dir}' does not exist"
+
+    ### This is a KiwiSDR band
+    local recording_dir=$(get_recording_dir_path $receiver_name $receiver_rx_band)
+    if [[ ! -d $recording_dir ]]; then
+        wd_logger 1 "ERROR: '$recording_dir' does not exist"
         return 1
     fi
-    if [[ ! -f ${pid_file} ]]; then
-        wd_logger 1 "There is no PID file ${pid_file}, so nothing to kill"
+    local pid_file="${recording_dir}/wav-recorder-all.pid"
+    wd_logger 1 "Killing a kiwi_recorder.py daemon whose pid is stored in $pid_file"
+
+   if [[ ! -f $pid_file ]]; then
+        wd_logger 1 "There is no PID file $pid_file, so nothing to kill"
         return 0
     fi
 
     local rc
-    wd_kill_pid_file ${pid_file}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_kill_pid_file ${pid_file}' => ${rc}"
+    wd_kill_pid_file $pid_file
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'wd_kill_pid_file $pid_file' => $rc"
         return 1
     fi
 
 : <<'COMMENT_OUT_LINES'
     ### Kill the daemon which it spawned which is recording the series of 1 minute long wav files
     for recorder_app in kiwi_recorder; do
-        local recording_pid_file=${recording_dir}/${recorder_app}.pid
+        local recording_pid_file=$recording_dir/${recorder_app}.pid
         wd_kill_pid_file ${recording_pid_file}
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -574,7 +577,7 @@ function kill_wav_recording_daemon()
     done
 COMMENT_OUT_LINES
 
-    wd_logger 1 "Killed the wav recording daemon for ${receiver_name} ${receiver_rx_band}"
+    wd_logger 1 "Killed the wav recording daemon for $receiver_name $receiver_rx_band"
     return 0
 }
 
