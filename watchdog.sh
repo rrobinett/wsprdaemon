@@ -59,9 +59,9 @@ declare watchdog_daemon_list=(
 )
 
 if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-    wd_logger 1 "Not adding grape_upload_daemon() to the watchdog_daemon_list[] since GRAPE_PSWS_ID is not defined in WD.conf"
+    wd_logger 2 "Not adding grape_upload_daemon() to the watchdog_daemon_list[] since GRAPE_PSWS_ID is not defined in WD.conf"
 else
-    wd_logger 1 "Adding grape_upload_daemon() to the watchdog_daemon_list[] since GRAPE_PSWS_ID is defined in WD.con"
+    wd_logger 2 "Adding grape_upload_daemon() to the watchdog_daemon_list[] since GRAPE_PSWS_ID is defined in WD.con"
     watchdog_daemon_list+=("grape_upload_daemon     ${GRAPE_WAV_ARCHIVE_ROOT_PATH}")
 fi
 
@@ -70,40 +70,55 @@ fi
 ### 
 function ka9q_rx_channel_is_configured()
 {
+    local __return_var_name="$1"
+
     if [[ -z "${WSPR_SCHEDULE[@]-}" ]]; then
         wd_logger 1 "ERROR: the expected WSPR_SCHEDULE[] array is not defined in WD.conf"
         exit 2
     fi
-    if ! [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q|MERGE ]]; then
-        wd_logger 1 "No KA9Q channels are configured on this WD server"
-        return 0
-    fi
-    if [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q ]]; then
-        wd_logger 1 "There are KA9Q channels configured on this WD server"
-        return 1
-    fi
-    ### TBD: This code needs to be finished and debugged
-    ### There is ar MERG... receiver in the schedule.  See if it includes a KA9Q receiver
-    local schedule_index
-    for (( schedule_index=0; schedule_index < ${#WSPR_SCHEDULE[@]}; ++schedule_index )); do
-        local jobs_list=( ${WSPR_SCHEDULE[schedule_index]} )
-        local job
-        for job in ${jobs_list[@]:1} ; do
-            local job_receiver=${job%%,*}
-            if [[ $job =~ MERGE ]]; then
-                ### TBD: here...
-                true
-            fi
+
+    local return_value=0       ### 0 => no KA9Q receive jobs,  1 => one or more KA9Q jobs
+    if ! [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q|MERG ]]; then
+        wd_logger 2 "No KA9Q channels are configured on this WD server"
+    elif [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q ]]; then
+        wd_logger 2 "There are KA9Q channels configured on this WD server"
+        return_value=1
+    else
+        ### There is a MERG... receiver in the schedule.  See if it includes a KA9Q receiver
+        local schedule_index
+        for (( schedule_index=0; schedule_index < ${#WSPR_SCHEDULE[@]}; ++schedule_index )); do
+            local jobs_list=( ${WSPR_SCHEDULE[schedule_index]} )
+            local job
+            for job in ${jobs_list[@]:1} ; do
+                local job_receiver=${job%%,*}
+                if [[ $job =~ MERG ]]; then
+                    local merg_rx="${job%%,*}"
+                    local merg_rx_index=$(get_receiver_list_index_from_name $merg_rx)
+                    if [[ -z "$merg_rx_index" ]]; then
+                        wd_logger 1 "ERROR: can't find merg_rx_index for '$merg_rx' in the RECEIVER_LIST"
+                        exit 2
+                    fi
+                    if [[ ${RECEIVER_LIST[merg_rx_index]} =~ KA9Q ]]; then
+                        wd_logger 2 "Found a MERG receiver which includes a KA9Q receiver in WSPR_SCHEDULE[${schedule_index}]}: '${WSPR_SCHEDULE[schedule_index]}'"
+                        return_value=1
+                        break
+                    fi
+                fi
+            done
         done
-    done
-    wd_logger 1 "No KA9Q channels are found in the MERG.. receivers on this WD server"
+        (( return_value == 0 )) && wd_logger 1 "No KA9Q channels are found in the MERG.. receivers on this WD server"
+    fi
+    wd_logger 2 "Returning $return_value from a search"
+    eval $__return_var_name=\$return_value
     return 0
 }
 
-if [[ ka9q_rx_channel_is_configured != 1 ]]; then
-    wd_logger 1 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
+declare ka9q_rx_is_active
+ka9q_rx_channel_is_configured "ka9q_rx_is_active"
+if (( $ka9q_rx_is_active != 1)); then
+    wd_logger 2 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
 else
-    wd_logger 1 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
+    wd_logger 2 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
     watchdog_daemon_list+=( "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}" )
 fi
 
@@ -112,7 +127,7 @@ function test_ka9q_rx_channel_is_configured()
     ka9q_rx_channel_is_configured
     exit 0
 }
-(( ${test_new_feature-0} )) && test_ka9q_rx_channel_is_configured
+### (( ${test_new_feature-0} )) && test_ka9q_rx_channel_is_configured
 
 
 #### -w [a,z,s,l] command
