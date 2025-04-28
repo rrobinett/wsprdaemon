@@ -629,16 +629,23 @@ declare ka9q_service_daemons_list=(
 
 ### This is called by the watchdog daemon and needs to be extended to support multiple RX888 servers at a site.
 function ka9q_web_daemon() {
-    wd_logger 1 "Starting loop by checking for DNS of status stream"
+    wd_logger 1 "Starting"
 
-    local ka9q_radiod_status_dns
-    ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: failed to find the status DNS  => ${rc}"
-    fi
-    if [[ -z "${ka9q_radiod_status_dns}" ]]; then
-        wd_logger 1 "ERROR: can't file ka9q_radiod_status_dns"
-    else
+    while true; do
+        local rc
+        wd_logger 1 "Starting loop by checking for DNS of status stream"
+
+        local ka9q_radiod_status_dns=""
+        while [[ -z "$ka9q_radiod_status_dns" ]]; do
+            ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
+            rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: ka9q-get-status-dns()  => ${rc}"
+            fi
+            if [[ -z "${ka9q_radiod_status_dns}" ]]; then
+                wd_logger 1 "ERROR: can't find ka9q_radiod_status_dns, so sleep for 5 seconds and try again"
+                sleep 5
+            fi
+        done
         ka9q_service_daemons_list=()
         ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-}"  ### This is hack to get this one service implementation working
 
@@ -648,9 +655,11 @@ function ka9q_web_daemon() {
 
             wd_logger 1 "Running 'ka9q_web_service_daemon '${ka9q_service_daemon_info}'"
             ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
+            rc=$?
+            wd_logger 1 "ERROR: ka9q_web_service_daemon $ka9q_service_daemon_info => $rc.  Sleep 5 and run it aagain"
             sleep 1
         done
-    fi
+    done
 }
 
 function ka9q_web_service_daemon() {
