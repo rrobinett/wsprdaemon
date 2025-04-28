@@ -1087,6 +1087,33 @@ function update_ini_file_section_variable() {
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
             sed "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
         else
+            ### We are validating and/or modifying a variable
+            if [[ "$section" == "rx888" && "$variable_esc" == "description" ]]; then
+                wd_logger 2 "Checking that $file section [$section] variable 'description' isn't longer than 63 characters and doesn't contain '/'"
+                local description_line=$(sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep "^ *description")
+                if [[ -z "$description_line" ]]; then
+                    wd_logger 1 "ERROR: Can't find expected 'description line in $file section [$section]"
+                    exit 1
+                else
+                    wd_logger 2 "Found expected description line in $file section [$section]: '$description_line'"
+                    local description_string=$(echo "$description_line" | sed 's/^ *[^=]*= *"//; s/".*//' )
+                    if [[ -z "$description_string" ]]; then
+                        wd_logger 1 "ERROR: Can't find expected 'description field in description line: '$description_line'"
+                    else
+                        local description_string_chars=$(echo  "$description_string" | wc -c )
+                        if (( description_string_chars > ${RADIO_MAX_DESCRIPTION_CHARS-63} )); then
+                            wd_logger 1 "ERROR: The rx888 decription string in $file is longer than the allowed 63 characters, so edit that file and shorten it"
+                            exit 1
+                        fi
+                        if [[ "$description_string" =~ "/" ]]; then
+                            wd_logger 1 "ERROR: The rx888 decription string in $file contains the disallowed character '/', so edit that file and remove it"
+                            exit 1
+                        fi
+                    fi
+                fi
+                wd_logger 2 "Found a valid description string '$description_string' in $file section [$section]"
+                return 0
+            fi
             wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
             sed  "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
         fi
@@ -1100,7 +1127,7 @@ function update_ini_file_section_variable() {
             return 0
         fi
     else
-        # Append the variable inside the section
+        # The variable isn't defined in the section, so insert it into the section
          if [[ "$new_value" == "#" ]]; then
             wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
             return 0
