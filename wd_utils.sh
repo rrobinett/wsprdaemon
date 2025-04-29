@@ -1054,8 +1054,14 @@ function update_ini_file_section_variable() {
     local rc=0
 
     if [[ ! -f "${file}" ]]; then
-        wd_logger 1 "ERROR: ini file '${file}' does not exist"
+        wd_logger 1 "ERROR: ini file '$file' does not exist"
         return 3
+    fi
+
+    ### 4/28/25 RR - fix bad WWVB freq value I introduced in the radiod@..conf template file
+    if grep -q  '^ *freq *= *"60000 ' "$file" ; then
+        wd_logger 1 "Fixing bad WWVB 'freq = \"60000' in $file"
+        sed -i 's/\(^ *freq *= "\)60000 /\160k000 /' "$file"
     fi
 
     # Escape special characters in section and variable for use in regex
@@ -1067,7 +1073,7 @@ function update_ini_file_section_variable() {
     # Check if section exists
     if ! grep -q "^\s*\[$section_esc\]" "$file"; then
         # Add section if it doesn't exist
-        wd_logger 1 "iERROR: expected section [$section] doesn't exist in '$file'"
+        wd_logger 1 "ERROR: expected section [$section] doesn't exist in '$file'"
         return 4
     fi
 
