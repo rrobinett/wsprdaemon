@@ -67,7 +67,7 @@ declare LIB_QT5_LINUX_MINT="qtbase5-dev"
 case ${CPU_ARCH} in
     armv7l)
         if [[ "${OSTYPE}" == "linux-gnueabihf" ]] ; then
-            PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )         ### on Pi's i32 bit bullseye
+            PACKAGE_NEEDED_LIST+=(  python3-soundfile libgfortran5:armhf ${LIB_QT5_CORE_ARMHF} )         ### on Pi's 32 bit bullseye
         else
             PACKAGE_NEEDED_LIST+=( libgfortran5:armhf ${LIB_QT5_DEFAULT_ARMHF} )
         fi
