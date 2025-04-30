@@ -1,7 +1,7 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
-shopt -s -o nounset
+#shopt -s -o nounset
 
 function wd-pcmrecord-version() {
     ~/wsprdaemon/ka9q-radio/pcmrecord --version
@@ -338,7 +338,11 @@ function wd-killall() {
     local verbosity=${verbosity-0}
 
     ### Stop all services
-    local services_list=(  wsprdaemon ft4-decoded ft8-decoded  pskreporter@ft4 pskreporter@ft8   pskreporter@wspr )
+    local services_list=(  wsprdaemon )
+    if [[  -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
+        local base_name=$(wd-get_ka9q-conf_file-base_name)
+        services_list+=( radiod@${base_name}.service ft4-decoded ft8-decoded  pskreporter@ft4 pskreporter@ft8 pskreporter@wspr )
+    fi
     local service_name
     for   service_name in ${services_list[@]}; do 
         (( verbosity > 1 )) && printf "Stopping service '${service_name}"
@@ -350,7 +354,6 @@ function wd-killall() {
              (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
         fi
     done
-    wd-radiod-action stop
 
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
     local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
@@ -531,7 +534,6 @@ function wd-desnap() {
     local snaps_list=()
     local rc
 
-    #set -x
     while snaps_list=( $( snap list | awk '!/Name/{print $1}') ) && [[ ${#snaps_list[@]} -gt 0 ]]; do
         local desnap_failures=0
         local snap
@@ -1339,7 +1341,6 @@ function wd-get_ka9q-conf_file-base_name() {
          conf_base_name="rx888-wsprdaemon"
     fi
 
-    #set -x
     local running_radiod_status_line=$(sudo systemctl status 'radiod@*' | grep '.conf' | grep -v '\\x')
     if [[ -n "${running_radiod_status_line}" ]]; then
         conf_base_name="${running_radiod_status_line##*@}"
@@ -1370,8 +1371,10 @@ alias wdrl='wd-rl'
 
 function wd-radiod-action(){
    local action=$1
+
    local base_name=$(wd-get_ka9q-conf_file-base_name)
    sudo systemctl ${action} radiod@${base_name}.service
+
    sudo systemctl ${action} ft8-decoded.service
    sudo systemctl ${action} ft4-decoded.service
    sudo systemctl ${action} pskreporter@ft4.service
