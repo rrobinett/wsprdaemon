@@ -324,12 +324,8 @@ function get_suntimes()
 function get_sunrise_sunset() 
 {
     local _return_sunrise_hm=$1
-    local maiden
-    if [[ -n "${FORCE_MAIDENHEAD-}" ]]; then
-        maiden="${FORCE_MAIDENHEAD}"
-    else
-        maiden=$2
-    fi
+    local maiden=$2
+
     local long_lat=( $(maidenhead_to_long_lat $maiden) )
 
     wd_logger 2 "Get sunrise/sunset for Maidenhead ${maiden} which is at long/lat  ${long_lat[*]}"
@@ -339,8 +335,7 @@ function get_sunrise_sunset()
     local sunrise_sunset_times=""
     local rc
     get_suntimes sunrise_sunset_times  ${lat} ${long} 
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'get_suntimes sunrise_sunset_times  ${lat} ${long}' => ${rc}"
         exit 1
     fi
@@ -348,6 +343,16 @@ function get_sunrise_sunset()
     wd_logger 2 "'get_suntimes sunrise_sunset_times  ${lat} ${long}' => 0.  sunrise_sunset_times=${sunrise_sunset_times}"
     return 0
 }
+
+function test_get_sunrise_sunset() {
+    local sun_times
+
+    get_sunrise_sunset "sun_times" "JO10os"
+
+    wd_logger 1 "get_sunrise_sunset 'sun_times' 'JO21xx' => '$sun_times'"
+    exit 0
+}
+## (( test_function )) && test_get_sunrise_sunset
 
 ### Once per day, cache the sunrise/sunset times for the grids of all receivers
 function update_suntimes_file() 

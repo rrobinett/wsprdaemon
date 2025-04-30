@@ -13,6 +13,7 @@ import subprocess
 # Watch out here - the trig functions have mix of degrees and radian inputs so explicit conversion used where needed
 # Error check for perpetual day or night and times are outputin the 'except' block  
 # V2 has no timezone argument, calculates from call to operating system executable timedatectl
+# G3ZIL checking code 30 April 2025 for any numerical error
 
 lat=float(sys.argv[1])
 lon=float(sys.argv[2])
@@ -35,7 +36,6 @@ hour=int(today.strftime('%H'))              # hour as zero padded integer
 
 # calculate fractional year gamma where whole year is two pi, so gamma is in radians, fine for trig functions below
 gamma=((2*pi)/n_days)*(day_of_year-1+(hour-12)/24)
-
 # calculate equation of time in minutes
 eqtime=229.18*(0.000075+0.001868*cos(gamma)-0.032077*sin(gamma)-0.014615*cos(2*gamma)-0.040849*sin(2*gamma))
 
@@ -59,14 +59,13 @@ try:
 
 #Then the UTC time of sunrise (or sunset) in minutes is:
   sunrise = 720-4*(lon+ha_sunrise)-eqtime
-  sunset = 720-4*(lon+ha_sunset)+eqtime
-
+  sunset = 720-4*(lon+ha_sunset)-eqtime    # was +, an error, corrected 30 April 2025, the error was about 2 minutes, but see major  bug below
   hour_sunrise=int((floor(sunrise/60)+tz_offset) % 24)
   hour_sunset=int((floor(sunset/60)+tz_offset) % 24)
   min_sunrise=int(sunrise % 60)
   min_sunset=int(sunset % 60)
-
-  print("{:02d}".format(hour_sunrise),":", "{:02d}".format(min_sunrise)," ", "{:02d}".format(hour_sunset),":", "{:02d}".format(min_sunrise), sep='')
+  print("{:02d}".format(hour_sunrise),":", "{:02d}".format(min_sunrise)," ", "{:02d}".format(hour_sunset),":", "{:02d}".format(min_sunset), sep='')
+# above print line had an error in that the  print for min_sunset was printing the variable min_sunrise. Corrected 30 April 2025 G3ZIL
 
 except ValueError as e:
   if (('math domain error') in str (e)):                # exception raised
