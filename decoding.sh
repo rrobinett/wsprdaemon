@@ -2194,6 +2194,11 @@ function decoding_daemon() {
                         return 1
                     fi
                     if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
+                        if ! [[ $receiver_name =~ KA9Q ]]; then
+                            local kiwisdr_noise_level_adjust_float=$( echo "scale=1;(${sdr_noise_level_adjust_float} + 60.0)" | bc )
+                            wd_logger 1 "KiwiSDRs are set for +60 dB audio channel gain, so subtract that from the levels reported by sox, so sdr_noise_level_adjust_float=$sdr_noise_level_adjust_float => kiwisdr_noise_level_adjust_float=$kiwisdr_noise_level_adjust_float"
+                            sdr_noise_level_adjust_float=$kiwisdr_noise_level_adjust_float
+                        fi
                         local corrected_sox_rms_noise_level_float
                         corrected_sox_rms_noise_level_float=$( echo "scale=1;(${sox_rms_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                         wd_logger 1 "Correcting measured FFT noise from ${sox_rms_noise_level_float} to ${corrected_sox_rms_noise_level_float}"
