@@ -16,6 +16,7 @@ release = '3.3.1'
 
 extensions = [
     'myst_parser',
+    'myst_nb',
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
