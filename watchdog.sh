@@ -78,7 +78,10 @@ function ka9q_rx_channel_is_configured()
     fi
 
     local return_value=0       ### 0 => no KA9Q receive jobs,  1 => one or more KA9Q jobs
-    if ! [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q|MERG ]]; then
+    if [[  -n "${KA9Q_RUNS_ONLY_REMOTELY-}" ]]; then
+        wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY='$KA9Q_RUNS_ONLY_REMOTELY', so download and compile the ~/ka9q-radio directory and spawn ka9q-web"
+         return_value=1
+    elif ! [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q|MERG ]]; then
         wd_logger 2 "No KA9Q channels are configured on this WD server"
     elif [[ "${WSPR_SCHEDULE[@]}" =~ KA9Q ]]; then
         wd_logger 2 "There are KA9Q channels configured on this WD server"
@@ -116,18 +119,20 @@ function ka9q_rx_channel_is_configured()
 declare ka9q_rx_is_active
 ka9q_rx_channel_is_configured "ka9q_rx_is_active"
 if (( $ka9q_rx_is_active != 1)); then
-    wd_logger 2 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
+    wd_logger 1 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
 else
-    wd_logger 2 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
+    wd_logger 1 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
     watchdog_daemon_list+=( "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}" )
 fi
 
 function test_ka9q_rx_channel_is_configured()
 { 
-    ka9q_rx_channel_is_configured
+    local test_if_configured
+    ka9q_rx_channel_is_configured "test_if_configured"
+    wd_logger 1 "'ka9q_rx_channel_is_configured()' => $test_if_configured"
     exit 0
 }
-### (( ${test_new_feature-0} )) && test_ka9q_rx_channel_is_configured
+# (( ${test_new_feature-0} )) && test_ka9q_rx_channel_is_configured
 
 
 #### -w [a,z,s,l] command

@@ -538,7 +538,7 @@ function ka9q-get-conf-file-name() {
     ka9q_ps_line=$( ps aux | grep "sbin/radiod .*radiod@" | grep -v grep | head -n 14)
 
     if [[ -z "${ka9q_ps_line}" ]]; then
-        wd_logger 1 "The ka9q-web service is not running"
+        wd_logger 1 "The ka9q-radiod service is not running"
         return 1
     fi
     local ka9q_pid_value
@@ -577,14 +577,25 @@ function ka9q-get-status-dns() {
     local ka9q_web_conf_file
     local rc
 
+    local conf_web_dns
+    get_config_file_variable "conf_web_dns" "KA9Q_WEB_DNS"
+    if [[ -n "${conf_web_dns-}" ]]; then
+        wd_logger 1 "Found KA9Q_WEB_DNS='$conf_web_dns' in WD.conf, so set KA9Q-web to display that"
+        eval ${___return_status_dns_var_name}=\"${conf_web_dns}\"
+        return 0
+    else
+        wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on tghe LAN using the avahi DNS service"
+    fi
+
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
         avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
-        local hf_locals_count=$(wc -l < avahi-browse.log)
-        local status_dns=$( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log )
-        case ${hf_locals_count} in
+        rc=$?
+        wd_logger 2 "'avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log' => $rc.  avahi-browse.log=>'$(<  avahi-browse.log)'"
+        local status_dns_list=( $( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log ) )
+        wd_logger 1 "{#status_dns_list[@]} = ${#status_dns_list[@]}, status_dns_list[] = '${status_dns_list[*]}'"
+        case ${#status_dns_list[@]} in
             0)
                 wd_logger 1 "Can't find any hf...local streams"
                  return 1
@@ -595,7 +606,9 @@ function ka9q-get-status-dns() {
                  return 0
                  ;;
              *)
-                 wd_logger 1 "Found ${hf_locals_count} radiod iservers running on this LAN.  Chose which to listen to by adding a line to wsprdaemon.conf:\n$(<  avahi-browse.log)"
+                 local wd_logger_print_arg=$(printf "Found ${#status_dns_list[@]} radiod servers running on this LAN:\n${status_dns_list[*]}\nChose which to display by adding a line like this to wsprdemon.conf:\nKA9Q_WEB_DNS=\"${status_dns_list[0]}\"")
+                 echo -e "$wd_logger_print_arg" >&2     ### wd_logger output goes into the daemon.log file, so echo this to stderr so the user sees it 
+                 wd_logger 1 "Multiple DNS:\n$wd_logger_print_arg"
                  return 1
                  ;;
          esac
@@ -639,7 +652,7 @@ function ka9q_web_daemon() {
         while [[ -z "$ka9q_radiod_status_dns" ]]; do
             ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
             rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: ka9q-get-status-dns()  => ${rc}"
+                wd_logger 1 "ERROR: ka9q-get-status-dns()  => ${rc}"
             fi
             if [[ -z "${ka9q_radiod_status_dns}" ]]; then
                 wd_logger 1 "ERROR: can't find ka9q_radiod_status_dns, so sleep for 5 seconds and try again"
@@ -657,11 +670,12 @@ function ka9q_web_daemon() {
             ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
             rc=$?
             wd_logger 1 "ERROR: ka9q_web_service_daemon $ka9q_service_daemon_info => $rc.  Sleep 5 and run it aagain"
-            sleep 1
+            sleep 5
         done
     done
 }
 
+### We could spawn multiple q-web daemons, so I've coded for this to be a spawned daemom.  But for now WD supports only one KA9Q-web daemon per server
 function ka9q_web_service_daemon() {
     local status_dns_name=$1             ### Where to get the spectrum stream (e.g. hf.local)
     local server_ip_port=$2              ### On what IP port to offer the UI
