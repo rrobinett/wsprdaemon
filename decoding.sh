@@ -2171,14 +2171,18 @@ function decoding_daemon() {
                     else
                         c2_fft_noise_level_float=$(< ${c2_filename}.out)
                     fi
+
                     fft_noise_level_float=$(bc <<< "scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};(var * 100)/100")
-                    if [[ -n "${sdr_noise_level_adjust_float}" ]]; then
+                    if [[ -z "${sdr_noise_level_adjust_float}" ]]; then
+
+                        wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
+                    else
+                        ### sox has normalized the wav file level, so add this negative number to the measured FFT levels to compensate for the gain applied by sox
                         local corrected_fft_noise_level_float
-                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 1 "Correcting measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
+                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} + ${sdr_noise_level_adjust_float})/1" | bc )
+                        wd_logger 1 "Since sdr_noise_level_adjust_float=$sdr_noise_level_adjust_float, correct measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
                         fft_noise_level_float=${corrected_fft_noise_level_float}
                     fi
-                    wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
  
                     get_rms_levels  "sox_rms_noise_level_float" "rms_line" ${decoder_input_wav_filename} ${rms_nl_adjust}
                     rc=$? ; if (( rc )); then
