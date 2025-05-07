@@ -118,6 +118,12 @@ declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 function wd_run_in_cgroup() {
     local rc
     local wd_core_range
+
+    if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
+        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
+        return 0
+    fi
+
     if [[ -n "${WD_CPU_CORES+set}" ]]; then
         wd_core_range="$WD_CPU_CORES"
         wd_logger 1 "MAX_WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
