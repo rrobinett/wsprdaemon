@@ -3,6 +3,16 @@
 
 #shopt -s -o nounset
 
+function wd-killweb() {
+    local web_pid=$(ps aux | grep web | grep -v grep | awk '{print $2}')
+
+    if [[ -z "${web_pid}" ]]; then
+        echo "Nor Ka9qQ-web process is running"
+        return 0
+    fi
+    sudo kill ${web_pid}
+}
+
 function wd-pcmrecord-version() {
     ~/wsprdaemon/ka9q-radio/pcmrecord --version
 }
