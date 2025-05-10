@@ -392,9 +392,9 @@ int main(int argc,char *argv[]){
     struct sockaddr sock;
     char iface[1024];
     resolve_mcast(PCM_mcast_address_text,&mcast_dest_sock,DEFAULT_RTP_PORT,iface,sizeof(iface),0);
-    Input_fd = listen_mcast(&mcast_dest_sock,iface);
+    Input_fd = listen_mcast(NULL,&mcast_dest_sock,iface);
     resolve_mcast(PCM_mcast_address_text,&sock,DEFAULT_STAT_PORT,iface,sizeof(iface),0);
-    Status_fd = listen_mcast(&sock,iface);
+    Status_fd = listen_mcast(NULL,&sock,iface);
   }
   if(Input_fd == -1){
     fprintf(stderr,"Can't set up PCM input, exiting\n");
