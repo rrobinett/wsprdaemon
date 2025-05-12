@@ -348,9 +348,23 @@ function upload_to_wsprnet_daemon() {
             fi
             cat ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} >> ${WSPR_LOG_FILE}
 
+            if [[ ${WSPR_LOGGING_CMD+x} ]]; then
+                if ! [[ -x ${WSPR_LOGGING_CMD} ]]; then
+                    wd_logger 1 "ERROR: WSPR_LOGGING_CMD='$WSPR_LOGGING_CMD', is not present or not an executable file"
+                else
+                    wd_logger 2 "WSPR_LOGGING_CMD='$WSPR_LOGGING_CMD' is present and is an executable file"
+                    $WSPR_LOGGING_CMD $UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE
+                    rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: '$WSPR_LOGGING_CMD $UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE' => $rc"
+                    else
+                        wd_logger 2 "'$WSPR_LOGGING_CMD $UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE' is finished"
+                    fi
+                fi
+            fi
+
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
             if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
-                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots whicg we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
+                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots which we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
             elif [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
                 wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}) So presume spots were recorded and flush them from our cache"
             else 
