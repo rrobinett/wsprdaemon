@@ -120,7 +120,7 @@ function wd_run_in_cgroup() {
     local wd_core_range
 
     if [[ ${HOSTNAME} =~ ^WD[0-9] ]]; then
-        wd_logger 1 "Don't setup CPUAffinity on this WD server ${HOSTNAME}"
+        wd_logger 2 "Don't setup CPUAffinity on this WD server ${HOSTNAME}"
         return 0
     fi
 
