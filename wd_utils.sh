@@ -840,7 +840,7 @@ function get_status_of_daemon() {
 
     wd_logger 3 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger -1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
+        wd_logger 2 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -1085,9 +1085,9 @@ function update_ini_file_section_variable() {
     [[ -z "$section_end_line_number" ]] && section_end_line_number=$(wc -l < "$file")
 
     # Check if variable exists within the section
+    local temp_file="/tmp/${file##*/}.tmp"
     if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
         ### The variable is defined.  See if it needs to be changed
-        local temp_file="${file}.tmp"
 
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
@@ -1139,7 +1139,9 @@ function update_ini_file_section_variable() {
             return 0
         else
             wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
-            sed -i "${section_start_line_number}a\\$variable=$new_value" "$file"
+            ### The /etc/systemd/service directory is usually owned by root, so create the modified version in /tmp and then 'sudo mv' it to the service dirctory
+            sed "${section_start_line_number}a\\$variable=$new_value" "$file" > "$temp_file"
+            sudo mv "$temp_file" "$file"
             return 1
          fi
     fi
