@@ -119,6 +119,11 @@ function wd_run_in_cgroup() {
     local rc
     local wd_core_range
 
+    if [[ ${HOSTNAME} =~ ^WD[0-9] ]]; then
+        wd_logge"Don't setup CPUAffinity on this WD server ${HOSTNAME}"
+        return 0
+    fi
+
     if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
         wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
         return 0
