@@ -382,8 +382,8 @@ function api_scrape_once() {
     wd_logger 2 "Recorded spots to TS database"
 
     if ! [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
-        wd_logger 1 "ERROR: '${CLICKHOUSE_IMPORT_CMD} does not exist or is not executable"
-        return 1
+        wd_logger 1 "'Can't record these spots to the Clickhouse DB becquse ${CLICKHOUSE_IMPORT_CMD} does not exist or is not executable"
+        return 0
     else
         ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE} )
         ret_code=$? ; if (( ret_code )); then
@@ -411,7 +411,6 @@ function wsprnet_scrape_daemon() {
         else
 	    wd_logger 1 "Scrape was successful.  Sleep until the next scrape offset second in the 2 minute WSPR file"
 	fi
-        wd_logger 1 "sleep 10000" ; sleep 10000
         api_wait_until_next_offset
     done
 }
@@ -462,6 +461,8 @@ function queue_gap_file() {
 
     local first_seq=${first_missing_seq}
     local last_seq
+    local gap_reqeusts_queued=0
+    local gap_requests_spots_total=0
     local gap_request_size
 
     while gap_request_size=$(( last_missing_seq - first_seq + 1 )) && [[ ${gap_request_size} -gt 0 ]] ; do
@@ -471,9 +472,13 @@ function queue_gap_file() {
             last_seq=$(( ${first_seq} + ${GAP_MAX_REQUEST} - 1 ))
         fi
         printf "%(%s)T %d %d\n" -1 ${first_seq} ${last_seq}  > gaps.d/${first_seq}.log
-        wd_logger 1 "Queued gap reqeust file gaps.d/${first_seq}.log which is for  ${gap_request_size} spots from seq_num ${first_seq} to ${last_seq}"
+        wd_logger 2 "Queued gap reqeust file gaps.d/${first_seq}.log which is for  ${gap_request_size} spots from seq_num ${first_seq} to ${last_seq}"
         first_seq=$(( ${last_seq} + 1 ))
+        (( ++gap_reqeusts_queued ))
+        ((  gap_requests_spots_total += ${gap_request_size} ))
     done
+    wd_logger 1 "Queued up ${gap_reqeusts_queued} gap reqeusts which alltogether ask for ${gap_requests_spots_total} spots missing in gaps"
+    return 0
 }
 
 function wsprnet_gap_daemon()
