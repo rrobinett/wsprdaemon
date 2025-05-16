@@ -23,11 +23,13 @@ Subsequently, to apply any updates of the latest version, use:
 git pull
 ```
 
-To switch to a different branch, e.g., 3.3.1, use:
+"master" generally refers to the latest stable version of the code.  As development of the code proceeds,
+you may elect to switch to a development branch, e.g., 3.3.1.  To do this, use:
 ```
 git checkout 3.3.1
 git pull
 ```
+
 
 WD provides lots of shell "aliases" to important and otherwise useful functions.  To have immediate access to these, run:
 ```
@@ -43,6 +45,24 @@ This sets the stage and prompts you to configure your setup:
 - [wsprdaemon configuration](../configuration/wd_conf.md)
 - [radiod configuration](../configuration/radiod_conf.md)
 - KiwiSDR
+
+Once you have defined a new wsprdaemon.conf (or restored your previous one) then invoke a command like:
+```
+wdv
+```
+Nominally, this reports the current version of wsprdaemon but it will use wsprdaemon.conf to proceed with setting up wsprdaemon to run -- downloading and compiling any required software (e.g., ka9q-radio and ka9q-web), setting up the proper directories, etc.  
+
+Finally, you can start wsprdaemon with:
+```
+wd -A
+```
+which will pipe all messages to stdout (the screen from which you invoked the command) which can help if something doesn't function properly.  
+
+Or simply run:
+```
+wda
+```
+which starts wsprdaemon "quietly" piping all messages to log files.  
 
 # To install ka9q-radio independently:
 
