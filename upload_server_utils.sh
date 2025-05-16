@@ -137,13 +137,15 @@ function tbz_service_daemon()
 
 function get_status_tbz_service_daemon()
 {
+    local ret_code
+
     get_status_of_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger 1 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
-    else
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "The tbz_service_daemon is not running in '${TBZ_SERVER_ROOT_DIR}'"
+    else
+        wd_logger 1 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
     fi
+    return 0
 }
 
 function kill_tbz_service_daemon()
@@ -346,7 +348,7 @@ function upload_to_mirror_site_daemon() {
                 wd_logger 1 "ERROR: the expected loaalhost RAC port ${wd0_rac_port_to_dest_server} to ${dest_server} is not open"
             else
 
-                rsync -a --remove-source-files -e "ssh -p ${dest_server_localhost_port}" ${files_queued_for_upload_list[@]} wsprdaemon@localhost:${UPLOAD_SPOOL_DIR}
+                rsync -a --bwlimit=${WD_MIRROR_BW_LIMIT-100} --timeout=${WD_MIRROR_TIMEOUT-60} --remove-source-files -e "ssh -p ${dest_server_localhost_port}" ${files_queued_for_upload_list[@]} wsprdaemon@localhost:${UPLOAD_SPOOL_DIR}
                 ret_code=$? ; if (( ret_code )); then
                     wd_logger 1 "ERROR: 'rsync ... ssh -p  ${dest_server_localhost_port} ...' failed"
                 else
@@ -508,11 +510,12 @@ function queue_files_for_mirroring()
 function get_status_upload_service() 
 {
     local daemon_function_name=$1
-
-    local daemon_status_function_name=""
+    local daemon_status_function_name
     local daemon_home_dir
-    local entry_info
-    for entry_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+
+    local info_index
+    for (( info_index=0; info_index < ${#UPLOAD_DAEMON_LIST[@]}; ++info_index )); do
+        local entry_info="${UPLOAD_DAEMON_LIST[info_index]}"
         local entry_info_list=( ${entry_info} )
         local entry_function_name=${entry_info_list[0]}
         local entry_status_function_name=${entry_info_list[2]-get_status_of_daemon}
@@ -524,8 +527,8 @@ function get_status_upload_service()
             break
         fi
     done
-    if [[ -z "${daemon_status_function_name}" ]]; then
-        wd_logger 1 "ERROR:  can't find daemon_function_name='${daemon_function_name}' in '\${UPLOAD_DAEMON_LIST[@]}'"
+    if [[ -z "${daemon_status_function_name-}" ]]; then
+        wd_logger 1 "ERROR:  can't find daemon_function_name='${daemon_function_name}' in '\${UPLOAD_DAEMON_LIST[*]}'"
         return 1
     fi
 
@@ -543,8 +546,9 @@ function get_status_upload_watchdog_services()
 {
     local daemon_status_function_name=""
     local daemon_home_dir
-    local entry_info
-    for entry_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+    local info_index
+    for (( info_index=0; info_index < ${#UPLOAD_DAEMON_LIST[@]}; ++info_index )); do
+        local entry_info="${UPLOAD_DAEMON_LIST[info_index]}"
         local entry_info_list=( ${entry_info} )
         local entry_function_name=${entry_info_list[0]}
         get_status_upload_service ${entry_function_name}
@@ -563,8 +567,9 @@ function upload_services_watchdog_daemon()
     wd_logger 1 "Starting"
     while true; do
         wd_logger 1 "Starting to check all daemons"
-        local daemon_info
-        for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+        local info_index
+        for (( info_index=0; info_index < ${#UPLOAD_DAEMON_LIST[@]}; ++info_index )); do
+            local daemon_info="${UPLOAD_DAEMON_LIST[info_index]}"
             local daemon_info_list=( ${daemon_info} )
             local daemon_function_name=${daemon_info_list[0]}
             local daemon_home_dir=${daemon_info_list[3]}
@@ -600,7 +605,9 @@ function kill_upload_services() {
     fi
 
     ### Kill the services it spawned
-    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+    local info_index
+    for (( info_index=0; info_index < ${#UPLOAD_DAEMON_LIST[@]}; ++info_index )); do
+        local daemon_info="${UPLOAD_DAEMON_LIST[info_index]}"
         local daemon_info_list=( ${daemon_info} )
         local daemon_function_name=${daemon_info_list[0]}
         local daemon_kill_function_name=${daemon_info_list[1]}
@@ -608,14 +615,14 @@ function kill_upload_services() {
 
         local pid_file_list=( $( find ${daemon_home_dir} -name '*.pid' ) )
         if (( ${#pid_file_list[@]} == 0 )); then
-            wd_logger 1 "Found no .pid files in and under '${daemon_home_dir}'"
+            wd_logger 2 "Found no .pid files in and under '${daemon_home_dir}'"
         else
             wd_logger 1 "Found ${#pid_file_list[@]} .pid files in and under '${daemon_home_dir}'"
             for pid_file in ${pid_file_list[@]}; do
                 local pid_val=$(< ${pid_file})
                 kill ${pid_val} >& /dev/null
                 ret_code=$? ; if (( ret_code )); then
-                    wd_logger 1 "ERROR: File ${pid_file} contains pid=${pid_val}, but 'kill ${pid_val}' => ${ret_code}"
+                    wd_logger 2 "File ${pid_file} contains pid=${pid_val}, but 'kill ${pid_val}' => ${ret_code}.  I infer that killing the watchdog killed all the daemons it spawned, so just delete the .pid file"
                 else
                     wd_logger 1 "Killed pid=${pid_val} found in file ${pid_file}"
                 fi
@@ -638,7 +645,9 @@ function get_status_upload_services()
         wd_logger 1 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
     fi
 
-    for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
+    local info_index
+    for (( info_index=0; info_index < ${#UPLOAD_DAEMON_LIST[@]}; ++info_index )); do
+        local daemon_info="${UPLOAD_DAEMON_LIST[info_index]}"
         local daemon_info_list=( ${daemon_info} )
         local daemon_function_name=${daemon_info_list[0]}
         local daemon_status_function_name=${daemon_info_list[2]}
@@ -664,7 +673,7 @@ declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs-files
 ### daemon_function() name           kill_daemon_function name           get status_function name                       directory that daemon runs in
 declare -r UPLOAD_DAEMON_LIST=(
    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients or from WD0
-#   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
 #   "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
 #   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### On WD0 this forwards those files to WD1/WD2/...
 #   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### On WD0 this publishs noise graph .png file
