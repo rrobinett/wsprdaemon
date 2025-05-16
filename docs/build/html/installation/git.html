@@ -9,6 +9,7 @@
   <title>Download the software with GIT &mdash; wsprdaemon 3.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -146,7 +147,8 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">pull</span>
 </pre></div>
 </div>
-<p>To switch to a different branch, e.g., 3.3.1, use:</p>
+<p>“master” generally refers to the latest stable version of the code.  As development of the code proceeds,
+you may elect to switch to a development branch, e.g., 3.3.1.  To do this, use:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">checkout</span> <span class="mf">3.3.1</span>
 <span class="n">git</span> <span class="n">pull</span>
 </pre></div>
@@ -165,6 +167,21 @@
 <li><p><a class="reference internal" href="../configuration/radiod_conf.html"><span class="std std-doc">radiod configuration</span></a></p></li>
 <li><p>KiwiSDR</p></li>
 </ul>
+<p>Once you have defined a new wsprdaemon.conf (or restored your previous one) then invoke a command like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wdv</span>
+</pre></div>
+</div>
+<p>Nominally, this reports the current version of wsprdaemon but it will use wsprdaemon.conf to proceed with setting up wsprdaemon to run – downloading and compiling any required software (e.g., ka9q-radio and ka9q-web), setting up the proper directories, etc.</p>
+<p>Finally, you can start wsprdaemon with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wd</span> <span class="o">-</span><span class="n">A</span>
+</pre></div>
+</div>
+<p>which will pipe all messages to stdout (the screen from which you invoked the command) which can help if something doesn’t function properly.</p>
+<p>Or simply run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wda</span>
+</pre></div>
+</div>
+<p>which starts wsprdaemon “quietly” piping all messages to log files.</p>
 </section>
 </section>
 <section id="to-install-ka9q-radio-independently">

@@ -15,7 +15,6 @@ release = '3.3.1'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'myst_parser',
     'myst_nb',
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
