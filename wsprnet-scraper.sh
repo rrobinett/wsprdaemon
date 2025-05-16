@@ -38,12 +38,13 @@ function wpsrnet_login() {
         return 1
     fi
 
-    wd_logger 1 "Executing curl to login as WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD='${WSPRNET_PASSWORD}'"
-    set +x
-    timeout 60 curl -s -d '{"name":"'${WSPRNET_USER}'", "pass":"'${WSPRNET_PASSWORD}'"}' -H "Content-Type: application/json" -X POST http://www.wsprnet.org/drupal/rest/user/login > ${WSPRNET_SESSION_ID_FILE}
-    ret_code=$? ; set +x; if (( ret_code )); then
-        wd_logger 1 "ERROR: curl login failed ifor WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD]'${WSPRNET_PASSWORD}' => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
+    wd_logger 2 "Executing curl to login as WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD='${WSPRNET_PASSWORD}'"
+    curl --max-time ${WN_LOGIN_TIMEOUT-30} -s -d '{"name":"'${WSPRNET_USER}'", "pass":"'${WSPRNET_PASSWORD}'"}' -H "Content-Type: application/json" -X POST http://www.wsprnet.org/drupal/rest/user/login > ${WSPRNET_SESSION_ID_FILE}
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "ERROR: curl login failed for WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD]'${WSPRNET_PASSWORD}' => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
     else
+        wd_logger 1 "Executed wsprnet login: 'curl -s -d '{\"name\":\"'${WSPRNET_USER}'\", \"pass\":\"'${WSPRNET_PASSWORD}'\"}' -H \"Content-Type: application/json\" -X POST http://www.wsprnet.org/drupal/rest/user/login'"
+        wd_logger 2 "curl returned:\n$(<${WSPRNET_SESSION_ID_FILE})"
         ### ret_code=0
         local sessid=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/sessid/s/^.*://p' | sed 's/"//g')
         local session_name=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/session_name/s/^.*://p' | sed 's/"//g')
@@ -52,10 +53,10 @@ function wpsrnet_login() {
             #rm -f ${WSPRNET_SESSION_ID_FILE}
             ret_code=2
         else
-            wd_logger 1 "Login was successful.  ${WSPRNET_SESSION_ID_FILE}:\n$(< ${WSPRNET_SESSION_ID_FILE})"
+            wd_logger 1 "Login was successful and we extracted these two tokens from the html it returned: sessid=${sessid}, session_name=${session_name}"
         fi
    fi
-    wd_logger 1 "Returning ${ret_code}"
+    wd_logger 2 "Returning ${ret_code}"
     return ${ret_code}
 }
 
@@ -97,23 +98,25 @@ function wpsrnet_get_spots() {
             last_spotnum=0
         fi
         WSPRNET_LAST_SPOTNUM=${last_spotnum}
-        wd_logger 1 "At startup using highest Spotnum ${last_spotnum} from TS, not 0"
+        wd_logger 1 "At startup using the highest Spotnum ${last_spotnum} we got from a query to Timescale"
     fi
-    wd_logger 1 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
+    wd_logger 2 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
     local start_seconds=${SECONDS}
     local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
-    set -x
     curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str} \
                "http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0" > ${html_spot_file}
     ret_code=$?
-    set +x
     local end_seconds=${SECONDS}
     local curl_seconds=$(( end_seconds - start_seconds))
     if (( ret_code )); then
-        wd_logger 1 "ERROR: curl download failed => ${ret_code} after ${curl_seconds} seconds"
+        wd_logger 1 "ERROR: curl download failed => ${ret_code} after ${curl_seconds} seconds and output:\n$(< ${html_spot_file})"
     else
+        wd_logger 1 "Scrape executed 'curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b '${session_token}' -H 'Content-Type: application/json' -X POST -d ${curl_str} \
+            'http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0'"
+        wd_logger 2 "Which returned this:\n$(< ${html_spot_file} )"
         if grep -q "You are not authorized to access this page." ${html_spot_file}; then
-            wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'.\nSo there are no spots reported in:\n$(< ${html_spot_file})\n"
+            wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'"
+            wd_logger 2 "So there are no spots reported in:\n$(< ${html_spot_file})\n"
             rm ${WSPRNET_SESSION_ID_FILE}
             ret_code=1
         else
@@ -340,7 +343,7 @@ function api_scrape_once() {
 
     wd_logger 2 "Starting in $PWD"
     if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
-        wd_logger 1 "There is on '${WSPRNET_SESSION_ID_FILE}', so log into wsprnet"
+        wd_logger 1 "There is no '${WSPRNET_SESSION_ID_FILE}', so log into wsprnet"
         wpsrnet_login
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: wpsrnet_login returned error => ${ret_code}"
