@@ -3,6 +3,11 @@
 
 #shopt -s -o nounset
 
+### These are useful on the WD[0-6] servers
+alias wdua='wd -u a'
+alias wduz='wd -u z'
+alias wdus='wd -u s'
+
 function wd-killweb() {
     local web_pid=$(ps aux | grep web | grep -v grep | awk '{print $2}')
 
