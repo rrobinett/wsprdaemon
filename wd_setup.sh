@@ -292,15 +292,15 @@ fi
 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
 if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
-        wd_logger -1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
+        wd_logger 1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
         exit 1
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
-        wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
+        wd_logger 1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
         exit 2
     fi
     if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
-        wd_logger -1 "ERROR: SIGNAL_LEVEL_UPLOAD_ID=\"${SIGNAL_LEVEL_UPLOAD_ID}\" defined in your wsprdaemon.conf file cannot include the \"/\". Please change it to \"_\""
+        wd_logger 1 "ERROR: SIGNAL_LEVEL_UPLOAD_ID=\"${SIGNAL_LEVEL_UPLOAD_ID}\" defined in your wsprdaemon.conf file cannot include the \"/\". Please change it to \"_\""
         exit 3
     fi
 fi
@@ -437,36 +437,38 @@ function ask_user_to_install_sw() {
 
 declare INSTALLED_DEBIAN_PACKAGES=$(${DPKG_CMD} -l)
 
-############### Timescale database #######################
-#### For writing and reading spots scraped from the Wsprnet.org spot database: TimeScale (TS) Wsprnet (WN) Write Only (WO) and Read Only (RO) defines
-declare TS_WN_DB=wsprnet
-declare TS_WN_TABLE=spots
-declare TS_WN_BATCH_INSERT_SPOTS_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wn_spots.sql   ### Defines the format of the spot lines of the csv file obtained from wsprnet.org
+if [[ ${HOSTNAME:0:2} == "WD" ]]; then
+    ############### Timescale database #######################
+    #### For writing and reading spots scraped from the Wsprnet.org spot database: TimeScale (TS) Wsprnet (WN) Write Only (WO) and Read Only (RO) defines
+    declare TS_WN_DB=wsprnet
+    declare TS_WN_TABLE=spots
+    declare TS_WN_BATCH_INSERT_SPOTS_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wn_spots.sql   ### Defines the format of the spot lines of the csv file obtained from wsprnet.org
 
-### For the WN table to be accessed, valid usenames and passwords must be defined in the WD.conf file
-declare TS_WN_WO_USER=${TS_WN_WO_USER-need_user}               ### For writes to work, a valid user name must be declared in WD.conf
-declare TS_WN_WO_PASSWORD=${TS_WN_WO_PASSWORD-need_password}   ### For writes to work, the valid password must be declared in WD.conf
+    ### For the WN table to be accessed, valid usenames and passwords must be defined in the WD.conf file
+    declare TS_WN_WO_USER=${TS_WN_WO_USER}               ### For writes to work, a valid user name must be declared in WD.conf.  This line will force bash to abort if the variable isn't defined in WD.conf
+    declare TS_WN_WO_PASSWORD=${TS_WN_WO_PASSWORD}       ### For writes to work, the valid password must be declared in WD.conf
 
-declare TS_WN_RO_USER=${TS_WN_RO_USER-wdread}                  ### This user is already public, so it can be the default value and shown here
-declare TS_WN_RO_PASSWORD=${TS_WN_RO_PASSWORD-JTWSPR2008}      ### This password is already public, no it can be the deault value and shown here
+    declare TS_WN_RO_USER=${TS_WN_RO_USER-wdread}                  ### This user is already public, so it can be the default value and shown here
+    declare TS_WN_RO_PASSWORD=${TS_WN_RO_PASSWORD-JTWSPR2008}      ### This password is already public, no it can be the deault value and shown here
 
-### TimeScale (TS) Wsprdaemon (WD) Write Only (WO) and Read Only (RO) defines
-declare TS_WD_DB=tutorial                                      ### The TS database (DB) which contains the tables of WD spots and noise
-declare TS_WD_SPOTS_TABLE=wsprdaemon_spots_s
-declare TS_WD_NOISE_TABLE=wsprdaemon_noise_s
+    ### TimeScale (TS) Wsprdaemon (WD) Write Only (WO) and Read Only (RO) defines
+    declare TS_WD_DB=tutorial                                      ### The TS database (DB) which contains the tables of WD spots and noise
+    declare TS_WD_SPOTS_TABLE=wsprdaemon_spots_s
+    declare TS_WD_NOISE_TABLE=wsprdaemon_noise_s
 
-declare TS_WD_WO_USER=${TS_WD_WO_USER-need_user}               ### For writes to work, a valid user name must be declared in WD.conf
-declare TS_WD_WO_PASSWORD=${TS_WD_WO_PASSWORD-need_password}   ### For writes to work, the valid password must be declared in WD.conf
+    declare TS_WD_WO_USER=${TS_WD_WO_USER}               ### For writes to work, a valid user name must be declared in WD.conf
+    declare TS_WD_WO_PASSWORD=${TS_WD_WO_PASSWORD}   ### For writes to work, the valid password must be declared in WD.conf
 
-declare TS_WD_RO_USER=${TS_WD_RO_USER-wdread}                  ### This user is already public, so it can be the default value and shown here
-declare TS_WD_RO_PASSWORD=${TS_WD_RO_PASSWORD-JTWSPR2008}      ### This password is already public, no it can be the default value and shown her
+    declare TS_WD_RO_USER=${TS_WD_RO_USER-wdread}                  ### This user is already public, so it can be the default value and shown here
+    declare TS_WD_RO_PASSWORD=${TS_WD_RO_PASSWORD-JTWSPR2008}      ### This password is already public, no it can be the default value and shown her
 
-declare TS_WD_BATCH_INSERT_SPOTS_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wd_spots.sql
-declare TS_WD_BATCH_INSERT_NOISE_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wd_noise.sql
+    declare TS_WD_BATCH_INSERT_SPOTS_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wd_spots.sql
+    declare TS_WD_BATCH_INSERT_NOISE_SQL_FILE=${WSPRDAEMON_ROOT_DIR}/ts_insert_wd_noise.sql
 
-### This python command is used by both the scraper daemon to record a csv file with a block of WN spots, and by the tgz servicing daemon to record WD_spots and WD_noise csv files
-### usage:  python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${csv_file} --sql ${insert_sql_file}  --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}
-declare TS_BATCH_UPLOAD_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_batch_upload.py
+    ### This python command is used by both the scraper daemon to record a csv file with a block of WN spots, and by the tgz servicing daemon to record WD_spots and WD_noise csv files
+    ### usage:  python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${csv_file} --sql ${insert_sql_file}  --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_DB} --username ${TS_USER} --password ${TS_PASSWORD}
+    declare TS_BATCH_UPLOAD_PYTHON_CMD=${WSPRDAEMON_ROOT_DIR}/ts_batch_upload.py
+fi
 
 
 function install_ts_recording_packages()

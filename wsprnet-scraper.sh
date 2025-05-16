@@ -1,9 +1,11 @@
 #!/bin/bash
 
-declare -r WSPRNET_SCRAPER_HOME_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"   ### Where to find the .sh, .conf and .awk files
-declare -r WSPRNET_SCRAPER_TMP_PATH=${WSPRDAEMON_TMP_DIR}/scraper.d
+declare WSPRNET_SCRAPER_HOME_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"   ### Where to find the .sh, .conf and .awk files
+declare WSPRNET_SCRAPER_TMP_PATH=${WSPRDAEMON_TMP_DIR}/scraper
+declare WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
+declare WSPRNET_SESSION_ID_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_session_info.html
 mkdir -p ${WSPRNET_SCRAPER_TMP_PATH}
-declare -r WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
+
 
 ################### Code which gets spots from wsprnet.org using its API and records them into our TS 'wsprnet' database table 'spots'  ##########################################################
 function wn_spots_batch_upload() {
@@ -24,25 +26,34 @@ function wn_spots_batch_upload() {
     return ${ret_code}
 }
 
-declare WSPRNET_SESSION_ID_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_session_info.html
-
 function wpsrnet_login() {
-    wd_logger 1 "Executing curl to login"
+    local ret_code
+
+    if [[ -z "${WSPRNET_USER-}" ]]; then
+        wd_logger 1 "ERROR:  the expected variable WSPRNET_USER is not defined in WD.conf"
+        return 1
+    fi
+    if [[ -z "${WSPRNET_PASSWORD-}" ]]; then
+        wd_logger 1 "ERROR:  the expected variable WSPRNET_PASSWORD is not defined in WD.conf"
+        return 1
+    fi
+
+    wd_logger 1 "Executing curl to login as WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD='${WSPRNET_PASSWORD}'"
+    set +x
     timeout 60 curl -s -d '{"name":"'${WSPRNET_USER}'", "pass":"'${WSPRNET_PASSWORD}'"}' -H "Content-Type: application/json" -X POST http://www.wsprnet.org/drupal/rest/user/login > ${WSPRNET_SESSION_ID_FILE}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
+    ret_code=$? ; set +x; if (( ret_code )); then
+        wd_logger 1 "ERROR: curl login failed ifor WSPRNET_USER='${WSPRNET_USER}', WSPRNET_PASSWORD]'${WSPRNET_PASSWORD}' => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
+    else
+        ### ret_code=0
         local sessid=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/sessid/s/^.*://p' | sed 's/"//g')
         local session_name=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/session_name/s/^.*://p' | sed 's/"//g')
         if [[ -z "${sessid}" ]] || [[ -z "${session_name}" ]]; then
-            wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name}"
-            rm -f ${WSPRNET_SESSION_ID_FILE}
+            wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name} from '${WSPRNET_SESSION_ID_FILE}':\n$(< ${WSPRNET_SESSION_ID_FILE})"
+            #rm -f ${WSPRNET_SESSION_ID_FILE}
             ret_code=2
         else
             wd_logger 1 "Login was successful.  ${WSPRNET_SESSION_ID_FILE}:\n$(< ${WSPRNET_SESSION_ID_FILE})"
         fi
-    else
-        wd_logger 1 "ERROR: curl login failed => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
-        rm -f ${WSPRNET_SESSION_ID_FILE}
    fi
     wd_logger 1 "Returning ${ret_code}"
     return ${ret_code}
@@ -75,12 +86,11 @@ function wpsrnet_get_spots() {
         ### I need to redirect the output to a file or the psql return code gets lost
         local psql_output_file=${WSPRNET_SCRAPER_TMP_PATH}/psql.out
         PGPASSWORD=${TS_WN_RO_PASSWORD}  psql -t -U ${TS_WN_RO_USER} -d ${TS_WN_DB}  -c 'select "Spotnum" from spots order by "Spotnum" desc limit 1 ;' > ${psql_output_file}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
+        ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: psql( ${TS_WN_RO_USER}/${TS_WN_RO_PASSWORD}/${TS_WN_DB}) for latest TS returned error => ${ret_code}"
             exit 1
         fi
-        local psql_output=$(cat ${psql_output_file})
+        local psql_output=$(< ${psql_output_file})
         local last_spotnum=$(tr -d ' ' <<< "${psql_output}")
         if [[ -z "${last_spotnum}" ]] || [[ ${last_spotnum} -eq 0 ]]; then
             wd_logger 1 "ERROR: At startup got no or invalid spot num '${last_spotnum}' from TS, so use last_spotnum='0'"
@@ -92,16 +102,18 @@ function wpsrnet_get_spots() {
     wd_logger 1 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
     local start_seconds=${SECONDS}
     local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
+    set -x
     curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str} \
                "http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0" > ${html_spot_file}
-    local ret_code=$?
+    ret_code=$?
+    set +x
     local end_seconds=${SECONDS}
     local curl_seconds=$(( end_seconds - start_seconds))
-    if [[ ${ret_code} -ne 0 ]]; then
+    if (( ret_code )); then
         wd_logger 1 "ERROR: curl download failed => ${ret_code} after ${curl_seconds} seconds"
     else
         if grep -q "You are not authorized to access this page." ${html_spot_file}; then
-            wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'.  So there are no spots reported"
+            wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'.\nSo there are no spots reported in:\n$(< ${html_spot_file})\n"
             rm ${WSPRNET_SESSION_ID_FILE}
             ret_code=1
         else
@@ -327,15 +339,10 @@ function api_scrape_once() {
     local ret_code
 
     wd_logger 2 "Starting in $PWD"
-    if [[ ! -d ${UPLOAD_DAEMON_FTP_DIR} ]]; then
-	wd_logger 1 "No '${UPLOAD_DAEMON_FTP_DIR}' on this server, so the user 'noisegraphs' is not setup on this server. Aborting this scrape and try to find it again later"
-	return 1
-    fi
     if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
-        wd_logger 1 "Logging into wsprnet"
+        wd_logger 1 "There is on '${WSPRNET_SESSION_ID_FILE}', so log into wsprnet"
         wpsrnet_login
-        ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
+        ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: wpsrnet_login returned error => ${ret_code}"
             return ${ret_code}
         fi
@@ -345,8 +352,7 @@ function api_scrape_once() {
          return 1
     fi
     wpsrnet_get_spots ${WSPRNET_HTML_SPOT_FILE}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: wpsrnet_get_spots() returned error => ${ret_code}."
         return ${ret_code}
     fi
@@ -354,29 +360,34 @@ function api_scrape_once() {
     wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
     ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
+        wd_logger 1 "ERROR: 'wsprnet_to_csv ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
         return ${ret_code}
     fi
     wd_logger 2 "Got csv ${WSPRNET_CSV_SPOT_FILE}, append azi information into ${WSPRNET_CSV_SPOT_AZI_FILE}"
     wsprnet_add_azi     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'wsprnet_add_azi     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
         return ${ret_code}
     fi
     wd_logger 2 "Created azi file ${WSPRNET_CSV_SPOT_AZI_FILE}" 
 
     wn_spots_batch_upload    ${WSPRNET_CSV_SPOT_AZI_FILE}
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'wn_spots_batch_upload    ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
         return ${ret_code}
     fi
     wd_logger 2 "Recorded spots to TS database"
 
-    if [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
+    if ! [[ -x ${CLICKHOUSE_IMPORT_CMD} ]]; then
+        wd_logger 1 "ERROR: '${CLICKHOUSE_IMPORT_CMD} does not exist or is not executable"
+        return 1
+    else
         ( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE} )
-        wd_logger 2 "Recorded spots to Clickhouse database"
+        ret_code=$? ; if (( ret_code )); then
+            wd_logger 1 "ERROR: '( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE}' => ${ret_code}"
+        else
+            wd_logger 2 "Recorded spots to Clickhouse database"
+        fi
     fi
     wd_logger 2 "Done in $PWD"
     return  ${ret_code}
@@ -391,9 +402,13 @@ function wsprnet_scrape_daemon() {
     wd_logger 1 "Starting and scrapes will be attempted at second offsets: ${WSPRNET_OFFSET_SECS}"
     setup_verbosity_traps
     while true; do
-        if ! api_scrape_once ; then
-	    wd_logger 1 "Scrape failed.  Sleep and try again later"
+        api_scrape_once 
+        rc=$? ; if (( rc )); then
+	    wd_logger 1 "ERROR: Scrape failed rc=${rc}.  Sleep until the next scrape offset second in the 2 minute WSPR file"
+        else
+	    wd_logger 1 "Scrape was successful.  Sleep until the next scrape offset second in the 2 minute WSPR file"
 	fi
+        wd_logger 1 "sleep 10000" ; sleep 10000
         api_wait_until_next_offset
     done
 }
@@ -407,9 +422,9 @@ function kill_wsprnet_scrape_daemon()
     kill_daemon         ${scraper_daemon_function_name}  ${scraper_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the ${scraper_daemon_function_name} running in '${scraper_root_dir}'"
+        wd_logger 1 "Killed the ${scraper_daemon_function_name} running in '${scraper_root_dir}'"
     else
-        wd_logger -1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
+        wd_logger 1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
     fi
 }
 
@@ -422,9 +437,9 @@ function get_status_wsprnet_scrape_daemon()
     get_status_of_daemon  ${scraper_daemon_function_name}  ${scraper_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
+        wd_logger 1 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
     else
-        wd_logger -1 "The ${scraper_daemon_function_name} is not running in '${scraper_root_dir}'"
+        wd_logger 1 "The ${scraper_daemon_function_name} is not running in '${scraper_root_dir}'"
     fi
     return ${ret_code}
 }
@@ -587,9 +602,9 @@ function kill_wsprnet_gap_daemon()
     kill_daemon  wsprnet_gap_daemon ${SCRAPER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the daemon 'wsprnet_gap_daemon' running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "Killed the daemon 'wsprnet_gap_daemon' running in '${SCRAPER_ROOT_DIR}'"
     else
-        wd_logger -1 "The 'wsprnet_gap_daemon' was not running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "The 'wsprnet_gap_daemon' was not running in '${SCRAPER_ROOT_DIR}'"
     fi
     return 0
 }
@@ -599,9 +614,9 @@ function get_status_wsprnet_gap_daemon()
     get_status_of_daemon   wsprnet_gap_daemon  ${SCRAPER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The wsprnet_gap_daemon is running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "The wsprnet_gap_daemon is running in '${SCRAPER_ROOT_DIR}'"
     else
-        wd_logger -1 "The wsprnet_gap_daemon is not running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "The wsprnet_gap_daemon is not running in '${SCRAPER_ROOT_DIR}'"
     fi
     return 0
 }

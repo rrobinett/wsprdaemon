@@ -124,9 +124,9 @@ function kill_noise_graphs_publishing_daemon()
     kill_daemon         ${noise_graphs_publishing_daemon_function_name}  ${noise_graphs_publishing_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the ${noise_graphs_publishing_daemon_function_name} running in '${noise_graphs_publishing_root_dir}'"
+        wd_logger 1 "Killed the ${noise_graphs_publishing_daemon_function_name} running in '${noise_graphs_publishing_root_dir}'"
     else
-        wd_logger -1 "The '${noise_graphs_publishing_daemon_function_name}' was not running in '${noise_graphs_publishing_root_dir}'"
+        wd_logger 1 "The '${noise_graphs_publishing_daemon_function_name}' was not running in '${noise_graphs_publishing_root_dir}'"
     fi
 
 }
@@ -140,9 +140,9 @@ function get_status_noise_graphs_publishing_daemon()
     get_status_of_daemon  ${noise_graphs_publishing_daemon_function_name}  ${noise_graphs_publishing_root_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The ${noise_graphs_publishing_daemon_function_name} is running in '${noise_graphs_publishing_root_dir}'"
+        wd_logger 1 "The ${noise_graphs_publishing_daemon_function_name} is running in '${noise_graphs_publishing_root_dir}'"
     else
-        wd_logger -1 "The ${noise_graphs_publishing_daemon_function_name} is not running in '${noise_graphs_publishing_root_dir}'"
+        wd_logger 1 "The ${noise_graphs_publishing_daemon_function_name} is not running in '${noise_graphs_publishing_root_dir}'"
     fi
     return ${ret_code}
 

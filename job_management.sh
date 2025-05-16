@@ -78,7 +78,7 @@ function check_for_zombies() {
         local ret_code=$?
         wd_logger 1 "'ERROR: source ${RUNNING_JOBS_FILE}' => ${ret_code}, so skip checking for jobs"
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger -2 "There are no running jobs"
+        wd_logger 2 "There are no running jobs"
     else
         ### There are jobs in ${#RUNNING_JOBS[@]} to be checked
 
@@ -239,7 +239,7 @@ function check_for_zombies() {
         if [[ ${rc} -ne 0 ]]; then
              wd_logger 1 "ERROR: 'wd_kill ${kill_pid_list[*]}' => ${rc}"
         fi
-        wd_logger -1 "Killed zombie pids:  '${kill_pid_list[*]}'"
+        wd_logger 1 "Killed zombie pids:  '${kill_pid_list[*]}'"
     fi
 }
 
@@ -267,7 +267,7 @@ function show_running_jobs() {
         wd_logger 1 "ERROR: 'source ${RUNNING_JOBS_FILE}' => $?"
         return 2
     elif [[ ${#RUNNING_JOBS[@]} -eq 0 ]] ; then
-        wd_logger -1 "There are no running jobs"
+        wd_logger 1 "There are no running jobs"
         return 3
     fi
 
@@ -287,14 +287,14 @@ function show_running_jobs() {
             ### For a simple rx device, the recording, decoding and posting pids are all in the same directory
             receiver_name_list=(${receiver_name})
             local print_string=$(printf "%25s: %12s,%-4s posting     %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_posting_status   ${receiver_name} ${receiver_band})")
-            wd_logger -1 "\n${print_string}"
+            wd_logger 1 "\n${print_string}"
         fi
         for receiver_name in ${receiver_name_list[@]}; do
             if [[ ${show_target} == "all" ]] || ( [[ ${receiver_name} == ${show_target} ]] && [[ ${receiver_band} == ${show_band} ]] ) ; then
                 local wd_log_string=$(printf "%25s: %12s,%-4s decoding    %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_decoding_status  ${receiver_name} ${receiver_band})")
-                wd_logger -1 "${wd_log_string}"
+                wd_logger 1 "${wd_log_string}"
                 wd_log_string=$(printf "%25s: %12s,%-4s recording   %s\n" ${job_info} ${receiver_name} ${receiver_band}  "$(get_recording_status ${receiver_name} ${receiver_band})")
-                wd_logger -1 "${wd_log_string}"
+                wd_logger 1 "${wd_log_string}"
                 found_job="yes"
             fi
         done
@@ -307,7 +307,7 @@ function show_running_jobs() {
             fi
         fi
     done
-    wd_logger -1 "Found ${running_jobs_count} running jobs"
+    wd_logger 1 "Found ${running_jobs_count} running jobs"
 }
 
 ##############################################################
@@ -710,12 +710,12 @@ function stop_running_jobs() {
 
     wd_logger 2 "Start with args: $1,${2-} => ${stop_receiver},${stop_band}"
     if [[ ! -f ${RUNNING_JOBS_FILE} ]]; then
-        wd_logger -1 "Found no RUNNING_JOBS_FILE, so nothing to do"
+        wd_logger 1 "Found no RUNNING_JOBS_FILE, so nothing to do"
         return 0
     fi
     source ${RUNNING_JOBS_FILE}
     if [[ ${#RUNNING_JOBS[@]} -eq 0 ]]; then
-       wd_logger -1 "There are no running jobs"
+       wd_logger 1 "There are no running jobs"
        return 0
     fi
 

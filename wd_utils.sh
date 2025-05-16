@@ -152,7 +152,7 @@ function wd_logger_check_all_logs
             local new_last_printed_line=$( echo "${new_error_log_lines}" | tail -1)
             echo "${new_last_printed_line}" > ${log_file_last_printed}
             local new_lines_to_print=$( echo "${new_log_lines}" | awk "{print \"${log_file_path}: \" \$0}")
-            wd_logger -1 "\n$( echo "${new_lines_to_print}" | head -n 8 )"
+            wd_logger 1 "\n$( echo "${new_lines_to_print}" | head -n 8 )"
             [[ ${verbosity} -ge 1 ]] && read -p "Press <ENTER> to check the next log file > "
         fi
     done
@@ -161,7 +161,7 @@ function wd_logger_check_all_logs
 declare CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS=10
 function print_new_log_lines()
 {
-    wd_logger -1 "Checking every ${CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS} seconds for new ERROR lines in all the log files.  Press <CONTROL C> to exit"
+    wd_logger 1 "Checking every ${CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS} seconds for new ERROR lines in all the log files.  Press <CONTROL C> to exit"
     while true; do
         wd_logger_check_all_logs "check_only_for_new_errors"
         sleep ${CHECK_FOR_LOG_ERROR_LINES_SLEEP_SECS}
@@ -172,9 +172,9 @@ function tail_log_file()
 {
     local log_file=${1}
 
-    wd_logger -1 "To view the full log file execute the command: 'less ${log_file}'\n"
+    wd_logger 1 "To view the full log file execute the command: 'less ${log_file}'\n"
     sleep 2
-    wd_logger -1 "Running 'tail -F ${log_file}':\n"
+    wd_logger 1 "Running 'tail -F ${log_file}':\n"
     tail -F ${log_file}
     less ${log_file}
 }
@@ -768,8 +768,8 @@ function spawn_daemon()
     local daemon_function_name=$1
     local daemon_root_dir=$2
     mkdir -p ${daemon_root_dir}
-    local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
-    local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
+    local daemon_log_file_path=$(realpath ${daemon_root_dir}/${daemon_function_name}.log)
+    local daemon_pid_file_path=$(realpath ${daemon_root_dir}/${daemon_function_name}.pid)
 
     wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
@@ -790,7 +790,7 @@ function spawn_daemon()
     fi
     local spawned_pid=$!
     echo ${spawned_pid} > ${daemon_pid_file_path}
-    wd_logger -1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
     return 0
 }
 
@@ -845,21 +845,21 @@ function get_status_of_daemon() {
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
         if [[ -z "${daemon_pid}" ]]; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
             return 3
         fi
         if ! is_uint "${daemon_pid}"; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
             return 4
         fi
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger 1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
