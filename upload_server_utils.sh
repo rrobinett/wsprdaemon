@@ -682,7 +682,7 @@ declare -r UPLOAD_DAEMON_LIST=(
 ### function which handles 'wd -u ...'
 function upload_server_cmd() {
     local action=$1
-    
+
     wd_logger 3 "Process cmd '${action}'"
     case ${action} in
         a)
