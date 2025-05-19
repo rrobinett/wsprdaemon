@@ -333,7 +333,7 @@ function wsprnet_add_azi() {
     return ${ret_code}
 }
 
-declare CLICKHOUSE_IMPORT_CMD=/home/arne/tools/wsprdaemonimport.sh
+declare CLICKHOUSE_IMPORT_CMD="/usr/local/sbin/wsprdaemonimport.sh"
 declare CLICKHOUSE_IMPORT_CMD_DIR=${CLICKHOUSE_IMPORT_CMD%/*}
 declare UPLOAD_TO_TS="yes"    ### -u => don't upload 
 
@@ -361,8 +361,7 @@ function api_scrape_once() {
     fi
     wd_logger 2 "Got spots in html file  ${WSPRNET_HTML_SPOT_FILE}, translate into ${WSPRNET_CSV_SPOT_FILE}"
     wsprnet_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
-    ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'wsprnet_to_csv ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
         return ${ret_code}
     fi
@@ -389,7 +388,7 @@ function api_scrape_once() {
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: '( cd ${CLICKHOUSE_IMPORT_CMD_DIR}; ${CLICKHOUSE_IMPORT_CMD} ${WSPRNET_CSV_SPOT_FILE}' => ${ret_code}"
         else
-            wd_logger 2 "Recorded spots to Clickhouse database"
+            wd_logger 1 "Recorded spots to Clickhouse database"
         fi
     fi
     wd_logger 2 "Done in $PWD"
