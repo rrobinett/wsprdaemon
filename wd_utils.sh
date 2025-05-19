@@ -859,7 +859,7 @@ function get_status_of_daemon() {
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger 1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger 2 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
