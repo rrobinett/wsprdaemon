@@ -46,7 +46,7 @@ get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
 
-if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; thebn
+if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; then
     wd_logger 1 "WARNING: the system clock is not synchronized"
 fi
 
