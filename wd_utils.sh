@@ -1087,7 +1087,7 @@ function update_ini_file_section_variable() {
     # Check if variable exists within the section
     if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
         ### The variable is defined.  See if it needs to be changed
-        local temp_file="${file}.tmp"
+        local temp_file="/tmp/${file##*/}.tmp"
 
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
@@ -1138,8 +1138,13 @@ function update_ini_file_section_variable() {
             wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
             return 0
         else
-            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value'"
-            sed -i "${section_start_line_number}a\\$variable=$new_value" "$file"
+            local temp_file="/tmp/${file##*/}"
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
+            sed "${section_start_line_number}a\\$variable=$new_value" "${file}" > ${temp_file}
+            sudo mv ${temp_file} ${file}         ### The /etc/systemd/system/ dirctory is owned by root
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'mv ${temp_file} ${file}' => ${rc}"
+            fi
             return 1
          fi
     fi
