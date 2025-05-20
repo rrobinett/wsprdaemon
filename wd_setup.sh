@@ -46,6 +46,10 @@ get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
 
+if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; thebn
+    wd_logger 1 "WARNING: the system clock is not synchronized"
+fi
+
 wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
 
 declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
