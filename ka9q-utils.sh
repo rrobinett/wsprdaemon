@@ -1038,6 +1038,17 @@ function ka9q-ft-setup()
     else
         wd_logger 2 "${ftx_decode_service_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     fi
+    if ! sudo systemctl is-enabled ${ftx_decode_service_name} >& /dev/null ; then
+        wd_logger 1 "${ftx_decode_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ftx_decode_service_name} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to enable ${ftx_decode_service_name} => ${rc}"
+            # return ${rc}
+        fi
+        wd_logger 1 "Enabled service ${ftx_decode_service_name}"
+    else
+        wd_logger 2 "${ftx_decode_service_name} is enabled, so it doesn't need to be enabled"
+    fi
 
     ### The wav files are created by the ftX-record daemon which listens to the multicast stream defined in /etc/radio/radiod@.....conf and outputs a series of wav files
     ### Since sites with multiple RX88s will be sending to different MC addresses, the ftX-record dameon amy need to be modified to listen on that MC address
@@ -1120,98 +1131,17 @@ function ka9q-ft-setup()
         fi
         wd_logger 1 "Restarted service ${ftx_record_service_name}"
     fi
-
-: <<'COMMENT_OUT_THESE_LINES'
-    ### When WD is running KA9Q's FTx decode services it could be configured to decode the wav files with WSJT-x's 'jt9' decoder,
-    ### so create a bash script which can be run by ftX-decoded,
-    ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
-    ### Since jt9 appears to be more sensitive than the FT4/8 decoder 'decode-ft8' specified by KA9Q-radio, create this script so that as some point in the future we can run jt9.
-    ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
-    ### It is awkward to embed an awk script inline like this, but the alternative would be to add it to WD homne directory.  When we strt using jt9 we should put it there.
-
-    sudo mkdir -p ${ka9q_ft_tmp_dir}
-    sudo chmod 777 ${ka9q_ft_tmp_dir}
-    local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
-    wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
-
-    # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
-    sudo rm -f ${ka9q_ft_jt9_decoder}
-    echo -n "${JT9_CMD} -${ft_type#ft} \$3 | awk -v base_freq_ghz=\$2 -v file_name=\${3##*/} "             > ${ka9q_ft_jt9_decoder}
-    echo    \''/^[0-9]/ {
-            printf "%s %3d %4s %'\''12.1f ~ %s %s %s %s\n", 20substr(file_name,1,2)"/"substr(file_name,3,2)"/"substr(file_name,5,2)" "substr(file_name,8,2)":"substr(file_name,10,2)":"substr(file_name,12,2), $2, $3,
-            ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
-    chmod +x ${ka9q_ft_jt9_decoder}
-
-
-    ### Create a service file for 
-    declare SYSTEMD_DIR="/etc/systemd/system"
-    local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
-    local ft_log_file_name="/var/log/${ft_type}.log"
-
-    local needs_new_service_file="no"
-    if [[ ! -f ${ft_service_file_name} ]]; then
-        wd_logger 1 "Can't find service file ${ft_service_file_name}"
-        needs_new_service_file="yes"
+    if ! sudo systemctl is-enabled ${ftx_record_service_name} >& /dev/null ; then
+        wd_logger 1 "${ftx_record_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ftx_record_service_name} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to enable ${ftx_record_service_name} => ${rc}"
+            # return ${rc}
+        fi
+        wd_logger 1 "Enabled service ${ftx_record_service_name}"
     else
-        local stdout_line="StandardOutput=append:${ft_log_file_name}"
-        if ! grep -q "${stdout_line}" ${ft_service_file_name} ; then
-            wd_logger 1 "Can't find correct stdout line in ${ft_service_file_name}, so recreate it" 
-            needs_new_service_file="yes"
-        fi
-        if [[ ${ft_type} == "ft4" || ${ft_type} == "ft8" ]]; then
-            wd_logger 2 "${ft_type} packets are proceessed by the 'decode-ft' command from ka9q-radio, so the Exec:.. line in the template .service files need not be changed"
-            if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
-                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type} spots"
-                ka9q-ft-install-decode-ft
-                rc=$? ; if (( rc )); then
-                    wd_logger 1 "ERROR: 'ka9q-ft-install-decode-ft()' => ${rc}"
-                    return ${rc}
-                fi
-                needs_new_service_file="yes"
-                wd_logger 1 "Successfully installed ${KA9Q_DECODE_FT_CMD}"
-            fi
-        elif [[ ${KA9Q_JT9_DECODING-no} == "yes" ]]; then
-            if ! grep -q "${JT9_CMD}" ${ft_service_file_name}; then
-                wd_logger 1 "Can't find ${JT9_CMD} in ${ft_service_file_name}, so recreate it"
-                needs_new_service_file="yes"
-            fi
-        fi
+        wd_logger 2 "${ftx_record_service_name} is enabled, so it doesn't need to be enabled"
     fi
-
-    ### Earlier versons of WD put ft[48].log files in /dev/shm/wsprdaemon/...  Now that WD puts them in /var/log,
-    ### ensure that the service file instructs systemctl to append stdout of the FT4/8 decoder to a /var/log/ft[48].log file
-    if [[ ${needs_new_service_file} == "yes" ]]; then
-        wd_logger 1 "Creating new service file ${ft_service_file_name}"
-        local ka9q_service_template_dir="${KA9Q_RADIO_DIR}/service"
-        local ka9q_ft_service_template_file_name="${ka9q_service_template_dir}/${ft_type}-decoded.service"
-        local ka9q_ft_service_tmp_file_name="${KA9Q_FT_TMP_ROOT}/${ft_type}-decoded.service"
-
-        cp ${ka9q_ft_service_template_file_name}                                                                                         ${ka9q_ft_service_tmp_file_name}
-        sed -i "/User=/s/=.*/=${USER}/"                                                                                                  ${ka9q_ft_service_tmp_file_name}
-        local my_primary_group=$(id -gn)
-        sed -i "/GROUP=/s/=.*/=${my_primary_group}/"                                                                                     ${ka9q_ft_service_tmp_file_name}
-        sed -i "/StandardOutput=append:/s;:.*;:${ft_log_file_name};"                                                                     ${ka9q_ft_service_tmp_file_name}
-        #sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" -x \"${ka9q_ft_jt9_decoder}\"  \$MCAST;"  ${ka9q_ft_service_tmp_file_name}
-        sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" \$MCAST;"                                 ${ka9q_ft_service_tmp_file_name}
-        
-        wd_logger 1 "Created a new service file ${ft_service_file_name} in  ${ka9q_ft_service_tmp_file_name}"
-        if [[ -f ${ft_service_file_name} ]]; then
-            sudo cp -p ${ft_service_file_name} ${ft_service_file_name}.old
-        fi
-        sudo cp  ${ka9q_ft_service_tmp_file_name} ${ft_service_file_name}
-        sudo systemctl daemon-reload
-        sudo systemctl restart ${ft_type}-decoded.service
-
-        wd_logger 1 "Created new ${ft_type}-decoded.service file, daemon-reload, and restarted it" 
-    else
-        if ! sudo systemctl status ${ft_type}-decoded.service > /dev/null ; then
-            wd_logger 2 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
-            sudo systemctl restart ${ft_type}-decoded.service
-        else
-            wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
-        fi
-    fi
-COMMENT_OUT_THESE_LINES
 
     ### Ensure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
     local ft_log_file_name="/var/log/${ft_type}.log"
@@ -1294,7 +1224,7 @@ function build_psk_uploader() {
     local rc
     local psk_services_restart_needed="yes"
 
-    wd_logger 1 "Start"
+    wd_logger 2 "Start"
     if ! python3 -c "import docopt" 2> /dev/null; then
         rc=$?
         wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
