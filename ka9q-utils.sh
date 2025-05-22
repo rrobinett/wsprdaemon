@@ -1001,19 +1001,47 @@ declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked 
 declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
-function ka9q-ft-setup() {
+function ka9q-ft-setup() 
+{
+    local rc
+
     local ka9q_runs_only_remotely
     get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
     if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
-        wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
+        wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
         return 0
     fi
 
-    local ft_type=$1        ## can be 4 or 8
+    local ft_type=${1}        ## must be 'ft4' or 'ft8'
+
     local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}       ### The ftX-decoded will create this directory and put the wav files it needs in it.  We don't need to create it.
 
+    ### Since May 2025 ka9q-radio decodes of each FT4/8 band is performed by a pair of systemctl daemons.
+    ### The ftX-decode dameon reads wav files created by the ftX-record daemon (which is an instance of pcmrecord).
+    ### It is created by a 'sudo make install' in the ka9q-radion directory and doesn't need any per-site customization
+    local ftx_decode_service_name="${ft_type}-decode.service"
+    local ft_decode_service_file="/etc/systemd/system/${ftx_decode_service_name}"
+    if [[ -f ${ft_decode_service_file} ]]; then
+        wd_logger 2 "Found the expected service file '${ft_decode_service_file}'"
+    else
+        wd_logger 1 "Can't find the service file '${ft_decode_service_file}' which should have been installed by ka9q-radio" 
+        return 1
+    fi
+    if ! sudo systemctl status ${ftx_decode_service_name}  >& /dev/null; then
+        wd_logger 1 "${ftx_decode_service_name} is not running, so it needs to be started"
+        sudo systemctl restart ${ftx_decode_service_name}  >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to restart ${ftx_decode_service_name} => ${rc}"
+            return ${rc}
+        fi
+        wd_logger 1 "Restarted service  ${ftx_decode_service_name}"
+    else
+        wd_logger 2 "${ftx_decode_service_name} is running and its conf file is never changed, so it doesn't need to be restarted"
+    fi
+
+    ### The wav files are created by the ftX-record daemon which listens to the multicast stream defined in /etc/radio/radiod@.....conf and outputs a series of wav files
+    ### Since sites with multiple RX88s will be sending to different MC addresses, the ftX-record dameon amy need to be modified to listen on that MC address
     wd_logger 2 "Find the ka9q conf file"
-    local rc
     local radiod_conf_file_name
     ka9q-get-configured-radiod "radiod_conf_file_name"
     rc=$? ; if (( rc )); then
@@ -1031,73 +1059,69 @@ function ka9q-ft-setup() {
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    local ft_record_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
 
     local needs_update="no"
 
-    if [[ ! -f ${decoded_conf_file_name} ]]; then
-        wd_logger 1 "File '${decoded_conf_file_name}' doesn't exist, so create it"
+    if [[ ! -f ${ft_record_conf_file_name} ]]; then
+        wd_logger 1 "File '${ft_record_conf_file_name}' doesn't exist, so create it"
         needs_update="yes"
-    elif ! grep -q "${mcast_line}" ${decoded_conf_file_name} ; then
-         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+    elif ! grep -q "${mcast_line}" ${ft_record_conf_file_name} ; then
+         wd_logger 1 "File '${ft_record_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
         needs_update="yes"
-    elif ! grep -q "${directory_line}" ${decoded_conf_file_name} ; then
-         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
+    elif ! grep -q "${directory_line}" ${ft_record_conf_file_name} ; then
+         wd_logger 1 "File '${ft_record_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
         needs_update="yes"
     else
-         wd_logger 2 "File '${decoded_conf_file_name}' is correct, so no update is needed"
+         wd_logger 2 "File '${ft_record_conf_file_name}' is correct, so no update is needed"
     fi
 
     if [[ ${needs_update} == "yes" ]]; then
-        echo "${mcast_line}"      >  ${decoded_conf_file_name}
-        echo "${directory_line}"  >> ${decoded_conf_file_name}
-        wd_logger 1 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
+        echo "${mcast_line}"      >  ${ft_record_conf_file_name}
+        echo "${directory_line}"  >> ${ft_record_conf_file_name}
+        wd_logger 1 "Created ${ft_record_conf_file_name} which contains:\n$(<  ${ft_record_conf_file_name})"
     fi
 
-    local rc
     getent group "radio" > /dev/null 2>&1
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist"
         return ${rc}
     fi
 
-    local group_owner=$( stat -c "%G" ${decoded_conf_file_name} )
+    local group_owner=$( stat -c "%G" ${ft_record_conf_file_name} )
     if [[ ${group_owner} != "radio" ]]; then
-        wd_logger 1 "'${decoded_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
-        sudo chgrp "radio" ${decoded_conf_file_name}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 ""
+        wd_logger 1 "'${ft_record_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
+        sudo chgrp "radio" ${ft_record_conf_file_name}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo chgrp "radio" ${ft_record_conf_file_name}' => ${rc}"
             return ${rc}
         fi
     fi
 
     local needs_restart="no"
-    local service_name="${ft_type}-decoded.service"
+    local ftx_record_service_name="${ft_type}-record.service"
 
     if [[ ${needs_update} == "yes" ]]; then
-        wd_logger 1 "We need to restart the '${service_name} because the conf file changed"
+        wd_logger 1 "We need to restart the '${ftx_record_service}' because its ${ft_record_conf_file_name} file was created or was changed"
         needs_restart="yes"
-    elif ! sudo systemctl status ${service_name}  >& /dev/null; then
-        wd_logger 1 "${service_name} is not running, so it needs to be started"
+    elif ! sudo systemctl status ${ftx_record_service_name}  >& /dev/null; then
+        wd_logger 1 "${ftx_record_service_name} is not running, so it needs to be started"
         needs_restart="yes"
     else
-        wd_logger 2 "${service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
+        wd_logger 2 "${ftx_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
     fi
     if [[ ${needs_restart} == "yes" ]]; then
-        local rc
-        sudo systemctl restart ${service_name}  >& /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to restart ${service_name} => ${rc}"
+        sudo systemctl restart ${ftx_record_service_name}  >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to restart ${ftx_record_service_name} => ${rc}"
             return ${rc}
         fi
-        wd_logger 1 "Restarted service  ${service_name}"
+        wd_logger 1 "Restarted service ${ftx_record_service_name}"
     fi
 
+: <<'COMMENT_OUT_THESE_LINES'
     ### When WD is running KA9Q's FTx decode services it could be configured to decode the wav files with WSJT-x's 'jt9' decoder,
     ### so create a bash script which can be run by ftX-decoded,
     ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
@@ -1118,7 +1142,8 @@ function ka9q-ft-setup() {
             ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
     chmod +x ${ka9q_ft_jt9_decoder}
 
-    ### Create a service file for the psk uploader
+
+    ### Create a service file for 
     declare SYSTEMD_DIR="/etc/systemd/system"
     local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
     local ft_log_file_name="/var/log/${ft_type}.log"
@@ -1138,8 +1163,7 @@ function ka9q-ft-setup() {
             if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
                 wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type} spots"
                 ka9q-ft-install-decode-ft
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
+                rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'ka9q-ft-install-decode-ft()' => ${rc}"
                     return ${rc}
                 fi
@@ -1187,8 +1211,10 @@ function ka9q-ft-setup() {
             wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
         fi
     fi
+COMMENT_OUT_THESE_LINES
 
     ### Ensure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
+    local ft_log_file_name="/var/log/${ft_type}.log"
     local logrotate_job_file_name="/etc/logrotate.d/${ft_type}.rotate"
     local create_job_file="no"
     if [[ ! -f ${logrotate_job_file_name} ]]; then
@@ -1197,6 +1223,8 @@ function ka9q-ft-setup() {
     elif ! grep -q 'maxsize'  ${logrotate_job_file_name}; then
          wd_logger 1 "Job file '${logrotate_job_file_name}' is missing the 'maxsize 1M' line, so recreate the file"
         create_job_file="yes"
+    else
+         wd_logger 2 "Logrotate file exists"
     fi
     if [[ ${create_job_file} == "yes" ]]; then
         echo "${ft_log_file_name} {
@@ -1213,7 +1241,7 @@ function ka9q-ft-setup() {
         sudo chmod 644  ${logrotate_job_file_name}
         wd_logger 1 "Added new logrotate job '${logrotate_job_file_name}' to keep '${ft_log_file_name}' clean"
     else
-        wd_logger 2 "Found '${logrotate_job_file_name}', so check it"
+        wd_logger 2 "Found '${logrotate_job_file_name}', so is configured properly so no need to change it"
     fi
 
     local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_name})
@@ -1225,6 +1253,7 @@ function ka9q-ft-setup() {
     fi
 
     wd_logger 2 "Setup complete"
+    return 0
 }
 
 function build_ka9q_ft8() {
@@ -1245,8 +1274,7 @@ function build_ka9q_ft8() {
     local ft_type
     for ft_type in ft8 ft4 ; do
         ka9q-ft-setup ${ft_type}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: ka9q-jt-setup() ${ft_type} => ${rc}"
             save_rc=${rc}
         else
@@ -1266,6 +1294,7 @@ function build_psk_uploader() {
     local rc
     local psk_services_restart_needed="yes"
 
+    wd_logger 1 "Start"
     if ! python3 -c "import docopt" 2> /dev/null; then
         rc=$?
         wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
@@ -1555,11 +1584,11 @@ function install_github_project() {
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-41afcb61344b2622b95570bdb031a54d4d4851df}"
-    "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-66f0b5cd70d2435184b54b29459bb15214120a2c}"
-    "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
-    "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-40d3dcdb16fa3c5e440a665ed9cbd21b80f4d346}"
+    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-1ac3d9b5b542789e8fc66df1edace99be9f851c5}"
+    "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-master}     ${KA9Q_FT8_ENABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-354603ae57d3453fe86fc8b64d58a0a500f0598b}"
+    "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}   ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
+    "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                          ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
+    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                   ${KA9Q_WEB_COMMIT-533db59d02f27ed7c990f9e6e35bfc4c2cd6367e}"
 )
 
 ###
