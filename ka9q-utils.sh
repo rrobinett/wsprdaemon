@@ -1019,45 +1019,83 @@ function ka9q-ft-setup()
     ### Since May 2025 ka9q-radio decodes of each FT4/8 band is performed by a pair of systemctl daemons.
     ### The ftX-decode dameon reads wav files created by the ftX-record daemon (which is an instance of pcmrecord).
     ### It is created by a 'sudo make install' in the ka9q-radion directory and doesn't need any per-site customization
-    local ftx_decode_service_name="${ft_type}-decode.service"
-    local ft_decode_service_file="/etc/systemd/system/${ftx_decode_service_name}"
-    if [[ -f ${ft_decode_service_file} ]]; then
-        wd_logger 2 "Found the expected service file '${ft_decode_service_file}'"
+    local ft_service_file_name="${ft_type}-decode.service"
+    local ft_systemd_service_file_path="/etc/systemd/system/${ft_service_file_name}"
+    if [[ -f ${ft_systemd_service_file_path} ]]; then
+        wd_logger 2 "Found the expected service file '${ft_systemd_service_file_path}'"
     else
-        wd_logger 1 "Can't find the service file '${ft_decode_service_file}' which should have been installed by ka9q-radio" 
-        return 1
-    fi
-    if ! sudo systemctl status ${ftx_decode_service_name}  >& /dev/null; then
-        wd_logger 1 "${ftx_decode_service_name} is not running, so it needs to be started"
-        sudo systemctl restart ${ftx_decode_service_name}  >& /dev/null
-        rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: failed to restart ${ftx_decode_service_name} => ${rc}"
-            return ${rc}
+        wd_logger 1 "Can't find the service file '${ft_systemd_service_file_path}' because it is not automatically installed by ka9q-radio" 
+        local ka9q_template_service_file_path="${KA9Q_RADIO_DIR}/service/${ft_service_file_name}"
+        if [[ ! -f ${ka9q_template_service_file_path} ]]; then
+            wd_logger 1 "ERROR: can't find the expected template file ${ka9q_template_service_file_path}, so force an abort"
+            echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service  ${ftx_decode_service_name}"
-    else
-        wd_logger 2 "${ftx_decode_service_name} is running and its conf file is never changed, so it doesn't need to be restarted"
-    fi
-    if ! sudo systemctl is-enabled ${ftx_decode_service_name} >& /dev/null ; then
-        wd_logger 1 "${ftx_decode_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
-        sudo systemctl enable ${ftx_decode_service_name} >& /dev/null
+        sudo cp -p ${ka9q_template_service_file_path} ${ft_systemd_service_file_path}
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: failed to enable ${ftx_decode_service_name} => ${rc}"
-            # return ${rc}
+            wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_service_file_path} ${ft_systemd_service_file_path}' => ${rc},  so force an abort"
+            echo ${force_abort}
         fi
-        wd_logger 1 "Enabled service ${ftx_decode_service_name}"
+        wd_logger 1 "Installed the service file template ${ka9q_template_service_file_path} in ${ft_systemd_service_file_path}"
+    fi
+    ### We have the ftX-decode.service file 
+
+    ### To start it we need it conf file
+    local ft_decode_conf_file_name="${ft_type}-decode.conf"
+    local ka9q_ft_decode_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_decode_conf_file_name}"
+    if [[ ! -f ${ka9q_ft_decode_conf_file_path} ]]; then
+        wd_logger 1 "Can't find expected ${ka9q_ft_decode_conf_file_path}, so copy the templae file to it"
+        local ka9q_template_ft_decode_conf_file_path="${KA9Q_RADIO_DIR}/config/${ft_decode_conf_file_name}"
+        if [[ ! -f ${ka9q_template_ft_decode_conf_file_path} ]]; then
+            wd_logger 1 "ERROR: can't file expected template file '${ka9q_template_ft_decode_conf_file_path}', so force an abort"
+            echo ${force_abort}
+        fi
+        sudo cp -p  ${ka9q_template_ft_decode_conf_file_path} ${ka9q_ft_decode_conf_file_path}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_ft_decode_conf_file_path} ${ka9q_ft_decode_conf_file_path}' => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Installed the service file template ${ka9q_template_ft_decode_conf_file_path} in ${ka9q_ft_decode_conf_file_path}"
+    fi
+    ### We have its conf file
+
+
+    ### Start it up
+    if sudo systemctl status ${ft_service_file_name}  >& /dev/null; then
+        wd_logger 2 "${ft_service_file_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     else
-        wd_logger 2 "${ftx_decode_service_name} is enabled, so it doesn't need to be enabled"
+        wd_logger 1 "${ft_service_file_name} is not running, so it needs to be started"
+        sudo systemctl daemon-reload
+        sudo systemctl restart ${ft_service_file_name}  >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to restart ${ft_service_file_name} => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Restarted service  ${ft_service_file_name}"
     fi
 
+    ### Ensure that it will run at startup
+    if sudo systemctl is-enabled ${ft_service_file_name} >& /dev/null ; then
+        wd_logger 2 "${ft_service_file_name} is enabled, so it doesn't need to be enabled"
+    else
+        wd_logger 1 "${ft_service_file_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ft_service_file_name} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to enable ${ft_service_file_name} => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Enabled service ${ft_service_file_name}"
+    fi
+    ### The ftX-decode daemon is set up
+
+    ### Setup the ftX-record daemon
     ### The wav files are created by the ftX-record daemon which listens to the multicast stream defined in /etc/radio/radiod@.....conf and outputs a series of wav files
-    ### Since sites with multiple RX88s will be sending to different MC addresses, the ftX-record dameon amy need to be modified to listen on that MC address
+    ### Since sites with multiple RX88s will be sending to different MC addresses, the ftX-record dameon may need to be modified to listen on that MC address
     wd_logger 2 "Find the ka9q conf file"
     local radiod_conf_file_name
     ka9q-get-configured-radiod "radiod_conf_file_name"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name'"
-        return ${rc}
+        wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name, so force an abort'"
+        echo ${force_abort}
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
@@ -1065,93 +1103,94 @@ function ka9q-ft-setup()
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name'"
-        return ${rc}
+        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name, so force an abort'"
+        echo ${force_abort}
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local ft_record_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    local ft_record_conf_file_name="${ft_type}-record.conf"
+    local ft_record_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_record_conf_file_name}"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
 
     local needs_update="no"
 
-    if [[ ! -f ${ft_record_conf_file_name} ]]; then
-        wd_logger 1 "File '${ft_record_conf_file_name}' doesn't exist, so create it"
+    if [[ ! -f ${ft_record_conf_file_path} ]]; then
+        wd_logger 1 "File '${ft_record_conf_file_path}' doesn't exist, so create it"
         needs_update="yes"
-    elif ! grep -q "${mcast_line}" ${ft_record_conf_file_name} ; then
-         wd_logger 1 "File '${ft_record_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+    elif ! grep -q "${mcast_line}" ${ft_record_conf_file_path} ; then
+         wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
         needs_update="yes"
-    elif ! grep -q "${directory_line}" ${ft_record_conf_file_name} ; then
-         wd_logger 1 "File '${ft_record_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
+    elif ! grep -q "${directory_line}" ${ft_record_conf_file_path} ; then
+         wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
         needs_update="yes"
     else
-         wd_logger 2 "File '${ft_record_conf_file_name}' is correct, so no update is needed"
+         wd_logger 2 "File '${ft_record_conf_file_path}' is correct, so no update is needed"
     fi
 
     if [[ ${needs_update} == "yes" ]]; then
-        echo "${mcast_line}"      >  ${ft_record_conf_file_name}
-        echo "${directory_line}"  >> ${ft_record_conf_file_name}
-        wd_logger 1 "Created ${ft_record_conf_file_name} which contains:\n$(<  ${ft_record_conf_file_name})"
+        echo "${mcast_line}"      >  ${ft_record_conf_file_path}
+        echo "${directory_line}"  >> ${ft_record_conf_file_path}
+        wd_logger 1 "Created ${ft_record_conf_file_path} which contains:\n$(<  ${ft_record_conf_file_path})"
     fi
 
     getent group "radio" > /dev/null 2>&1
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist"
-        return ${rc}
+        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist, so force an abort"
+        echo ${force_abort}
     fi
 
-    local group_owner=$( stat -c "%G" ${ft_record_conf_file_name} )
+    local group_owner=$( stat -c "%G" ${ft_record_conf_file_path} )
     if [[ ${group_owner} != "radio" ]]; then
-        wd_logger 1 "'${ft_record_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
-        sudo chgrp "radio" ${ft_record_conf_file_name}
+        wd_logger 1 "'${ft_record_conf_file_path}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
+        sudo chgrp "radio" ${ft_record_conf_file_path}
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: 'sudo chgrp "radio" ${ft_record_conf_file_name}' => ${rc}"
-            return ${rc}
+            wd_logger 1 "ERROR: 'sudo chgrp "radio" ${ft_record_conf_file_path}' => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
     fi
 
     local needs_restart="no"
-    local ftx_record_service_name="${ft_type}-record.service"
+    local ft_record_service_name="${ft_type}-record.service"
 
     if [[ ${needs_update} == "yes" ]]; then
-        wd_logger 1 "We need to restart the '${ftx_record_service}' because its ${ft_record_conf_file_name} file was created or was changed"
+        wd_logger 1 "We need to restart '${ft_record_service_name}' service because its ${ft_record_conf_file_path} was created or was changed"
         needs_restart="yes"
-    elif ! sudo systemctl status ${ftx_record_service_name}  >& /dev/null; then
-        wd_logger 1 "${ftx_record_service_name} is not running, so it needs to be started"
+    elif ! sudo systemctl status ${ft_record_service_name}  >& /dev/null; then
+        wd_logger 1 "${ft_record_service_name} is not running, so it needs to be started"
         needs_restart="yes"
     else
-        wd_logger 2 "${ftx_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
+        wd_logger 2 "${ft_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
     fi
     if [[ ${needs_restart} == "yes" ]]; then
-        sudo systemctl restart ${ftx_record_service_name}  >& /dev/null
+        sudo systemctl restart ${ft_record_service_name}  >& /dev/null
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: failed to restart ${ftx_record_service_name} => ${rc}"
-            return ${rc}
+            wd_logger 1 "ERROR: failed to restart ${ft_record_service_name} => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service ${ftx_record_service_name}"
+        wd_logger 1 "Restarted service ${ft_record_service_name}"
     fi
-    if ! sudo systemctl is-enabled ${ftx_record_service_name} >& /dev/null ; then
-        wd_logger 1 "${ftx_record_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
-        sudo systemctl enable ${ftx_record_service_name} >& /dev/null
+    if ! sudo systemctl is-enabled ${ft_record_service_name} >& /dev/null ; then
+        wd_logger 1 "${ft_record_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ft_record_service_name} >& /dev/null
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: failed to enable ${ftx_record_service_name} => ${rc}"
-            # return ${rc}
+            wd_logger 1 "ERROR: failed to enable ${ft_record_service_name} => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
-        wd_logger 1 "Enabled service ${ftx_record_service_name}"
+        wd_logger 1 "Enabled service ${ft_record_service_name}"
     else
-        wd_logger 2 "${ftx_record_service_name} is enabled, so it doesn't need to be enabled"
+        wd_logger 2 "${ft_record_service_name} is enabled, so it doesn't need to be enabled"
     fi
 
     ### Ensure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
     local ft_log_file_name="/var/log/${ft_type}.log"
-    local logrotate_job_file_name="/etc/logrotate.d/${ft_type}.rotate"
+    local logrotate_job_file_path="/etc/logrotate.d/${ft_type}.rotate"
     local create_job_file="no"
-    if [[ ! -f ${logrotate_job_file_name} ]]; then
-        wd_logger 1 "Found no '${logrotate_job_file_name}', so create it"
+    if [[ ! -f ${logrotate_job_file_path} ]]; then
+        wd_logger 1 "Found no '${logrotate_job_file_path}', so create it"
         create_job_file="yes"
-    elif ! grep -q 'maxsize'  ${logrotate_job_file_name}; then
-         wd_logger 1 "Job file '${logrotate_job_file_name}' is missing the 'maxsize 1M' line, so recreate the file"
+    elif ! grep -q 'maxsize'  ${logrotate_job_file_path}; then
+         wd_logger 1 "Job file '${logrotate_job_file_path}' is missing the 'maxsize 1M' line, so recreate the file"
         create_job_file="yes"
     else
          wd_logger 2 "Logrotate file exists"
@@ -1167,19 +1206,19 @@ function ka9q-ft-setup()
         delaycompress
         copytruncate
 } " > /tmp/${ft_type}.rotate
-        sudo cp /tmp/${ft_type}.rotate ${logrotate_job_file_name}
-        sudo chmod 644  ${logrotate_job_file_name}
-        wd_logger 1 "Added new logrotate job '${logrotate_job_file_name}' to keep '${ft_log_file_name}' clean"
+        sudo cp /tmp/${ft_type}.rotate ${logrotate_job_file_path}
+        sudo chmod 644  ${logrotate_job_file_path}
+        wd_logger 1 "Added new logrotate job '${logrotate_job_file_path}' to keep '${ft_log_file_name}' clean"
     else
-        wd_logger 2 "Found '${logrotate_job_file_name}', so is configured properly so no need to change it"
+        wd_logger 2 "Found '${logrotate_job_file_path}', so is configured properly so no need to change it"
     fi
 
-    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_name})
+    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_path})
     if [[ "${target_file}" == "${ft_log_file_name}" ]]; then
-        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${logrotate_job_file_name}', so no changes are needed"
+        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${logrotate_job_file_path}', so no changes are needed"
     else
-        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${logrotate_job_file_name}, so fix it'"
-        sudo sed -i "s;^/[^{]*;${ft_log_file_name} ;" ${logrotate_job_file_name}
+        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${logrotate_job_file_path}, so fix it'"
+        sudo sed -i "s;^/[^{]*;${ft_log_file_name} ;" ${logrotate_job_file_path}
     fi
 
     wd_logger 2 "Setup complete"
@@ -1225,89 +1264,103 @@ function build_psk_uploader() {
     local psk_services_restart_needed="yes"
 
     wd_logger 2 "Start"
-    if ! python3 -c "import docopt" 2> /dev/null; then
-        rc=$?
-        wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
-        if ! pip3 -h >& /dev/null ; then
-            rc=$?
-            wd_logger 1 "pip3 -h => ${rc}.  So install pip"
-            sudo apt install python3-pip -y
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_loggger 1 "ERROR: sudo apt install python-pip -> ${rc}"
-                exit 1
+    python3 -c "import docopt" 2> /dev/null
+    rc=$? ; if (( rc == 0 )) ; then
+        wd_logger 2 "python docopt can be imported, so all needed libraries are presemt"
+    else
+        wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So run 'apt' to install it"
+        sudo apt update
+        sudo apt install python3-docopt
+        rc=$? ; if (( rc == 0 )); then
+            wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+        else
+            pip3 -h >& /dev/null 
+            rc=$? ; if (( rc == 0 )); then
+                wd_logger 1 "pip3 is installed"
+            else
+                wd_logger 1 "pip3 -h => ${rc}.  So need to install pip3"
+                sudo apt install python3-pip -y
+                rc=$? ; if (( rc == 0 )); then
+                    wd_logger 1 "apt installed pip3"
+                else
+                    wd_loggger 1 "ERROR: sudo apt install python-pip -> ${rc}, so force abort"
+                    echo ${force_abort}
+                fi
             fi
-            wd_logger 1 "apt installed pip3"
+            local pip3_extra_args=""
+            if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
+                pip3_extra_args="--break-system-package"
+                wd_logger 1 "Adding extra args to pip: ${pip3_extra_args}"
+            fi
+            pip3 install docopt ${pip3_extra_args}
+            rc=$? ; if (( rc == 0 )); then
+                wd_logger 1 "Successfully ran python3 -c 'import  docopt'"
+            else
+                wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}, so force abort"
+                echo ${force_abort}
+            fi
         fi
-        local pip3_extra_args=""
-        if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
-            pip3_extra_args="--break-system-package"
-        fi
-        pip3 install docopt ${pip3_extra_args}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
-            return 2
-        fi
-        wd_logger 1 "Successfully ran python3 -c 'import  docopt'"
     fi
 
-    local pskreporter_sender_file_name="${project_subdir}/pskreporter-sender"           ### This template file is part of the package
-    local pskreporter_sender_bin_file_name="/usr/local/bin/pskreporter-sender"
-    if [[ ! -x ${pskreporter_sender_bin_file_name} ]]; then
-        wd_logger 1 "Copying ${pskreporter_sender_file_name} to ${pskreporter_sender_bin_file_name}"
-        sudo cp ${pskreporter_sender_file_name} ${pskreporter_sender_bin_file_name}
-        sudo chmod a+x  ${pskreporter_sender_bin_file_name}
-    fi
-
-    local pskreporter_service_file_name="${project_subdir}/pskreporter@.service"                ### This template file is part of the package
-    local pskreporter_systemd_service_file_name="/etc/systemd/system/pskreporter@.service"      ### It should be copied to the /etc/systemd/system/ directory
+    ### Enxure that the executable is in /usr/local/bin/
+    local pskreporter_service_file_name="pskreporter@.service"                                              ### This template file is part of the package
+    local pskreporter_systemd_service_file_path="/etc/systemd/system/${pskreporter_service_file_name}"      ### It should be copied to the /etc/systemd/system/ directory
 
     local needs_systemctl_daemon_reload="no"  
     local needs_systemctl_restart="no"  
-    if [[ ! -f ${pskreporter_systemd_service_file_name} ]]; then
-        wd_logger 2 "Missing ${pskreporter_systemd_service_file_name}, so creating it from ${pskreporter_service_file_name}"
-        cp ${pskreporter_service_file_name} ${pskreporter_systemd_service_file_name}
+    if [[ ! -f ${pskreporter_systemd_service_file_path} ]]; then
+        local template_file_path="$(realpath ${project_subdir}/${pskreporter_service_file_name})"
+        wd_logger 1 "Missing ${pskreporter_systemd_service_file_path}, so creating it from ${template_file_path}"
+        sudo cp ${template_file_path} ${pskreporter_systemd_service_file_path}
         needs_systemctl_daemon_reload="yes"
+    else
+        wd_logger 2 "${pskreporter_systemd_service_file_path} exists.  Check to see if it needs to be updated"
     fi
-    wd_logger 2 "${pskreporter_systemd_service_file_name} exists.  Check to see if it needs to be updated"
 
-    ### Phil's repo expects the PSK command to be in /usr/local/bin, but WD runs it from under the WD hoem directory
-    sed "s;/usr/local/bin;${KA9Q_PSK_REPORTER_DIR};" ${pskreporter_systemd_service_file_name} > ${pskreporter_systemd_service_file_name}.tmp
-    if ! diff ${pskreporter_systemd_service_file_name} ${pskreporter_systemd_service_file_name}.tmp > /dev/null; then
-        wd_logger 2 "${pskreporter_systemd_service_file_name} has been changed not no longer run from /usr/local/bin"
-        mv ${pskreporter_systemd_service_file_name}.tmp ${pskreporter_systemd_service_file_name}
-        needs_systemctl_daemon_reload="yes"
-   fi
-   if ! grep -q "WorkingDirectory" ${pskreporter_systemd_service_file_name} ; then
-       sed -i "/ExecStart=/i\\
-WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${pskreporter_systemd_service_file_name}"
+    ### Update the service file if needed
+    local tmp_service_file_path="/tmp/${pskreporter_systemd_service_file_path##*/}"
+    cp -p ${pskreporter_systemd_service_file_path} ${tmp_service_file_path}
+    if ! grep -q "WorkingDirectory" ${tmp_service_file_path} ; then
+        sed -i "/ExecStart=/i\\
+        WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${tmp_service_file_path}
+        wd_logger 1 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${tmp_service_file_path}"
         needs_systemctl_daemon_reload="yes"
     fi
-    if grep -q "User=recordings"  ${pskreporter_systemd_service_file_name} ; then
-        sed -i "s/User=recordings/User=${USER}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "'Changed 'User=recordings' to 'User=${USER}' in  ${pskreporter_systemd_service_file_name}"
+    if grep -q "User=recordings"  ${tmp_service_file_path} ; then
+        sed -i "s/User=recordings/User=${USER}/"  ${tmp_service_file_path}
+        wd_logger 1 "'Changed 'User=recordings' to 'User=${USER}' in  ${tmp_service_file_path}"
         needs_systemctl_daemon_reload="yes"
     fi
-    if grep -q "Group=radio"  ${pskreporter_systemd_service_file_name} ; then
+    if grep -q "Group=radio"  ${tmp_service_file_path} ; then
         local my_group=$(id -gn)
-        sed -i "s/Group=radio/Group=${my_group}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
+        sed -i "s/Group=radio/Group=${my_group}/"  ${tmp_service_file_path}
+        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${tmp_service_file_path}"
         needs_systemctl_daemon_reload="yes"
     fi
-    if ! grep -q "Environment=" ${pskreporter_systemd_service_file_name} ; then
-       sed -i "/ExecStart=/i\\
-Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "Added 'Environment=\"TZ=UTC\"' to ${pskreporter_systemd_service_file_name}"
+    if ! grep -q "Environment=" ${tmp_service_file_path} ; then
+        sed -i "/ExecStart=/i\\
+        Environment=\"TZ=UTC\"" ${tmp_service_file_path}
+        wd_logger 1 "Added 'Environment=\"TZ=UTC\"' to ${tmp_service_file_path}"
         needs_systemctl_daemon_reload="yes"
+    fi
+    if grep -q "ExecStart=.*/usr/local/bin" ${tmp_service_file_path} ; then
+        sed -i "/ExecStart=/s;/usr/local/bin;${KA9Q_PSK_REPORTER_DIR};"  ${tmp_service_file_path}
+        wd_logger 1 "Changed /usr/local/bin to ${KA9Q_PSK_REPORTER_DIR}"
+        needs_systemctl_daemon_reload="yes"
+    fi
+
+    if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
+        wd_logger 2 "The service file has not beeen changed"
+    else
+        wd_logger 1 "The service file needs to be changed, so update ${pskreporter_systemd_service_file_path}"
+        sudo cp ${tmp_service_file_path} ${pskreporter_systemd_service_file_path}
     fi
     if [[ ${needs_systemctl_daemon_reload} == "yes" ]]; then
-        wd_logger 2 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
+        wd_logger 1 "Beacuse ${tmp_service_file_path} changed we need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
         sudo systemctl daemon-reload 
         needs_systemctl_restart="yes"
     fi
-
+ 
     local ft_type 
     for ft_type in ft4 ft8 wspr; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
@@ -1328,10 +1381,12 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             needs_systemctl_restart="yes"
         fi
 
+        ### The decodes find the ftX.log and wspr.log files in /var/log
         local ft_type_tmp_root_dir="/var/log"
 
         local ft_type_log_file_name="${ft_type_tmp_root_dir}/${ft_type}.log"
         if [[ ! -f ${ft_type_log_file_name} ]]; then
+            sudo touch ${ft_type_log_file_name}
             wd_logger 1 "WARNING: can't find expected file '${ft_type_log_file_name}'"
         fi
 
@@ -1345,14 +1400,14 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
-        
+
         local config_variable
         for config_variable in CALLSIGN LOCATOR ANTENNA; do
             local config_value
             wd_get_config_value "config_value" ${config_variable}
             rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
-                return ${rc}
+                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}, so force an abort"
+                echo ${force_abort}
             fi
             local variable_line="${config_variable}=${config_value}"
             if grep -wq "${variable_line}" ${psk_conf_file} ; then
@@ -1360,26 +1415,24 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
                 echo "${variable_line}" >> ${psk_conf_file}.tmp
-                wd_logger 2 "Added or replaced invalid '${config_variable}=' line in ${psk_conf_file} with '${variable_line}'"
+                wd_logger 1 "Added or replaced invalid '${config_variable}=' line in ${psk_conf_file} with '${variable_line}'"
                 mv  ${psk_conf_file}.tmp  ${psk_conf_file}
                 needs_systemctl_restart="yes"
             fi
         done
 
-        sudo systemctl status pskreporter@${ft_type} > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+        sudo systemctl status pskreporter@${ft_type} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
         if [[ ${needs_systemctl_restart} == "yes" || ${psk_services_restart_needed} == "yes" ]]; then
             wd_logger 2 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sudo systemctl restart pskreporter@${ft_type}' => ${rc}"
-                return ${rc}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'sudo systemctl restart pskreporter@${ft_type}' => ${rc}, so force an abort"
+                echo ${force_abort}
             fi
         fi
         wd_logger 2 "Done checking and updating  ${psk_conf_file}"
