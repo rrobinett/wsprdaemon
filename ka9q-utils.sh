@@ -995,7 +995,7 @@ function build_ka9q_radio() {
 #test_get_conf_section_variable
 #printf "%s\n" ${test_value}
 #exit
-declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/run}"             ### The KA9q FT decoder puts its wav files in the /tmp/ftX/... trees and logs spots to /var/log/ftX.log
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/var/lib/ka9q-radio}"             ### Configure the dameon with runspcmrecord to put its wav files here is subdirs under here
 
 declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
 declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
@@ -1108,7 +1108,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local ft_record_conf_file_name="${ft_type}-record.conf"
+    local ft_record_conf_file_name="${ft_type}-decode.conf"     ### Counter-intuatively, the ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
     local ft_record_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_record_conf_file_name}"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
@@ -1117,18 +1117,21 @@ function ka9q-ft-setup()
 
     if [[ ! -f ${ft_record_conf_file_path} ]]; then
         wd_logger 1 "File '${ft_record_conf_file_path}' doesn't exist, so create it"
+        touch ${ft_record_conf_file_path}
         needs_update="yes"
-    elif ! grep -q "${mcast_line}" ${ft_record_conf_file_path} ; then
+    fi
+    if ! grep -q "${mcast_line}" ${ft_record_conf_file_path} ; then
          wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
         needs_update="yes"
-    elif ! grep -q "${directory_line}" ${ft_record_conf_file_path} ; then
+    fi
+    if ! grep -q "${directory_line}" ${ft_record_conf_file_path} ; then
          wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
         needs_update="yes"
-    else
-         wd_logger 2 "File '${ft_record_conf_file_path}' is correct, so no update is needed"
     fi
 
-    if [[ ${needs_update} == "yes" ]]; then
+    if [[ ${needs_update} != "yes" ]]; then
+        wd_logger 2 "File '${ft_record_conf_file_path}' is correct, so no update is needed"
+    else
         echo "${mcast_line}"      >  ${ft_record_conf_file_path}
         echo "${directory_line}"  >> ${ft_record_conf_file_path}
         wd_logger 1 "Created ${ft_record_conf_file_path} which contains:\n$(<  ${ft_record_conf_file_path})"
