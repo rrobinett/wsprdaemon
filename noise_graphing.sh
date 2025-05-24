@@ -64,14 +64,14 @@ function setup_noise_graphs()
     fi
 
     ### Get the Python packages needed to create the graphs.png
+    local ret_code
     local package
     for package in psycopg2 ${matplotlib_spec} scipy ; do
         wd_logger 2 "Install Python package ${package}"
         install_python_package ${package}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to install Python package ${package}"
-            return ${ret_code}
+        ret_code=$? ; if (( ret_code )); then
+            wd_logger 1 "ERROR: failed to install Python package ${package}, so force an abort"
+            echo ${force_abort}
         fi
     done
 
