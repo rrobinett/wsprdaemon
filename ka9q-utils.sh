@@ -1567,11 +1567,11 @@ function install_github_project() {
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-1ac3d9b5b542789e8fc66df1edace99be9f851c5}"
-    "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-master}     ${KA9Q_FT8_ENABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-354603ae57d3453fe86fc8b64d58a0a500f0598b}"
-    "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}   ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
-    "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                          ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                   ${KA9Q_WEB_COMMIT-533db59d02f27ed7c990f9e6e35bfc4c2cd6367e}"
+    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-1ac3d9b5b542789e8fc66df1edace99be9f851c5}"
+    "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-354603ae57d3453fe86fc8b64d58a0a500f0598b}"
+    "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-bc2b1e07ca5c06d026811d0710efbb0583d5e4fb}"
+    "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
+    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-533db59d02f27ed7c990f9e6e35bfc4c2cd6367e}"
 )
 
 ###
