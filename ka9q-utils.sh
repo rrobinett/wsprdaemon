@@ -1022,6 +1022,22 @@ function ka9q-ft-setup()
     ### Since May 2025 ka9q-radio decodes of each FT4/8 band is performed by a pair of systemctl daemons.
     ### The ftX-decode dameon reads wav files created by the ftX-record daemon (which is an instance of pcmrecord).
     ### It is created by a 'sudo make install' in the ka9q-radion directory and doesn't need any per-site customization
+
+    ### First stop and deactivate the legacy ftX-decodd.service
+    local legacy_ft_service_name="${ft_type}-decoded.service"
+    local legacy_ft_service_file_path="/etc/systemd/system/${legacy_ft_service_name}"
+    sudo systemctl list-unit-files | grep -q ${legacy_ft_service_name}
+    rc=$?
+    if (( rc )); then
+        wd_logger 2 "Found no legacy ${legacy_ft_service_name} which would need to be disabled"
+    else
+        wd_logger 1 "Found a legacy ${legacy_ft_service_name} which needs to be stopped and disabled"
+        sudo systemctl stop    ${legacy_ft_service_name}
+        sudo systemctl disable ${legacy_ft_service_name}
+        sudo rm ${legacy_ft_service_file_path}
+        sudo systemctl daemon-reexec
+    fi
+
     local ft_service_file_name="${ft_type}-decode.service"
     local ft_systemd_service_file_path="/etc/systemd/system/${ft_service_file_name}"
     if [[ -f ${ft_systemd_service_file_path} ]]; then
