@@ -41,7 +41,7 @@ wisdom_fft_rates_list=${wisdom_fft_rates_list[*]}"
     wd-killall
     echo "$(date): Running the FFT planning command.  This may take minutes or even hours to complete. So leave this server undisturbed during this operation to maximize its optimizations:"
     set -x
-    time fftwf-wisdom -v -T 1 -w /var/lib/ka9q-radio/wisdom -o /tmp/wisdomf ${wisdom_fft_rates_list[-1]}
+    time fftwf-wisdom -v -T 1 -w /var/lib/ka9q-radio/wisdom -o /tmp/wisdomf ${wisdom_fft_rates_list[@]}
     set +x
     local current_wisdom_file_size=$(stat -c %s /etc/fftw/wisdomf)
     local new_wisdom_file_size=$(stat -c %s /tmp/wisdomf)
@@ -52,8 +52,8 @@ The currently installed versioon /etc/fftw/wisdom  has ${current_wisdom_file_siz
     if (( new_wisdom_file_size > current_wisdom_file_size )); then
         echo "Since the new wisdomf is larger than the current wisdomf, it is recommended that you install the new one.  Proceed? [Y,n] => "
         if  [[ -z ${REPLY-} || ${REPLAY^^} == "Y" ]]; then
-            sudo cp -p /etc/fftw/wisdom.save
-            sudo cp -p /tmp/wisdom /etc/fftw/wisdom
+            sudo cp -p /etc/fftw/wisdom /etc/fftw/wisdom.save
+            sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf
             echo "/etc/fftw/wisdom has been changed"
         else
             echo "/etc/fftw/wisdom is unchanged"
