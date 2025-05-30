@@ -1125,7 +1125,7 @@ function update_ini_file_section_variable() {
         fi
         if ! diff "$file" "$temp_file" > diff.log; then
             wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
-            mv "${temp_file}"  "$file"
+            sudo mv "${temp_file}"  "$file"
             return 1
         else
             rm "${temp_file}"
