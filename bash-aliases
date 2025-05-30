@@ -30,6 +30,10 @@ function wd-fft-utils() {
     fi
     local nominal_sample_rate=$(awk -F'nominal sample rate ' '/nominal sample rate/{print $2}' ${tmp_file}.end | awk '{print $1}')
     local wisdom_fft_rates_list=($( awk -F'-o /tmp/wisdomf' '/-o \/tmp\/wisdomf /{print $2}' ${tmp_file}.end  | awk '{print $1}' | sed 's/",//' | sort -u | sort -rn -k1.3 ) )
+    if (( ${#wisdom_fft_rates_list[@]} == 0 )); then
+        echo "FFT planning is optimal, so no update is needed"
+        return 0
+    fi
     echo "Found $(wc -l < ${tmp_file}.end) lines and ${#wisdom_fft_rates_list[@]} unplanned rates reported after the most recent 'Start' line
 nominal_sample_rate=${nominal_sample_rate}
 wisdom_fft_rates_list=${wisdom_fft_rates_list[*]}"
