@@ -18,7 +18,7 @@ function wd-fft-utils() {
         return 2
     fi
     local tmp_file_size=$(wc -l <  ${tmp_file})
-    echo "${tmp_file} has ${tmp_file_size} lines"
+    (( ${verbosity-0} )) && echo "${tmp_file} has ${tmp_file_size} lines"
     awk '/Start/ {last=NR; next} {lines[NR]=$0} END {for (i=last+1; i<=NR; i++) print lines[i]}' ${tmp_file} > ${tmp_file}.end
     rc=$? ; if (( rc )); then
         echo "awk '/Start/ {last=NR; next} {lines[NR]=$0} END {for (i=last+1; i<=NR; i++) print lines[i]}' ${tmp_file} > ${tmp_file}.end => ${rc}"
@@ -54,9 +54,9 @@ wisdom_fft_rates_list=${wisdom_fft_rates_list[*]}"
 The newly created wisdom file     /tmp/wisdom      has ${new_wisdom_file_size} bytes
 The currently installed versioon /etc/fftw/wisdom  has ${current_wisdom_file_size} bytes"
     if (( new_wisdom_file_size > current_wisdom_file_size )); then
-        echo "Since the new wisdomf is larger than the current wisdomf, it is recommended that you install the new one.  Proceed? [Y,n] => "
+        read -p "Since the new wisdomf is larger than the current wisdomf, it is recommended that you install the new one.  Proceed? [Y,n] => "
         if  [[ -z ${REPLY-} || ${REPLAY^^} == "Y" ]]; then
-            sudo cp -p /etc/fftw/wisdom /etc/fftw/wisdom.save
+            sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
             sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf
             echo "/etc/fftw/wisdom has been changed"
         else
@@ -1074,8 +1074,7 @@ alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wdld='wd -l d'
-alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
-alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
 alias wds='wd -s'
