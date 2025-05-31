@@ -896,7 +896,8 @@ function build_ka9q_radio() {
     else
         wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
         cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob9600 cob4800 cob1920 cob1200 cob960 cob800 cob600 cob480 cob400 cob320 cob300 cob200 cob160 cob150
+        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob162000 cob81000 cob40500 cob32400 cob16200 cob9600 cob8100 cob4860 cob4800 cob3240 cob1920 cob1620 \
+                                             cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15
         rc=$?
         cd - > /dev/null
         if [[ ${rc} -ne 0 ]]; then
