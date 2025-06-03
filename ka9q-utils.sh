@@ -85,10 +85,11 @@ function pull_commit(){
     if [[ ${git_project} == "ft8_lib" ]]; then
          git_root="master"
     fi
+
     local current_commit_sha
     get_current_commit_sha current_commit_sha ${git_directory}
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${git_director}' => ${rc}"
+        wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${git_directory}' => ${rc}"
         return 3
     fi
     if [[ "${current_commit_sha}" == "${desired_git_sha}" ]]; then
@@ -240,16 +241,16 @@ function get_current_commit_sha() {
         wd_logger 1 "ERROR: directory '${git_directory}' doesn't exist"
         return 1
     fi
-    ( cd ${git_directory}; git log )  >& ${GIT_LOG_OUTPUT_FILE}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: directory ${git_directory} is not a git-created directory:\n$(< ${GIT_LOG_OUTPUT_FILE})"
-        return 2
+    wd_logger 1 "Getting git commit from  ${git_directory}"
+    ( cd ${git_directory}; git log >& ${GIT_LOG_OUTPUT_FILE} )
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'cd ${git_directory}; git log' => ${rc}:\n$(head ${GIT_LOG_OUTPUT_FILE})"
+        echo ${force_abort}
     fi
     local commit_sha=$( awk '/commit/{print $2; exit}' ${GIT_LOG_OUTPUT_FILE} )
     if [[ -z "${commit_sha}" ]]; then
         wd_logger 1 "ERROR: 'git log' output does not contain a line with 'commit' in it"
-        return 3
+        echo ${force_abort}
     fi
     wd_logger 2 "'git log' is returning the current commit COMMIT = ${commit_sha}"
     eval ${__return_commit_sha_variable}=\${commit_sha}
