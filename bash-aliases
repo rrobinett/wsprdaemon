@@ -2,7 +2,71 @@
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
 #shopt -s -o nounset
+#
 
+function wd-fft-utils() {
+    local rc
+    local tmp_file="/tmp/wd-fft-utils.txt"
+
+    journalctl --no-pager -n 2000 -u radiod@rx888-wsprdaemon.service* > ${tmp_file}
+    rc=$? ; if (( rc )); then
+        echo "Can't find log lines for radiod.  'journalctl --nopager -n 2000 -u radiod@* > ${tmp_file}' returned error ${rc}"
+        return 1
+    fi
+    if [[ ! -s  ${tmp_file} ]]; then
+        echo " 'journalctl --nopager -n 2000 -u radiod@* > ${tmp_file}' returned no error, but ${tmp_file} is empty"
+        return 2
+    fi
+    local tmp_file_size=$(wc -l <  ${tmp_file})
+    (( ${verbosity-0} )) && echo "${tmp_file} has ${tmp_file_size} lines"
+    awk '/Start/ {last=NR; next} {lines[NR]=$0} END {for (i=last+1; i<=NR; i++) print lines[i]}' ${tmp_file} > ${tmp_file}.end
+    rc=$? ; if (( rc )); then
+        echo "awk '/Start/ {last=NR; next} {lines[NR]=$0} END {for (i=last+1; i<=NR; i++) print lines[i]}' ${tmp_file} > ${tmp_file}.end => ${rc}"
+        return 3
+    fi
+    if [[ ! -s ${tmp_file}.end ]]; then
+        echo "Couldn't find a 'Start' line in ${tmp_file}"
+        return 4
+    fi
+    local nominal_sample_rate=$(awk -F'nominal sample rate ' '/nominal sample rate/{print $2}' ${tmp_file}.end | awk '{print $1}')
+    local wisdom_fft_rates_list=($( awk -F'-o /tmp/wisdomf' '/-o \/tmp\/wisdomf /{print $2}' ${tmp_file}.end  | awk '{print $1}' | sed 's/",//' | sort -u | sort -rn -k1.3 ) )
+    if (( ${#wisdom_fft_rates_list[@]} == 0 )); then
+        echo "FFT planning is optimal, so no update is needed"
+        return 0
+    fi
+    echo "Found $(wc -l < ${tmp_file}.end) lines and ${#wisdom_fft_rates_list[@]} unplanned rates reported after the most recent 'Start' line
+nominal_sample_rate=${nominal_sample_rate}
+wisdom_fft_rates_list=${wisdom_fft_rates_list[*]}"
+    read -p "Do you want to stop this WD server and run the FFT tool so the FFTs for those rates are optimized? => "
+    if [[ -n ${REPLY-} && ${REPLAY^^} != "Y" ]]; then
+        echo "All done"
+        return 0
+    fi
+    wd-killall
+    echo "$(date): Running the FFT planning command.  This may take minutes or even hours to complete. So leave this server undisturbed during this operation to maximize its optimizations:"
+    set -x
+    time fftwf-wisdom -v -T 1 -w /var/lib/ka9q-radio/wisdom -o /tmp/wisdomf ${wisdom_fft_rates_list[@]}
+    set +x
+    local current_wisdom_file_size=$(stat -c %s /etc/fftw/wisdomf)
+    local new_wisdom_file_size=$(stat -c %s /tmp/wisdomf)
+
+    echo "FFT optimization is complete
+The newly created wisdom file     /tmp/wisdom      has ${new_wisdom_file_size} bytes
+The currently installed versioon /etc/fftw/wisdom  has ${current_wisdom_file_size} bytes"
+    if (( new_wisdom_file_size > current_wisdom_file_size )); then
+        read -p "Since the new wisdomf is larger than the current wisdomf, it is recommended that you install the new one.  Proceed? [Y,n] => "
+        if  [[ -z ${REPLY-} || ${REPLAY^^} == "Y" ]]; then
+            sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
+            sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf
+            echo "/etc/fftw/wisdom has been changed"
+        else
+            echo "/etc/fftw/wisdom is unchanged"
+        fi
+    else
+        echo "ERROR: it is unexpected that the new wisdomf not larger than the current wisdomf, so do nothing"
+    fi
+    return 0
+}
 function wd-killweb() {
     local web_pid=$(ps aux | grep web | grep -v grep | awk '{print $2}')
 
@@ -1010,8 +1074,7 @@ alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wdld='wd -l d'
-alias wda='wd -a'       ### Instruct systemctl to if needed install and configure WD as a service, and then run 'systemctl start wsprdaemon'
-alias WDA='wd -A'       ### Start WD from this terminal session so stderr messages go to this terminal.  This is how I run WD when debugging
+alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
 alias wds='wd -s'
