@@ -8,7 +8,7 @@ function wd-fft-utils() {
     local rc
     local tmp_file="/tmp/wd-fft-utils.txt"
 
-    journalctl --no-pager -n 2000 -u radiod@rx888-wsprdaemon.service* > ${tmp_file}
+    sudo journalctl --no-pager -n 2000 -u radiod@rx888-wsprdaemon.service* > ${tmp_file}
     rc=$? ; if (( rc )); then
         echo "Can't find log lines for radiod.  'journalctl --nopager -n 2000 -u radiod@* > ${tmp_file}' returned error ${rc}"
         return 1
