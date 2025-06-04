@@ -761,8 +761,12 @@ function build_ka9q_radio() {
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
         1)
-            wd_logger 1 "New files were created, so run 'sudo make install"
-            ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
+            if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
+                wd_logger 1 "New files were created but WD is not configured to install and run ka9q-radio, so don't run 'sudo make install"
+            else
+                wd_logger 1 "New files were created and WD is configured to install and run ka9q-radio, so run 'sudo make install"
+                ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
+            fi
             ;;
         *)
             wd_logger 1 "ERROR: 'diff before_make.txt after_make.txt' => ${rc}:\n$(< diff.log)"
@@ -1288,7 +1292,7 @@ function build_psk_uploader() {
     local psk_services_restart_needed="yes"
 
     wd_logger 2 "Start"
-    if [[ ${KA9Q_RUNS_ONLY_REMOTELY} == 'yes' ]]; then
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
         wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install psk_uploader"
         return 0
     fi
