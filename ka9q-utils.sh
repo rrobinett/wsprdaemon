@@ -1287,6 +1287,11 @@ function build_psk_uploader() {
     local psk_services_restart_needed="yes"
 
     wd_logger 2 "Start"
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY} == 'yes' ]]; then
+        wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install psk_uploader"
+        return 0
+    fi
+
     python3 -c "import docopt" 2> /dev/null
     rc=$? ; if (( rc == 0 )) ; then
         wd_logger 2 "python docopt can be imported, so all needed libraries are presemt"
