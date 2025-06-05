@@ -2,7 +2,46 @@
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
 #shopt -s -o nounset
-#
+
+function wd-ka9q-controls() {
+    local action="${1-is-active}"
+
+    local radio_config_dir_path="/etc/radio"
+    local radiod_config_dir_path=$(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d')
+
+    if [[ -d ${radiod_config_dir_path} ]]; then
+       radiod_start_arg=${radiod_config_dir_path##*/}
+       radiod_start_arg=${radio_start_arg%.conf.d}
+       (( ${verbosity-0} )) && echo "radiod_start_arg=${radiod_start_arg}"
+   else
+       echo "ERROR: Can't find a new-style radiod@...conf.d directory"
+       return 1
+   fi
+   local start_list=( 
+       "${radiod_start_arg}"
+       "ft4-record.service"
+       "ft4-decode.service"
+       "ft8-record.service"
+       "ft8-decode.service"
+       "pskreporter@ft4.service"
+       "pskreporter@ft8.service"
+       "pskreporter@wspr.service"
+   )
+
+    local start_list_index
+    for (( start_list_index=0; start_list_index < ${#start_list[@]}; ++start_list_index )); do
+        local start_args="${start_list[start_list_index]}"
+        set +x
+        sudo systemctl ${action} ${start_args} >& /dev/null
+        rc=$?; set +x; if (( rc )) ; then
+            echo "ERROR: 'sudo systemctl ${action} ${start_args}' => ${rc}"
+          #  return 1
+        else 
+            echo "'sudo systemctl ${action} ${start_args}' => ${rc}"
+        fi
+    done
+    return 0
+}
 
 function wd-fft-utils() {
     local rc
@@ -404,7 +443,8 @@ function ka9q-web-control() {
     return 0
 }
 
-### So we don't run through all the 'wd -Z' startup instalalation and validation code which might crash
+### So we don't run through all the 'wd -Z' startupi, installation and validation code which might crash
+declare WD_CONF_PATH=~/wsprdaemon/wsprdaemon.conf
 function wd-killall() {
     local rc
     local rc1
@@ -413,10 +453,16 @@ function wd-killall() {
 
     ### Stop all services
     local services_list=(  wsprdaemon )
-    if [[  -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
+
+    source ${WD_CONF_PATH}
+
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
         services_list+=( radiod@${base_name}.service ft4-decode ft8-decode ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr )
+    else
+        echo "Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY=${KA9Q_RUNS_ONLY_REMOTELY-no} and/or there are no running KA9Q jobs"
     fi
+
     local service_name
     for   service_name in ${services_list[@]}; do 
         (( verbosity > 1 )) && printf "Stopping service '${service_name}"
@@ -459,8 +505,9 @@ function wd-killall() {
         done
    fi
 
-    ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
+    #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    ps aux | grep 'wsprdaemon.sh' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local zombie_pid_list=( $( awk '${print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
         sudo kill ${zombie_pid_list[@]}
