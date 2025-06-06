@@ -76,9 +76,9 @@ function wd-fft-utils() {
     echo "Found $(wc -l < ${tmp_file}.end) lines and ${#wisdom_fft_rates_list[@]} unplanned rates reported after the most recent 'Start' line
 nominal_sample_rate=${nominal_sample_rate}
 wisdom_fft_rates_list=${wisdom_fft_rates_list[*]}"
-    read -p "Do you want to stop this WD server and run the FFT tool so the FFTs for those rates are optimized? => "
-    if [[ -n ${REPLY-} && ${REPLAY^^} != "Y" ]]; then
-        echo "All done"
+    read -p "Do you want to stop this WD server and run the FFT tool so the FFTs for those rates are optimized? [Y,n] => "
+    if [[ -n ${REPLY-} && ${REPLY^^} != "Y" ]]; then
+        echo "No changes have been made"
         return 0
     fi
     wd-killall
@@ -94,7 +94,7 @@ The newly created wisdom file     /tmp/wisdom      has ${new_wisdom_file_size} b
 The currently installed versioon /etc/fftw/wisdom  has ${current_wisdom_file_size} bytes"
     if (( new_wisdom_file_size > current_wisdom_file_size )); then
         read -p "Since the new wisdomf is larger than the current wisdomf, it is recommended that you install the new one.  Proceed? [Y,n] => "
-        if  [[ -z ${REPLY-} || ${REPLAY^^} == "Y" ]]; then
+        if  [[ -z ${REPLY-} || ${REPLY^^} == "Y" ]]; then
             sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
             sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf
             echo "/etc/fftw/wisdom has been changed"
