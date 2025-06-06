@@ -241,7 +241,7 @@ function get_current_commit_sha() {
         wd_logger 1 "ERROR: directory '${git_directory}' doesn't exist"
         return 1
     fi
-    wd_logger 1 "Getting git commit from  ${git_directory}"
+    wd_logger 2 "Getting git commit from  ${git_directory}"
     ( cd ${git_directory}; git log >& ${GIT_LOG_OUTPUT_FILE} )
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'cd ${git_directory}; git log' => ${rc}:\n$(head ${GIT_LOG_OUTPUT_FILE})"
@@ -946,7 +946,7 @@ function build_ka9q_radio() {
              wd_logger 1 "RADIOD_CPU_CORES='$RADIOD_CPU_CORES' in WD.conf, so configure radiod to run in those cores"
          else
              radiod_cores="$(< /sys/devices/system/cpu/cpu0/topology/thread_siblings_list )"
-             wd_logger 1 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
+             wd_logger 2 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
         fi
         local radio_service_file_path="/etc/systemd/system/radiod@.service"
         update_ini_file_section_variable "$radio_service_file_path"  "Service" "CPUAffinity" "$radiod_cores"

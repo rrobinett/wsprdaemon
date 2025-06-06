@@ -142,7 +142,7 @@ function wd_run_in_cgroup() {
         #### It would be better to learn which cores are running radiod and then exclude WD from using them, but there is only so much coding time in life...
         local max_cpu_core=${MAX_WD_CPU_CORES-$(( cpu_core_count - 1 ))}
         wd_core_range="2-$max_cpu_core"
-        wd_logger 1 "Restricting WD to run in the default range '$wd_core_range'"
+        wd_logger 2 "Restricting WD to run in the default range '$wd_core_range'"
     fi
 
     ### Fix up the wsprdaemon.service file so the CPUAffinity is assigned by systemctl when it starts WD
@@ -154,7 +154,7 @@ function wd_run_in_cgroup() {
          rc=$?
          case $rc in
              0)
-                 wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was already setup"
+                 wd_logger 2 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was already setup"
                  ;;
              1)
                  wd_logger 1 "update_ini_file_section_variable $wd_service_file 'Service' 'CPUAffinity' '$wd_core_range'  was added or changed"
@@ -170,7 +170,7 @@ function wd_run_in_cgroup() {
         wd_logger 1 "WD is being run by systemctld which is in control of CPUAffinity.  So don't try to reassign WD to other cores"
         return 0
     fi
-    wd_logger 1 "WD is being run by a terminal session, so set CPUAffinity to run on cores '$wd_core_range'"
+    wd_logger 2 "WD is being run by a terminal session, so set CPUAffinity to run on cores '$wd_core_range'"
  
     echo  "+cpuset"         | sudo tee "${CPU_CGROUP_PATH}/cgroup.subtree_control" > /dev/null
     sudo mkdir -p  "${WD_CPUSET_PATH}"
@@ -179,7 +179,7 @@ function wd_run_in_cgroup() {
     echo  ${wd_core_range}  | sudo tee "${WD_CPUSET_PATH}/cpuset.cpus"             > /dev/null  ###
     echo $$                 | sudo tee "${WD_CPUSET_PATH}/cgroup.procs"            > /dev/null
 
-    wd_logger 1 "Restricted current WD shell $$ and its children to CPU cores ${wd_core_range}"
+    wd_logger 2 "Restricted current WD shell $$ and its children to CPU cores ${wd_core_range}"
 }
 wd_run_in_cgroup
 
