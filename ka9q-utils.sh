@@ -335,8 +335,8 @@ function ka9q_conf_file_bw_check() {
 
 ### Parses the data fields in the first line with the word 'STAT' in it into the global associative array ka9q_status_list()
 declare KA9Q_MIN_LINES_IN_USEFUL_STATUS=20
-declare KA9Q_GET_STATUS_TRIES=5
-declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-5}       ### low long to wait for a 'metadump...&' to complete
+declare KA9Q_GET_STATUS_TRIES=${KA9Q_GET_STATUS_TRIES-1}
+declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-15}       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
