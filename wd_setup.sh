@@ -521,8 +521,7 @@ function find_wsjtx_commands()
         wd_logger 2 "Testing ${bin_file}"
         local rc 
         ${bin_file} |& grep -q "Usage" 
-        rc=$?
-        if [[ ${rc} -ne 0 ]];  then
+        rc=$? ; if (( rc ));  then
             wd_logger 2 "Bin file '${bin_file} fails to run on this server.  Skip to test next bin file"
         else
             wd_logger 2 "Bin file '${bin_file} runs on this server"
@@ -555,13 +554,13 @@ function find_wsjtx_commands()
                     wd_logger 2 "There is no JT9_CMD, so use this one '${bin_file}'"
                     JT9_CMD="${bin_file}"
                 else
-                    local test_name=${JT9_CMD##*bin/jt9}        ## I gave up trying to find a regex experession which would do this
-                    if [[  -z "${test_name}" ]]; then
-                        wd_logger 2 "Found a second bin/jt9... after first finding ''bin/jt9', so 'wd_rm ${JT9_CMD}' and use this ${bin_file}"
-                        wd_rm ${JT9_CMD}
+                    ### We have already found a bin/jt9... command which runs on this server
+                    local test_name=${bin_file##*bin/}
+                    if [[  -n "${JT9_CMD_TO_RUN-}" && "${JT9_CMD_TO_RUN}" == "${test_name}" ]]; then
+                        wd_logger 1 "Found a second bin/jt9 ${bin_file} after first finding '${JT9_CMD}. Use this file=${bin_file} which matches JT9_CMD_TO_RUN=${JT9_CMD_TO_RUN} in WD this ${bin_file}"
                         JT9_CMD=${bin_file}
                     else
-                        wd_logger 1 "Warning: Since we have a functioning non-'bin/jt9' command, ignoring this second one '${bin_file}"
+                        wd_logger 2 "Warning: Since we have already found a functioning 'bin/jt9' command ${JT9_CMD}, ignoring this second one '${bin_file}"
                     fi 
                 fi
             else
