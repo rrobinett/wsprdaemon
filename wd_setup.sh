@@ -557,7 +557,7 @@ function find_wsjtx_commands()
                     ### We have already found a bin/jt9... command which runs on this server
                     local test_name=${bin_file##*bin/}
                     if [[  -n "${JT9_CMD_TO_RUN-}" && "${JT9_CMD_TO_RUN}" == "${test_name}" ]]; then
-                        wd_logger 1 "Found a second bin/jt9 ${bin_file} after first finding '${JT9_CMD}. Use this file=${bin_file} which matches JT9_CMD_TO_RUN=${JT9_CMD_TO_RUN} in WD this ${bin_file}"
+                        wd_logger 1 "Found a second bin/jt9 ${bin_file} after first finding '${JT9_CMD}. Run this file=${bin_file} which matches JT9_CMD_TO_RUN=${JT9_CMD_TO_RUN}"
                         JT9_CMD=${bin_file}
                     else
                         wd_logger 2 "Warning: Since we have already found a functioning 'bin/jt9' command ${JT9_CMD}, ignoring this second one '${bin_file}"
