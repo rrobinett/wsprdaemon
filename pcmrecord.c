@@ -226,6 +226,8 @@ static struct session *Sessions;
 int Mcast_ttl;
 struct sockaddr Metadata_dest_socket;
 struct sockaddr mcast_dest_sock;
+static char const *Source;
+static struct sockaddr_storage *Source_socket; // Remains NULL if Source == NULL
 
 static void closedown(int a);
 static void input_loop(void);
@@ -254,6 +256,7 @@ static struct option Options[] = {
   {"locale", required_argument, NULL, 'l'},
   {"minfiletime", required_argument, NULL, 'm'},
   {"mintime", required_argument, NULL, 'm'},
+  {"source", required_argument, NULL, 'o'},
   {"raw", no_argument, NULL, 'r' },
   {"subdirectories", no_argument, NULL, 's'},
   {"subdirs", no_argument, NULL, 's'},
@@ -270,7 +273,7 @@ static struct option Options[] = {
   {"wd_tolerance", required_argument, NULL, 'Y'},
   {NULL, no_argument, NULL, 0},
 };
-static char Optstring[] = "cd:e:fjl:m:rsS:t:vL:Vx:WE:q:Y:";
+static char Optstring[] = "cd:e:fjl:m:o:rsS:t:vL:Vx:WE:q:Y:";
 
 int main(int argc,char *argv[]){
   App_path = argv[0];
@@ -301,6 +304,9 @@ int main(int argc,char *argv[]){
       break;
     case 'm':
       SubstantialFileTime = fabsf(strtof(optarg,NULL));
+      break;
+    case 'o':
+      Source = optarg;
       break;
     case 'r':
       Raw = true;
@@ -335,7 +341,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
-      fputs("wsprdaemon mode (-W): v0.9\n",stdout);
+      fputs("wsprdaemon mode (-W): v0.10\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
@@ -387,14 +393,18 @@ int main(int argc,char *argv[]){
     fprintf(stderr,"--jtmode supersedes --subdirs\n");
     Subdirs = false;
   }
+  if(Source != NULL){
+    Source_socket = calloc(1,sizeof(struct sockaddr_storage));
+    resolve_mcast(Source,Source_socket,0,NULL,0,0);
+  }
   // Set up input socket for multicast data stream from front end
   {
-    struct sockaddr sock;
-    char iface[1024];
+    struct sockaddr_storage sock = {0};
+    char iface[1024] = {0};
     resolve_mcast(PCM_mcast_address_text,&mcast_dest_sock,DEFAULT_RTP_PORT,iface,sizeof(iface),0);
-    Input_fd = listen_mcast(NULL,&mcast_dest_sock,iface);
+    Input_fd = listen_mcast(Source_socket,&mcast_dest_sock,iface);
     resolve_mcast(PCM_mcast_address_text,&sock,DEFAULT_STAT_PORT,iface,sizeof(iface),0);
-    Status_fd = listen_mcast(NULL,&sock,iface);
+    Status_fd = listen_mcast(Source_socket,&sock,iface);
   }
   if(Input_fd == -1){
     fprintf(stderr,"Can't set up PCM input, exiting\n");
