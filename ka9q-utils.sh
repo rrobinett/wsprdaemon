@@ -1075,7 +1075,7 @@ function ka9q-ft-setup()
             wd_logger 1 "ERROR: can't file expected template file '${ka9q_template_ft_decode_conf_file_path}', so force an abort"
             echo ${force_abort}
         fi
-        sudo cp -p  ${ka9q_template_ft_decode_conf_file_path} ${ka9q_ft_decode_conf_file_path}
+        sudo sed '/^[[:space:]]*$/d' ${ka9q_template_ft_decode_conf_file_path} > ${ka9q_ft_decode_conf_file_path}     ### remove the blank lines from the template file
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_ft_decode_conf_file_path} ${ka9q_ft_decode_conf_file_path}' => ${rc}, so force an abort"
             echo ${force_abort}
@@ -1158,7 +1158,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local ft_record_conf_file_name="${ft_type}-record.conf"     ### Counter-intuatively, the ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
+    local ft_record_conf_file_name="${ft_type}-decode.conf"     ### Counter-intuatively, the ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
     local ft_record_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_record_conf_file_name}"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
@@ -1171,7 +1171,7 @@ function ka9q-ft-setup()
         needs_update="yes"
     fi
     if ! grep -q "${mcast_line}" ${ft_record_conf_file_path} ; then
-         wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+        wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
         needs_update="yes"
     fi
     if ! grep -q "${directory_line}" ${ft_record_conf_file_path} ; then
