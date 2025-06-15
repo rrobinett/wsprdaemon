@@ -1405,6 +1405,8 @@ function build_psk_uploader() {
         Environment=\"TZ=UTC\"" ${tmp_service_file_path}
         wd_logger 1 "Added 'Environment=\"TZ=UTC\"' to ${tmp_service_file_path}"
     fi
+    ### add '--tcp' if it is missing
+    sed -i '/ExecStart=.*pskreporter-sender/ {/--tcp/! s/pskreporter-sender/pskreporter-sender --tcp/}'  ${tmp_service_file_path}
 
     if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
         wd_logger 2 "The service file has not beeen changed"
