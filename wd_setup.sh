@@ -77,8 +77,8 @@ case ${CPU_ARCH} in
         fi
         ;;
     aarch64)
-        PACKAGE_NEEDED_LIST+=( libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
-         if [[ "${OS_RELEASE}" == "12" ]]; then
+        PACKAGE_NEEDED_LIST+=( libsndfile1-dev python3-pip libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
+         if [[ "${OS_RELEASE}" == "11" ]]; then
             ### The 64 bit Pi5 OS is based upon Debian 12
             wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
             PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
@@ -472,7 +472,7 @@ function install_ts_recording_packages()
 {
    ### Get the Python packages needed to create the graphs.png
     local package
-    for package in psycopg2 ; do
+    for package in soundfile psycopg2 ; do
         wd_logger 2 "Install Python package ${package}"
         install_python_package ${package}
         local ret_code=$?
