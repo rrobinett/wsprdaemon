@@ -1158,7 +1158,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local ft_record_conf_file_name="${ft_type}-decode.conf"     ### Counter-intuatively, the ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
+    local ft_record_conf_file_name="${ft_type}-decode.conf"     ### ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
     local ft_record_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_record_conf_file_name}"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
