@@ -3,6 +3,19 @@
 
 #shopt -s -o nounset
 
+function wd-cpu-info() 
+{
+    local sys_list=( $(ls -dv /sys/devices/system/cpu/cpu[0-9]*) )   ### Get numericallyt sorted list 
+    local cpu_list=( ${sys_list[@]##*/} )                            ### Chop off the poth to just get a list of core names
+    local sys_cpu_base_path="/sys/devices/system/cpu"
+
+    local cpu
+    for cpu in ${cpu_list[@]} ; do
+        local cpu_max_freq=$(cat "${sys_cpu_base_path}/${cpu}/cpufreq/scaling_max_freq" 2>/dev/null)
+        [ -n "${cpu_max_freq}" ] && printf "%5s: %s\n" "${cpu}" "${cpu_max_freq}"
+    done
+}
+
 function wd-ka9q-controls() {
     local action="${1-is-active}"
 

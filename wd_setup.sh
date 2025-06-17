@@ -183,6 +183,78 @@ function wd_run_in_cgroup() {
 }
 wd_run_in_cgroup
 
+CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0 and 1 run the time critcal radiod 'proc_rx888' and 'fft' threads
+
+function wd-set-cpu-speed()
+{
+    local sys_cpu_root_dir="/sys/devices/system/cpu"
+
+    if [[ ! -d ${sys_cpu_root_dir} ]]; then
+        wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
+        return 0
+    fi
+    local sys_cpu_path_list=( $(find ${sys_cpu_root_dir} -maxdepth 1 -type d -regex '.*/cpu[0-9]+' | sort -V) )
+    if (( ${#sys_cpu_path_list[@]} == 0 )); then
+        wd_logger 1 "INFO: there are no cpu directories in '${sys_cpu_root_dir}' so we can't monitor and control the cpu speed on this server"
+        return 0
+    fi
+    wd_logger 2 "This server CPU has ${#sys_cpu_path_list[@]} cores"
+
+    if [[ -z "${CPU_CORE_KHZ}" ]]; then
+        wd_logger 1 "CPU_CORE_KHZ is NULL, so don't change the CPU frequencies"
+        return 0
+    fi
+    local cpu_specs_list=( ${CPU_CORE_KHZ//,/ } )
+    local cpu_target_list=()
+    local cpu_target
+
+    ### Get the max freq and current scaled setting
+    local cpu_max_freq_list=()
+    local cpu_current_freq_list=()
+    local cpu_path
+    for cpu_path in ${sys_cpu_path_list[@]} ; do
+        local cpu_number=${cpu_path##*cpu}
+        local cpu_max_freq=$(cat "${cpu_path}/cpufreq/cpuinfo_max_freq" 2>/dev/null)
+        local scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
+        wd_logger 2 "${cpu_path}: ${cpu_max_freq} ${scaling_max_freq}"
+        cpu_max_freq_list[cpu_number]="${cpu_max_freq}"
+        scaling_max_freq[cpu_number]="${scaling_max_freq}"
+    done
+
+    ### Get the desired scaled freq
+    local new_cpu_freq_list=()
+    local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
+    local desired_list_index
+    for (( desired_list_index=0; desired_list_index < ${#cpu_desired_list[@]} ; ++desired_list_index )); do
+        wd_logger 2 "Checking desired #${desired_list_index}"
+        local desired_info_list=( ${cpu_desired_list[desired_list_index]//:/ } )
+        local cpu_core=${desired_info_list[0]}
+        local cpu_freq=${desired_info_list[1]}
+        if [[ ${cpu_core} != "DEFAULT" ]]; then
+            new_cpu_freq_list[cpu_core]=${cpu_freq}
+        else
+            ### When "DEFAULT" then fill in all empty array elements
+            local index
+            for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
+                wd_logger 2 "Setting core ${index} to default value ${cpu_freq}"
+                if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
+                    new_cpu_freq_list[index]=${cpu_freq}
+                fi
+            done
+        fi
+        wd_logger 2 "Done with desired #${desired_list_index}"
+    done
+
+    local index
+    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
+        if (( ${scaling_max_freq[index]} != ${new_cpu_freq_list[index]} )); then
+            wd_logger 1 "Changing core #${index} max frequency from ${scaling_max_freq[index]} to ${new_cpu_freq_list[index]}"
+            echo ${new_cpu_freq_list[index]} | sudo tee "${sys_cpu_path_list[index]}/cpufreq/scaling_max_freq" > /dev/null
+        fi
+     done
+}
+wd-set-cpu-speed
+
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
