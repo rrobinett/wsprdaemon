@@ -18,7 +18,7 @@
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the .wv files for the April 8th 2024 total eclipse +- 1 day
-declare -r GRAPE_TMP_DIR="/run/user/$(id -u)/grape_drf_cache"                                                          ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
+declare -r GRAPE_TMP_DIR="/run/wsprdaemon/grape_drf_cache"                                                          ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
 declare -r WD_SILENT_WV_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/one-minute-silent-float.wv"                                  ### A wavpack-compressed wav file of one minute of silence.  When a minute file is missing  soft link to this file
 declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
@@ -779,11 +779,12 @@ function grape_init() {
     fi
 
     local rc
-    mkdir -p ${GRAPE_TMP_DIR}
+    sudo mkdir -p ${GRAPE_TMP_DIR}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: can't create ${GRAPE_TMP_DIR} "
         return ${rc}
     fi
+    sudo chown "${USER}:$(id -gn)" ${GRAPE_TMP_DIR}
 
     if ! install_debian_package "libhdf5-dev" ; then
         wd_logger 1 "ERROR: 'install_debian_package libhdf5-dev' => $?"
