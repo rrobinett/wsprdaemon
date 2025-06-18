@@ -210,15 +210,16 @@ function wd-set-cpu-speed()
 
     ### Get the max freq and current scaled setting
     local cpu_max_freq_list=()
+    local scaling_max_freq=()
     local cpu_current_freq_list=()
     local cpu_path
     for cpu_path in ${sys_cpu_path_list[@]} ; do
         local cpu_number=${cpu_path##*cpu}
         local cpu_max_freq=$(cat "${cpu_path}/cpufreq/cpuinfo_max_freq" 2>/dev/null)
-        local scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
-        wd_logger 2 "${cpu_path}: ${cpu_max_freq} ${scaling_max_freq}"
+        local cpu_scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
         cpu_max_freq_list[cpu_number]="${cpu_max_freq}"
-        scaling_max_freq[cpu_number]="${scaling_max_freq}"
+        scaling_max_freq[cpu_number]="${cpu_scaling_max_freq}"
+        wd_logger 2 "${cpu_path}: core #${cpu_number} max_possible: ${cpu_max_freq} current_max_setting:${scaling_max_freq}, scaling_max_freq[${cpu_number}]=${scaling_max_freq[cpu_number]} "
     done
 
     ### Get the desired scaled freq
@@ -226,17 +227,18 @@ function wd-set-cpu-speed()
     local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
     local desired_list_index
     for (( desired_list_index=0; desired_list_index < ${#cpu_desired_list[@]} ; ++desired_list_index )); do
-        wd_logger 2 "Checking desired #${desired_list_index}"
+        wd_logger 2 "Checking desired #${desired_list_index}: ${cpu_desired_list[desired_list_index]}"
         local desired_info_list=( ${cpu_desired_list[desired_list_index]//:/ } )
         local cpu_core=${desired_info_list[0]}
         local cpu_freq=${desired_info_list[1]}
         if [[ ${cpu_core} != "DEFAULT" ]]; then
+            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq}"
             new_cpu_freq_list[cpu_core]=${cpu_freq}
         else
             ### When "DEFAULT" then fill in all empty array elements
             local index
             for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-                wd_logger 2 "Setting core ${index} to default value ${cpu_freq}"
+                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq}"
                 if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
                     new_cpu_freq_list[index]=${cpu_freq}
                 fi
@@ -247,6 +249,7 @@ function wd-set-cpu-speed()
 
     local index
     for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
+        wd_logger 2 "For core ${index}: scaling_max_freq[]=${scaling_max_freq[index]}, desired_cpu_max=${new_cpu_freq_list[index]}"
         if (( ${scaling_max_freq[index]} != ${new_cpu_freq_list[index]} )); then
             wd_logger 1 "Changing core #${index} max frequency from ${scaling_max_freq[index]} to ${new_cpu_freq_list[index]}"
             echo ${new_cpu_freq_list[index]} | sudo tee "${sys_cpu_path_list[index]}/cpufreq/scaling_max_freq" > /dev/null
