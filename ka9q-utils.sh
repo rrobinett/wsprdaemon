@@ -209,24 +209,54 @@ function wd_get_config_value() {
 function get_conf_section_variable() {
     local __return_variable_name=$1
     local conf_file_name=$2
-    local conf_section=$3
+    local conf_section=${3^^}  ### forces to UPPER CASE
     local conf_variable_name=$4
 
-    if [[ ! -f ${conf_file_name} ]] ; then
-        wd_logger 1 "ERROR: '' doesn't exist"
-        return 1
+    local conf_dir_name="${conf_file_name}.d"
+    if [[ -d ${conf_dir_name} ]]; then
+        wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"
+        local files_list=( $(find ${conf_dir_name} -maxdepth 1 -type f ) )
+        if (( ${#files_list[@]} == 0 )); then
+            wd_logger 1 "ERROR: can't find any files in ${conf_dir_name}"
+            echo ${force_abort}
+        fi
+        if [[ ${conf_section:0:3} == "FT8" ]]; then
+            wd_logger 2 "Perform special search for FT8 sections since there are multiple sections which start '[FT8-....]'"
+            conf_section="FT8.*"
+        fi
+        local files_with_section_list=( $(grep -i -l "^\[${conf_section}\]" ${files_list[@]} ) )
+        case ${#files_with_section_list[@]} in
+            0)
+                wd_logger 1 "ERROR: can't find a file with section '${conf_section}' in ${conf_dir_name}"
+                echo ${force_abort}
+                ;;
+            1)
+                conf_file_name=${files_with_section_list[0]}
+                wd_logger 2 "Found section '${conf_section}' in ${conf_file_name}"
+                ;;
+            *)
+                 wd_logger 1 "ERROR: found ${#files_with_section_list[@]} files with a  section '${conf_section}'"
+                echo ${force_abort}
+                ;;
+        esac
+        ### conf_file_name has been changed to that of the conf_file_name.d/NNN file which contans the desired section/variable
     fi
-    local section_lines=$( grep -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
+    if [[ ! -f ${conf_file_name} ]] ; then
+        wd_logger 1 "ERROR: config file '${conf_file_name}' doesn't exist"
+         echo ${force_abort}
+    fi
+    local section_lines=$( grep -i -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
     if [[ -z "${section_lines}" ]]; then
         wd_logger 1 "ERROR:  couldn't find section '\[${conf_section}\]' in  ${conf_file_name}"
-        return 2
+        echo ${force_abort}
     fi
     wd_logger 2 "Got section '\[.*${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
     local section_variable_value=$( echo "${section_lines}" | awk "/${conf_variable_name} *=/ { print \$3 }" )
     if [[ -z "${section_variable_value}" ]]; then
         wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
-        return 3
+        echo ${force_abort}
     fi
+        
     eval ${__return_variable_name}="\${section_variable_value}"
     wd_logger 2 "Returned the value '${section_variable_value}' of variable '${conf_variable_name}' in '${conf_section}' section of config file '${conf_file_name}' to variable '${__return_variable_name}'"
     return 0
@@ -564,7 +594,7 @@ function ka9q-get-conf-file-name() {
         return 2
     fi
     eval ${__return_conf_file_var_name}=\"\${ka9q_conf_file}\"
-    wd_logger 2 "Found pid =${ka9q_pid_value} and conf_file = '${ka9q_conf_file}'"
+    wd_logger 1 "Found pid =${ka9q_pid_value} and conf_file = '${ka9q_conf_file}'"
     return 0
 }
 
@@ -588,11 +618,13 @@ function ka9q-get-status-dns() {
         eval ${___return_status_dns_var_name}=\"${conf_web_dns}\"
         return 0
     else
-        wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on tghe LAN using the avahi DNS service"
+        wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on the LAN using the avahi DNS service"
     fi
 
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
-    rc=$? ; if (( rc )); then
+    rc=$? ; if (( rc == 0 )); then
+        wd_logger 1 "'ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"' => ${ka9q_web_conf_file}"
+    else
         wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
         avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
         rc=$?
@@ -616,18 +648,28 @@ function ka9q-get-status-dns() {
                  return 1
                  ;;
          esac
+
     fi
-    if [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
-        wd_logger 1 "Cant' find the conf file '${conf_file}' for radiod"
-        returm 2
+
+    local ka9q_web_conf_temp_file_path="/tmp/ka9q_web_conf.txt"
+    local ka9q_web_conf_dir="${ka9q_web_conf_file}.d"
+    if [[ -d ${ka9q_web_conf_dir} ]] ; then
+        wd_logger 1 "Getting conf lines from ${ka9q_web_conf_dir}/*"
+        cat ${ka9q_web_conf_dir}/* > ${ka9q_web_conf_temp_file_path}
+    elif [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
+        wd_logger 1 "Can't find the conf file '${ka9q_web_conf_file}' for radiod"
+        echo ${force_abort}
+    else
+        cp -p ${ka9q_web_conf_file}  ${ka9q_web_conf_temp_file_path}
     fi
+
     local ka9q_radiod_dns
-    ka9q_radiod_dns=$( grep -A 20 "\[global\]" "${ka9q_web_conf_file}" |  awk '/^status =/{print $3}' )
+    ka9q_radiod_dns=$( grep -A 20 "\[global\]" "${ka9q_web_conf_temp_file_path}" |  awk '/^status =/{print $3}' )
     if [[ -z "${ka9q_radiod_dns}" ]]; then
-        wd_logger 1 "Can't find the 'status =' line in '${conf_file}'"
-        returm 3
+        wd_logger 1 "Can't find the 'status =' line in '${ka9q_web_conf_temp_file_path}'"
+        echo ${force_abort}
     fi
-    wd_logger 2 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
+    wd_logger 1 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
     eval ${___return_status_dns_var_name}=\"${ka9q_radiod_dns}\"
     return 0
 }
@@ -654,7 +696,7 @@ function ka9q_web_daemon() {
 
         local ka9q_radiod_status_dns=""
         while [[ -z "$ka9q_radiod_status_dns" ]]; do
-            ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
+            ka9q-get-status-dns "ka9q_radiod_status_dns" #>& /dev/null
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: ka9q-get-status-dns()  => ${rc}"
             fi
@@ -829,41 +871,90 @@ function build_ka9q_radio() {
     local ka9q_conf_name
     get_config_file_variable  "ka9q_conf_name" "KA9Q_CONF_NAME"
     if [[ -n "${ka9q_conf_name}" ]]; then
-        wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
+        wd_logger 2 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
     else
         ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
         wd_logger 2 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
     fi
-    local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
-    local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
 
     local radio_restart_needed="no"
-    if [[ ! -f ${ka9q_conf_file_path} ]]; then
-        if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
-            wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
-            exit 1
-        else
-            wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
-            cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
-            radio_restart_needed="yes"
-        fi
-    fi
+    local ka9q_conf_dir="${KA9Q_RADIOD_CONF_DIR}"
+    local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
 
+    ### Default is to find the config sections in the old style single ..conf file
+    local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
     ### INI/CONF FILE        SECTION   VARIABLE  DESIRED VALUE
-     local init_file_section_variable_value_list=(
-    "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
-    "${ka9q_conf_file_path}  rx888   description 63"    ### avahi DNS names can be at most 63 characters and can't include '/' and other special chars, so error out if that isn't the case
-    "${ka9q_conf_file_path}  WSPR    agc          0"
-    "${ka9q_conf_file_path}  WSPR    gain         0"
-    "${ka9q_conf_file_path}  WSPR    low       1300"
-    "${ka9q_conf_file_path}  WSPR    high      1700"
-    "${ka9q_conf_file_path}  WSPR    encoding float"
-    "${ka9q_conf_file_path}  WWV-IQ  disable     no"
-    "${ka9q_conf_file_path}  WWV-IQ  agc          0"
-    "${ka9q_conf_file_path}  WWV-IQ  gain         0"
-    "${ka9q_conf_file_path}  WWV-IQ  encoding float"
-    )
-    local index
+    local init_file_section_variable_value_list=(
+            "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
+            "${ka9q_conf_file_path}  rx888   description 63"    ### avahi DNS names can be at most 63 characters and can't include '/' and other special chars, so error out if that isn't the case
+            "${ka9q_conf_file_path}  WSPR    agc          0"
+            "${ka9q_conf_file_path}  WSPR    gain         0"
+            "${ka9q_conf_file_path}  WSPR    low       1300"
+            "${ka9q_conf_file_path}  WSPR    high      1700"
+            "${ka9q_conf_file_path}  WSPR    encoding float"
+            "${ka9q_conf_file_path}  WWV-IQ  disable     no"
+            "${ka9q_conf_file_path}  WWV-IQ  agc          0"
+            "${ka9q_conf_file_path}  WWV-IQ  gain         0"
+            "${ka9q_conf_file_path}  WWV-IQ  encoding float"
+        )
+   if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
+        wd_logger 1 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
+
+        if [[ ! -f ${ka9q_conf_file_path} ]]; then
+            if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+                wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+                echo ${force-abort}
+            else
+                wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
+                cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+                radio_restart_needed="yes"
+            fi
+        fi
+        if grep -q "m[0-9]*k" ${ka9q_conf_file_path} ; then
+            ### 3/12/25 - RR   The template radiod@rx888-wsprdaemon.conf included in Ka9q-radio installations to date includes an invalid 17m FT4 band frequency specification "18m10k000"
+            ###           This section repairs that and any other similarly corrupted frequency specs
+            wd_logger 1 "Fixing corrupt frequency value(s) '$(grep -oE "m[0-9]*k" ${ka9q_conf_file_path})' found in  ${ka9q_conf_file_path}"
+            sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}' => $rc, so failed to correct corrupt freq line(s)"
+            else
+                wd_logger 1 "Fixed correct corrupt freq line(s), so restart radiod"
+                radio_restart_needed="yes"
+            fi
+        fi
+    else
+        ka9q_conf_dir="${ka9q_conf_file_path}.d"
+        wd_logger 2 "Checking KA9Q configurations in files in new style directory ${ka9q_conf_dir}"
+        if find ${ka9q_conf_dir} -mindepth 1 -type f -print -quit | grep -q .; then
+            wd_logger 2 "There are flat files in ${ka9q_conf_dir}"
+        else
+            wd_logger 1 "${ka9q_conf_dir} exists, but there are no files in it"
+            echo ${force_abort}
+        fi
+        local new_style_conf_file
+        local index
+        for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
+            local config_variable_info_list=( ${init_file_section_variable_value_list[index]} )
+            local target_section=${config_variable_info_list[1]}
+            local target_section_file_path_list=( $(grep -l "^\[${target_section}\]" ${ka9q_conf_dir}/*) )
+            if (( ${#target_section_file_path_list[@]} == 0 )); then
+                wd_logger 1 "ERROR: can't find a file in ${ka9q_conf_dir} which contains [${target_section}]"
+                echo ${force_abort}
+            elif  (( ${#target_section_file_path_list[@]} > 1 )); then
+                 wd_logger 1 "ERROR: found  ${#target_section_file_path_list[@]} which contain [${target_section}]: ${target_section_file_path_list[*]}"
+                echo ${force_abort}
+            else
+                local section_config_file_path="${target_section_file_path_list[0]}"
+                local old_entry="${config_variable_info_list[*]}"
+                 config_variable_info_list[0]="${section_config_file_path}"
+                 init_file_section_variable_value_list[index]="${config_variable_info_list[*]}"
+                 wd_logger 2 "Changed file path in:\n'${old_entry}' to:\n'${init_file_section_variable_value_list[index]}'\n"
+            fi
+        done
+    fi
+    wd_logger 2 "Done setting up conf targets"
+
+   local index
     for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
         wd_logger 2 "Checking .conf/.ini file variable with: 'update_ini_file_section_variable ${init_file_section_variable_value_list[index]}'"
         update_ini_file_section_variable ${init_file_section_variable_value_list[index]}
@@ -882,18 +973,6 @@ function build_ka9q_radio() {
                  ;;
          esac
     done
-    if grep -q "m[0-9]*k" ${ka9q_conf_file_path} ; then
-        ### 3/12/25 - RR   The template radiod@rx888-wsprdaemon.conf included in Ka9q-radio installations to date includes an invalid 17m FT4 band frequency specification "18m10k000"
-        ###           This section repairs that and any other similarly corrupted frequency specs
-        wd_logger 1 "Fixing corrupt frequency value(s) '$(grep -oE "m[0-9]*k" ${ka9q_conf_file_path})' found in  ${ka9q_conf_file_path}"
-        sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}
-        rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: 'sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}' => $rc, so failed to correct corrupt freq line(s)"
-        else
-            wd_logger 1 "Fixed correct corrupt freq line(s), so restart radiod"
-            radio_restart_needed="yes"
-        fi
-    fi
 
    ### Make sure the wisdomf needed for effecient execution of radiod exists
     if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
@@ -960,7 +1039,7 @@ function build_ka9q_radio() {
                 sudo systemctl daemon-reload
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "'sudo systemctl daemon-reload' => $rc after change to  ${radio_service_file_path}"
-                    exit 1
+                    echo ${force_abort}
                 fi
                 radio_restart_needed="yes"
                 ;;
@@ -1149,7 +1228,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast DNS name of the stream"
+    wd_logger 2 "Find the multicast DNS name of the  ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
