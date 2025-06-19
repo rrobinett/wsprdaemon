@@ -83,7 +83,30 @@ function get_config_file_variable()
     local __return_variable=$1
     local _variable_name=$2
 
-    local conf_file_value=$( shopt -u -o nounset; source ~/wsprdaemon/wsprdaemon.conf; eval echo \${${_variable_name}-} )
+    local config_file_path=~/wsprdaemon/wsprdaemon.conf
+    local temp_config_file=/tmp/temp.config
+    if [[ -f ${config_file_path} ]]; then
+        wd_logger 2 "Get config variables from ${config_file_path}"
+        cp -p ${config_file_path} ${temp_config_file}
+    elif [[ -d ${config_file_path} ]]; then
+        wd_logger 1 "Get config variables from new style config.d/* files"
+        cat ${config_file_path}/* > ${temp_config_file}
+    else
+        config_file_path=${config_file_path%.d}
+        if [[ ! -f ${config_file_path} ]]; then
+            wd_logger 1 "ERROR: can't find config file ${config_file_path} or new style ${config_file_path}.d"
+            echo ${force_abort}
+        fi
+        cp -p ${config_file_path} ${temp_config_file}
+    fi
+    if [[ ! -s ${temp_config_file} ]]; then
+        wd_logger 1 "ERROR: ${temp_config_file} is empty"
+        echo ${force_abort}
+    fi
+
+    local conf_file_value=$( shopt -u -o nounset; source ${temp_config_file}; eval echo \${${_variable_name}-} )
+
+    wd_logger 2 "Returning ${__return_variable} = '${conf_file_value-}'"
 
     eval ${__return_variable}=\${conf_file_value-}
 }
