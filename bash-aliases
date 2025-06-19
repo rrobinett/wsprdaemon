@@ -33,9 +33,10 @@ function wd-ka9q-controls() {
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
-       "ft4-decode.service"
+       "ft4-decode@1.service"
        "ft8-record.service"
-       "ft8-decode.service"
+       "ft8-decode@1.service"
+       "hfdl.service"
        "pskreporter@ft4.service"
        "pskreporter@ft8.service"
        "pskreporter@wspr.service"
@@ -60,7 +61,8 @@ function wd-fft-utils() {
     local rc
     local tmp_file="/tmp/wd-fft-utils.txt"
 
-    sudo journalctl --no-pager -n 2000 -u radiod@rx888-wsprdaemon.service* > ${tmp_file}
+    local service_name=$(systemctl list-units --no-legend 'radiod@*.service' | awk '{print $2}')
+    sudo journalctl --no-pager -n 2000 -u ${service_name} > ${tmp_file}
     rc=$? ; if (( rc )); then
         echo "Can't find log lines for radiod.  'journalctl --nopager -n 2000 -u radiod@* > ${tmp_file}' returned error ${rc}"
         return 1
@@ -519,7 +521,7 @@ function wd-killall() {
    fi
 
     #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    ps aux | grep 'wsprdaemon.sh' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    ps aux | grep 'wsprdaemon.sh\|pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
