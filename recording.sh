@@ -352,7 +352,7 @@ function ka9q_recording_daemon()
         if [[ ${USR_BIN_PCMRECORD-no} == "yes" ]]; then
             wd_logger 1 "Running Phil's pcmrecord"
             pcm_record_cmd="/usr/local/bin/pcmrecord"
-            pcm_record_cmd_args="--max_length 60"
+            pcm_record_cmd_args="--max_length 60 --pad"
          else
              wd_logger 1 "Running Scott's pcmrecord"
              pcm_record_cmd="${KA9Q_RADIO_PCMRECORD_CMD}"
