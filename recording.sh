@@ -348,11 +348,21 @@ function ka9q_recording_daemon()
             wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_WD_RECORD_CMD} -v -s ${receiver_rx_freq_hz} ${receiver_ip} >  >& wd-record-${receiver_band}.log' => ${rc}"
         fi
     else
-        wd_logger 1 "Start recording wav files from ${receiver_ip} ${receiver_band} using ${KA9Q_RADIO_PCMRECORD_CMD}"
+        local pcm_record_cmd
+        if [[ ${USR_BIN_PCMRECORD-no} == "yes" ]]; then
+            wd_logger 1 "Running Phil's pcmrecord"
+            pcm_record_cmd="/usr/local/bin/pcmrecord"
+            pcm_record_cmd_args="--max_length 60"
+         else
+             wd_logger 1 "Running Scott's pcmrecord"
+             pcm_record_cmd="${KA9Q_RADIO_PCMRECORD_CMD}"
+             pcm_record_cmd_args="-W -q pcmrecord-errors.log -L 60"
+        fi
+        wd_logger 1 "Start recording wav files from ${receiver_ip} ${receiver_band} using ${pcm_record_cmd}"
         local running_jobs_pid_list=()
-        while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_PCMRECORD_CMD} -L 60 ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
+        while running_jobs_pid_list=( $( ps x | grep "${pcm_record_cmd} .* ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
-            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_PCMRECORD_CMD} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
+            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${pcm_record_cmd} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
             kill ${running_jobs_pid_list[@]}
             rc=$? ; if (( rc == 0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
@@ -362,15 +372,17 @@ function ka9q_recording_daemon()
 
         local verbosity_args_list=( -v -v -v -v )
         local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
-        wd_logger 1 "Starting '${KA9Q_RADIO_PCMRECORD_CMD} ${PCMRECORD_CMD_EXTRA_ARGS-} -L 60 ${receiver_ip}' in ${PWD}"
+        local pcm_cmd_line="${pcm_record_cmd} ${pcm_record_cmd_args} ${PCMRECORD_CMD_EXTRA_ARGS-} --jt ${receiver_ip}"
+        wd_logger 1 "Starting ' ${pcm_cmd_line}' in ${PWD}"
         echo "=========== Starting at $(date -u) =================" >>  pcmrecord-errors.log
         echo "=========== Starting at $(date -u) =================" >>  pcmrecord-outs.log
-        ${KA9Q_RADIO_PCMRECORD_CMD} ${PCMRECORD_CMD_EXTRA_ARGS-} -W -q pcmrecord-errors.log -L 60 --jt ${receiver_ip} > pcmrecord-outs.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
+        ${pcm_cmd_line} > pcmrecord-outs.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_PCMRECORD_CMD} -L 60 ${receiver_ip}' => ${rc}"
+            wd_logger 1 "ERROR: Unexpectedly '${pcm_cmd_line}' => ${rc}"
         else
-            wd_logger 1 "ERROR: Unexpectedly '${KA9Q_RADIO_PCMRECORD_CMD} -L 60 ${receiver_ip}' terminated with no error"
+            wd_logger 1 "ERROR: Unexpectedly '${pcm_cmd_line}' terminated with no error"
         fi
+        wd_sleep 5
     fi
     return 1
 }

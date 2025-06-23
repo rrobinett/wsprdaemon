@@ -33,9 +33,10 @@ function wd-ka9q-controls() {
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
-       "ft4-decode.service"
+       "ft4-decode@1.service"
        "ft8-record.service"
-       "ft8-decode.service"
+       "ft8-decode@1.service"
+       "hfdl.service"
        "pskreporter@ft4.service"
        "pskreporter@ft8.service"
        "pskreporter@wspr.service"
@@ -44,9 +45,8 @@ function wd-ka9q-controls() {
     local start_list_index
     for (( start_list_index=0; start_list_index < ${#start_list[@]}; ++start_list_index )); do
         local start_args="${start_list[start_list_index]}"
-        set +x
         sudo systemctl ${action} ${start_args} >& /dev/null
-        rc=$?; set +x; if (( rc )) ; then
+        rc=$?; if (( rc )) ; then
             echo "ERROR: 'sudo systemctl ${action} ${start_args}' => ${rc}"
           #  return 1
         else 
@@ -60,7 +60,8 @@ function wd-fft-utils() {
     local rc
     local tmp_file="/tmp/wd-fft-utils.txt"
 
-    sudo journalctl --no-pager -n 2000 -u radiod@rx888-wsprdaemon.service* > ${tmp_file}
+    local service_name=$(systemctl list-units --no-legend 'radiod@*.service' | awk '{for(i=1;i<=NF;i++) if($i ~ /^radiod@/) print $i}')
+    sudo journalctl --no-pager -n 2000 -u ${service_name} > ${tmp_file}
     rc=$? ; if (( rc )); then
         echo "Can't find log lines for radiod.  'journalctl --nopager -n 2000 -u radiod@* > ${tmp_file}' returned error ${rc}"
         return 1
@@ -471,7 +472,7 @@ function wd-killall() {
 
     if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
-        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr )
+        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
     else
         echo "Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY=${KA9Q_RUNS_ONLY_REMOTELY-no} and/or there are no running KA9Q jobs"
     fi
@@ -519,7 +520,7 @@ function wd-killall() {
    fi
 
     #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    ps aux | grep 'wsprdaemon.sh' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    ps aux | grep 'wsprdaemon.sh\|pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
@@ -1496,7 +1497,7 @@ function wd-get-ka9q-conf-file-path () {
 
 #alias wd-rl='sudo journalctl -u radiod@rx888-wsprdaemon.service'     ### show the syslog entries for the radiod service.  add -f to watch new log lines appear
 function wd-rl() {
-    local rl_args=${@--n 40}
+    local rl_args=${@--n 80}
     local base_name=$(wd-get_ka9q-conf_file-base_name)
     sudo journalctl -u radiod@${base_name} -f ${rl_args}
 }
