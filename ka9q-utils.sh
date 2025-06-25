@@ -215,7 +215,7 @@ function get_conf_section_variable() {
     local conf_dir_name="${conf_file_name}.d"
     if [[ -d ${conf_dir_name} ]]; then
         wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"
-        local files_list=( $(find ${conf_dir_name} -maxdepth 1 -type f ) )
+        local files_list=( $(find ${conf_dir_name} -maxdepth 1 -type f ! -name '*~' ) )
         if (( ${#files_list[@]} == 0 )); then
             wd_logger 1 "ERROR: can't find any files in ${conf_dir_name}"
             echo ${force_abort}
@@ -235,7 +235,7 @@ function get_conf_section_variable() {
                 wd_logger 2 "Found section '${conf_section}' in ${conf_file_name}"
                 ;;
             *)
-                 wd_logger 1 "ERROR: found ${#files_with_section_list[@]} files with a  section '${conf_section}'"
+                 wd_logger 1 "ERROR: found ${#files_with_section_list[@]} files with a section '${conf_section}': ${files_with_section_list[*]}"
                 echo ${force_abort}
                 ;;
         esac
@@ -898,7 +898,7 @@ function build_ka9q_radio() {
             "${ka9q_conf_file_path}  WWV-IQ  encoding float"
         )
    if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
-        wd_logger 1 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
+        wd_logger 2 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
 
         if [[ ! -f ${ka9q_conf_file_path} ]]; then
             if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
@@ -936,7 +936,8 @@ function build_ka9q_radio() {
         for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
             local config_variable_info_list=( ${init_file_section_variable_value_list[index]} )
             local target_section=${config_variable_info_list[1]}
-            local target_section_file_path_list=( $(grep -l "^\[${target_section}\]" ${ka9q_conf_dir}/*) )
+            local target_section_regex="^\[.*${target_section}\]"
+            local target_section_file_path_list=( $(grep -il "${target_section_regex}" $( find ${ka9q_conf_dir} -type f ! -name '*~') ) )   ## Ignore Phil's editor's ...~ files
             if (( ${#target_section_file_path_list[@]} == 0 )); then
                 wd_logger 1 "ERROR: can't find a file in ${ka9q_conf_dir} which contains [${target_section}]"
                 echo ${force_abort}
@@ -944,6 +945,8 @@ function build_ka9q_radio() {
                  wd_logger 1 "ERROR: found  ${#target_section_file_path_list[@]} which contain [${target_section}]: ${target_section_file_path_list[*]}"
                 echo ${force_abort}
             else
+                wd_logger 2 "Found regex of [${target_section}] in ${target_section_file_path_list[0]}"
+
                 local section_config_file_path="${target_section_file_path_list[0]}"
                 local old_entry="${config_variable_info_list[*]}"
                  config_variable_info_list[0]="${section_config_file_path}"
