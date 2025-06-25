@@ -1071,14 +1071,15 @@ function update_ini_file_section_variable() {
     wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
 
     # Check if section exists
-    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
+    local section_regex="^\s*\[.*${section_esc}\]"
+    if ! grep -iq "${section_regex}" "$file"; then
         # Add section if it doesn't exist
-        wd_logger 1 "ERROR: expected section [$section] doesn't exist in '$file'"
+        wd_logger 1 "ERROR: regex ${section_regex} of expected section [$section] doesn't exist in '$file'"
         return 4
     fi
 
     # Find section start and end lines
-    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_start_line_number=$(grep -n "${section_regex}" "$file" | cut -d: -f1 | head -n1)
     local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
 
     # If no next section is found, set section_end_line_number to end of file
@@ -1129,17 +1130,17 @@ function update_ini_file_section_variable() {
             return 1
         else
             rm "${temp_file}"
-            wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
+            wd_logger 2 "Existing $variable_esc in section $section_regex already has the value $new_value, so nothing to do"
             return 0
         fi
     else
         # The variable isn't defined in the section, so insert it into the section
          if [[ "$new_value" == "#" ]]; then
-            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_regex, so there is no line to remark out with new_value='$new_value'"
             return 0
         else
             local temp_file="/tmp/${file##*/}"
-            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_regex] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
             sed "${section_start_line_number}a\\$variable=$new_value" "${file}" > ${temp_file}
             sudo mv ${temp_file} ${file}         ### The /etc/systemd/system/ dirctory is owned by root
             rc=$? ; if (( rc )); then
