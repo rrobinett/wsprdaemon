@@ -1021,7 +1021,7 @@ alias cdrf='cd /run/ft8'
 alias cds='cd /etc/systemd/system'
 alias cdt='cd /dev/shm/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
-alias cdww='cd ~/wsprdaemon/wav-archive.d/'
+alias cdww='cd ~/wsprdaemon/wav-archive/'
 
 ### Start 'vi' using WD's .vimrc
 function vi() 
@@ -1249,7 +1249,7 @@ function wd-merged-kfs() {
 }
 
 
-declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive.d    ### No "" so ~ is expanded
+declare WD_WAV_ARCHIVE_ROOT_DIR=~/wsprdaemon/wav-archive    ### No "" so ~ is expanded
 ### 11/2/22 - This doesn't work anymore, but it could be modifed 
 function wd-grape-info(){
     local grape_date_dirs_list=( $( find ${WD_WAV_ARCHIVE_ROOT_DIR} -mindepth 1 -maxdepth 1 -type d | sort) )
@@ -1305,7 +1305,7 @@ function wd-wav-clean() {
 }
 
 ### At sites which are archiving wav files, this gets some info
-alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive.d/ ; ls -lt ~/wsprdaemon/wav-archive.d/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive.d/ | tail -n 2'
+alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive/ ; ls -lt ~/wsprdaemon/wav-archive/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive/ | tail -n 2'
 
 alias wdwaf=wd-wav-archive-fix
 function wd-wav-archive-fix(){
