@@ -2,6 +2,62 @@
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
 #shopt -s -o nounset
+alias cdb='cd ~/wsprdaemon/ka9q-web'
+
+function get-github-projects-list()
+{
+    # Extract the array definition into a temp file
+    local tmpfile=$1
+    awk '
+    BEGIN { in_array = 0 }
+    /^\s*declare\s+GITHUB_PROJECTS_LIST=\(/ { in_array = 1 }
+    in_array {
+    print
+    if (/\)\s*$/) {
+        in_array = 0
+        exit
+    }
+}
+' ~/wsprdaemon/ka9q-utils.sh > "$tmpfile"
+}
+
+function wd-commit-info() 
+{
+    local tmpfile=$(mktemp)
+    get-github-projects-list ${tmpfile}
+    # Now source the extracted array definition
+    # KA9Q_RADIO_COMMIT_CHECK="main"
+    unset KA9Q_RADIO_COMMIT_CHECK KA9Q_FT8_COMMIT_CHECK PSK_UPLOADER_COMMIT_CHECK ONION_COMMIT_CHECK KA9Q_WEB_COMMIT_CHECK
+    KA9Q_RADIO_LIBS_NEEDED="NONE"
+    ONION_LIBS_NEEDED="NONE"
+    source "$tmpfile"
+    ka9q_list=( "${GITHUB_PROJECTS_LIST[@]}")
+    source ~/wsprdaemon/wsprdaemon.conf
+    source "$tmpfile"
+    as_configured_list=( "${GITHUB_PROJECTS_LIST[@]}")
+    #cat "$tmpfile"
+    rm "$tmpfile"
+
+    local format="%20s %20s %42s %20s %42s %42s\n"
+    printf "${format}" "Service" "ka9q-utils.sh check" "ka9q-utils.sh commit" "as configured check" "as configured commit" "running commit"
+
+    local index
+    for (( index=0; index < ${#ka9q_list[@]}; ++index)); do
+        local ka9q_service_info_list=( ${ka9q_list[index]} )
+        local commit_dir=${ka9q_service_info_list[0]}
+
+        local ka9q_commit_check=${ka9q_service_info_list[1]}
+        local ka9q_commit_val=${ka9q_service_info_list[6]}
+
+        local as_configured_info_list=( ${as_configured_list[index]} )
+        local as_configured_commit_check=${as_configured_info_list[1]}
+        local as_configured_commit_val=${as_configured_info_list[6]}
+
+        local running_commit=$(cd ~/wsprdaemon/${commit_dir}; git rev-parse HEAD)
+        set +x
+         printf "${format}" ${commit_dir} ${ka9q_commit_check} ${ka9q_commit_val} ${as_configured_commit_check} ${as_configured_commit_val} ${running_commit}
+    done
+}
 
 function wd-cpu-info() 
 {
