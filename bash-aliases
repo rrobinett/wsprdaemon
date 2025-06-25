@@ -55,7 +55,7 @@ function wd-commit-info()
 
         local running_commit=$(cd ~/wsprdaemon/${commit_dir}; git rev-parse HEAD)
         set +x
-         printf "${format}" ${commit_dir} ${ka9q_commit_check} ${ka9q_commit_val} ${as_configured_commit_check} ${as_configured_commit_val} ${running_commit}
+        printf "${format}" ${commit_dir} ${ka9q_commit_check} ${ka9q_commit_val} ${as_configured_commit_check} ${as_configured_commit_val} ${running_commit}
     done
 }
 
