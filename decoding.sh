@@ -869,6 +869,24 @@ function file_is_closed_or_last_write_was_seconds_ago() {
 
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
+function wait_until_newest_tmp_file_is_closed() {
+    local wav_file_dir_path=$1
+    local wav_file_regex="$2"
+    local tmp_wav_file_regex="${wav_file_regex}.tmp"
+
+    wd_logger 1 "Looking for a '${tmp_wav_file_regex}' in ${wav_file_dir_path}"
+    local newest_tmp_wav_file=$( find  ${wav_file_dir_path} -type f -name "${tmp_wav_file_regex}" | sort | tail -1 )
+    if [[ -z "${newest_tmp_wav_file}" ]]; then
+        wd_logger 1 "Found no '${tmp_wav_file_regex}' file"
+        return 1
+    fi
+    wd_logger 1 "Waiting for tmp file ${newest_tmp_wav_file} to be closed"
+    local rc
+    inotifywait -e close ${newest_tmp_wav_file} >& /dev/null
+    rc=$?
+    wd_logger 1 "'inotifywait -e close ${newest_tmp_wav_file}}' => ${rc}"
+    return 0
+}
 
 function get_wav_file_list() {
     local return_variable_name=$1  ### returns a string with a space-separated list each element of which is of the form MODE:first.wav[,second.wav,...]
@@ -909,7 +927,7 @@ function get_wav_file_list() {
 
     ### Kiwirecorder.py and pcmrecordder create files with the same name format
     local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
-    local wav_file_regex="*_${band_freq_hz}_*.wav"
+    local wav_file_regex="*Z_${band_freq_hz}_usb.wav"
 
     wd_logger 2 "Starting 'while (( \${#return_list[@]} == 0 )); do ...'."
     local wait_for_newest_file_to_close="no"
@@ -925,9 +943,10 @@ function get_wav_file_list() {
         fi
         local find_files_list=()
         find_files_list=( $( sort -r find.log ) )
-
-        if (( ${#find_files_list[@]} < 1 )); then
-            wd_logger 2 "Found no wav files.  Sleep 1 and then search again"
+        if (( ${#find_files_list[@]} < 2 )); then
+            wd_logger 1 "Found only ${#find_files_list[@]} wav files.  Check for open *wav.tmp files"
+            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}"
+            wd_logger 1 "Done waiting.  So sleep 1 and check again"
             sleep 1
             continue
         fi
@@ -938,6 +957,9 @@ function get_wav_file_list() {
 
         if [[ ${wait_for_newest_file_to_close} == "yes" ]]; then
             ### We previously found a list but couldn't create a return_list[], so wait until the newest file is closed before checking again
+            wd_logger 1 "wait_for_newest_file_to_close=${wait_for_newest_file_to_close}, so wait for newest wav.tmp to clcose"
+            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}"
+            wd_logger 1 "Done waiting.  So check for newest *.wav file to be closed"
             wd_logger 1 "Waiting for ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} seconds for the newest file ${newest_file_name} to be closed or not written to for ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2} seconds"
             file_is_closed_or_last_write_was_seconds_ago ${newest_file_name}  ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65}  ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}
             wd_logger 1 "After waiting for the newest file ${newest_file_name} to be closed, cancel wait_for_newest_file_to_close and check again"
