@@ -188,7 +188,6 @@ CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0
 function wd-set-cpu-speed()
 {
     local sys_cpu_root_dir="/sys/devices/system/cpu"
-
     if [[ ! -d ${sys_cpu_root_dir} ]]; then
         wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
         return 0
@@ -217,6 +216,10 @@ function wd-set-cpu-speed()
         local cpu_number=${cpu_path##*cpu}
         local cpu_max_freq=$(cat "${cpu_path}/cpufreq/cpuinfo_max_freq" 2>/dev/null)
         local cpu_scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
+        if [[ -z "${cpu_max_freq}" || -z "${cpu_scaling_max_freq}" ]]; then
+            wd_logger 2 "Can't read cpu_max_freq='${cpu_max_freq}' and/or cpu_scaling_max_freq='${cpu_scaling_max_freq}', so we can't adjust CPU frequency"
+            return 0
+        fi
         cpu_max_freq_list[cpu_number]="${cpu_max_freq}"
         scaling_max_freq[cpu_number]="${cpu_scaling_max_freq}"
         wd_logger 2 "${cpu_path}: core #${cpu_number} max_possible: ${cpu_max_freq} current_max_setting:${scaling_max_freq}, scaling_max_freq[${cpu_number}]=${scaling_max_freq[cpu_number]} "
