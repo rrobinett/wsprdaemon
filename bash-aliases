@@ -2,8 +2,6 @@
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
 #shopt -s -o nounset
-alias cdb='cd ~/wsprdaemon/ka9q-web'
-
 function get-github-projects-list()
 {
     # Extract the array definition into a temp file
@@ -1940,3 +1938,12 @@ function wd-ft-logs() {
 function wd-no-capslock() {
    hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0}]}'
 }
+
+alias cdb='cd ~/wsprdaemon/ka9q-web'
+alias cdu='cd /srv/wd_data/uploads/wsprdaemon'
+alias cdt='cd /run/wsprdaemon/uploads'
+alias wdua='wd -u a'
+alias wduz='wd -u z'
+alias wdus='wd -u s'
+alias r='reset'
+
