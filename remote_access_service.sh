@@ -13,6 +13,9 @@
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
 declare WD_FRPS_URL=${WD_FRPS_URL-wd0.wsprdaemon.org}
+declare HAMSCI_FRPS_URL=${HAMSCI_FRPS_URL-vpn.hamsci.org}
+declare HAMSCI_RAC_MIN=200
+declare HAMSCI_RAC_MAX=299
 declare WD_FRPS_PORT=35735
 declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}    ### Default to use FRP version 0.36.2
 declare FRPC_INI_FILE=${FRPC_CMD}_wd.ini
@@ -349,13 +352,17 @@ function wd_remote_access_service_manager() {
             local_ssh_server_port=${sshd_config_port}
         fi
     fi
+    local rac_url="${WD_FRPS_URL}"
+    if (( (remote_access_channel >= HAMSCI_RAC_MIN) &&  (remote_access_channel <= HAMSCI_RAC_MAX) )); then
+        rac_url="${HAMSCI_FRPS_URL}"
+    fi
 
     wd_logger 1 "Creating ${FRPC_INI_FILE}"
     cat > ${FRPC_INI_FILE} <<EOF
 [common]
 admin_addr = 127.0.0.1
 admin_port = 7500
-server_addr = ${WD_FRPS_URL}
+server_addr = ${rac_url}
 server_port = ${WD_FRPS_PORT}
 
 [${remote_access_id}]
