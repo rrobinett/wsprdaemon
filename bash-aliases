@@ -526,7 +526,25 @@ function wd-killall() {
 
     if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
-        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record ft4-decoded ft8-decoded pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
+        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
+
+        ### These services have been depricaded, so stop and disable them
+        local needs_daemon_reload="no"
+        local legacy_ft_services_list=( ft4-decoded ft8-decoded )
+        local legacy_service
+        for legacy_service in ${legacy_ft_services_list[@]} ; do
+            if sudo systemctl is-active --quiet ${legacy_service}.service ; then
+                echo "Stopping the active legacy service ${legacy_service}"
+                sudo systemctl stop ${legacy_service}.service
+            fi
+            if systemctl list-unit-files | grep -q "^${legacy_service}"; then
+                echo "Disabling the legacy service ${legacy_service}"
+                sudo systemctl disable ${legacy_service}.service
+            fi
+        done
+        if [[ ${needs_daemon_reload} == "yes" ]]; then
+            sudo systemctl daemon-reload
+        fi
     else
         echo "Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY=${KA9Q_RUNS_ONLY_REMOTELY-no} and/or there are no running KA9Q jobs"
     fi
