@@ -101,13 +101,13 @@ function wd_logger_check_all_logs
                 cp ${log_file_path} ${new_log_lines_file}
             else
                 ### There is a line in the *printed file
-                if ! grep -F -q "${last_printed_line}" ${log_file_path} ; then
+                if ! grep -q -F -- "${last_printed_line}" ${log_file_path} ; then
                     wd_logger 2 "Can't find that the line '${last_printed_line}' in ${log_file_last_printed} is in ${log_file_path}"
                     wd_rm ${log_file_last_printed}
                     cp ${log_file_path} ${new_log_lines_file}
                 else
                     wd_logger 2 "Found line in ${log_file_last_printed} file is present in ${log_file_path}, so print only the lines which follow it"
-                    grep -F -A 100000 "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
+                    grep -A 100000 -F -- "${last_printed_line}" ${log_file_path}  | tail -1 > ${new_log_lines_file}
                     if [[ ! -s ${new_log_lines_file} ]]; then
                         wd_logger 2 "Found no lines to print in ${log_file_path}, so nothing to print"
                         continue
