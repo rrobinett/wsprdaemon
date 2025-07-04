@@ -24,29 +24,29 @@
 ###   in the upload_to_wsprnet_daemon() and I would rather work on VHF/UHF support
 
 ### The spot and noise data is saved in permanent file systems, while temp files are not saved 
-declare UPLOADS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/uploads.d"           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
-declare UPLOADS_WSPRDAEMON_ROOT_DIR="${UPLOADS_ROOT_DIR}/wsprdaemon.d"
+declare UPLOADS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/uploads"           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
+declare UPLOADS_WSPRDAEMON_ROOT_DIR="${UPLOADS_ROOT_DIR}/wsprdaemon"
 
-declare UPLOADS_TMP_ROOT_DIR="${WSPRDAEMON_TMP_DIR}/uploads.d"        ### Put under here all files which can or should be flushed when the system is started
-declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR="${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d"
+declare UPLOADS_TMP_ROOT_DIR="${WSPRDAEMON_TMP_DIR}/uploads"        ### Put under here all files which can or should be flushed when the system is started
+declare UPLOADS_TMP_WSPRDAEMON_ROOT_DIR="${UPLOADS_TMP_ROOT_DIR}/wsprdaemon"
 declare UPLOADS_GREP_LOG_FILE="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/grep.log"       ### Since there is only one upload daemon, there needs to be only one grep.log file
 
 ### spots.logs.wsprdaemon.org
-declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/spots.d
+declare UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/spots
 declare UPLOADS_WSPRDAEMON_SPOTS_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_SPOTS_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_SPOTS_ROOT_DIR}/uploads.pid
 
-declare UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/spots.d
+declare UPLOADS_TMP_WSPRDAEMON_SPOTS_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/spots
 
 ### noise.logs.wsprdaemon.org
-declare UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/noise.d
+declare UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_WSPRDAEMON_ROOT_DIR}/noise
 declare UPLOADS_WSPRDAEMON_NOISE_LOGFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/uploads.log
 declare UPLOADS_WSPRDAEMON_NOISE_PIDFILE_PATH=${UPLOADS_WSPRDAEMON_NOISE_ROOT_DIR}/uploads.pid
 
-declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/noise.d
+declare UPLOADS_TMP_WSPRDAEMON_NOISE_ROOT_DIR=${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/noise
 
 ### wsprnet.org upload daemon files
-declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet.d
+declare UPLOADS_TMP_WSPRNET_ROOT_DIR=${UPLOADS_TMP_ROOT_DIR}/wsprnet
 mkdir -p ${UPLOADS_TMP_WSPRNET_ROOT_DIR}
 declare UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/spots.txt   ### The wsprnet upload daemon creates this file containing all spots ready for upload and it is uploaded by a curl command
 declare UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/curl.log 
@@ -55,8 +55,8 @@ declare WSPR_LOG_FILE="/var/log/wspr.log"                        ### Phil KA9Q w
 declare WSPR_LOGROTATE_FILE="/etc/logrotate.d/wspr.rotate"       ### This file instructs logroate to keep that file from growning too large
 
 ### wsprnet.org 
-declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet.d      
-declare UPLOADS_WSPRNET_SPOTS_DIR=${UPLOADS_WSPRNET_ROOT_DIR}/spots.d
+declare UPLOADS_WSPRNET_ROOT_DIR=${UPLOADS_ROOT_DIR}/wsprnet      
+declare UPLOADS_WSPRNET_SPOTS_DIR=${UPLOADS_WSPRNET_ROOT_DIR}/spots
 declare UPLOADS_WSPRNET_PIDFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.pid
 declare UPLOADS_WSPRNET_LOGFILE_PATH=${UPLOADS_WSPRNET_SPOTS_DIR}/uploads.log
 declare UPLOADS_WSPRNET_SUCCESSFUL_LOGFILE=${UPLOADS_WSPRNET_SPOTS_DIR}/successful_spot_uploads.log
@@ -428,7 +428,7 @@ declare UPLOADS_WSPRDAEMON_PAUSE_SECS=${UPLOADS_WSPRDAEMON_PAUSE_SECS-30} ### Ho
 
 function upload_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
-    local source_root_dir=${1}     ### i.e. ~/wsprdaemon/uploads.d/wsprdaemon.d/
+    local source_root_dir=${1}     ### i.e. ~/wsprdaemon/uploads/wsprdaemon/
     mkdir -p ${source_root_dir}
     cd ${source_root_dir}
 
@@ -437,7 +437,7 @@ function upload_to_wsprdaemon_daemon() {
     mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
 
     while true; do
-        ### find all *.txt files under spots.d and noise.d.
+        ### find all *.txt files under spots and noise.
         wd_logger 1 "Starting search for *_spots.txt files"
         local -a spot_file_list=()
         while spot_file_list=( $(find -name '*_spots.txt') ) && [[ ${#spot_file_list[@]} -eq 0 ]]; do   ### bash limits the # of cmd line args we will pass to tar to about 24000
@@ -493,9 +493,9 @@ function upload_to_wsprdaemon_daemon() {
             wd_logger 1 "source_file_list[] has ${#source_file_list[@]} elements which is more than the allowed MAX_RM_ARGS=${MAX_RM_ARGS} elements, so truncate it"
             source_file_list=( ${source_file_list[@]:0:${MAX_RM_ARGS}} )
         fi
-        ### In v2.10* the spot and noise file paths were tared from the ~/wsprdaemon/uploads.d directory, so the filenames all start with 'wsprdaemon.d/...
-        ### So to preserve backwards compatibility we will mimic that behavior by executing tar from ..uploads.d and prepending 'wsprdaemon.d' to all the filenames we are tarring
-        local tar_source_file_list=( wsprdaemon.d/${config_relative_path} ${source_file_list[@]/./wsprdaemon.d} )
+        ### In v2.10* the spot and noise file paths were tared from the ~/wsprdaemon/uploads directory, so the filenames all start with 'wsprdaemon/...
+        ### So to preserve backwards compatibility we will mimic that behavior by executing tar from ..uploads and prepending 'wsprdaemon' to all the filenames we are tarring
+        local tar_source_file_list=( wsprdaemon/${config_relative_path} ${source_file_list[@]/./wsprdaemon} )
 
         local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
         local tar_file_path="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${tar_file_name}"
