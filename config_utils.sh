@@ -85,22 +85,20 @@ function get_config_file_variable()
 
     local config_file_path=~/wsprdaemon/wsprdaemon.conf
     local temp_config_file=/tmp/temp.config
-    if [[ -f ${config_file_path} ]]; then
-        wd_logger 2 "Get config variables from ${config_file_path}"
-        cp -p ${config_file_path} ${temp_config_file}
-    elif [[ -d ${config_file_path} ]]; then
+
+    if [[ -d ${config_file_path}.d ]]; then
         wd_logger 1 "Get config variables from new style config.d/* files"
-        cat ${config_file_path}/* > ${temp_config_file}
-    else
-        config_file_path=${config_file_path%.d}
-        if [[ ! -f ${config_file_path} ]]; then
-            wd_logger 1 "ERROR: can't find config file ${config_file_path} or new style ${config_file_path}.d"
+        local config_files_list=( $(find ${config_file_path}.d -maxdepth 1 - type f ! -name '*~' ) )
+        if (( ${#config_files_list[@]} == 0 )); then
+            wd_logger 1 "ERROR:  ${config_file_path}.d exists, but is empty"
             echo ${force_abort}
         fi
+        cat ${config_files_list[@]} > ${temp_config_file}
+    elif [[ -f ${config_file_path} ]]; then
+        wd_logger 2 "Get config variables from ${config_file_path}"
         cp -p ${config_file_path} ${temp_config_file}
-    fi
-    if [[ ! -s ${temp_config_file} ]]; then
-        wd_logger 1 "ERROR: ${temp_config_file} is empty"
+    else
+        wd_logger 1 "ERROR: ${config_file_path}.d doesn't exist nor does ${config_file_path}"
         echo ${force_abort}
     fi
 
