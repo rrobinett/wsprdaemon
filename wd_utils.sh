@@ -771,7 +771,7 @@ function spawn_daemon()
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 2 "Start with args '$1' '$2' => daemon_root_dir=${daemon_root_dir}, daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
+    wd_logger 1 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
         if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
@@ -782,15 +782,15 @@ function spawn_daemon()
             rm -f ${daemon_pid_file_path}
         fi
     fi
+    local ret_code
     WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}  > /dev/null &
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
+    ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: failed to spawn 'WD_LOGFILE=${daemon_log_file_path} ${daemon_function_name}  ${daemon_root_dir}' => ${ret_code}"
         return 1
     fi
     local spawned_pid=$!
     echo ${spawned_pid} > ${daemon_pid_file_path}
-    wd_logger -1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and recorded that pid to '${daemon_pid_file_path}' == $(< ${daemon_pid_file_path})"
+    wd_logger 1 "Spawned new ${daemon_function_name} job with PID '${spawned_pid}' and set to log to '${daemon_log_file_path}'"
     return 0
 }
 
@@ -838,7 +838,7 @@ function get_status_of_daemon() {
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 3 "Start"
+    wd_logger 1 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
         wd_logger -1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
         return 2
@@ -1071,15 +1071,14 @@ function update_ini_file_section_variable() {
     wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
 
     # Check if section exists
-    local section_regex="^\s*\[.*${section_esc}\]"
-    if ! grep -iq "${section_regex}" "$file"; then
+    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
         # Add section if it doesn't exist
-        wd_logger 1 "ERROR: regex ${section_regex} of expected section [$section] doesn't exist in '$file'"
+        wd_logger 1 "ERROR: expected section [$section] doesn't exist in '$file'"
         return 4
     fi
 
     # Find section start and end lines
-    local section_start_line_number=$(grep -n "${section_regex}" "$file" | cut -d: -f1 | head -n1)
+    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
     local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
 
     # If no next section is found, set section_end_line_number to end of file
@@ -1130,17 +1129,17 @@ function update_ini_file_section_variable() {
             return 1
         else
             rm "${temp_file}"
-            wd_logger 2 "Existing $variable_esc in section $section_regex already has the value $new_value, so nothing to do"
+            wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
             return 0
         fi
     else
         # The variable isn't defined in the section, so insert it into the section
          if [[ "$new_value" == "#" ]]; then
-            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_regex, so there is no line to remark out with new_value='$new_value'"
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
             return 0
         else
             local temp_file="/tmp/${file##*/}"
-            wd_logger 1 "variable '$variable_esc' was not in section [$section_regex] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
             sed "${section_start_line_number}a\\$variable=$new_value" "${file}" > ${temp_file}
             sudo mv ${temp_file} ${file}         ### The /etc/systemd/system/ dirctory is owned by root
             rc=$? ; if (( rc )); then
