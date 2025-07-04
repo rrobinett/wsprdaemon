@@ -351,7 +351,7 @@ function systemctl_is_setup() {
          return 0
      fi
      wd_logger 1 "The WD service was configured but not enabled, so enable it"
-     if sudo systemctl enabled wsprdaemon.service ; then
+     if sudo systemctl enable wsprdaemon.service ; then
          wd_logger 1 "The WD service has been enabled"
          return 0
      fi
@@ -393,7 +393,7 @@ function setup_systemctl_daemon() {
             wd_logger 1 "This server already has a correctly configured ${SYSTEMCTL_UNIT_PATH} file. So leaving the configuration alone."
             if ! sudo systemctl is-enabled wsprdaemon.service ; then
                 wd_logger 1 "The WD service was configured but not enabled, so enabled it"
-                if sudo systemctl enabled wsprdaemon.service ; then
+                if sudo systemctl enable wsprdaemon.service ; then
                     wd_logger 1 "The WD service has been enabled"
                     return 0
                 fi
@@ -472,14 +472,12 @@ function start_systemctl_daemon() {
 
     local rc
     sudo systemctl is-enabled wsprdaemon.service >& /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "wsprdaemon.service is not enabled, so enabled it"
         sudo systemctl enable wsprdaemon.service
     fi
     sudo systemctl start wsprdaemon.service >& /dev/null
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         wd_logger 1 "wsprdaemon.service is already running, so nothing to do"
     else
         wd_logger 1 "wsprdaemon.service is not running, so start the watchdog daemon"
