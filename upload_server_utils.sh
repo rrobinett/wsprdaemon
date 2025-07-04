@@ -1,6 +1,25 @@
 #!/bin/bash
 
-declare UPLOAD_FTP_PATH=/home/noisegraphs/ftp/upload                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
+if [[ ${HOSTNAME} == "WD0" ]]; then
+    declare UPLOAD_FTP_PATH="/home/noisegraphs/ftp/upload"                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
+    if ! [[ -d ${UPLOAD_FTP_PATH} ]]; then
+        wd_logger 1 "ERROR: can't find the needed direcctory '${UPLOAD_FTP_PATH}' on server WD0"
+        echo ${force_abort}
+    fi
+else
+    declare UPLOAD_FTP_PATH="/srv/wd_data/wd0-tbz-files"
+    if [[ -d ${UPLOAD_FTP_PATH} ]]; then
+        wd_logger 2 "Found expected '${UPLOAD_FTP_PATH}'"
+    else
+        sudo mkdir -p  ${UPLOAD_FTP_PATH}
+        sudo chmod 777 ${UPLOAD_FTP_PATH}
+        if (( $? )); then
+            wd_logger 1 "ERROR: 'sudo mkdir -p  ${UPLOAD_FTP_PATH}' failed"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Created the needed direcctory '${UPLOAD_FTP_PATH}'"
+    fi
+fi
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
 ### The extended spot lines created by WD 2.x have these 32 fields:
@@ -13,127 +32,68 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
 declare MAX_RM_ARGS=5000     ### Limit of the number of files in the 'rm ...' cmd line
+declare TBZ_SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads
+declare TBZ_PROCESSED_ARCHIVE_FILE="${TBZ_SERVER_ROOT_DIR}/tbz_processed_list.txt"
+declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its size
+
+declare TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $2}')
+declare TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE=$(( (TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
 
 ### This daemon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
 function tbz_service_daemon() 
 {
-    wd_logger 1 "Starting in $PWD, but will run in ${UPLOADS_TMP_ROOT_DIR}"
-
     local tbz_service_daemon_root_dir=$1  ### The tbz files are found in permanent storage under ~/wsprdaemon/uploads.d/..., but this daemon does all its work in a /tmp/wsprdaemon/... directory
+    local rc
 
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
-    mkdir -p ${UPLOADS_TMP_ROOT_DIR}
-    cd ${UPLOADS_TMP_ROOT_DIR}
+    wd_logger 1 "Starting in $PWD.  Searching ${UPLOAD_FTP_PATH} for new tbz files. Untaring them in ${UPLOADS_TMP_ROOT_DIR}"
 
-    ### wd_logger will write to $PWD in UPLOADS_TMP_ROOT_DIR.  We want the log to be kept on a permanent file system, so create a symlink to a log file over there
-    if [[ ! -L tbz_service_daemon.log ]]; then
-        ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log       ### Logging for this daemon is in permanent storage
-        wd_logger 1 "Created symlink 'ln -s ${tbz_service_daemon_root_dir}/tbz_service_daemon.log tbz_service_daemon.log'"
-    fi
-
-    shopt -s nullglob
-    
     while true; do
-        wd_logger 2 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
-        local -a tbz_file_list
-        while tbz_file_list=( ${UPLOAD_FTP_PATH}/*.tbz) && [[ ${#tbz_file_list[@]} -eq 0 ]]; do
-            wd_logger 2 "Found no files, so sleep and try again"
-            sleep 1
+        wd_logger 1 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
+        local tbz_file_list=()
+        while tbz_file_list=( $( find ${UPLOAD_FTP_PATH} -maxdepth 1 -type f -name '*.tbz' ) ) && [[ ${#tbz_file_list[@]} -eq 0 ]]; do
+            wd_logger 2 "Found no tbz files in '${UPLOAD_FTP_PATH}', so sleep and try again"
+            sleep 2
         done
+        wd_logger 1 "Found ${#tbz_file_list[@]} tbz files in '${UPLOAD_FTP_PATH}'"
 
-        ### Untar one .tbz file at a time, throwing away bad and old files, until we run out of .tbz files or we fill up the /tmp/wsprdaemon file system.
-        rm -rf wsprdaemon.d wsprnet.d
-        local file_system_size=$(df . | awk '/^tmpfs/{print $2}')
-        local file_system_max_usage=$(( (file_system_size * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
-        wd_logger 2 "Found ${#tbz_file_list[@]} .tbz files.  The $PWD file system has ${file_system_size} kByte capacity, so use no more than ${file_system_max_usage} KB of it for temp spot and noise files"
-
-        local valid_tbz_list=() 
-        local tbz_file 
-        for tbz_file in ${tbz_file_list[@]}; do
-            wd_logger 3 "In $PWD: Running 'tar xf ${tbz_file}'"
-            if tar xf ${tbz_file} &> /dev/null ; then
-                wd_logger 2 "Found a valid tar file: ${tbz_file}"
-                valid_tbz_list+=(${tbz_file})
-                local file_system_usage=$(df . | awk '/^tmpfs/{print $3}')
-                if [[ ${file_system_usage} -gt ${file_system_max_usage} ]]; then
-                    wd_logger 1 "Filled up /tmp/wsprdaemon after extracting from ${#valid_tbz_list[@]} tbz files, so proceed to processing the spot and noise files which were extracted"
-                    break
-                fi
-            else
-                wd_logger 2 "Found invalid tar file ${tbz_file}"
-                local file_mod_epoch=0
-                file_mod_epoch=$( $GET_FILE_MOD_TIME_CMD ${tbz_file})
-                local current_epoch=$( printf "%(%s)T" -1 )         ### faster than "date +"%s"
-                local file_age=$(( ${current_epoch}  - ${file_mod_epoch} ))
-                if [[ ${file_age} -gt ${MAX_TBZ_AGE_SECS-600} ]] ; then
-                    if [[ ! ${tbz_file} =~ K7BIZ ]]; then   ### K7BIZ is running a corrupt config, so don't print that his .tbz files are corrupt
-                        wd_logger 1 "Deleting invalid file ${tbz_file} which is ${file_age} seconds old"
-                    fi
-                    sudo rm ${tbz_file}
-                    local ret_code=$?
-                    if [[ ${ret_code} -ne 0 ]]; then
-                        wd_logger 1 "ERROR: when deleting invalid file ${tbz_file} which is ${file_age} seconds old, 'rm ${tbz_file}' => ${ret_code}"
-                    fi
-                fi
-            fi
-        done
-        if [[ ${#valid_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 2 "Found no valid tar files among the ${#tbz_file_list[@]} raw tar files, so nothing to do"
-            sleep 1
-            continue
-        fi
-        ### Flush valid tbz files which we have previously processed
-        declare TBZ_PROCESSED_ARCHIVE_FILE="tbz_processed_list.txt"
-        declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its size
-        touch ${TBZ_PROCESSED_ARCHIVE_FILE}
-        local previously_processed_tbz_list=()
-        local new_tbz_list=()
+       [[ -d ${UPLOADS_TMP_ROOT_DIR} ]] && rm -rf ${UPLOADS_TMP_ROOT_DIR}
+        mkdir -p ${UPLOADS_TMP_ROOT_DIR}
+ 
         local tbz_file
-        for tbz_file in ${valid_tbz_list[@]} ; do
-            if grep ${tbz_file} ${TBZ_PROCESSED_ARCHIVE_FILE} > /dev/null ; then
-                wd_logger 1 "Flushing '${tbz_file}' which has been previously processed"
-                wd_rm ${tbz_file}
-                previously_processed_tbz_list+=( ${tbz_file} )
+        for tbz_file in ${tbz_file_list[@]} ; do
+            local tbz_file_base_name="${tbz_file##*/}"
+            [[ ! -f ${TBZ_PROCESSED_ARCHIVE_FILE} ]] && touch ${TBZ_PROCESSED_ARCHIVE_FILE}
+            if grep -q ${tbz_file_base_name} ${TBZ_PROCESSED_ARCHIVE_FILE} ; then
+                wd_logger 1 "Skipping new '${tbz_file}' which has been previously processed"
             else
-                new_tbz_list+=( ${tbz_file} )
+                wd_logger 1 "Extracting spot and noise files to '${UPLOADS_TMP_ROOT_DIR}' by running 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}'"
+                tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR} &> /dev/null
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}' => ${rc}, so flush it"
+                else
+                    wd_logger 1 "Extracted spot and noise files from '${tbz_file}'"
+                    echo "${tbz_file_base_name}" >> ${TBZ_PROCESSED_ARCHIVE_FILE}
+                fi
+            fi
+            wd_rm ${tbz_file}
+            local file_system_usage=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $3}')
+            if (( file_system_usage >  TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE )); then
+                wd_logger 1 "The ${UPLOADS_TMP_ROOT_DIR} file system has been filled after extracting from ${#valid_tbz_list[@]} tbz files, so proceed to processing the spot and noise files which were extracted"
+                break
             fi
         done
-        wd_logger 1 "In checking for previously processed files: valid_tbz_list has ${#valid_tbz_list[@]} files, of which we flushed the ${#previously_processed_tbz_list[@]} files which have been previously processed."
-        if [[ ${#new_tbz_list[@]} -eq 0 ]]; then
-            wd_logger 1 "After flushing there are no new tbz files, so there are no new tbz files to process\n"
-            sleep 1
-            continue
-        fi
-        valid_tbz_list=( ${new_tbz_list[@]} )
-        echo "${new_tbz_list[@]}" >> ${TBZ_PROCESSED_ARCHIVE_FILE}
         truncate_file ${TBZ_PROCESSED_ARCHIVE_FILE} ${MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE}
+        wd_logger 1 "Done processing tbz files"
 
-        local valid_tbz_names_list=( ${valid_tbz_list[@]##*/} )
-        local valid_reporter_names_list=( $( sort -u <<< "${valid_tbz_names_list[@]}") )
-        wd_logger 1 "Extracted spot and noise files from the ${#valid_tbz_names_list[@]} valid tar files in the ftp directory which came from ${#valid_reporter_names_list[@]} different reporters: '${valid_reporter_names_list[*]}'"
+        [[ ${HOSTNAME} == "WD0" ]] && queue_files_for_mirroring ${valid_tbz_list[@]}
 
-        queue_files_for_mirroring ${valid_tbz_list[@]}
+        record_spot_files       ${UPLOADS_TMP_ROOT_DIR}
+        record_noise_files      ${UPLOADS_TMP_ROOT_DIR}
 
-        ### Remove frequently found zero length spot files which are used by the decoding daemon client to signal the posting daemon that decoding has been completed when no spots are decodedgrep 
-        flush_empty_spot_files
-
-        record_spot_files
-     
-        record_noise_files
-
-        wd_logger 1 "Deleting the ${#valid_tbz_list[@]} valid tar files"
-        local tbz_file
-        for tbz_file in ${valid_tbz_list[@]} ; do
-            sudo rm ${tbz_file}              ### the tbz files are owned by the user 'noisegraphs' and we can't 'sudo wd_rm...', so 
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: while flushing ${tbz_file} recorded to TS, 'rm ...' => ${ret_code}"
-            fi
-        done
-        wd_logger 1 "Finished deleting the tar files\n"
-        sleep 1
+       sleep 1
     done
 }
 
@@ -142,9 +102,9 @@ function get_status_tbz_service_daemon()
     get_status_of_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
+        wd_logger 2 "The tbz_service_daemon is running in '${TBZ_SERVER_ROOT_DIR}'"
     else
-        wd_logger -1 "The tbz_service_daemon is not running in '${TBZ_SERVER_ROOT_DIR}'"
+        wd_logger 2 "The tbz_service_daemon is not running in '${TBZ_SERVER_ROOT_DIR}'"
     fi
 }
 
@@ -153,77 +113,88 @@ function kill_tbz_service_daemon()
     kill_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the tbz_service_daemon running in '${TBZ_SERVER_ROOT_DIR}'"
+        wd_logger 1 "Killed the tbz_service_daemon running in '${TBZ_SERVER_ROOT_DIR}'"
     else
-        wd_logger -1 "Failed to kill the tbz_service_daemon in '${TBZ_SERVER_ROOT_DIR}'"
+        wd_logger 1 "Failed to kill the tbz_service_daemon in '${TBZ_SERVER_ROOT_DIR}'"
     fi
 }
 
+### Given the file path to the root of a directory tree populated with spot files uploaded by WD clients,
+### flush all the zero sized spot files which clients genrate when no spots were found in a band+cycle
 function flush_empty_spot_files()
 {
+    local spot_flles_root_path=$1
+    local ret_code
+
     local spot_file_list=()
-    while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
+    while [[ -d ${spot_flles_root_path} ]] && spot_file_list=( $(find ${spot_flles_root_path} -name '*_spots.txt' -size 0 ) ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do     ### Remove in batches of 10000 files.
         wd_logger 1 "Flushing ${#spot_file_list[@]} empty spot files"
         if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
             wd_logger 1 "${#spot_file_list[@]} empty spot files are too many to 'rm ..' in one call, so 'rm' the first ${MAX_RM_ARGS} spot files"
             spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
         fi
         wd_rm ${spot_file_list[@]}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
+        ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: while flushing zero length files, 'rm ...' => ${ret_code}"
-            exit
         fi
     done
 }
+
+### Give the file path to the root of a directory tree populated with spot files uploaded by WD clients,
+### format a single CSV file with those spot files and call the python program which recrods those lines in the Clickhouse (CH) database
+#
+declare SPOTS_CSV_FILE_PATH=" ${UPLOADS_TMP_ROOT_DIR}/ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to CH
 function record_spot_files()
 {
-    wd_logger 1 "Starting"
+    local spot_flles_root_path=$1
+    local ret_code
+
+    wd_logger 1 "Flushing empty spot files found under ${spot_flles_root_path}"
+    flush_empty_spot_files ${spot_flles_root_path}
+
     ### Process non-empty spot files
-    while [[ -d wsprdaemon.d/spots.d ]] && spot_file_list=( $(find wsprdaemon.d/spots.d -name '*_spots.txt')  ) && [[ ${#spot_file_list[@]} -gt 0 ]]; do
-        if [[ ${#spot_file_list[@]} -gt ${MAX_RM_ARGS} ]]; then
+    local spot_file_list=()
+    while [[ -d ${spot_flles_root_path} ]] && spot_file_list=( $(find ${spot_flles_root_path} -name '*_spots.txt')  ) && (( ${#spot_file_list[@]} > 0 )); do
+        wd_logger 1 "Found ${#spot_file_list[@]} spot files"
+        if (( ${#spot_file_list[@]} > MAX_RM_ARGS )); then
             wd_logger 1 "${#spot_file_list[@]} spot files are too many to process in one pass, so processing the first ${MAX_RM_ARGS} spot files"
             spot_file_list=(${spot_file_list[@]:0:${MAX_RM_ARGS}})
         fi
-        local ts_spots_csv_file=./ts_spots.csv    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to TS 
-        format_spot_lines ${ts_spots_csv_file}    ### format_spot_lines inherits the values in ${spot_file_list[@]}, it would probably be cleaner to pass them as args
-        # mv ${ts_spots_csv_file} testing.csv
-        # > ${ts_spots_csv_file}
-       if [[ ! -s ${ts_spots_csv_file} ]]; then
-            wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files which were extracted from ${#valid_tbz_list[@]} tar files, so there are not spots to record in the DB"
+        format_spot_lines ${SPOTS_CSV_FILE_PATH} ${spot_file_list[@]}
+        local spot_lines_count=$( wc -l <  ${SPOTS_CSV_FILE_PATH} )
+        if (( spot_lines_count == 0 )); then
+            wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files"
         else
+            wd_logger 1 "Found ${spot_lines_count} spots in the ${#spot_file_list[@]} spot files"
             declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
             declare SPLIT_CSV_PREFIX="split_spots_"
             rm -f ${SPLIT_CSV_PREFIX}*
-            split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}
-            local ret_code=$?
-            if [[ ${ret_code} -ne 0 ]]; then
-                wd_logger 1 "ERROR: couldn't split ${ts_spots_csv_file}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${ts_spots_csv_file} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
-                exit
+            split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${SPOTS_CSV_FILE_PATH} ${SPLIT_CSV_PREFIX}
+            ret_code=$? ; if (( ret_code )); then
+                wd_logger 1 "ERROR: couldn't split ${SPOTS_CSV_FILE_PATH}.  'split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${SPOTS_CSV_FILE_PATH} ${SPLIT_CSV_PREFIX}' => ${ret_code}"
+                echo ${force_abort}
             fi
             local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-            wd_logger 2 "Split ${ts_spots_csv_file} into ${#split_file_list[@]} splitXXX.csv files"
+            wd_logger 2 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 2 "Recording spots ${split_csv_file}"
+                wd_logger 1 "Recording spots ${split_csv_file}"
                 python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD} >& python.out
-                local ret_code=$?
-                if [[ ${ret_code} -ne 0 ]]; then
+                ret_code=$? ; if (( ret_code )); then
                     wd_logger 1 "ERROR: ' ${TS_BATCH_UPLOAD_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table:\n$(< python.out)\n$(<${split_csv_file})"
                 else
-                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
+                    wd_logger 1 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
                 fi
-                #wd_rm ${split_csv_file}
             done
-            wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
+            wd_logger 1 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
-        wd_logger 1 "Finished recording ${ts_spots_csv_file}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-        wd_rm ${ts_spots_csv_file} ${spot_file_list[@]}
-        local ret_code=$?
-        if [[ ${ret_code} -ne 0 ]]; then
-            wd_logger 1 "ERROR: while flushing ${ts_spots_csv_file} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
+        wd_logger 1 "Finished recording ${SPOTS_CSV_FILE_PATH}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
+        wd_rm ${SPOTS_CSV_FILE_PATH} ${spot_file_list[@]}
+        ret_code=$? ; if (( ret_code )); then
+            wd_logger 1 "ERROR: while flushing ${SPOTS_CSV_FILE_PATH} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
         fi
     done
+    wd_logger 1 "Done"
 }
 
 ###  Format of the extended spot line delivered by WD clients:
@@ -247,26 +218,34 @@ function record_spot_files()
 declare WD_SPOTS_TO_TS_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wd_spots_to_ts.awk
 function format_spot_lines()
 {
-    local fixed_spot_lines_file=$1
+    local spots_csv_file_path=$1
+    local spot_files_list=( ${@:2} )
 
     if [[ ! -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ]]; then
         wd_logger 1 "ERROR: can't find awk program file '${WD_SPOTS_TO_TS_AWK_PROGRAM}'"
-        exit 1
+        echo ${force_abort}
     fi
-    awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${fixed_spot_lines_file}
-    local ret_code=$?
-    if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM}' => ${ret_code}"
+    if (( ${#spot_files_list[@]} == 0 )); then
+        wd_logger 1 "ERROR: no spot files were passed"
+        echo ${force_abort}
+    fi
+    local temp_spot_lines_file_path="${spots_csv_file_path}.tmp"
+    awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${temp_spot_lines_file_path}
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ...' => ${ret_code}"
         return 1
     fi
-    if grep ERROR ${fixed_spot_lines_file} > fixed_error_spots.csv ; then
-        grep -v ERROR ${fixed_spot_lines_file} > fixed_good_spots.csv
-        mv ${fixed_spot_lines_file} good_and_bad_spots.csv
-        cp fixed_good_spots.csv ${fixed_spot_lines_file}
-        wd_logger 1 "ERROR: found some invalid spots which are not being recorded:\n$(< fixed_error_spots.csv)"
+    grep -v "ERROR" ${temp_spot_lines_file_path} > ${spots_csv_file_path}
+    if [[ ! -s  ${spots_csv_file_path} ]]; then
+        wd_logger 1 "Found no spot lines in ${temp_spot_lines_file_path}"
+    fi
+    local error_lines_file_path="${spots_csv_file_path}.errors"
+    grep "ERROR" ${temp_spot_lines_file_path} > ${error_lines_file_path} 
+    if [[ -s ${error_lines_file_path} ]] ; then
+        wd_logger 1 "ERROR: stored $( wd -l < ${error_lines_file_path}) invalid spots in ${error_lines_file_path}:\n$(< ${error_lines_file_path})"
     fi
 
-   wd_logger 1 "Formatted WD spot lines into TS spot lines of ${fixed_spot_lines_file}:\n$(head -n 4 ${fixed_spot_lines_file})"
+    wd_logger 1 "Formatted $(wc -l <  ${spots_csv_file_path}) WD spots into ${spots_csv_file_path} (here are the first four lines):\n$(head -n 4 ${spots_csv_file_path})"
     return 0
 }
 
@@ -402,7 +381,7 @@ function kill_upload_to_mirror_site_daemons()
     wd_logger 2 "Start"
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger -2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        wd_logger 2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
  
@@ -417,9 +396,9 @@ function kill_upload_to_mirror_site_daemons()
         local ret_code=$?
         ### Normally upload_to_mirror_site_daemon() will print out its actions, so there is no reason to print out its return code
         if [[ ${ret_code} -eq 0 ]]; then
-            wd_logger -1 "Killed a upload_to_mirror_site_daemon running in '${mirror_daemon_root_dir}'"
+            wd_logger 1 "Killed a upload_to_mirror_site_daemon running in '${mirror_daemon_root_dir}'"
         else
-            wd_logger -1 "The 'upload_to_mirror_site_daemon' was not running in '${mirror_daemon_root_dir}'"
+            wd_logger 1 "The 'upload_to_mirror_site_daemon' was not running in '${mirror_daemon_root_dir}'"
         fi
     done
     wd_logger 2 "Done"
@@ -461,9 +440,9 @@ function kill_mirror_watchdog_daemon()
     kill_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the mirror_watchdog_daemon running in '${mirror_watchdog_daemon_home_dir}'"
+        wd_logger 1 "Killed the mirror_watchdog_daemon running in '${mirror_watchdog_daemon_home_dir}'"
     else
-        wd_logger -1 "The 'mirror_watchdog_daemon' was not running in '${mirror_watchdog_daemon_home_dir}'"
+        wd_logger 1 "The 'mirror_watchdog_daemon' was not running in '${mirror_watchdog_daemon_home_dir}'"
     fi
 
     ### If the mirror_watchdog_daemon() is running, then its SIG_TERM handler will have killed the individual mirror_daemons.
@@ -480,13 +459,13 @@ function get_status_mirror_watchdog_daemon()
     get_status_of_daemon    mirror_watchdog_daemon ${mirror_watchdog_daemon_home_dir}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The mirror_watchdog_daemon is running in '${mirror_watchdog_daemon_home_dir}'"
+        wd_logger 1 "The mirror_watchdog_daemon is running in '${mirror_watchdog_daemon_home_dir}'"
     else
-        wd_logger -1 "The mirror_watchdog_daemon is not running in '${mirror_watchdog_daemon_home_dir}'"
+        wd_logger 1 "The mirror_watchdog_daemon is not running in '${mirror_watchdog_daemon_home_dir}'"
     fi
 
     if [[ ${#MIRROR_DESTINATIONS_LIST[@]} -eq 0 ]]; then
-        wd_logger -2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
+        wd_logger 2 "There are no mirror destinations declared in \${MIRROR_DESTINATIONS_LIST[@]}, so there are no mirror daemons running"
         return 0
     fi
     local mirror_spec
@@ -499,9 +478,9 @@ function get_status_mirror_watchdog_daemon()
         get_status_of_daemon  upload_to_mirror_site_daemon ${mirror_daemon_root_dir}
         local ret_code=$?
         if [[ ${ret_code} -eq 0 ]]; then
-            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is running in ${mirror_daemon_root_dir}"
+            wd_logger 1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is running in ${mirror_daemon_root_dir}"
         else
-            wd_logger -1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is not running in ${mirror_daemon_root_dir}"
+            wd_logger 1 "The upload_to_mirror_site_daemon to site '${mirror_daemon_id}' is not running in ${mirror_daemon_root_dir}"
         fi
     done
 }
@@ -599,6 +578,7 @@ declare -r UPLOAD_SERVERS_POLL_RATE=10       ### Seconds for the daemons to wait
 
 function upload_services_watchdog_daemon() 
 {
+    local ret_code=$?
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
     wd_logger 1 "Starting"
@@ -610,23 +590,24 @@ function upload_services_watchdog_daemon()
             local daemon_function_name=${daemon_info_list[0]}
             local daemon_home_dir=${daemon_info_list[3]}
             
-            wd_logger 1 "Check and if needed spawn: '${daemon_function_name} ${daemon_home_dir}'"
+            wd_logger 1 "Check, and if needed, spawn: '${daemon_function_name} ${daemon_home_dir}'"
             spawn_daemon ${daemon_function_name} ${daemon_home_dir}
-            local ret_code=$?
-            if [[ ${ret_code} -eq 0 ]]; then
-                wd_logger 1 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
-            else
+            ret_code=$?; if (( ret_code )); then
                 wd_logger 1 "ERROR: '${daemon_function_name} ${daemon_home_dir}' => ${ret_code}"
+            else
+                wd_logger 1 "Spawned '${daemon_function_name} ${daemon_home_dir}'"
             fi
         done
-
         wd_sleep 600 # ${UPLOAD_SERVERS_POLL_RATE}
     done
 }
 
+### Called by 'wd -u a'
 function spawn_upload_services_watchdog_daemon() 
 {
-     spawn_daemon            upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    wd_logger 1 "Start"
+    spawn_daemon            upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
+    wd_logger 1 "Done"
 }
 
 function kill_upload_services_watchdog_daemon()
@@ -636,9 +617,9 @@ function kill_upload_services_watchdog_daemon()
     kill_daemon  upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the daemon 'upload_services_watchdog_daemon' running in '${SERVER_ROOT_DIR}'"
+        wd_logger 1 "Killed the daemon 'upload_services_watchdog_daemon' running in '${SERVER_ROOT_DIR}'"
     else
-        wd_logger -1 "The 'upload_services_watchdog_daemon' was not running in '${SERVER_ROOT_DIR}'"
+        wd_logger 1 "The 'upload_services_watchdog_daemon' was not running in '${SERVER_ROOT_DIR}'"
     fi
 
     ### Kill the services it spawned
@@ -668,9 +649,9 @@ function get_status_upload_services()
     get_status_of_daemon   upload_services_watchdog_daemon ${SERVER_ROOT_DIR}
     local ret_code=$?
     if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -2 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
+        wd_logger 2 "The upload_services_watchdog_daemon is running in '${SERVER_ROOT_DIR}'"
     else
-        wd_logger -2 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
+        wd_logger 2 "The upload_services_watchdog_daemon is not running in '${SERVER_ROOT_DIR}'"
     fi
 
     for daemon_info in "${UPLOAD_DAEMON_LIST[@]}"; do
@@ -686,24 +667,23 @@ function get_status_upload_services()
 }
 
 declare SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}
-declare TBZ_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/uploads.d
-declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper.d
-declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror.d
-declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs.d
+declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper
+declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror
+declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs
 
 declare -r UPLOAD_DAEMON_LIST=(
    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
-   "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
-   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
-   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
+#   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+#   "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
+#   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
+#   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
     )
 
 ### function which handles 'wd -u ...'
 function upload_server_cmd() {
     local action=$1
     
-    wd_logger 3 "Process cmd '${action}'"
+    wd_logger 1 "Process cmd '${action}'"
     case ${action} in
         a)
             spawn_upload_services_watchdog_daemon
