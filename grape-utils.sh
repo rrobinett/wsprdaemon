@@ -27,6 +27,7 @@ declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
 declare -r PSWS_URL="pswsnetwork.caps.ua.edu"
+declare -r PSWS_NEW_URL="pswsnetwork.eng.ua.edu"
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
 declare -r          GRAPE_ERROR_RETURN_BASE=240
@@ -58,6 +59,7 @@ function grape_return_code_is_error() {
 #set -euo pipefail
 
 declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
+declare -r PSWS_SERVER_NEW_URL='pswsnetwork.eng.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
@@ -71,9 +73,20 @@ function grape_upload_all_local_wavs() {
         wd_logger 2 "Checking date_dir ${date_dir}"
         local site_dir_list=( $( find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
+        local search_txt="NOT_DEFINED"
         for site_dir in ${site_dir_list[@]} ; do
-            wd_logger 2 "Checking site_dir ${site_dir}"
-            upload_24hour_wavs_to_grape_drf_server ${site_dir}
+            wd_logger 1 "Checking site_dir ${site_dir} for NOT DEFINED"
+            if [[ "$site_dir" == "*$search_txt*" ]]; then
+                wd_logger 1 "Skipping ${site_dir} with NOT_DEFINED"
+                new_dir=${site_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}
+                ### what we need to do:
+                # test for new_dir existing.  If not, rename site_dir to new_dir
+                # OTHERWISE, for each folder in site_dir, copy its contents to the same dir in new_dir
+                wd_logger 1 "would create ${new_dir}"
+            else
+                wd_logger 2 "Checking site_dir ${site_dir}"
+                upload_24hour_wavs_to_grape_drf_server ${site_dir}
+            fi
         done
     done
     wd_logger 2 "Completed"
@@ -213,13 +226,6 @@ function upload_24hour_wavs_to_grape_drf_server() {
             return ${rc}
         fi
 
-        ### Ensure that sftp can auto-login to this server's usesr account on the PSWS server
-        grape_upload_public_key
-        rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
-            return ${rc}
-        fi
- 
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
         sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
@@ -233,12 +239,12 @@ function upload_24hour_wavs_to_grape_drf_server() {
     wd_logger 1  "Upload was successful, so create '${reporter_upload_complete_file_name}'"
 }
 
-function grape_test_ssh_auto_login() {
+function grape_test_auto_login() {
     local station_id=$1
     local rc
 
-    wd_logger 2 "Starting by trying to execute a 'ssh..."
-    timeout ${PSWS_SSH_TIMEOUT-5} ssh -o ConnectTimeout=3 -F /dev/null -l ${station_id} -o BatchMode=yes -o ConnectTimeout=${GRAPE_PSWS_CONNECTION_TIMEOUT-10} ${PSWS_URL} true # &>/dev/null
+    wd_logger 2 "Starting by trying to execute a 'sftp..."
+    timeout ${PSWS_SSH_TIMEOUT-5} sftp -b /dev/null ${station_id}@${PSWS_URL} &>/dev/null
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'ssh ...' => $rc  So can't autologin to account '${station_id}'"
     else
@@ -259,14 +265,10 @@ function grape_upload_public_key() {
     fi
 
     local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
-    grape_test_ssh_auto_login $station_id
+    grape_test_auto_login $station_id
     rc=$? ; if (( rc == 0 )); then
         wd_logger 2 "Autologin for site ${station_id} is already setup"
         return 0
-    fi
-    if (( rc == 255 )); then
-        wd_logger 1 "ERROR: grape_test_ssh_auto_login() => $rc. This was probably a timeout, so can't setup PSWS auotlogin"
-        return $rc
     fi
     wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
 
@@ -594,7 +596,7 @@ function grape_create_24_hour_wavs() {
      return ${new_wav_count}  
 }
 
-### '-c' Searches all the date/... direectories (execpt for today), repairs if necessary by adding silence files, then creates a 24 hour 10 hz wav file.
+### '-c' Searches all the date/... directories (except for today), repairs if necessary by adding silence files, then creates a 24 hour 10 hz wav file.
 ###  Returns:  number of newly created wav files, or -1 if there was a failure
 function grape_create_all_24_hour_wavs(){
     local current_date
