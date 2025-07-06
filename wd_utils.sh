@@ -769,7 +769,7 @@ function spawn_daemon()
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 1 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
+    wd_logger 2 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
         if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
