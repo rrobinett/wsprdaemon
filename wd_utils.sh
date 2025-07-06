@@ -836,28 +836,28 @@ function get_status_of_daemon() {
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 1 "Start"
+    wd_logger 2 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger -1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
+        wd_logger 1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
         if [[ -z "${daemon_pid}" ]]; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
             return 3
         fi
         if ! is_uint "${daemon_pid}"; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
             return 4
         fi
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger 1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
