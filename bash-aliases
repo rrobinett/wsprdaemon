@@ -74,16 +74,42 @@ function wd-ka9q-controls() {
     local action="${1-is-active}"
 
     local radio_config_dir_path="/etc/radio"
-    local radiod_config_dir_path=$(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d')
+    local radiod_config_dir_path_list=( $(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d') )
+
+    if (( ${#radiod_config_dir_path_list[@]} == 0 )); then
+        echo "ERROR: can't find any '${radio_config_dir_path}/radiod@*.conf.d/ directories'"
+        return 1
+    fi
+    if (( ${#radiod_config_dir_path_list[@]} > 1 )); then
+        local radiod_dir
+        for radiod_dir in  ${radiod_config_dir_path_list[@]}; do
+            set +x
+            if ps aux | grep -q ${radiod_dir##*/} ; then
+               echo "Found running ${radiod_dir##*/}"
+               radiod_config_dir_path_list=( "${radiod_dir}" )
+               break
+            fi
+        done
+        if (( ${#radiod_config_dir_path_list[@]} != 1 )); then
+            echo "ERROR: found ${#radiod_config_dir_path_list[@]} '${radio_config_dir_path}/radiod@*.conf.d/ directories': ${radiod_config_dir_path_list[*]}"
+        fi
+    fi
+
+    set +x
+    radiod_config_dir_path="${radiod_config_dir_path_list[0]}"
+    local radiod_start_arg
 
     if [[ -d ${radiod_config_dir_path} ]]; then
        radiod_start_arg=${radiod_config_dir_path##*/}
-       radiod_start_arg=${radio_start_arg%.conf.d}
+       radiod_start_arg=${radiod_start_arg%.conf.d}
+       set +x
        (( ${verbosity-0} )) && echo "radiod_start_arg=${radiod_start_arg}"
    else
+       set +x
        echo "ERROR: Can't find a new-style radiod@...conf.d directory"
        return 1
    fi
+   
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
