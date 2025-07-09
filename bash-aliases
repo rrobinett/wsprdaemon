@@ -551,7 +551,6 @@ function wd-killall() {
     source ${WD_CONF_PATH}
     #
     ### These services have been depricaded, so stop and disable them
-    local needs_daemon_reload="no"
     local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
@@ -563,12 +562,9 @@ function wd-killall() {
         if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
             echo "Disabling the legacy service ${full_legacy_service}"
             sudo systemctl disable ${full_legacy_service}
-            needs_daemon_reload="yes"
+            sudo systemctl daemon-reload
         fi
     done
-    if [[ ${needs_daemon_reload} == "yes" ]]; then
-        sudo systemctl daemon-reload
-    fi
  
     if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
