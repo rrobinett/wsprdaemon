@@ -1756,6 +1756,22 @@ function ka9q-services-setup() {
 ###
 function ka9q-setup() {    
     wd_logger 2 "Starting in ${PWD}"
+    #
+    ### These services have been depricaded by KA9A, so even if no KA9Q receviers are currently defined stop and disable them
+    local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
+    local legacy_service
+    for legacy_service in ${legacy_ft_services_list[@]} ; do
+        local full_legacy_service="${legacy_service}.service"
+        if sudo systemctl is-active --quiet ${full_legacy_service} ; then
+            wd_logger 1 "Stopping the active legacy service ${full_legacy_service}"
+            sudo systemctl stop ${full_legacy_service}
+        fi
+        if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
+            wd_logger 1 "Disabling the legacy service ${full_legacy_service}"
+            sudo systemctl disable ${full_legacy_service}
+            sudo systemctl daemon-reload
+        fi
+    done
 
     local active_receivers
     get_list_of_active_real_receivers "active_receivers"
