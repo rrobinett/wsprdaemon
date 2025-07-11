@@ -16,7 +16,7 @@ function record_wsprnet_spots_in_clickhouse() {
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file} => ${ret_code}"
     else
-        wd_logger 1 "Spot files were recorded by: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file}"
+        wd_logger 2 "Spot files were recorded by: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file}"
     fi
     return ${ret_code}
 }
@@ -73,7 +73,7 @@ function wpsrnet_get_spots() {
         ret_code=2
     fi
     local session_token="${session_name}=${sessid}"
-    wd_logger 1 "Got wsprnet session_token = '${session_token}'"
+    wd_logger 2 "Got wsprnet session_token = '${session_token}'"
  
     ### If we have previously querried wsprnet.org and saved its spots in our local Clickhouse wsrpnet.rx database, then ask wsprnet.org for spots after the wsprnet-assigned 64 bit id of that spot
     if (( WSPRNET_LAST_SPOTNUM == 0 )); then
@@ -94,7 +94,7 @@ function wpsrnet_get_spots() {
         WSPRNET_LAST_SPOTNUM=${last_spotnum}   ### Remember this spot id for the next query
     fi
 
-    wd_logger 1 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
+    wd_logger 2 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
     local start_seconds=${SECONDS}
     local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
     curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str} \
@@ -117,7 +117,7 @@ function wpsrnet_get_spots() {
                 ret_code=2
             else
                 local download_size=$( cat ${html_spot_file} | wc -c)
-                wd_logger 1 "curl downloaded ${download_size} bytes of spot info after ${curl_seconds} seconds"
+                wd_logger 1 "curl downloaded ${download_size} bytes of spot info in ${curl_seconds} seconds"
             fi
         fi
     fi
@@ -154,7 +154,7 @@ function wsprnet_html_to_csv() {
     local first_spot_array=(${sorted_lines_array[0]//,/ })
     local last_spot_array=(${sorted_lines_array[-1]//,/ })
     local scrape_seconds=$(( ${SECONDS} - ${scrape_start_seconds} ))
-    #wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots from %4d wspr cycles. First sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" "${#epochs_list[@]}")"
+
     wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots first sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" )"
 
     local spot_num_gap=$(( ${first_spot_array[0]} - ${WSPRNET_LAST_SPOTNUM} ))
@@ -237,7 +237,7 @@ function wsprnet_html_to_csv() {
         wd_logger 1 "ERROR: found ${#sorted_lines_array[@]} in our plaintext of the html file, but only ${csv_spotnum_count} is the csv version of it"
         return 1
     fi
-    wd_logger 1 "Created the csv file ${wsprnet_csv_spot_file} with ${csv_spotnum_count} spot lines"
+    wd_logger 2 "Created the csv file ${wsprnet_csv_spot_file} with ${csv_spotnum_count} spot lines"
     return 0
 }
 
@@ -289,7 +289,7 @@ function convert-wsprnet-csv-to-clickhouse-csv() {
     local clickhouse_csv_file_path=$2
     local ret_code
 
-    wd_logger 1 "process ${wsprnet_csv_file_path} to create ${clickhouse_csv_file_path}"
+    wd_logger 2 "process ${wsprnet_csv_file_path} to create ${clickhouse_csv_file_path}"
     if [[ ! -f ${wsprnet_csv_file_path} ]]; then
         wd_logger 1 "ERROR: no wsprnet_csv_file_path=${wsprnet_csv_file_path}"
         echo ${force_abort}
@@ -303,7 +303,7 @@ function convert-wsprnet-csv-to-clickhouse-csv() {
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR:  'python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} --input ${wsprnet_csv_file_path} --output ${clickhouse_csv_file_path}' => ${ret_code}"
     else
-        wd_logger 1 "python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} ${wsprnet_csv_file_path} ${clickhouse_csv_file_path} => ${ret_code}"
+        wd_logger 2 "python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} ${wsprnet_csv_file_path} ${clickhouse_csv_file_path} => ${ret_code}"
     fi
     return ${ret_code}
 }
@@ -312,7 +312,7 @@ function scrape_wsprnet() {
     local scrape_start_seconds=${SECONDS}
     local ret_code
 
-    wd_logger 1 "Starting in $PWD"
+    wd_logger 2 "Starting in $PWD"
     if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
         wd_logger 1 "Logging into wsprnet"
         wpsrnet_login
@@ -330,25 +330,25 @@ function scrape_wsprnet() {
         wd_logger 1 "ERROR: wpsrnet_get_spots() returned error => ${ret_code}."
         return ${ret_code}
     fi
-    wd_logger 1 "Got spots in html file  ${WSPRNET_HTML_SPOT_FILE}, translate into ${WSPRNET_CSV_SPOT_FILE}"
+    wd_logger 2 "Got spots in html file  ${WSPRNET_HTML_SPOT_FILE}, translate into ${WSPRNET_CSV_SPOT_FILE}"
     wsprnet_html_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'wsprnet_html_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
         return ${ret_code}
     fi
-    wd_logger 1 "Got csv ${WSPRNET_CSV_SPOT_FILE}, append azi information to each spot and store them in ${WSPRNET_CSV_SPOT_AZI_FILE}"
+    wd_logger 2 "Got csv ${WSPRNET_CSV_SPOT_FILE}, append azi information to each spot and store them in ${WSPRNET_CSV_SPOT_AZI_FILE}"
     convert-wsprnet-csv-to-clickhouse-csv     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'convert-wsprnet-csv-to-clickhouse-csv     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
         return ${ret_code}
     fi
-    wd_logger 1 "Created spots with azi file ready for Clickhouse: ${WSPRNET_CSV_SPOT_AZI_FILE}" 
+    wd_logger 2 "Created spots with azi file ready for Clickhouse: ${WSPRNET_CSV_SPOT_AZI_FILE}" 
 
     record_wsprnet_spots_in_clickhouse ${WSPRNET_CSV_SPOT_AZI_FILE}
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'record_wsprnet_spots_in_clickhouse ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
     else
-        wd_logger 1 "Recorded spots into the Clickhouse database"
+        wd_logger 2 "Recorded spots into the Clickhouse database"
     fi
     return  ${ret_code}
 }
