@@ -373,14 +373,14 @@ function kill_wsprnet_scrape_daemon()
 {
     local scraper_root_dir=$1
     local scraper_daemon_function_name="wsprnet_scrape_daemon"
+    local ret_code
 
     wd_logger 2 "Kill with: 'kill_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
     kill_daemon         ${scraper_daemon_function_name}  ${scraper_root_dir}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the ${scraper_daemon_function_name} running in '${scraper_root_dir}'"
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
     else
-        wd_logger -1 "The '${scraper_daemon_function_name}' was not running in '${scraper_root_dir}'"
+        wd_logger 1 "Killed the ${scraper_daemon_function_name} running in '${scraper_root_dir}'"
     fi
 }
 
@@ -388,14 +388,14 @@ function get_status_wsprnet_scrape_daemon()
 {
     local scraper_root_dir=$1
     local scraper_daemon_function_name="wsprnet_scrape_daemon"
+    local ret_code
 
     wd_logger 2 "Get status with: 'get_status_of_daemon ${scraper_daemon_function_name}  ${scraper_root_dir}'"
     get_status_of_daemon  ${scraper_daemon_function_name}  ${scraper_root_dir}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "The ${scraper_daemon_function_name} is not running in '${scraper_root_dir}'"
     else
-        wd_logger -1 "The ${scraper_daemon_function_name} is not running in '${scraper_root_dir}'"
+        wd_logger 2 "The ${scraper_daemon_function_name} is running in  '${scraper_root_dir}'"
     fi
     return ${ret_code}
 }
@@ -553,26 +553,28 @@ function wsprnet_gap_daemon()
     
 function kill_wsprnet_gap_daemon()
 {
+    local ret_code
+
     wd_logger 2 "Kill the wsprnet_gap_daemon by executing: 'kill_daemon wsprnet_gap_daemon ${SCRAPER_ROOT_DIR}'"
     ### Kill the watchdog
     kill_daemon  wsprnet_gap_daemon ${SCRAPER_ROOT_DIR}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "Killed the daemon 'wsprnet_gap_daemon' running in '${SCRAPER_ROOT_DIR}'"
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "The 'wsprnet_gap_daemon' was not running in '${SCRAPER_ROOT_DIR}'"
     else
-        wd_logger -1 "The 'wsprnet_gap_daemon' was not running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "Killed the daemon 'wsprnet_gap_daemon' running in '${SCRAPER_ROOT_DIR}'"
     fi
     return 0
 }
 
 function get_status_wsprnet_gap_daemon()
 {
+    local ret_code
+
     get_status_of_daemon   wsprnet_gap_daemon  ${SCRAPER_ROOT_DIR}
-    local ret_code=$?
-    if [[ ${ret_code} -eq 0 ]]; then
-        wd_logger -1 "The wsprnet_gap_daemon is running in '${SCRAPER_ROOT_DIR}'"
+    ret_code=$? ; if (( ret_code )); then
+        wd_logger 1 "The wsprnet_gap_daemon is not running in '${SCRAPER_ROOT_DIR}'"
     else
-        wd_logger -1 "The wsprnet_gap_daemon is not running in '${SCRAPER_ROOT_DIR}'"
+        wd_logger 1 "The wsprnet_gap_daemon is running in '${SCRAPER_ROOT_DIR}'"
     fi
     return 0
 }
