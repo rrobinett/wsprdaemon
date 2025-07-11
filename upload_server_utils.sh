@@ -143,7 +143,7 @@ function flush_empty_spot_files()
 ### Give the file path to the root of a directory tree populated with spot files uploaded by WD clients,
 ### format a single CSV file with those spot files and call the python program which recrods those lines in the Clickhouse (CH) database
 #
-declare SPOTS_CSV_FILE_PATH=" ${UPLOADS_TMP_ROOT_DIR}/ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to CH
+declare SPOTS_CSV_FILE_PATH="${UPLOADS_TMP_ROOT_DIR}/ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to CH
 function record_spot_files()
 {
     local spot_flles_root_path=$1
@@ -167,7 +167,7 @@ function record_spot_files()
         else
             wd_logger 1 "Found ${spot_lines_count} spots in the ${#spot_file_list[@]} spot files"
             declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
-            declare SPLIT_CSV_PREFIX="split_spots_"
+            declare SPLIT_CSV_PREFIX="${UPLOADS_TMP_ROOT_DIR}/split_spots_"
             rm -f ${SPLIT_CSV_PREFIX}*
             split --lines=${TS_MAX_INPUT_LINES} --numeric-suffixes --additional-suffix=.csv ${SPOTS_CSV_FILE_PATH} ${SPLIT_CSV_PREFIX}
             ret_code=$? ; if (( ret_code )); then
@@ -175,10 +175,10 @@ function record_spot_files()
                 echo ${force_abort}
             fi
             local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-            wd_logger 2 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
+            wd_logger 1 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 1 "Recording spots ${split_csv_file}"
+                wd_logger 1 "Recording spots in $(realpath ${split_csv_file})"
                 python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD} >& python.out
                 ret_code=$? ; if (( ret_code )); then
                     wd_logger 1 "ERROR: ' ${TS_BATCH_UPLOAD_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table:\n$(< python.out)\n$(<${split_csv_file})"
@@ -189,7 +189,7 @@ function record_spot_files()
             wd_logger 1 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
         wd_logger 1 "Finished recording ${SPOTS_CSV_FILE_PATH}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
-        wd_rm ${SPOTS_CSV_FILE_PATH} ${spot_file_list[@]}
+        wd_rm ${spot_file_list[@]}
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: while flushing ${SPOTS_CSV_FILE_PATH} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
         fi
@@ -673,7 +673,7 @@ declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs
 
 declare -r UPLOAD_DAEMON_LIST=(
    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-#   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+   "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
 #   "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
 #   "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
 #   "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR} "  ### Publish noise graph .png file
