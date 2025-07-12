@@ -39,6 +39,67 @@ declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its siz
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $2}')
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE=$(( (TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
 
+function setup_clickhouse_wsprdaemon_tables() 
+{
+    local rc
+
+     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = 'wsprdaemon'" | grep -q 1
+     rc=$? ; if (( rc )); then
+         wd_logger 1 "Creating the 'wsprdaemon' database"
+         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE wsprdaemon"
+         rc=$? ; if (( rc )); then
+             wd_logger 1 "Failed to create missing 'wsprdaemon' database"
+             echo ${force_abort}
+         fi
+          wd_logger 1 "Created the missing 'wsprdaemon' database"
+     fi
+     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
+CREATE TABLE IF NOT EXISTS wsprdaemon.spots
+(
+    spot_timestamp DateTime,
+    spot_sync_quality Float32,
+    spot_snr Float32,
+    spot_dt Float32,
+    spot_freq Float32,
+    spot_call String,
+    spot_grid String,
+    spot_pwr Int32,
+    spot_drift Int32,
+    spot_cycles Int32,
+    spot_jitter Float32,
+    spot_blocksize Int32,
+    spot_metric Float32,
+    spot_decodetype String,
+    spot_ipass Int32,
+    spot_nhardmin Int32,
+    spot_pkt_mode Int32,
+    wspr_cycle_rms_noise Float32,
+    wspr_cycle_fft_noise Float32,
+    band String,
+    real_receiver_grid String,
+    real_receiver_call_sign String,
+    km Int32,
+    rx_az Int32,
+    rx_lat Float64,
+    rx_lon Float64,
+    tx_az Int32,
+    tx_lat Float64,
+    tx_lon Float64,
+    v_lat Float64,
+    v_lon Float64,
+    wspr_cycle_kiwi_overloads_count Int32,
+    proxy_upload_this_spot UInt8
+) ENGINE = MergeTree
+ORDER BY spot_timestamp;
+"
+     rc=$? ; if (( rc )); then
+          wd_logger 1 "ERROR: clickhouse ... CREATE TABLE IF NOT EXISTS wsprdaemon.spots => ${rc}"
+      else
+          wd_logger 1 "Found or created wsprdaemon.spot with 'clickhouse ... CREATE TABLE IF NOT EXISTS wsprdaemon.spots => ${rc}"
+     fi
+     return ${rc}
+ }
+
 ### This daemon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
 function tbz_service_daemon() 
@@ -49,6 +110,12 @@ function tbz_service_daemon()
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
     wd_logger 1 "Starting in $PWD.  Searching ${UPLOAD_FTP_PATH} for new tbz files. Untaring them in ${UPLOADS_TMP_ROOT_DIR}"
+
+    setup_clickhouse_wsprdaemon_tables
+    rc=$? ; if (( rc )); then
+       wd_logger 1 "'setup_clickhouse_wsprdaemon_tables' => ${rc}"
+       echo ${force_abort}
+    fi
 
     while true; do
         wd_logger 1 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
@@ -90,7 +157,7 @@ function tbz_service_daemon()
 
         [[ ${HOSTNAME} == "WD0" ]] && queue_files_for_mirroring ${valid_tbz_list[@]}
 
-        record_spot_files       ${UPLOADS_TMP_ROOT_DIR}
+        record_wsprdaemon_spot_files       ${UPLOADS_TMP_ROOT_DIR}
         record_noise_files      ${UPLOADS_TMP_ROOT_DIR}
 
        sleep 1
@@ -144,7 +211,7 @@ function flush_empty_spot_files()
 ### format a single CSV file with those spot files and call the python program which recrods those lines in the Clickhouse (CH) database
 #
 declare SPOTS_CSV_FILE_PATH="${UPLOADS_TMP_ROOT_DIR}/ts_spots.csv"    ### Take spots in wsprdaemon extended spot lines and format them into this file which can be recorded to CH
-function record_spot_files()
+function record_wsprdaemon_spot_files()
 {
     local spot_flles_root_path=$1
     local ret_code
@@ -178,15 +245,16 @@ function record_spot_files()
             wd_logger 1 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 1 "Recording spots in $(realpath ${split_csv_file})"
-                python3 ${TS_BATCH_UPLOAD_PYTHON_CMD} --input ${split_csv_file} --sql ${TS_WD_BATCH_INSERT_SPOTS_SQL_FILE} --address localhost --ip_port ${TS_IP_PORT-5432} --database ${TS_WD_DB} --username ${TS_WD_WO_USER} --password ${TS_WD_WO_PASSWORD} >& python.out
+                wd_logger 1 "Recording spots assembled in $(realpath ${split_csv_file})"
+                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO wsprdaemon.spots FORMAT CSV" < ${split_csv_file}
                 ret_code=$? ; if (( ret_code )); then
-                    wd_logger 1 "ERROR: ' ${TS_BATCH_UPLOAD_PYTHON_CMD} ${split_csv_file} ...' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon_spots_s table:\n$(< python.out)\n$(<${split_csv_file})"
+                    wd_logger 1 "ERROR: 'clickhouse-client ... --query='INSERT INTO wsprdaemon.spots FORMAT CSV' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon.spots table"
                 else
                     wd_logger 1 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
                 fi
             done
             wd_logger 1 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
+            echo ${force_abort}
         fi
         wd_logger 1 "Finished recording ${SPOTS_CSV_FILE_PATH}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
         wd_rm ${spot_file_list[@]}
