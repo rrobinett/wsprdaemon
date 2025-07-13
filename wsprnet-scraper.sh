@@ -463,7 +463,8 @@ declare GAP_MAX_REQUEST=50000                                            ### Ask
 function queue_gap_file() {
     local first_missing_seq=$1
     local last_missing_seq=$2
-    mkdir -p gaps.d/
+    local gap_dir_path=${SCRAPER_ROOT_DIR}/gaps
+    mkdir -p ${gap_dir_path}
 
     local first_seq=${first_missing_seq}
     local last_seq
@@ -475,8 +476,9 @@ function queue_gap_file() {
         else
             last_seq=$(( ${first_seq} + ${GAP_MAX_REQUEST} - 1 ))
         fi
-        printf "%(%s)T %d %d\n" -1 ${first_seq} ${last_seq}  > gaps.d/${first_seq}.log
-        wd_logger 2 "Queued gap reqeust file gaps.d/${first_seq}.log which is for  ${gap_request_size} spots from seq_num ${first_seq} to ${last_seq}"
+        local gap_file_path=${gap_dir_path}/${first_seq}.log
+        printf "%(%s)T %d %d\n" -1 ${first_seq} ${last_seq}  > ${gap_file_path}
+        wd_logger 2 "Queued gap reqeust file ${gap_file_path} which is for  ${gap_request_size} spots from seq_num ${first_seq} to ${last_seq}"
         first_seq=$(( ${last_seq} + 1 ))
     done
 }
@@ -484,17 +486,17 @@ function queue_gap_file() {
 function wsprnet_gap_daemon()
 {
     wd_logger 1 "Starting in ${PWD}"
-    mkdir -p ${SCRAPER_ROOT_DIR}/gaps.d
+    mkdir -p ${SCRAPER_ROOT_DIR}/gaps
     local tmp_ts_csv_file=${WSPRNET_SCRAPER_TMP_PATH}/missing_spots.csv
     while true; do
         local gap_files_list=()
-        while [[ ! -d ${SCRAPER_ROOT_DIR}/gaps.d ]] ; do
-            wd_logger 1 "There is no ${SCRAPER_ROOT_DIR}/gaps.d directory, so sleep ${GAP_POLL_SECS}"
+        while [[ ! -d ${SCRAPER_ROOT_DIR}/gaps ]] ; do
+            wd_logger 1 "There is no ${SCRAPER_ROOT_DIR}/gaps directory, so sleep ${GAP_POLL_SECS}"
             wd_sleep ${GAP_POLL_SECS}
         done
-        wd_logger 1 "Waiting for gap report files to appear in ${SCRAPER_ROOT_DIR}/gaps.d"
+        wd_logger 1 "Waiting for gap report files to appear in ${SCRAPER_ROOT_DIR}/gaps"
         ### sort the output of find in numeric (i.e. sequence number) order.  Thus we will fill gaps from lowest sequence to highest
-        while gap_files_list=( $(find ${SCRAPER_ROOT_DIR}/gaps.d -type f | sort -t / -k 2,2n ) ) && [[ ${#gap_files_list[@]} -eq 0 ]] ; do
+        while gap_files_list=( $(find ${SCRAPER_ROOT_DIR}/gaps -type f | sort -t / -k 2,2n ) ) && [[ ${#gap_files_list[@]} -eq 0 ]] ; do
             wd_logger 2 "Found no gap files, so sleep ${GAP_POLL_SECS}"
             wd_sleep ${GAP_POLL_SECS}
         done
