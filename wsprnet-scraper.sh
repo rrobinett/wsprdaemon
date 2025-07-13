@@ -12,7 +12,7 @@ function record_wsprnet_spots_in_clickhouse() {
 
     wd_logger 2 "Record ${csv_file} to the Clickhouse wsprnet.rx table"
 
-    clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --database=wsprnet --query="INSERT INTO rx FORMAT CSV" < ${csv_file}
+    clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --database=wspr --query="INSERT INTO rx FORMAT CSV" < ${csv_file}
     ret_code=$? ; if (( ret_code )); then
         wd_logger 1 "ERROR: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file} => ${ret_code}"
     else
@@ -79,7 +79,7 @@ function wpsrnet_get_spots() {
     if (( WSPRNET_LAST_SPOTNUM == 0 )); then
         wd_logger 1 "Making first query from wsprnet.org, so get the WN spot number of the most recent spot in our local CH database, if any"
         local clickhouse_output_file=${WSPRNET_SCRAPER_TMP_PATH}/clickhouse.out
-        clickhouse-client --host=${CLICKHOUSE_HOST} --port=9000 --user=${CLICKHOUSE_USER} --password=${CLICKHOUSE_PASSWORD} --query "SELECT id FROM wsprnet.rx ORDER BY id DESC LIMIT 1" > ${clickhouse_output_file}
+        clickhouse-client --host=${CLICKHOUSE_HOST} --port=9000 --user=${CLICKHOUSE_USER} --password=${CLICKHOUSE_PASSWORD} --query "SELECT id FROM wspr.rx ORDER BY id DESC LIMIT 1" > ${clickhouse_output_file}
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: 'clickhouse-client --host=${CLICKHOUSE_HOST} --port=9000 --user=${CLICKHOUSE_USER} --password=${CLICKHOUSE_PASSWORD} --query 'SELECT id FROM wsprnet.rx ORDER BY id DESC LIMIT 1'' > ${ret_code}"
             echo ${force_abort}
@@ -353,6 +353,56 @@ function scrape_wsprnet() {
     return  ${ret_code}
 }
 
+function setup_clickhouse_wsprnet_tables()
+{
+    local rc
+
+     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = 'wspr'" | grep -q 1
+     rc=$? ; if (( rc )); then
+         wd_logger 1 "Creating the 'wspr' database"
+         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE wspr"
+         rc=$? ; if (( rc )); then
+             wd_logger 1 "Failed to create missing 'wspr' database"
+             echo ${force_abort}
+         fi
+          wd_logger 1 "Created the missing 'wspr' database"
+     fi
+     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
+CREATE TABLE IF NOT EXISTS wspr.rx (
+    id           UInt64                      CODEC(Delta(8), ZSTD(1)),
+    time         DateTime                    CODEC(Delta(4), ZSTD(1)),
+    band         Int16                       CODEC(T64, ZSTD(1)),
+    rx_sign      LowCardinality(String),
+    rx_lat       Float32                     CODEC(ZSTD(1)),
+    rx_lon       Float32                     CODEC(ZSTD(1)),
+    rx_loc       LowCardinality(String),
+    tx_sign      LowCardinality(String),
+    tx_lat       Float32                     CODEC(ZSTD(1)),
+    tx_lon       Float32                     CODEC(ZSTD(1)),
+    tx_loc       LowCardinality(String),
+    distance     UInt16                      CODEC(T64, ZSTD(1)),
+    azimuth      UInt16                      CODEC(T64, ZSTD(1)),
+    rx_azimuth   UInt16                      CODEC(T64, ZSTD(1)),
+    frequency    UInt32                      CODEC(T64, ZSTD(1)),
+    power        Int8                        CODEC(T64, ZSTD(1)),
+    snr          Int8                        CODEC(ZSTD(1)),
+    drift        Int8                        CODEC(ZSTD(1)),
+    version      LowCardinality(String),
+    code         Int8
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(time)
+ORDER BY (time, id)
+SETTINGS index_granularity = 8192;
+"
+     rc=$? ; if (( rc )); then
+         wd_logger 1 "ERROR: clickhouse-client ... 'CREATE TABLE IF NOT EXISTS' => ${rc}"
+     else
+         wd_logger 1 "clickhouse-client ... 'CREATE TABLE IF NOT EXISTS' was successful"
+     fi
+     return ${rc}
+}
+
 function wsprnet_scrape_daemon() {
     local scraper_root_dir=$1
 
@@ -361,6 +411,8 @@ function wsprnet_scrape_daemon() {
 
     wd_logger 1 "Starting and scrapes will be attempted at second offsets: ${WSPRNET_OFFSET_SECS}"
     setup_verbosity_traps
+    setup_clickhouse_wsprnet_tables
+
     while true; do
         if ! scrape_wsprnet ; then
 	    wd_logger 1 "Scrape failed.  Sleep and try again later"
