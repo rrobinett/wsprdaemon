@@ -39,66 +39,74 @@ declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its siz
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $2}')
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE=$(( (TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
 
+###b 7/13/2025 - RR These names match those used on the legacy WD1 and WD3 CH databases
+declare CLICKHOUSE_DATABASE="wspr"
+declare CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE="${CLICKHOUSE_DATABASE}.wsprdaemon_spots"
+declare CLICKHOUSE_WSPRDAEMON_NOISE_TABLE="${CLICKHOUSE_DATABASE}.wsprdaemon_noise"
+
 function setup_clickhouse_wsprdaemon_tables() 
 {
     local rc
 
-     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = 'wsprdaemon'" | grep -q 1
+     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = '${CLICKHOUSE_DATABASE}'" | grep -q 1
      rc=$? ; if (( rc )); then
-         wd_logger 1 "Creating the 'wsprdaemon' database"
-         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE wsprdaemon"
+         wd_logger 1 "Creating the '${CLICKHOUSE_DATABASE}' database"
+         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE ${CLICKHOUSE_DATABASE}"
          rc=$? ; if (( rc )); then
-             wd_logger 1 "Failed to create missing 'wsprdaemon' database"
+             wd_logger 1 "Failed to create missing '${CLICKHOUSE_DATABASE}' database"
              echo ${force_abort}
          fi
-          wd_logger 1 "Created the missing 'wsprdaemon' database"
+          wd_logger 1 "Created the missing '${CLICKHOUSE_DATABASE}' database"
      fi
+     ### The fields in this wsprdaemon.spots table are in their order in the csv file
+     ###     and that order comes from the spot lines uploaded by the clients
+     ###     and that order derives from their order in ALL_WSPR.TXT
+
      clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
-CREATE TABLE IF NOT EXISTS wsprdaemon.spots
+CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}
 (
-   spot_timestamp DateTime CODEC(ZSTD(1)),
-    spot_sync_quality UInt16 CODEC(ZSTD(1)),
-    snr Float32 CODEC(ZSTD(1)),
-    spot_dt Float32 CODEC(ZSTD(1)),
-    frequency Float32 CODEC(ZSTD(1)),
-    callsign LowCardinality(String) CODEC(ZSTD(1)),
-    tx_grid LowCardinality(String) CODEC(ZSTD(1)),
-    power UInt8 CODEC(ZSTD(1)),
-    drift Int16 CODEC(ZSTD(1)),
-    spot_cycles UInt8 CODEC(ZSTD(1)),
-    spot_jitter UInt8 CODEC(ZSTD(1)),
-    spot_blocksize UInt16 CODEC(ZSTD(1)),
-    spot_metric UInt16 CODEC(ZSTD(1)),
-    spot_decodetype UInt8 CODEC(ZSTD(1)),
-    spot_ipass UInt8 CODEC(ZSTD(1)),
-    spot_nhardmin UInt8 CODEC(ZSTD(1)),
-    spot_pkt_mode UInt8 CODEC(ZSTD(1)),
-    wspr_cycle_rms_noise Float32 CODEC(ZSTD(1)),
-    wspr_cycle_fft_noise Float32 CODEC(ZSTD(1)),
-    band LowCardinality(String) CODEC(ZSTD(1)),
-    reporter_grid LowCardinality(String) CODEC(ZSTD(1)),
-    reporter LowCardinality(String) CODEC(ZSTD(1)),
-    distance Int32 CODEC(ZSTD(1)),
-    azimuth Float32 CODEC(ZSTD(1)),
-    rx_lat Float32 CODEC(ZSTD(1)),
-    rx_lon Float32 CODEC(ZSTD(1)),
-    tx_az Float32 CODEC(ZSTD(1)),
-    tx_lat Float32 CODEC(ZSTD(1)),
-    tx_lon Float32 CODEC(ZSTD(1)),
-    v_lat Float32 CODEC(ZSTD(1)),
-    v_lon Float32 CODEC(ZSTD(1)),
-    wspr_cycle_kiwi_overloads_count UInt8 CODEC(ZSTD(1)),
-    proxy_upload_this_spot UInt8 CODEC(ZSTD(1)),
-    receiver_id LowCardinality(String) CODEC(ZSTD(1)))
+    time            DateTime                CODEC(ZSTD(1)),
+    sync_quality    UInt16                  CODEC(ZSTD(1)),
+    snr             Float32                 CODEC(Delta, ZSTD(3)),
+    dt              Float32                 CODEC(Delta, ZSTD(3)),
+    frequency       Float32                 CODEC(Delta, ZSTD(3)),
+    tx_sign         LowCardinality(String)  CODEC(LZ4),
+    tx_loc          LowCardinality(String)  CODEC(LZ4),
+    power           UInt8                   CODEC(T64, ZSTD(1)),
+    drift           Float32                 CODEC(Delta, ZSTD(3)),
+    decode_cycles   UInt32                  CODEC(T64, ZSTD(1)),
+    jitter          Int16                   CODEC(T64, ZSTD(1)),  
+    blocksize       UInt16                  CODEC(T64, ZSTD(1)),
+    metric          UInt16                  CODEC(T64, ZSTD(1)),
+    osd_decode      UInt8                   CODEC(T64, ZSTD(1)),
+    ipass           UInt8                   CODEC(T64, ZSTD(1)),
+    nhardmin        UInt16                  CODEC(T64, ZSTD(1)),
+    mode            Int16                   CODEC(ZSTD(1)),
+    rms_noise       Float32                 CODEC(Delta, ZSTD(3)),
+    fft_noise       Float32                 CODEC(Delta, ZSTD(3)),
+    band            Int16                   CODEC(ZSTD(1)),
+    rx_loc          LowCardinality(String)  CODEC(LZ4),
+    rx_sign         LowCardinality(String)  CODEC(LZ4),
+    distance        Int32                   CODEC(T64, ZSTD(1)),
+    rx_azimuth      Float32                 CODEC(Delta, ZSTD(3)),
+    rx_lat          Float32                 CODEC(Delta, ZSTD(3)),
+    rx_lon          Float32                 CODEC(Delta, ZSTD(3)),
+    azimuth         Float32                 CODEC(Delta, ZSTD(3)),
+    tx_lat          Float32                 CODEC(Delta, ZSTD(3)),
+    tx_lon          Float32                 CODEC(Delta, ZSTD(3)),
+    ov_count        UInt32                  CODEC(T64, ZSTD(1)),
+    proxy_upload    UInt8                   CODEC(T64, ZSTD(1)),
+    receiver_id     LowCardinality(String)  CODEC(LZ4)
+)
 ENGINE = MergeTree
-PARTITION BY toYYYYMM(spot_timestamp)
-ORDER BY (spot_timestamp)
+PARTITION BY toYYYYMM(time)
+ORDER BY (time)
 SETTINGS index_granularity = 8192;
 "
      rc=$? ; if (( rc )); then
-          wd_logger 1 "ERROR: clickhouse ... CREATE TABLE IF NOT EXISTS wsprdaemon.spots => ${rc}"
+          wd_logger 1 "ERROR: clickhouse ... CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} => ${rc}"
       else
-          wd_logger 1 "Found or created wsprdaemon.spot with 'clickhouse ... CREATE TABLE IF NOT EXISTS wsprdaemon.spots => ${rc}"
+          wd_logger 1 "Found or created wsprdaemon.spot with 'clickhouse ... CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} => ${rc}"
      fi
      return ${rc}
  }
@@ -132,23 +140,26 @@ function tbz_service_daemon()
        [[ -d ${UPLOADS_TMP_ROOT_DIR} ]] && rm -rf ${UPLOADS_TMP_ROOT_DIR}
         mkdir -p ${UPLOADS_TMP_ROOT_DIR}
  
+        local valid_tbz_list=()
         local tbz_file
         for tbz_file in ${tbz_file_list[@]} ; do
             local tbz_file_base_name="${tbz_file##*/}"
             [[ ! -f ${TBZ_PROCESSED_ARCHIVE_FILE} ]] && touch ${TBZ_PROCESSED_ARCHIVE_FILE}
             if grep -q ${tbz_file_base_name} ${TBZ_PROCESSED_ARCHIVE_FILE} ; then
-                wd_logger 1 "Skipping new '${tbz_file}' which has been previously processed"
+                wd_logger 1 "Flushing tar file '${tbz_file}' which has been previously processed"
+                wd_rm ${tbz_file}
             else
-                wd_logger 1 "Extracting spot and noise files to '${UPLOADS_TMP_ROOT_DIR}' by running 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}'"
+                wd_logger 2 "Extracting spot and noise files to '${UPLOADS_TMP_ROOT_DIR}' by running 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}'"
                 tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR} &> /dev/null
                 rc=$? ; if (( rc )); then
-                    wd_logger 1 "ERROR: 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}' => ${rc}, so flush it"
+                    wd_logger 1 "ERROR: 'tar xf ${tbz_file} -C ${UPLOADS_TMP_ROOT_DIR}' => ${rc}, so just flush it"
+                    wd_rm  ${tbz_file}
                 else
-                    wd_logger 1 "Extracted spot and noise files from '${tbz_file}'"
+                    wd_logger 2 "Extracted spot and noise files from '${tbz_file}'"
                     echo "${tbz_file_base_name}" >> ${TBZ_PROCESSED_ARCHIVE_FILE}
+                    valid_tbz_list+=( ${tbz_file} )
                 fi
             fi
-            wd_rm ${tbz_file}
             local file_system_usage=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $3}')
             if (( file_system_usage >  TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE )); then
                 wd_logger 1 "The ${UPLOADS_TMP_ROOT_DIR} file system has been filled after extracting from ${#valid_tbz_list[@]} tbz files, so proceed to processing the spot and noise files which were extracted"
@@ -158,10 +169,13 @@ function tbz_service_daemon()
         truncate_file ${TBZ_PROCESSED_ARCHIVE_FILE} ${MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE}
         wd_logger 1 "Done processing tbz files"
 
+        ### On WD0 we queue the valid tbz files for uploading to WD1 and WD2 by creating hard links to the tbz files
         [[ ${HOSTNAME} == "WD0" ]] && queue_files_for_mirroring ${valid_tbz_list[@]}
+        ### On WD1 and WD2 we just delete the tbz files once they are processed
+        wd_rm  ${valid_tbz_list[@]}
 
         record_wsprdaemon_spot_files       ${UPLOADS_TMP_ROOT_DIR}
-        record_noise_files      ${UPLOADS_TMP_ROOT_DIR}
+        #record_noise_files      ${UPLOADS_TMP_ROOT_DIR}
 
        sleep 1
     done
@@ -219,7 +233,7 @@ function record_wsprdaemon_spot_files()
     local spot_flles_root_path=$1
     local ret_code
 
-    wd_logger 1 "Flushing empty spot files found under ${spot_flles_root_path}"
+    wd_logger 2 "Flushing empty spot files found under ${spot_flles_root_path}"
     flush_empty_spot_files ${spot_flles_root_path}
 
     ### Process non-empty spot files
@@ -235,7 +249,7 @@ function record_wsprdaemon_spot_files()
         if (( spot_lines_count == 0 )); then
             wd_logger 1 "Found zero valid spot lines in the ${#spot_file_list[@]} spot files"
         else
-            wd_logger 1 "Found ${spot_lines_count} spots in the ${#spot_file_list[@]} spot files"
+            wd_logger 2 "Found ${spot_lines_count} spots in the ${#spot_file_list[@]} spot files"
             declare TS_MAX_INPUT_LINES=${PYTHON_MAX_INPUT_LINES-5000}
             declare SPLIT_CSV_PREFIX="${UPLOADS_TMP_ROOT_DIR}/split_spots_"
             rm -f ${SPLIT_CSV_PREFIX}*
@@ -245,27 +259,26 @@ function record_wsprdaemon_spot_files()
                 echo ${force_abort}
             fi
             local split_file_list=( ${SPLIT_CSV_PREFIX}* )
-            wd_logger 1 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
+            wd_logger 2 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 1 "Recording spots assembled in $(realpath ${split_csv_file})"
-                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO wsprdaemon.spots FORMAT CSV" < ${split_csv_file}
+                wd_logger 2 "Recording spots assembled in $(realpath ${split_csv_file})"
+                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV" < ${split_csv_file}
                 ret_code=$? ; if (( ret_code )); then
-                    wd_logger 1 "ERROR: 'clickhouse-client ... --query='INSERT INTO wsprdaemon.spots FORMAT CSV' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon.spots table"
+                    wd_logger 1 "ERROR: 'clickhouse-client ... --query='INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon.spots table"
                 else
-                    wd_logger 1 "Recorded $( wc -l < ${split_csv_file} ) spots to the wsprdaemon_spots_s table from ${#spot_file_list[*]} spot files which were extracted from ${#valid_tbz_list[*]} tar files, so flush the spot file"
+                    wd_logger 2 "Recorded $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} table from ${#spot_file_list[*]} spot files which were extracted from ${#split_file_list[*]} tar files, so flush ${split_csv_file}"
                 fi
             done
-            wd_logger 1 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
-            echo ${force_abort}
+            wd_logger 2 "Finished recording the ${#split_file_list[@]} splitXXX.csv files"
         fi
-        wd_logger 1 "Finished recording ${SPOTS_CSV_FILE_PATH}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
+        wd_logger 2 "Finished recording ${SPOTS_CSV_FILE_PATH}, so flushing it and all the ${#spot_file_list[@]} spot files which created it"
         wd_rm ${spot_file_list[@]}
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: while flushing ${SPOTS_CSV_FILE_PATH} and the ${#spot_file_list[*]} non-zero length spot files already recorded to TS, 'rm ...' => ${ret_code}"
         fi
     done
-    wd_logger 1 "Done"
+    wd_logger 2 "Done"
 }
 
 ###  Format of the extended spot line delivered by WD clients:
@@ -286,24 +299,25 @@ function record_wsprdaemon_spot_files()
 ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floating point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
 ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
 
-declare WD_SPOTS_TO_TS_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wd_spots_to_ts.awk
+declare WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wsprdaemon-spots-to-clickhouse.awk
 function format_spot_lines()
 {
     local spots_csv_file_path=$1
     local spot_files_list=( ${@:2} )
 
-    if [[ ! -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ]]; then
-        wd_logger 1 "ERROR: can't find awk program file '${WD_SPOTS_TO_TS_AWK_PROGRAM}'"
+    if [[ ! -f ${WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM} ]]; then
+        wd_logger 1 "ERROR: can't find awk program file '${WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM}'"
         echo ${force_abort}
     fi
     if (( ${#spot_files_list[@]} == 0 )); then
         wd_logger 1 "ERROR: no spot files were passed"
         echo ${force_abort}
     fi
+    cat  ${spot_file_list[@]} > ${spots_csv_file_path}.raw     ### DIAGS_CODE
     local temp_spot_lines_file_path="${spots_csv_file_path}.tmp"
-    awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ${spot_file_list[@]} > ${temp_spot_lines_file_path}
+    awk -f ${WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM} ${spot_file_list[@]} > ${temp_spot_lines_file_path}
     ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: 'awk -f ${WD_SPOTS_TO_TS_AWK_PROGRAM} ...' => ${ret_code}"
+        wd_logger 1 "ERROR: 'awk -f ${WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM} ...' => ${ret_code}"
         return 1
     fi
     grep -v "ERROR" ${temp_spot_lines_file_path} > ${spots_csv_file_path}
@@ -344,7 +358,7 @@ function record_noise_files()
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: Python failed to record $( wc -l < ${noise_csv_file}) noise lines to  the wsprdaemon_noise_s table from \${noise_file_list[@]}"
         else
-            wd_logger 1 "Recorded $( wc -l < ${noise_csv_file} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#valid_tbz_list[@]} tar files."
+            wd_logger 1 "Recorded $( wc -l < ${noise_csv_file} ) noise lines to the wsprdaemon_noise_s table from ${#noise_file_list[@]} noise files which were extracted from ${#noise_file_list[@]} tar files."
         fi
         wd_rm ${noise_file_list[@]}
         local ret_code=$?
