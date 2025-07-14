@@ -1062,21 +1062,21 @@ function update_ini_file_section_variable() {
         sed -i 's/\(^ *freq *= "\)60000 /\160k000 /' "$file"
     fi
 
-    # Escape special characters in section and variable for use in regex
-    local section_esc=$(printf "%s\n" "$section" | sed 's/[][\/.^$*]/\\&/g')
+    ### Match sections with names which start with characters and end with ${section}, e.g "[KSF_OMNI-${section}]"
+    local section_esc="^\s*\[.*${section}\]\s*$"
     local variable_esc=$(printf "%s\n" "$variable" | sed 's/[][\/.^$*]/\\&/g')
 
     wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
 
     # Check if section exists
-    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
+    if ! grep -q "${section_esc}" "$file"; then
         # Add section if it doesn't exist
         wd_logger 1 "ERROR: expected section [$section] doesn't exist in '$file'"
-        return 4
+        echo ${force_abort}
     fi
 
     # Find section start and end lines
-    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_start_line_number=$(grep -n "${section_esc}" "$file" | cut -d: -f1 | head -n1)
     local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
 
     # If no next section is found, set section_end_line_number to end of file
