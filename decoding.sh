@@ -927,7 +927,7 @@ function get_wav_file_list() {
 
     ### Kiwirecorder.py and pcmrecordder create files with the same name format
     local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
-    local wav_file_regex="*Z_${band_freq_hz}_usb.wav"
+    local wav_file_regex="*Z_${band_freq_hz}_*.wav"
 
     wd_logger 2 "Starting 'while (( \${#return_list[@]} == 0 )); do ...'."
     local wait_for_newest_file_to_close="no"
