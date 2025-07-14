@@ -61,43 +61,43 @@ function setup_clickhouse_wsprdaemon_tables()
      ### The fields in this wsprdaemon.spots table are in their order in the csv file
      ###     and that order comes from the spot lines uploaded by the clients
      ###     and that order derives from their order in ALL_WSPR.TXT
-
      clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
-CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}
-(
-    time            DateTime                CODEC(ZSTD(1)),
-    sync_quality    UInt16                  CODEC(ZSTD(1)),
-    snr             Float32                 CODEC(Delta, ZSTD(3)),
-    dt              Float32                 CODEC(Delta, ZSTD(3)),
-    frequency       Float32                 CODEC(Delta, ZSTD(3)),
-    tx_sign         LowCardinality(String)  CODEC(LZ4),
-    tx_loc          LowCardinality(String)  CODEC(LZ4),
-    power           UInt8                   CODEC(T64, ZSTD(1)),
-    drift           Float32                 CODEC(Delta, ZSTD(3)),
-    decode_cycles   UInt32                  CODEC(T64, ZSTD(1)),
-    jitter          Int16                   CODEC(T64, ZSTD(1)),  
-    blocksize       UInt16                  CODEC(T64, ZSTD(1)),
-    metric          UInt16                  CODEC(T64, ZSTD(1)),
-    osd_decode      UInt8                   CODEC(T64, ZSTD(1)),
-    ipass           UInt8                   CODEC(T64, ZSTD(1)),
-    nhardmin        UInt16                  CODEC(T64, ZSTD(1)),
-    mode            Int16                   CODEC(ZSTD(1)),
-    rms_noise       Float32                 CODEC(Delta, ZSTD(3)),
-    fft_noise       Float32                 CODEC(Delta, ZSTD(3)),
-    band            Int16                   CODEC(ZSTD(1)),
-    rx_loc          LowCardinality(String)  CODEC(LZ4),
-    rx_sign         LowCardinality(String)  CODEC(LZ4),
-    distance        Int32                   CODEC(T64, ZSTD(1)),
-    rx_azimuth      Float32                 CODEC(Delta, ZSTD(3)),
-    rx_lat          Float32                 CODEC(Delta, ZSTD(3)),
-    rx_lon          Float32                 CODEC(Delta, ZSTD(3)),
-    azimuth         Float32                 CODEC(Delta, ZSTD(3)),
-    tx_lat          Float32                 CODEC(Delta, ZSTD(3)),
-    tx_lon          Float32                 CODEC(Delta, ZSTD(3)),
-    ov_count        UInt32                  CODEC(T64, ZSTD(1)),
-    proxy_upload    UInt8                   CODEC(T64, ZSTD(1)),
-    receiver_id     LowCardinality(String)  CODEC(LZ4)
-)
+CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} (
+    time           DateTime                CODEC(ZSTD(1)),
+    band           Int16                   CODEC(ZSTD(1)),
+    rx_grid        LowCardinality(String)  CODEC(LZ4),
+    rx_id          LowCardinality(String)  CODEC(LZ4),
+    tx_call        LowCardinality(String)  CODEC(LZ4),
+    tx_grid        LowCardinality(String)  CODEC(LZ4),
+    SNR            Float32                 CODEC(Delta(4), ZSTD(3)),
+    c2_noise       Float32                 CODEC(Delta(4), ZSTD(3)), -- Mapped from fft_noise
+    drift          Float32                 CODEC(Delta(4), ZSTD(3)),
+    freq           Float32                 CODEC(Delta(4), ZSTD(3)),
+    km             Int32                   CODEC(T64, ZSTD(1)),      -- Mapped from distance
+    rx_az          Float32                 CODEC(Delta(4), ZSTD(3)), -- Mapped from rx_azimuth
+    rx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
+    rx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
+    tx_az          Float32                 CODEC(Delta(4), ZSTD(3)), -- Mapped from azimuth
+    tx_dBm         UInt8                   CODEC(T64, ZSTD(1)),      -- Mapped from power
+    tx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
+    tx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
+    v_lat          Float32                 CODEC(Delta(4), ZSTD(3)),
+    v_lon          Float32                 CODEC(Delta(4), ZSTD(3)),
+    sync_quality   UInt16                  CODEC(ZSTD(1)),
+    dt             Float32                 CODEC(Delta(4), ZSTD(3)),
+    decode_cycles  UInt32                  CODEC(T64, ZSTD(1)),
+    jitter         Int16                   CODEC(T64, ZSTD(1)),
+    rms_noise      Float32                 CODEC(Delta(4), ZSTD(3)),
+    blocksize      UInt16                  CODEC(T64, ZSTD(1)),
+    metric         Int16                   CODEC(T64, ZSTD(1)),
+    osd_decode     UInt8                   CODEC(T64, ZSTD(1)),
+    ipass          UInt8                   CODEC(T64, ZSTD(1)),
+    nhardmin       UInt16                  CODEC(T64, ZSTD(1)),
+    mode           Int16                   CODEC(ZSTD(1)),
+    ov_count       UInt32                  CODEC(T64, ZSTD(1)),
+    proxy_upload   UInt8                   CODEC(T64, ZSTD(1)),
+    receiver       LowCardinality(String)  CODEC(LZ4)
+) 
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(time)
 ORDER BY (time)
@@ -262,8 +262,10 @@ function record_wsprdaemon_spot_files()
             wd_logger 2 "Split ${SPOTS_CSV_FILE_PATH} into ${#split_file_list[@]} splitXXX.csv files"
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
-                wd_logger 2 "Recording spots assembled in $(realpath ${split_csv_file})"
-                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV" < ${split_csv_file}
+                wd_logger 1 "Recording spots assembled in $(realpath ${split_csv_file})"
+                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} \
+                    ( time, sync_quality, SNR, dt, freq, tx_call, tx_grid, tx_dBm, drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, mode, rms_noise, c2_noise, band, rx_grid, rx_id, km, rx_az, rx_lat, \
+                    rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, ov_count, proxy_upload, receiver) FORMAT CSV" < ${split_csv_file}
                 ret_code=$? ; if (( ret_code )); then
                     wd_logger 1 "ERROR: 'clickhouse-client ... --query='INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon.spots table"
                 else
