@@ -1064,7 +1064,8 @@ alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdr='cd /etc/radio'
 alias cdrf='cd /run/ft8'
 alias cds='cd /etc/systemd/system'
-alias cdt='cd /dev/shm/wsprdaemon'
+alias cdt='cd /dev/shm/wsprdaemon/recording.d/KA9Q_3/20'
+alias pdw='pushd ~/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 alias cdww='cd ~/wsprdaemon/wav-archive/'
 
@@ -1988,7 +1989,7 @@ function wd-no-capslock() {
 
 alias cdb='cd ~/wsprdaemon/ka9q-web'
 alias cdu='cd /srv/wd_data/uploads/wsprdaemon'
-alias cdt='cd /run/wsprdaemon/uploads'
+#alias cdt='cd /run/wsprdaemon/uploads'
 alias wdua='wd -u a'
 alias wduz='wd -u z'
 alias wdus='wd -u s'
