@@ -1,6 +1,46 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+function wdsr()
+{
+    local wd_is_running
+    local wd_last_start_epoch
+
+    local wd_watchdog_pid_file_path=~/wsprdaemon/watchdog_daemon.pid
+    if ! [[ -f ${wd_watchdog_pid_file_path} ]]; then
+        echo "Can't find '${wd_watchdog_pid_file_path}', so WD can't be running"
+        return 0
+    fi
+    local wd_pid=$(< ${wd_watchdog_pid_file_path})
+    local rc
+    local wd_run_time=$(ps -p ${wd_pid} -o etime=)
+    rc=$? ; if (( rc )); then
+        echo "WD pid ${wd_pid} is not running"
+        return 0
+    fi
+    echo "WD's watchdog daemon has been running for D-HH:MM:SS: ${wd_run_time}"
+    local pid_file_path_list=( $(find ~/wsprdaemon /dev/shm/wsprdaemon/ -type f -name '*.pid') )
+
+    local running_pid_count=0
+    local dead_pid_count=0
+    local pid_file
+    for pid_file in ${pid_file_path_list[@]} ; do
+        local pid=$(<${pid_file})
+        local pid_run_time=$(ps -p ${pid} -o etime=)
+        rc=$? ; if (( rc )); then
+            echo "PID in ${pid_file} is not running"
+            (( ++dead_pid_count ))
+        else
+            (( ${verbosity-0} )) && echo "Deamon ${pid_file} is running"
+            (( ++running_pid_count ))
+        fi
+    done
+    echo "Found ${running_pid_count} running PID files and ${dead_pid_count} dead pids"
+    (  source ~/wsprdaemon/running.jobs
+    echo "There are ${#RUNNING_JOBS[@]} running receiver jobs"
+    )
+}
+
 #shopt -s -o nounset
 function get-github-projects-list()
 {
