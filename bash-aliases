@@ -1,6 +1,44 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+function cdt()
+{
+    local wd_tmp_file_system_path
+    if [[ -d /run/wsprdaemon ]]; then
+        wd_tmp_file_system_path="/run/wsprdaemon"
+    elif [[ -d /dev/shm/wsprdaemon ]]; then
+        wd_tmp_file_system_path="/dev/shm/wsprdaemon"
+    else
+        echo "ERROR: dan't find WD's tmp file system"
+        return
+    fi
+    local recording_dir_path="${wd_tmp_file_system_path}/recording.d"
+    if ! [[ -d ${recording_dir_path} ]]; then
+        echo "Can't find expected directory '${recording_dir_path}'"
+        return
+    fi
+    local receiver_dir_path_list=( $(find ${recording_dir_path} -maxdepth 1 -type d -name 'KA9Q*') )
+    case ${#receiver_dir_path_list[@]} in
+        0)
+            echo "Can't find any 'KA9Q*' directories in '${recording_dir_path}'"
+            return 0
+            ;;
+        1)
+            echo "Found one 'KA9Q*' directories in '${recording_dir_path}', so changing to it"
+            cd ${receiver_dir_path_list[0]}
+            ;;
+        *)
+            printf "Found ${#receiver_dir_path_list[@]} 'KA9Q*' directories in '${recording_dir_path}'. Choose one:\n"
+            local index
+            for (( index=0; index < ${#receiver_dir_path_list[@]};  ++index )); do
+                printf "%2d: ${receiver_dir_path_list[index]}\n" ${index}
+            done
+            read -p "Select [0-$(( ${#receiver_dir_path_list[@]} - 1))].  Default is 0 => "
+            cd ${receiver_dir_path_list[${REPLY-0}]}
+            ;;
+    esac
+}
+
 function wdsr()
 {
     local wd_is_running
@@ -1104,7 +1142,6 @@ alias cdk='cd ~/wsprdaemon/ka9q-radio'
 alias cdr='cd /etc/radio'
 alias cdrf='cd /run/ft8'
 alias cds='cd /etc/systemd/system'
-alias cdt='cd /dev/shm/wsprdaemon/recording.d/KA9Q_3/20'
 alias pdw='pushd ~/wsprdaemon'
 alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 alias cdww='cd ~/wsprdaemon/wav-archive/'
@@ -2029,7 +2066,6 @@ function wd-no-capslock() {
 
 alias cdb='cd ~/wsprdaemon/ka9q-web'
 alias cdu='cd /srv/wd_data/uploads/wsprdaemon'
-#alias cdt='cd /run/wsprdaemon/uploads'
 alias wdua='wd -u a'
 alias wduz='wd -u z'
 alias wdus='wd -u s'
