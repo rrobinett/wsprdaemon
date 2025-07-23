@@ -73,20 +73,9 @@ function grape_upload_all_local_wavs() {
         wd_logger 2 "Checking date_dir ${date_dir}"
         local site_dir_list=( $( find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
-        local search_txt="NOT_DEFINED"
         for site_dir in ${site_dir_list[@]} ; do
-            wd_logger 1 "Checking site_dir ${site_dir} for NOT DEFINED"
-            if [[ "$site_dir" == "*$search_txt*" ]]; then
-                wd_logger 1 "Skipping ${site_dir} with NOT_DEFINED"
-                new_dir=${site_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}
-                ### what we need to do:
-                # test for new_dir existing.  If not, rename site_dir to new_dir
-                # OTHERWISE, for each folder in site_dir, copy its contents to the same dir in new_dir
-                wd_logger 1 "would create ${new_dir}"
-            else
-                wd_logger 2 "Checking site_dir ${site_dir}"
-                upload_24hour_wavs_to_grape_drf_server ${site_dir}
-            fi
+            wd_logger 2 "Checking site_dir ${site_dir}"
+            upload_24hour_wavs_to_grape_drf_server ${site_dir}
         done
     done
     wd_logger 2 "Completed"
@@ -144,6 +133,10 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local receiver_info="${receiver_dir##*/}"
         local receiver_name="${receiver_info%@*}"
         local pswsnetwork_info="${receiver_info#*@}"
+        local search_txt="NOT_DEFINED"
+        if [[ "$pswsnetwork_info" == "*$search_txt*" ]]; then
+            pswsnetwork_info=${GRAPE_PSWS_ID}
+        fi
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
