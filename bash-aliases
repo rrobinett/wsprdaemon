@@ -52,21 +52,23 @@ function wdsr()
     local wd_pid=$(< ${wd_watchdog_pid_file_path})
     local rc
     local wd_run_time=$(ps -p ${wd_pid} -o etime=)
-    rc=$? ; if (( rc )); then
-        echo "WD pid ${wd_pid} is not running"
-        return 0
+    rc=$? ; if (( rc )) || [[ -z "${wd_run_time}" ]]; then
+        echo "WD's watchdog_daemon() pid ${wd_pid} is not running"
+    else
+        echo "WD's watchdog_daemon() pid ${wd_pid} has been running for D-HH:MM:SS: ${wd_run_time}"
     fi
-    echo "WD's watchdog daemon has been running for D-HH:MM:SS: ${wd_run_time}"
-    local pid_file_path_list=( $(find ~/wsprdaemon /dev/shm/wsprdaemon/ -type f -name '*.pid') )
+    local pid_file_path_list=( $(find /dev/shm/wsprdaemon/ -path /dev/shm/wsprdaemon/wav-archive -prune -o -type f -name '*.pid') )
+    echo "Checking ${#pid_file_path_list[@]} pid files.."
 
     local running_pid_count=0
     local dead_pid_count=0
     local pid_file
     for pid_file in ${pid_file_path_list[@]} ; do
+        set +x
         local pid=$(<${pid_file})
-        local pid_run_time=$(ps -p ${pid} -o etime=)
-        rc=$? ; if (( rc )); then
-            echo "PID in ${pid_file} is not running"
+        local pid_run_time=$(ps -p ${pid} -o etime= 2> /dev/null)
+        rc=$? ; set +x;if (( rc )) || [[ -z "${pid_run_time}" ]];  then
+            echo "PID ${pid} stored in ${pid_file} is not running"
             (( ++dead_pid_count ))
         else
             (( ${verbosity-0} )) && echo "Deamon ${pid_file} is running"
