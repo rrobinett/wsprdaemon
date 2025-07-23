@@ -954,13 +954,25 @@ function wait_until_newest_tmp_file_is_closed()
                 wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from its ouput:\n'${ps_output}'"
                 echo ${force_abort}
             fi
-            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the newly spawned pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
+            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
             wait_for_pid_to_run_seconds ${pcmrecord_pid}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: unexpected error 'wait_for_pid_to_run_seconds ${pcmrecord_pid}' => ${rc}"
                 echo ${force_abort}
             fi
-            wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
+            wd_logger 1 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
+            local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)) )
+            rc=$?; if (( rc )); then
+                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
+                echo ${force_abort}
+            fi
+            if (( ${#after_wait_file_list[@]} )); then
+                wd_logger 1 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
+            else
+                wd_logger 1 "ERROR: no wav file appeared after waiting for the next second 59->00 transition, so kill the running pcmrecord ${pcmrecord_pid}"
+                wd_logger 1 "       The deaf pcmrecord may be due to Ubuntu restarting the network services due to a Wifi interface restart"
+                sudo kill ${pcmrecord_pid}
+            fi
         fi
     done
     wd_logger 1 "ERROR: that forver loop should never reach here"
