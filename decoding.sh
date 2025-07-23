@@ -532,6 +532,7 @@ function sleep_until_raw_file_is_full() {
                 wd_logger 1 "ERROR: 'wd_kill ${kiwirecorder_pids[*]}' => ${rc}"
             fi
             wd_logger 1 "ERROR: wav file stabilized at invalid too long duration ${wav_file_duration_hh_mm_sec_msec}, so there appear to be more than one instance of the KWR running. 'ps' output was:\n${ps_output}\nSo executed 'wd_kill ${kiwirecorder_pids[*]}'"
+            echo ${force_abort}
         fi
 
         flush_wav_files_older_than ${filename}
@@ -867,25 +868,115 @@ function file_is_closed_or_last_write_was_seconds_ago() {
     fi
 }
 
+### Scott's pcmrecord creates the first wav file only at the next second 59 to second 00 transition
+### so when pcmrecord is running but there is no wav file being recorded, wist up to 60+ seconds for the wav file to appear
+declare MAX_SECONDS_TO_WAIT_FOR_FIRST_WAV=${MAX_SECONDS_TO_WAIT_FOR_FIRST_WAV-62}
+function wait_for_pid_to_run_seconds()
+{
+    local pid_to_wait_for=$1
+    local rc
+
+    wd_logger 1 "Wait for pid ${pid_to_wait_for} to be running for more than ${MAX_SECONDS_TO_WAIT_FOR_FIRST_WAV} or until the next second 00"
+
+    local pid_start_date=$(ps -o lstart= -p ${pid_to_wait_for})
+    rc=$? ; if (( ${rc} )); then
+        wd_logger 1 "ERROR: pcmrecording 'ps -o lstart= -p ${pcmrecord_pid}'=> $rc}"
+        return ${rc}
+     fi
+     local pid_start_epoch=$( date -d "${pid_start_date}" +%s )
+     rc=$? ; if (( rc )); then
+         wd_logger 1 "ERROR: 'date -d "${pid_start_date}" +%' => ${rc}"
+         echo ${force_abort}
+     fi
+     if [[ -z "${pid_start_epoch}" ]]; then
+         wd_logger 1 "ERROR: 'date -d "${pid_start_date}" +%' => ${rc}, but it returned an empty epoch"
+         echo ${force_abort}
+     fi
+     local seconds_since_pid_start=$(( EPOCHSECONDS - pid_start_epoch ))
+     local second_in_minute=$(( EPOCHSECONDS % 60 ))
+     local seconds_to_sleep=$(( 60 - second_in_minute + 2))
+     wd_logger 1 "At second ${second_in_minute} there are ${seconds_to_sleep} seconds before we can expect the first wav file to appear. So sleep for ${seconds_to_sleep} seconds"
+     wd_sleep ${seconds_to_sleep}
+     return 0
+}
+
 ### Waits for wav files needed to decode one or more of the WSPR packet length wav file  have been fully recorded
 ### Then returns zero or more space-seperated strings each of which has the form 'WSPR_PKT_SECONDS:ONE_MINUTE_WAV_FILENAME_0,ONE_MINUTE_WAV_FILENAME_1[,ONE_MINUTE_WAV_FILENAME_2...]'
-function wait_until_newest_tmp_file_is_closed() {
+function wait_until_newest_tmp_file_is_closed() 
+{
     local wav_file_dir_path=$1
-    local wav_file_regex="$2"
-    local tmp_wav_file_regex="${wav_file_regex}.tmp"
+    local wav_file_regex=$2
+    local receiver_name=$3
+    local receiver_band=$4
 
-    wd_logger 1 "Looking for a '${tmp_wav_file_regex}' in ${wav_file_dir_path}"
-    local newest_tmp_wav_file=$( find  ${wav_file_dir_path} -type f -name "${tmp_wav_file_regex}" | sort | tail -1 )
-    if [[ -z "${newest_tmp_wav_file}" ]]; then
-        wd_logger 1 "Found no '${tmp_wav_file_regex}' file"
-        return 1
-    fi
-    wd_logger 1 "Waiting for tmp file ${newest_tmp_wav_file} to be closed"
+    wd_logger 2 "Starting with args: wav_file_dir_path=${wav_file_dir_path}, wav_file_regex=${wav_file_regex}, receiver_name=${receiver_name}, receiver_band=${receiver_band}"
+
+    local newest_tmp_wav_file
     local rc
-    inotifywait -e close ${newest_tmp_wav_file} >& /dev/null
-    rc=$?
-    wd_logger 1 "'inotifywait -e close ${newest_tmp_wav_file}}' => ${rc}"
-    return 0
+
+    while true; do
+        wd_logger 2 "Looking for a '${wav_file_regex}' file in ${wav_file_dir_path}"
+        find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)  > find.log
+        rc=$?; if (( rc )); then
+            wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
+            echo ${force_abort}
+        fi
+        newest_tmp_wav_file=$(sort find.log | tail -1 )
+        if [[ -n "${newest_tmp_wav_file}" ]]; then
+            wd_logger 1 "Found the newest tmp file ${newest_tmp_wav_file}, so execute 'inotifywait -e close ${newest_tmp_wav_file} to wait for it to be closed"
+            inotifywait -e close ${newest_tmp_wav_file} >& /dev/null
+            rc=$? ; if (( rc == 0 )); then
+                ### I expect this is the normal path through this function
+                wd_logger 1 "'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}, so that file is closed and we can return"
+                return 0
+            else
+                wd_logger 1 "ERROR: unexpected that 'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}' for that file found y 'fine ...'"
+                echo ${force_abort}
+            fi
+        else
+            ### We found no '*wav*' files, so make sure pcmrecord is running
+            local pcm_dns_regex="pcmrecord .*wspr"
+            if [[  ${wav_file_dir_path} =~ "WWV" ]]; then
+                pcm_dns_regex="pcmrecord .*wwv"
+            fi
+            local ps_output=$( ps aux | grep "${pcm_dns_regex}" | grep -v grep )
+            if [[ -z "${ps_output}" ]]; then
+                wd_logger 1 "Found no '${wav_file_regex}' file and there is no pcmrecord running, so spawn a new pcmrecord"
+                spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: unexpected error that 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+                    echo ${force_abort}
+                fi
+                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has spawned the wav file recorder"
+            fi
+            local pcmrecord_pid=$(echo "${ps_output}" | awk '{print $2}')
+            if [[ -z "${pcmrecord_pid}" ]]; then
+                wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from its ouput:\n'${ps_output}'"
+                echo ${force_abort}
+            fi
+            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
+            wait_for_pid_to_run_seconds ${pcmrecord_pid}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: unexpected error 'wait_for_pid_to_run_seconds ${pcmrecord_pid}' => ${rc}"
+                echo ${force_abort}
+            fi
+            wd_logger 1 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
+            local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)) )
+            rc=$?; if (( rc )); then
+                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
+                echo ${force_abort}
+            fi
+            if (( ${#after_wait_file_list[@]} )); then
+                wd_logger 1 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
+            else
+                wd_logger 1 "ERROR: no wav file appeared after waiting for the next second 59->00 transition, so kill the running pcmrecord ${pcmrecord_pid}"
+                wd_logger 1 "       The deaf pcmrecord may be due to Ubuntu restarting the network services due to a Wifi interface restart"
+                sudo kill ${pcmrecord_pid}
+            fi
+        fi
+    done
+    wd_logger 1 "ERROR: that forver loop should never reach here"
+    echo ${force_abort}
 }
 
 function get_wav_file_list() {
@@ -916,6 +1007,7 @@ function get_wav_file_list() {
         spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+            sleep 1
             return ${rc}
         fi
         wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
@@ -927,14 +1019,14 @@ function get_wav_file_list() {
 
     ### Kiwirecorder.py and pcmrecordder create files with the same name format
     local band_freq_hz=$( get_wspr_band_freq_hz ${receiver_band} )
-    local wav_file_regex="*Z_${band_freq_hz}_usb.wav"
+    local wav_file_regex="*Z_${band_freq_hz}_*.wav"
 
     wd_logger 2 "Starting 'while (( \${#return_list[@]} == 0 )); do ...'."
     local wait_for_newest_file_to_close="no"
     local return_list=()
     while (( ${#return_list[@]} == 0 )); do
         ### Get a list of all wav files for this band
-        wd_logger 1 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
+        wd_logger 2 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
         find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" >& find.log
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex} > find.log:\n$(<find.log)"
@@ -945,8 +1037,17 @@ function get_wav_file_list() {
         find_files_list=( $( sort -r find.log ) )
         if (( ${#find_files_list[@]} < 2 )); then
             wd_logger 1 "Found only ${#find_files_list[@]} wav files.  Check for open *wav.tmp files"
-            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}"
-            wd_logger 1 "Done waiting.  So sleep 1 and check again"
+            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}" ${receiver_name} ${receiver_band}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: wait_until_newest_tmp_file_is_closed() found no *tmp file, so make sure pcmrecord is running"
+                spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+                fi
+                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder.  So sleep 1 and check again"
+            else
+                wd_logger 1 "Done waiting.  So sleep 1 and check again"
+            fi
             sleep 1
             continue
         fi
@@ -958,7 +1059,7 @@ function get_wav_file_list() {
         if [[ ${wait_for_newest_file_to_close} == "yes" ]]; then
             ### We previously found a list but couldn't create a return_list[], so wait until the newest file is closed before checking again
             wd_logger 1 "wait_for_newest_file_to_close=${wait_for_newest_file_to_close}, so wait for newest wav.tmp to clcose"
-            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}"
+            wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}" ${receiver_name} ${receiver_band}
             wd_logger 1 "Done waiting.  So check for newest *.wav file to be closed"
             wd_logger 1 "Waiting for ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65} seconds for the newest file ${newest_file_name} to be closed or not written to for ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2} seconds"
             file_is_closed_or_last_write_was_seconds_ago ${newest_file_name}  ${WAIT_FOR_FILE_TO_CLOSE_SECONDS-65}  ${KIWIRECORDER_WRITE_IS_FINISHED_SECONDS-2}
@@ -995,8 +1096,8 @@ function get_wav_file_list() {
 
         ### Cleanup the file list so that it contains only a contiguous list of files, each starting one minute later than the previous file
         local find_files_count=${#find_files_list[@]}
-        wd_logger 1 "The 'find' command found ${find_files_count} closed wav files in '${wav_recording_dir}': '${find_files_list[*]##*/}'"
-        wd_logger 1 "Removing any files in the list which preceed any gap"
+        wd_logger 2 "The 'find' command found ${find_files_count} closed wav files in '${wav_recording_dir}': '${find_files_list[*]##*/}'"
+        wd_logger 2 "Removing any files in the list which preceed any gap"
 
         local last_file_name="${find_files_list[0]}"
         local checked_files_list=( ${last_file_name} )

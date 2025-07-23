@@ -60,11 +60,11 @@ NF == 32 || NF == 34 {
     wd_day   = substr(fields[1], 5, 2)
     wd_hour  = substr(fields[2], 1, 2)
     wd_min   = substr(fields[2], 3, 2)
-    ts_time  = ( "20" wd_year "-" wd_month "-" wd_day ":" wd_hour ":" wd_min )
+    clickhouse_time  = ( "20" wd_year "-" wd_month "-" wd_day " " wd_hour ":" wd_min ": 00")
 
     fields[3] = int ( fields[3] * 100 )       ### ALL_WSPR.TXT reports sync_quality as a float (0.NN), but we have defined that sync field as a int in TS
 
-    printf( "\"%s\"", ts_time )
+    printf( "\"%s\"", clickhouse_time )
 
     fields[7]  = toupper(fields[7])
     fields[8]  = ( toupper(substr(fields[8], 1, 2)) substr(fields[8], 3, 2) tolower(substr(fields[8], 5, 2)) )

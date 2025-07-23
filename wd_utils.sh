@@ -769,7 +769,7 @@ function spawn_daemon()
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 1 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
+    wd_logger 2 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
         if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
@@ -836,28 +836,28 @@ function get_status_of_daemon() {
     local daemon_log_file_path=${daemon_root_dir}/${daemon_function_name}.log
     local daemon_pid_file_path=${daemon_root_dir}/${daemon_function_name}.pid  
 
-    wd_logger 1 "Start"
+    wd_logger 2 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger -1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
+        wd_logger 1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
         if [[ -z "${daemon_pid}" ]]; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but it is empty"
             return 3
         fi
         if ! is_uint "${daemon_pid}"; then
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
             return 4
         fi
         ps ${daemon_pid} > /dev/null
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
-            wd_logger -1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
+            wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"
             wd_rm ${daemon_pid_file_path}
             return 3
         else
-            wd_logger -1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
+            wd_logger 1 "$(printf "Daemon '%30s' is running with pid %6d in '%s'" ${daemon_function_name} ${daemon_pid} ${daemon_root_dir})"
         fi
     fi
     return 0
@@ -1062,21 +1062,21 @@ function update_ini_file_section_variable() {
         sed -i 's/\(^ *freq *= "\)60000 /\160k000 /' "$file"
     fi
 
-    # Escape special characters in section and variable for use in regex
-    local section_esc=$(printf "%s\n" "$section" | sed 's/[][\/.^$*]/\\&/g')
+    ### Match sections with names which start with characters and end with ${section}, e.g "[KSF_OMNI-${section}]"
+    local section_esc="^\s*\[.*${section}\]\s*$"
     local variable_esc=$(printf "%s\n" "$variable" | sed 's/[][\/.^$*]/\\&/g')
 
     wd_logger 2 "In ini file $file edit or add variable $variable_esc in section $section_esc to have the value $new_value"
 
     # Check if section exists
-    if ! grep -q "^\s*\[$section_esc\]" "$file"; then
+    if ! grep -q "${section_esc}" "$file"; then
         # Add section if it doesn't exist
         wd_logger 1 "ERROR: expected section [$section] doesn't exist in '$file'"
-        return 4
+        echo ${force_abort}
     fi
 
     # Find section start and end lines
-    local section_start_line_number=$(grep -n "^\s*\[$section_esc\]" "$file" | cut -d: -f1 | head -n1)
+    local section_start_line_number=$(grep -n "${section_esc}" "$file" | cut -d: -f1 | head -n1)
     local section_end_line_number=$(awk -v start=$section_start_line_number 'NR > start && /^\[.*\]/ {print NR-1; exit}' "$file")
 
     # If no next section is found, set section_end_line_number to end of file
