@@ -935,10 +935,10 @@ function wait_until_newest_tmp_file_is_closed()
             fi
         else
             ### We found no '*wav*' files, so make sure pcmrecord is running
-            local pcm_dns_regex="pcmrecord .*wspr"
-            if [[  ${wav_file_dir_path} =~ "WWV" ]]; then
-                pcm_dns_regex="pcmrecord .*wwv"
-            fi
+            local receiver_ip=$(get_receiver_ip_from_name  ${receiver_name})
+            local pcm_dns_regex="pcmrecord .*${receiver_ip}"
+            wd_logger 1 "We found no '*wav*' files for ${receiver_name} ${receiver_band}, so make sure ps reports a '${pcm_dns_regex}' which would create it is running"
+
             local ps_output=$( ps aux | grep "${pcm_dns_regex}" | grep -v grep )
             if [[ -z "${ps_output}" ]]; then
                 wd_logger 1 "Found no '${wav_file_regex}' file and there is no pcmrecord running, so spawn a new pcmrecord"
@@ -947,7 +947,8 @@ function wait_until_newest_tmp_file_is_closed()
                     wd_logger 1 "ERROR: unexpected error that 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
                     echo ${force_abort}
                 fi
-                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has spawned the wav file recorder"
+                ps_output=$( ps aux | grep "${pcm_dns_regex}" | grep -v grep )
+                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has spawned the wav file recorder and 'ps aux  | grep '${pcm_dns_regex}'' now outputs:\n${ps_output}"
             fi
             local pcmrecord_pid=$(echo "${ps_output}" | awk '{print $2}')
             if [[ -z "${pcmrecord_pid}" ]]; then
