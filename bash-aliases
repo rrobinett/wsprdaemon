@@ -4,9 +4,9 @@
 function cdt()
 {
     local wd_tmp_file_system_path
-    if [[ -d /run/wsprdaemon ]]; then
+    if [[ -d /run/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/run/wsprdaemon"
-    elif [[ -d /dev/shm/wsprdaemon ]]; then
+    elif [[ -d /dev/shm/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/dev/shm/wsprdaemon"
     else
         echo "ERROR: dan't find WD's tmp file system"
