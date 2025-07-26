@@ -1,6 +1,11 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+function wd-pcmrecord-restarts()
+{
+    sudo journalctl --since "6 hours ago" -u radiod@rx888-wsprdaemon | grep "No rx888 data for 5 seconds, quitting"
+}
+
 function wd-pcmrecord-status()
 {
     ps -eo pid,lstart,etime,cmd | grep pcmrecord | grep -v grep
