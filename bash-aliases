@@ -1,12 +1,78 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+### If source and destination directory trees are on the same file system, wd-mvsync uses the much faster'mv' rather than 'rsync' to move the files
+function wd-mvsync()
+{
+    local src_dir=$1
+    local dst_dir=$2
+    local rc
+
+    local file
+    find "${src_dir}" -type f | while IFS= read -r file; do
+        local rel_path="${file#${src_dir}/}"
+        local dest_path="${dst_dir}/${rel_path}"
+
+        mkdir -p "$(dirname "$dest_path")"
+        mv "${file}" "${dest_path}"
+        rc=$? ; if (( rc )); then
+            echo "ERROR: 'mv ${file} ${dest_path}' => ${rc}"
+            return 1
+        fi
+    done
+    return 0
+ }
+
+function wd-rsync() 
+{
+    local src_dir=${1-}
+    if [[ -z "${src_dir}" ]]; then
+        echo "Missing <SRC_DIR> argument.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if ! [[ -d "${src_dir}" ]]; then
+        echo "<SRC_DIR> doesn't exist.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    local dst_dir=${2-}
+    if [[ -z "${dst_dir}" ]]; then
+        echo "Missing <DST_DIR> argument.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if ! [[ -d "${dst_dir}" ]]; then
+        echo "<DST_DIR> doesn't exist.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if (( $(stat -c %d "${src_dir}") == $(stat -c %d "${dst_dir}") )); then
+        echo "${src_dir} and ${dst_dir} are in the file system, so we can 'mv' the files rather than 'rsync' them"
+        wd-mvsync ${src_dir} ${dst_dir}
+        return
+    fi
+
+    echo "${src_dir} and ${dst_dir} are on different file systems, so we must run 'rsync' to transfer them"
+    echo "Executing: rsync -ah --remove-source-files --info=progress2 --stats ${src_dir} ${dst_dir}"
+    rsync -ah --remove-source-files --info=progress2 --stats "${src_dir}" "${dst_dir}"
+    local rc=$? ; if (( rc )); then
+        echo "ERROR: ' rsync -ah --remove-source-files --info=progress2 --stats ${src_dir} ${dst_dir}' => ${rc}"
+        return 1
+    fi
+    
+    local src_files_list=( $(find ${src_dir} -type f) )
+    if (( ${#src_files_list[@]} ));then
+        echo "ERROR: found ${#src_files_list[@]} files in ${src_dir} after rsync"
+        return 2
+    fi
+    rm -r ${src_dir}
+    echo "All files in ${src_dir} have been moved to the corresponding subdir in ${dst_dir} and ${src_dir} has been deleted"
+    return 0
+}
+
 function cdt()
 {
     local wd_tmp_file_system_path
-    if [[ -d /run/wsprdaemon ]]; then
+    if [[ -d /run/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/run/wsprdaemon"
-    elif [[ -d /dev/shm/wsprdaemon ]]; then
+    elif [[ -d /dev/shm/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/dev/shm/wsprdaemon"
     else
         echo "ERROR: dan't find WD's tmp file system"

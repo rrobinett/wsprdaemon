@@ -930,7 +930,7 @@ function wait_until_newest_tmp_file_is_closed()
                 wd_logger 1 "'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}, so that file is closed and we can return"
                 return 0
             else
-                wd_logger 1 "ERROR: unexpected that 'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}' for that file found y 'fine ...'"
+                wd_logger 1 "ERROR: unexpected that 'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}' for that file found "
                 echo ${force_abort}
             fi
         else
