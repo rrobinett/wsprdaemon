@@ -827,10 +827,10 @@ function file_is_closed_or_last_write_was_seconds_ago() {
              wd_logger 2 "The file ${file_path} is closed"
              return 0
          else
-            wd_logger 1 "The file ${file_path} is open so run 'inotifywait -e close ${newest_file_name}' so we wakeup when it is closed"
-            inotifywait -e close ${newest_file_name} >& /dev/null
+            wd_logger 1 "The file ${file_path} is open so run 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name}' so we wakeup when it is closed"
+            inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name} >& /dev/null
             rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait -e close ${newest_file_name}' => ${rc}"
+            wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name}' => ${rc}"
                 return ${rc}
             else
                 log_wav_file_create_times "$newest_file_name"
@@ -876,7 +876,7 @@ function wait_for_pid_to_run_seconds()
     local pid_to_wait_for=$1
     local rc
 
-    wd_logger 1 "Wait for pid ${pid_to_wait_for} to be running for more than ${MAX_SECONDS_TO_WAIT_FOR_FIRST_WAV} or until the next second 00"
+    wd_logger 1 "Wait for pid ${pid_to_wait_for} to be running for more than ${MAX_SECONDS_TO_WAIT_FOR_FIRST_WAV} seconds or until the next second 59->00 transition"
 
     local pid_start_date=$(ps -o lstart= -p ${pid_to_wait_for})
     rc=$? ; if (( ${rc} )); then
@@ -895,7 +895,7 @@ function wait_for_pid_to_run_seconds()
      local seconds_since_pid_start=$(( EPOCHSECONDS - pid_start_epoch ))
      local second_in_minute=$(( EPOCHSECONDS % 60 ))
      local seconds_to_sleep=$(( 60 - second_in_minute + 2))
-     wd_logger 1 "At second ${second_in_minute} there are ${seconds_to_sleep} seconds before we can expect the first wav file to appear. So sleep for ${seconds_to_sleep} seconds"
+     wd_logger 1 "At current second ${second_in_minute} there are ${seconds_to_sleep} seconds before look to see if the first wav file has appeared. So sleep for ${seconds_to_sleep} seconds"
      wd_sleep ${seconds_to_sleep}
      return 0
 }
@@ -923,15 +923,31 @@ function wait_until_newest_tmp_file_is_closed()
         fi
         newest_tmp_wav_file=$(sort find.log | tail -1 )
         if [[ -n "${newest_tmp_wav_file}" ]]; then
-            wd_logger 1 "Found the newest tmp file ${newest_tmp_wav_file}, so execute 'inotifywait -e close ${newest_tmp_wav_file} to wait for it to be closed"
-            inotifywait -e close ${newest_tmp_wav_file} >& /dev/null
+            wd_logger 1 "Found the newest tmp file ${newest_tmp_wav_file}, so execute 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} to wait for it to be closed"
+            local timeout
+            for (( timeout=0; timeout < 5; ++timeout )); do
+                if [[ -f "${newest_tmp_wav_file}" ]]; then
+                    wd_logger 1 "Found ${newest_tmp_wav_file} exists after ${timeout} seconds"
+                    break
+                fi
+                wd_logger 1 "WARNING: can't find expected file ${newest_tmp_wav_file}, so sleeping 1"
+                sleep 1
+            done
+            if ! [[ -f "${newest_tmp_wav_file}" ]]; then
+                wd_logger 1 "Timeout waiting for the expected file ${newest_tmp_wav_file} exists after ${timeout} seconds"
+                return 1
+            fi
+
+            inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} >& inotifywait.log # /dev/null
             rc=$? ; if (( rc == 0 )); then
                 ### I expect this is the normal path through this function
-                wd_logger 1 "'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}, so that file is closed and we can return"
+                wd_logger 1 "'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}, so that file is closed or deleted and we can return"
                 return 0
             else
-                wd_logger 1 "ERROR: unexpected that 'inotifywait -e close ${newest_tmp_wav_file}' => ${rc}' for that file found "
-                echo ${force_abort}
+                wd_logger 1 "ERROR: unexpected that 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}':\n$(<inotifywait.log)"
+                # printf "$(date): ERROR: unexpected that 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}':\n$(<inotifywait.log)\n " >&2
+                return 1
+                # echo ${force_abort}
             fi
         else
             ### We found no '*wav*' files, so make sure pcmrecord is running
@@ -952,7 +968,9 @@ function wait_until_newest_tmp_file_is_closed()
             fi
             local pcmrecord_pid=$(echo "${ps_output}" | awk '{print $2}')
             if [[ -z "${pcmrecord_pid}" ]]; then
-                wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from its ouput:\n'${ps_output}'"
+                local ps_pcm_all="$(ps aux | grep pcmrecord | grep -v grep)"
+                wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from ps's :\n'${ps_pcm_all}'"
+                ## printf "$(date): ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from its ouput:\n'${ps_pcm_all}'\n" >&2
                 echo ${force_abort}
             fi
             wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
