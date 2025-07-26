@@ -490,14 +490,36 @@ function spawn_wav_recording_daemon() {
         if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
             wav_record_daemon_log_filename="wav-record-daemon-all.log"
         fi
-        wd_logger 1 "Flushed all *.wav* files and Spawning a KA9Q wd-record daemon for receiver '${receiver_name}' in directory ${recording_dir} where it will log to ${wav_record_daemon_log_filename}"
         rm -f ${recording_dir}/*.wav*
+        wd_logger 1 "Flushed all *.wav* files and Spawning a KA9Q wd-record daemon for receiver '${receiver_name}' in directory ${recording_dir} where it will log to ${wav_record_daemon_log_filename}"
         cd  ${recording_dir}
         WD_LOGFILE=${wav_record_daemon_log_filename} ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band}  &    ### Once instance of pcmrecord outputs all the bands in the stream to a series of wav files
         rc1=$?
         wav_recorder_pid=$!
-        echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
         cd - > /dev/null
+        echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
+        if (( rc1 )); then
+            wd_logger 1 "ERROR: 'ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band} &' => ${rc}"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Spawned ' ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band}', now wait for it to start it running its pcmrecord"
+        local ps_output
+        local timeout
+        for (( timeout=0; timeout < 5; ++timeout )); do
+            ps_output="$( ps aux | grep "pcmrecord .*${receiver_ip}" | grep -v grep )"
+            if [[ -n "${ps_output}" ]]; then
+                wd_logger 1 "Found 'pcmrecord .*${receiver_ip}' is running after ${timeout} seconds"
+                break
+            fi
+            wd_logger 1 "Can't find expected 'pcmrecord .*${receiver_ip}', so sleeping 1"
+            sleep 1
+        done
+        if ! [[ -z "${ps_output}" ]]; then
+            wd_logger 1 "ERROR: Timeout after waiting ${timeout} seconds for the expected 'pcmrecord .*${receiver_ip}'"
+            wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
+            echo ${force_abort}
+        fi
+         wd_logger 1 "Found that 'pcmrecord .*${receiver_ip}' is running after waiting ${timeout} seconds"
     else
         local my_receiver_password=${receiver_list_element[4]}
 
