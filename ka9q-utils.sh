@@ -1781,6 +1781,7 @@ function ka9q-setup() {
    fi
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
+    sudo systemctl start set_lo_multicast
     ka9q-services-setup
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: ka9q-services-setup() => ${rc}"
