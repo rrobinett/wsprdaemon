@@ -20,6 +20,7 @@
 declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the .wv files for the April 8th 2024 total eclipse +- 1 day
 declare -r GRAPE_TMP_DIR="/run/wsprdaemon/grape_drf_cache"                                                          ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
+mkdir -p ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 declare -r WD_SILENT_WV_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/one-minute-silent-float.wv"                                  ### A wavpack-compressed wav file of one minute of silence.  When a minute file is missing  soft link to this file
 declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
 declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
