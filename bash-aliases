@@ -1,6 +1,24 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+function wd-most-recent-log-error()
+{
+    local grep_arg="${1-ERROR:}"
+    local dir_list=( $(find . -type d ) )
+    local dir
+    for dir in ${dir_list[@]}; do
+        local log_file_list=( $( find ${dir} -maxdepth 1 -type f -name '*.log' ) )
+        local log_file
+        for log_file in ${log_file_list[@]}; do
+            local grep_last_line="$( grep "${grep_arg}" $(realpath ${log_file}) | grep -v start | tail -n 1)"
+            if [[ -n "${grep_last_line}" ]]; then
+                echo "${grep_last_line}"
+            fi
+        done
+    done
+    echo "$(date -u): search complete"
+}
+
 ### If source and destination directory trees are on the same file system, wd-mvsync uses the much faster'mv' rather than 'rsync' to move the files
 function wd-mvsync()
 {
