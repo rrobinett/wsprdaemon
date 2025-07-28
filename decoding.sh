@@ -969,9 +969,9 @@ function wait_until_newest_tmp_file_is_closed()
             local pcmrecord_pid=$(echo "${ps_output}" | awk '{print $2}')
             if [[ -z "${pcmrecord_pid}" ]]; then
                 local ps_pcm_all="$(ps aux | grep pcmrecord | grep -v grep)"
-                wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from ps's :\n'${ps_pcm_all}'"
-                ## printf "$(date): ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from its ouput:\n'${ps_pcm_all}'\n" >&2
-                echo ${force_abort}
+                wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from ps's :\n'${ps_pcm_all}'.  Perhaps MC stream is not present on LAN."
+                sleep 1
+                return 1
             fi
             wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
             wait_for_pid_to_run_seconds ${pcmrecord_pid}
@@ -1752,7 +1752,7 @@ function decoding_daemon() {
             wd_logger 1 "ERROR: while running in ${PWD} can't find expected dir ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
             break;
         fi
-        local posting_clients_list=( $(find ${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d) )
+        local posting_clients_list=( $(find ${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d -not -name '*mutex.lock' ) )
         if (( ${#posting_clients_list[@]} == 0 )); then
             wd_logger 1 "While running in ${PWD} can't find any posting_client subdirs in ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
             break;

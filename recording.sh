@@ -514,7 +514,7 @@ function spawn_wav_recording_daemon() {
             wd_logger 1 "Can't find expected 'pcmrecord .*${receiver_ip}', so sleeping 1"
             sleep 1
         done
-        if ! [[ -z "${ps_output}" ]]; then
+        if [[ -z "${ps_output}" ]]; then
             wd_logger 1 "ERROR: Timeout after waiting ${timeout} seconds for the expected 'pcmrecord .*${receiver_ip}'"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             echo ${force_abort}
