@@ -916,7 +916,10 @@ function wait_until_newest_tmp_file_is_closed()
 
     while true; do
         wd_logger 2 "Looking for a '${wav_file_regex}' file in ${wav_file_dir_path}"
-        find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)  > find.log
+        ### WD's mutex library creates and almost immediately deletes transient ...mutex.lock directories.  If find finds a mutex.lock directory and then it disappaears 
+        ### during the filtering stage of find, then find prints a 'No such file or directory' message to stderr
+        ### Since I can't suppress those messages, direct stderr to /dev/null so those messages don't appear in the user's terminal window
+        find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)  >find.log 2>/dev/null
         rc=$?; if (( rc )); then
             wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
             echo ${force_abort}
