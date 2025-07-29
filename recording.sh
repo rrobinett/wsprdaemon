@@ -363,7 +363,7 @@ function ka9q_recording_daemon()
         local running_jobs_pid_list=()
         while running_jobs_pid_list=( $( ps x | grep "${pcm_record_cmd} .* ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
-            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${pcm_record_cmd} -s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
+            wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${pcm_record_cmd} .. ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
             kill ${running_jobs_pid_list[@]}
             rc=$? ; if (( rc == 0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
