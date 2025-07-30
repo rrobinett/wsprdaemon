@@ -983,9 +983,10 @@ function wait_until_newest_tmp_file_is_closed()
                 echo ${force_abort}
             fi
             wd_logger 1 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
-            local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)) )
+            local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \) 2>find.stderr ) )
             rc=$?; if (( rc )); then
-                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
+                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1':\n$(<find.stderr) "
+                echo -e "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1':\n$(<find.stderr) "
                 echo ${force_abort}
             fi
             if (( ${#after_wait_file_list[@]} )); then
@@ -1755,7 +1756,7 @@ function decoding_daemon() {
             wd_logger 1 "ERROR: while running in ${PWD} can't find expected dir ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
             break;
         fi
-        local posting_clients_list=( $(find ${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d -not -name '*mutex.lock' ) )
+        local posting_clients_list=( $(find ${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d -not -name '*mutex.lock' 2> find.stderr ) )
         if (( ${#posting_clients_list[@]} == 0 )); then
             wd_logger 1 "While running in ${PWD} can't find any posting_client subdirs in ${DECODING_CLIENTS_SUBDIR}.  So stop trying to decode"
             break;
