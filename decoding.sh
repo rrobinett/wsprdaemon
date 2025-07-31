@@ -1221,7 +1221,7 @@ function get_wav_file_list() {
            ### Check to see if we have returned some of these files in a previous call to this function
            ### The '-secs'  files contain the name of the first file of a complete ${seconds_in_wspr_pkt} wav file which was previously reporeted
            local index_of_first_minute_of_wspr_pkt
-           local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -type f -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r ) ) 
+           local wav_checked_pkt_sec_list=( $(  find ${wav_recording_dir} -maxdepth 1 -type f -name "${wav_file_regex}.${seconds_in_wspr_pkt}-secs" | sort -r  2>find.stderr ) ) 
            local epoch_of_previously_reported_wspr_pkt
            local epoch_of_pkt_we_want
            if (( ${#wav_checked_pkt_sec_list[@]} > 0 )); then
