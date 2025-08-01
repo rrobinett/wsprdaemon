@@ -31,17 +31,8 @@ export LC_ALL="C"
 trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
 
 ###  Returns 0 if arg is an unsigned integer, else 1
-function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; esac ;}
-function is_positive_integer()
-{
-    local test_value="$1"
-    if [[ "$test_value" =~ ^[1-9][0-9]*$ ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
+function is_int()  { if [[ "$1" =~ ^-?[0-9]+$ ]]; then return 0; else return 1; fi } 
+function is_uint() { if [[ "$1" =~   ^[0-9]+$ ]]; then return 0; else return 1; fi } 
 
 ###
 function wd_logger_flush_all_logs {
@@ -772,7 +763,7 @@ function spawn_daemon()
     wd_logger 2 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
-        if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
+        if $(is_uint "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
             wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
             return 0
         else
