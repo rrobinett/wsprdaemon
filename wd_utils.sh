@@ -936,7 +936,7 @@ function wd_mutex_lock() {
         fi
         local sleep_secs
         sleep_secs=$(( ( ${RANDOM} % ${mutex_timeout_count} ) + 1 ))      ### randomize the sleep time or all the sessions will hang while wating for the lock to free
-        wd_logger 1 "Try  #${mkdir_try_count} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
+        wd_logger 2 "Try  #${mkdir_try_count} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
         wd_sleep ${sleep_secs}
     done
     wd_logger 2 "Locked access to ${mutex_name} after ${mkdir_try_count} tries"
