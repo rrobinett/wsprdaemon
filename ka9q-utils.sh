@@ -467,7 +467,7 @@ function ka9q_parse_metadump_file_to_status_file() {
 }
 
 function ka9q_parse_status_value() {
-    local ___return_var="$1"
+    declare -n ___return_var="$1"
     local status_file=$2
     local search_val="$3"
 
@@ -476,19 +476,27 @@ function ka9q_parse_status_value() {
     ### and replace command fields with ';' which isn't found in any of the current status lines
     if [[ ! -f  ${status_file} ]]; then
         wd_logger 1 "ERROR: can't find  ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 1
     fi
     local search_results
-    search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${status_file} )
+    search_results=$( sed -n -e "s#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q" "${status_file}" 2> sed.stderr | xargs )
+    local rc=$? ; if (( rc )); then
+    wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}:\n$(<sed.stderr)"
+        ___return_var=""
+        return 1
+    fi
+    if [[ -s sed.stderr ]]; then
+        wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}, but sed.stderr has:\n$(<sed.stderr)"
+    fi
 
     if [[ -z "${search_results}" ]]; then
         wd_logger 1 "ERROR: can't find '${search_val}' in ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 2
     fi
     wd_logger 2 "Found search string '${search_val}' in line and returning '${search_results}'"
-    eval ${___return_var}=\""${search_results}"\"
+    ___return_var="${search_results}"
     return 0
 }
 
@@ -497,7 +505,7 @@ declare KA9Q_METADUMP_CACHE_FILE_NAME="./ka9q_status.log"
 declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
 
 function ka9q_get_current_status_value() {
-    local __return_var="$1"
+    declare -n __return_var="$1"
     local receiver_ip_address=$2
     local receiver_freq_hz=$3
     local search_val="$4"
@@ -516,24 +524,22 @@ function ka9q_get_current_status_value() {
     else
         wd_logger 2 "Updating ${status_log_file}"
         ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if ((  rc )); then
             wd_logger 1 "ERROR: failed to update ${status_log_file}"
             return ${rc}
         fi
     fi
 
     local value_found
-    ka9q_parse_status_value  value_found  ${status_log_file} "${search_val}"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    ka9q_parse_status_value "value_found"  ${status_log_file} "${search_val}"
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to get new status"
         return ${rc}
     fi
     
     wd_logger 2 "Returning '${value_found}'"
 
-    eval ${__return_var}=\""${value_found}"\"
+    __return_var="${value_found}"
     return 0
 }
 
