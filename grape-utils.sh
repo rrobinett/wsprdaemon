@@ -17,10 +17,47 @@
 ###    You should have received a copy of the GNU General Public License
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+function wd_merge_file_trees()
+{
+    local SRC_ROOT="${1}"
+    local DST_ROOT="${2}"
+    local src_dev=$(df --output=source "$SRC_ROOT" | tail -1)
+    local dst_dev=$(df --output=source "$DST_ROOT" | tail -1)
+
+    # set -x
+    if [[ "$src_dev" == "$dst_dev" ]]; then
+        wd_logger 1 "'mv'ing files from  '$SRC_ROOT' to  '$DST_ROOT'..."
+        find "$SRC_ROOT" -type f | while read -r src_file; do
+            rel_path="${src_file#$SRC_ROOT/}"
+            dst_file="$DST_ROOT/$rel_path"
+            mkdir -p "$(dirname "$dst_file")"
+            mv "$src_file" "$dst_file"
+            # set +x
+            # exit
+        done
+        wd_logger 1 "Moving files from  '$SRC_ROOT' to  '$DST_ROOT' is complete"
+    else
+        # return
+        wd_logger 1 "'rsync'ing  files from  '$SRC_ROOT' to  '$DST_ROOT'..."
+        rsync -a --info=progress2 --remove-source-files "$SRC_ROOT"/ "$DST_ROOT"/
+    fi
+    wd_logger 1 "Merging files into '$DST_ROOT' complete, so 'rm -r $SRC_ROOT}'"
+    rm -r "$SRC_ROOT"
+}
+
+
 declare    GRAPE_ARCHIVE_PRESERVE_DATES_LIST=( ${GRAPE_ARCHIVE_PRESERVE_DATES_LIST[@]-20240407 20240408 20240409} )    ### Preserve the .wv files for the April 8th 2024 total eclipse +- 1 day
 declare -r GRAPE_TMP_DIR="/run/wsprdaemon/grape_drf_cache"                                                          ### While creating a 24 hour 10 Hz IQ wav file, decompress the 1440 one minute wav files into this tmpfs file system
 declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
 mkdir -p ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
+declare -r LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
+if [[ -d ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ]]; then
+    wd_logger 1 "Transferring the lagacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
+    wd_merge_file_trees ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
+else
+    wd_logger 2 "There is no legacy file tree '${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH}', so nothing to clean up"
+fi
+
 declare -r WD_SILENT_WV_FILE_PATH="${WSPRDAEMON_ROOT_DIR}/one-minute-silent-float.wv"                                  ### A wavpack-compressed wav file of one minute of silence.  When a minute file is missing  soft link to this file
 declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
 declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
