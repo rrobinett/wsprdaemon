@@ -85,7 +85,7 @@ function get_config_file_variable()
     local _variable_name=$2
 
     local config_file_path=~/wsprdaemon/wsprdaemon.conf
-    local temp_config_file=/tmp/temp.config
+    local temp_config_file=$(mktemp)
 
     if [[ -d ${config_file_path}.d ]]; then
         wd_logger 1 "Get config variables from new style config.d/* files"
@@ -104,10 +104,12 @@ function get_config_file_variable()
     fi
 
     local conf_file_value=$( shopt -u -o nounset; source ${temp_config_file}; eval echo \${${_variable_name}-} )
+    rm -f ${temp_config_file}
 
     wd_logger 2 "Returning ${__return_variable} = '${conf_file_value-}'"
-
-    eval ${__return_variable}=\${conf_file_value-}
+    declare -n ref=${__return_variable}
+    ref="${conf_file_value-}"
+    return 0
 }
 
 function is_valid_mode_list() {

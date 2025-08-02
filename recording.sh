@@ -437,7 +437,7 @@ function spawn_wav_recording_daemon() {
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
     fi
-    wd_logger 1 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
+    wd_logger 2 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
     
     mkdir -p ${recording_dir}
 
@@ -656,7 +656,7 @@ COMMENT_OUT_LINES
 declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
 function purge_stale_recordings() 
 {
-    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN}) )
+    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} 2> find.stderr) )
 
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
         return 0

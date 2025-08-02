@@ -467,7 +467,7 @@ function ka9q_parse_metadump_file_to_status_file() {
 }
 
 function ka9q_parse_status_value() {
-    local ___return_var="$1"
+    declare -n ___return_var="$1"
     local status_file=$2
     local search_val="$3"
 
@@ -476,19 +476,27 @@ function ka9q_parse_status_value() {
     ### and replace command fields with ';' which isn't found in any of the current status lines
     if [[ ! -f  ${status_file} ]]; then
         wd_logger 1 "ERROR: can't find  ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 1
     fi
     local search_results
-    search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${status_file} )
+    search_results=$( sed -n -e "s#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q" "${status_file}" 2> sed.stderr | xargs )
+    local rc=$? ; if (( rc )); then
+    wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}:\n$(<sed.stderr)"
+        ___return_var=""
+        return 1
+    fi
+    if [[ -s sed.stderr ]]; then
+        wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}, but sed.stderr has:\n$(<sed.stderr)"
+    fi
 
     if [[ -z "${search_results}" ]]; then
         wd_logger 1 "ERROR: can't find '${search_val}' in ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 2
     fi
     wd_logger 2 "Found search string '${search_val}' in line and returning '${search_results}'"
-    eval ${___return_var}=\""${search_results}"\"
+    ___return_var="${search_results}"
     return 0
 }
 
@@ -497,7 +505,7 @@ declare KA9Q_METADUMP_CACHE_FILE_NAME="./ka9q_status.log"
 declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
 
 function ka9q_get_current_status_value() {
-    local __return_var="$1"
+    declare -n __return_var="$1"
     local receiver_ip_address=$2
     local receiver_freq_hz=$3
     local search_val="$4"
@@ -516,24 +524,22 @@ function ka9q_get_current_status_value() {
     else
         wd_logger 2 "Updating ${status_log_file}"
         ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if ((  rc )); then
             wd_logger 1 "ERROR: failed to update ${status_log_file}"
             return ${rc}
         fi
     fi
 
     local value_found
-    ka9q_parse_status_value  value_found  ${status_log_file} "${search_val}"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    ka9q_parse_status_value "value_found"  ${status_log_file} "${search_val}"
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to get new status"
         return ${rc}
     fi
     
     wd_logger 2 "Returning '${value_found}'"
 
-    eval ${__return_var}=\""${value_found}"\"
+    __return_var="${value_found}"
     return 0
 }
 
@@ -1065,7 +1071,7 @@ function build_ka9q_radio() {
             wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
-        wd_logger 1 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+        wd_logger 2 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
     else
         wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
     fi
@@ -1172,14 +1178,14 @@ function ka9q-ft-setup()
     if [[ ${service_restart_needed} == "no" ]] && sudo systemctl status ${ft_service_file_instance_name}  >& /dev/null; then
         wd_logger 2 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     else
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
         sudo systemctl daemon-reload
         sudo systemctl restart ${ft_service_file_instance_name}  >& /dev/null
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: failed to restart ${ft_service_file_instance_name} => ${rc}, so force an abort"
             echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service  ${ft_service_file_instance_name}"
+        wd_logger 2 "Restarted service  ${ft_service_file_instance_name}"
     fi
 
     ### Ensure that it will run at startup
@@ -1288,7 +1294,7 @@ function ka9q-ft-setup()
     fi
 
     if [[ ${service_restart_needed} == "no" ]] && ! sudo systemctl status ${ft_record_service_name}  >& /dev/null; then
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
         service_restart_needed="yes"
     else
         wd_logger 2 "${ft_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
@@ -1299,7 +1305,7 @@ function ka9q-ft-setup()
             wd_logger 1 "ERROR: failed to restart ${ft_record_service_name} => ${rc}, so force an abort"
             echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service ${ft_record_service_name}"
+        wd_logger 2 "Restarted service ${ft_record_service_name}"
     fi
     if sudo systemctl is-enabled ${ft_record_service_name} >& /dev/null ; then
         wd_logger 2 "${ft_record_service_name} is enabled, so it doesn't need to be enabled"
@@ -1565,7 +1571,7 @@ function build_psk_uploader() {
 
         sudo systemctl status pskreporter@${ft_type} >& /dev/null
         rc=$? ; if (( rc )); then
-            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
