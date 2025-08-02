@@ -32,16 +32,13 @@ function wd_merge_file_trees()
             dst_file="$DST_ROOT/$rel_path"
             mkdir -p "$(dirname "$dst_file")"
             mv "$src_file" "$dst_file"
-            # set +x
-            # exit
         done
-        wd_logger 1 "Moving files from  '$SRC_ROOT' to  '$DST_ROOT' is complete"
     else
         # return
         wd_logger 1 "'rsync'ing  files from  '$SRC_ROOT' to  '$DST_ROOT'..."
         rsync -a --info=progress2 --remove-source-files "$SRC_ROOT"/ "$DST_ROOT"/
     fi
-    wd_logger 1 "Merging files into '$DST_ROOT' complete, so 'rm -r $SRC_ROOT}'"
+    wd_logger 1 "Merging files into '$DST_ROOT' is complete, so 'rm -r $SRC_ROOT'"
     rm -r "$SRC_ROOT"
 }
 
