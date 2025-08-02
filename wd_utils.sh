@@ -999,7 +999,10 @@ function  wd_ip_is_valid() {
         return 1
     fi
 
-    if [[ "${ip_port}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$ ]]; then
+    if ! [[ "${ip_port}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$ ]]; then
+        wd_logger 1  "ERROR: Got invalid IP:PORT '${ip_port}'"
+        return 4
+    else
         # Split IP and PORT
         local arg_ip="${ip_port%:*}"
         local arg_port="${ip_port##*:}"
@@ -1018,9 +1021,6 @@ function  wd_ip_is_valid() {
             wd_logger 1  "ERROR: Got invalid IP '${arg_ip}' in IP:PORT ${ip_port}"
             return 3
         fi
-    else
-        wd_logger 1  "ERROR: Got invalid IP in IP:PORT ${ip_port}"
-        return 4
     fi
     wd_logger 1 "ERROR: this line should never be executed"
     return 5
