@@ -437,7 +437,7 @@ function spawn_wav_recording_daemon() {
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
     fi
-    wd_logger 1 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
+    wd_logger 2 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
     
     mkdir -p ${recording_dir}
 
@@ -464,7 +464,7 @@ function spawn_wav_recording_daemon() {
     if [[ -f ${pid_file}  ]] ; then
         local recording_pid=$(< ${pid_file} )
         if ps -e -o pid | grep -v grep | grep -q ${recording_pid}; then         ## 'ps  ${recording_pid}' would block for many seconds.  This never blocks
-            wd_logger 1 "A recording job in ${recording_dir} with pid ${recording_pid} is already running:\n'ps -e -o pid | grep ${recording_pid}:\n$(ps auxf | grep -v grep | grep -A 4 ${recording_pid})"
+            wd_logger 2 "A recording job in ${recording_dir} with pid ${recording_pid} is already running:\n'ps -e -o pid | grep ${recording_pid}:\n$(ps auxf | grep -v grep | grep -A 4 ${recording_pid})"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
