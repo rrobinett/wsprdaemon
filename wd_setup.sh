@@ -118,6 +118,22 @@ function is_orange_pi_5() {
     fi
 }
 
+### Change to find() in order to debug spurious find errors which are printed stderr output
+function find() {
+    local tmp
+    tmp=$(mktemp)
+    command find "$@" 2> "$tmp"
+    local rc=$?
+    if [[ -s $tmp ]]; then
+        echo -e "'find() $@' -> called from function ${FUNCNAME[1]} in file ${BASH_SOURCE[1]} line #${BASH_LINENO[0]} printed:\n$(<"$tmp")" >&2
+        rm -f "$tmp"
+        exit 1
+    fi
+    rm -f "$tmp"
+    return $rc
+}
+ export -f find
+
 declare CPU_CGROUP_PATH="/sys/fs/cgroup"
 declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 
