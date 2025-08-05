@@ -1049,7 +1049,7 @@ function build_ka9q_radio() {
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
-    if (( cpu_core_count < 6 )); then
+    if [[ -z "${RADIOD_CPU_CORES-}" ]] && (( cpu_core_count < 6 )); then
         wd_logger 2 "Found only ${cpu_core_count} cores, so don't restrict which cores it can run on"
     else
         local radiod_cores
