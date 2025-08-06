@@ -368,7 +368,6 @@ function ka9q_recording_daemon()
             rc=$? ; if (( rc == 0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
             fi
-            echo ${force_abort}
             sleep 10
         done
 
@@ -565,10 +564,10 @@ function spawn_wav_recording_daemon() {
         wd_logger 1 "ERROR: 'wait_until_newest_tmp_file_is_closed ${wav_recorder_pid}' => ${rc} while waiting for the wavfile recorder to create it first wav file after startup"
         return ${rc}
     fi
-    wav_file_list=( $( find ${recording_dir} -maxdepth 1 -type f \( -name "*.wav" -o -name "*.wav.tmp" \)) )
+    wav_file_list=( $( find ${recording_dir} -maxdepth 1 -type f \( -name "*.wav" -o -name "*.wav.tmp" \) 2>find.stderr ) )
     if (( ${#wav_file_list[@]} == 0 )); then
         wd_logger 1 "ERROR: Found no new wav files in ${recording_dir} after the next second 59->00 transition after spawning the wav file reccording daemon, so killing the wav file recorder PID ${wav_recorder_pid} and deleting the file rm -f  ${recording_dir}/${wav_recording_pid_file} where that PID is stored"
-        rm -f rm -f  ${recording_dir}/${wav_recording_pid_file}
+        rm -f ${recording_dir}/${wav_recording_pid_file}
         kill ${wav_recorder_pid}
         return 1
     fi
