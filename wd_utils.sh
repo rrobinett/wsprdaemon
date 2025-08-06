@@ -31,17 +31,8 @@ export LC_ALL="C"
 trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} line #${BASH_LINENO[0]}"' ERR
 
 ###  Returns 0 if arg is an unsigned integer, else 1
-function is_uint() { case $1        in '' | *[!0-9]*              ) return 1;; esac ;}
-function is_positive_integer()
-{
-    local test_value="$1"
-    if [[ "$test_value" =~ ^[1-9][0-9]*$ ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
+function is_int()  { if [[ "$1" =~ ^-?[0-9]+$ ]]; then return 0; else return 1; fi } 
+function is_uint() { if [[ "$1" =~   ^[0-9]+$ ]]; then return 0; else return 1; fi } 
 
 ###
 function wd_logger_flush_all_logs {
@@ -772,7 +763,7 @@ function spawn_daemon()
     wd_logger 2 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
-        if $(is_positive_integer "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
+        if $(is_uint "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
             wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
             return 0
         else
@@ -945,7 +936,7 @@ function wd_mutex_lock() {
         fi
         local sleep_secs
         sleep_secs=$(( ( ${RANDOM} % ${mutex_timeout_count} ) + 1 ))      ### randomize the sleep time or all the sessions will hang while wating for the lock to free
-        wd_logger 1 "Try  #${mkdir_try_count} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
+        wd_logger 2 "Try  #${mkdir_try_count} of 'mkdir ${mutex_lock_dir_name}' failed.  Sleep ${sleep_secs}  and retry"
         wd_sleep ${sleep_secs}
     done
     wd_logger 2 "Locked access to ${mutex_name} after ${mkdir_try_count} tries"
@@ -1008,7 +999,10 @@ function  wd_ip_is_valid() {
         return 1
     fi
 
-    if [[ "${ip_port}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$ ]]; then
+    if ! [[ "${ip_port}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$ ]]; then
+        wd_logger 1  "ERROR: Got invalid IP:PORT '${ip_port}'"
+        return 4
+    else
         # Split IP and PORT
         local arg_ip="${ip_port%:*}"
         local arg_port="${ip_port##*:}"
@@ -1027,9 +1021,6 @@ function  wd_ip_is_valid() {
             wd_logger 1  "ERROR: Got invalid IP '${arg_ip}' in IP:PORT ${ip_port}"
             return 3
         fi
-    else
-        wd_logger 1  "ERROR: Got invalid IP in IP:PORT ${ip_port}"
-        return 4
     fi
     wd_logger 1 "ERROR: this line should never be executed"
     return 5

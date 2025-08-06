@@ -136,7 +136,7 @@ export -f kill
 
 
 ### Change to find() in order to debug spurious find errors which are printed stderr output
-function debug_finds() {
+function find() {
     local tmp
     tmp=$(mktemp)
     command find "$@" 2> "$tmp"
@@ -149,7 +149,7 @@ function debug_finds() {
     rm -f "$tmp"
     return $rc
 }
-# export -f find
+ export -f find
 
 declare CPU_CGROUP_PATH="/sys/fs/cgroup"
 declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
