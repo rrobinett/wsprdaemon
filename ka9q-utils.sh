@@ -312,7 +312,7 @@ function ka9q-get-configured-radiod() {
         wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
 
         if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_nam} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
             exit 1
         fi
         wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
@@ -467,7 +467,7 @@ function ka9q_parse_metadump_file_to_status_file() {
 }
 
 function ka9q_parse_status_value() {
-    local ___return_var="$1"
+    declare -n ___return_var="$1"
     local status_file=$2
     local search_val="$3"
 
@@ -476,19 +476,27 @@ function ka9q_parse_status_value() {
     ### and replace command fields with ';' which isn't found in any of the current status lines
     if [[ ! -f  ${status_file} ]]; then
         wd_logger 1 "ERROR: can't find  ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 1
     fi
     local search_results
-    search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${status_file} )
+    search_results=$( sed -n -e "s#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q" "${status_file}" 2> sed.stderr | xargs )
+    local rc=$? ; if (( rc )); then
+    wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}:\n$(<sed.stderr)"
+        ___return_var=""
+        return 1
+    fi
+    if [[ -s sed.stderr ]]; then
+        wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}, but sed.stderr has:\n$(<sed.stderr)"
+    fi
 
     if [[ -z "${search_results}" ]]; then
         wd_logger 1 "ERROR: can't find '${search_val}' in ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 2
     fi
     wd_logger 2 "Found search string '${search_val}' in line and returning '${search_results}'"
-    eval ${___return_var}=\""${search_results}"\"
+    ___return_var="${search_results}"
     return 0
 }
 
@@ -497,7 +505,7 @@ declare KA9Q_METADUMP_CACHE_FILE_NAME="./ka9q_status.log"
 declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
 
 function ka9q_get_current_status_value() {
-    local __return_var="$1"
+    declare -n __return_var="$1"
     local receiver_ip_address=$2
     local receiver_freq_hz=$3
     local search_val="$4"
@@ -516,24 +524,22 @@ function ka9q_get_current_status_value() {
     else
         wd_logger 2 "Updating ${status_log_file}"
         ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if ((  rc )); then
             wd_logger 1 "ERROR: failed to update ${status_log_file}"
             return ${rc}
         fi
     fi
 
     local value_found
-    ka9q_parse_status_value  value_found  ${status_log_file} "${search_val}"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    ka9q_parse_status_value "value_found"  ${status_log_file} "${search_val}"
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to get new status"
         return ${rc}
     fi
     
     wd_logger 2 "Returning '${value_found}'"
 
-    eval ${__return_var}=\""${value_found}"\"
+    __return_var="${value_found}"
     return 0
 }
 
@@ -897,7 +903,15 @@ function build_ka9q_radio() {
             "${ka9q_conf_file_path}  WWV-IQ  gain         0"
             "${ka9q_conf_file_path}  WWV-IQ  encoding float"
         )
-   if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
+
+    if [[ "${RX888_64_MSPS-no}" ==  "yes" ]]; then
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate     64800000")
+    else
+        ### The default is to run the RX888 at 129.6 Msps
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate    129600000")
+    fi
+
+    if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
         wd_logger 2 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
 
         if [[ ! -f ${ka9q_conf_file_path} ]]; then
@@ -978,39 +992,55 @@ function build_ka9q_radio() {
     done
 
    ### Make sure the wisdomf needed for effecient execution of radiod exists
-    if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
-    else
-        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
-        cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob162000 cob81000 cob40500 cob32400 cob16200 cob9600 cob8100 cob4860 cob4800 cob3240 cob1920 cob1620 \
-                                             cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15
-        rc=$?
-        cd - > /dev/null
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof500000...'"
-            return 3
-        fi
-        if [[ ! -f ${KA9Q_RADIO_NWSIDOM} ]]; then
-            wd_logger 1 "ERROR: can't find expected '${KA9Q_RADIO_NWSIDOM}'"
-            return 3
-        fi
-        wd_logger 1 "${KA9Q_RADIO_NWSIDOM} has been created"
-    fi
+   wd_logger 2 "Creating or updating /etc/fftw/wisdom"
+   killall fftwf-wisdom 2> /dev/null
 
-    if [[ ! -f ${FFTW_WISDOMF} || ${KA9Q_RADIO_NWSIDOM} -nt ${FFTW_WISDOMF} ]]; then
-        if [[ -f ${FFTW_WISDOMF} ]]; then
-            wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save before installing a new ${KA9Q_RADIO_NWSIDOM}"
-            sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
-        fi
-        wd_logger 1 "Copying ${KA9Q_RADIO_NWSIDOM} to ${FFTW_WISDOMF}"
-        sudo cp -p ${KA9Q_RADIO_NWSIDOM} ${FFTW_WISDOMF}
-        local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
-        sudo chown ${dir_user_group} ${FFTW_WISDOMF}
-        wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
-        radio_restart_needed="yes"
+   local fft_tmp_file_path=$(mktemp)
+   local use_cached_wisdom_arg=""
+   local cached_wisdom_file_path="/var/lib/ka9q-radio/wisdom"
+   if [[ -f ${cached_wisdom_file_path} ]]; then
+       use_cached_wisdom_arg="-w ${cached_wisdom_file_path}"
+   fi
+
+   local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
+   if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
+       fft_129_Msps="rof3240000"
+   fi
+
+   /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${use_cached_wisdom_arg} -o /tmp/wisdomf ${fft_129_Msps}  rof1620000 cob162000 cob81000 cob40500 cob32400 \
+                                cob16200 cob9600 cob8100 cob4860 cob4800 cob3240 cob1920 cob1620 \
+                                cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
+                                >${fft_tmp_file_path} 2>&1 &
+   local fftwf_pid=$!
+   local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
+
+   ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
+   trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
+
+   if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
+       wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fft_tmp_file_path})\n"
+   else
+       wd_logger 1 "Optimizing the FFT library.  Watching it progess which may take hours..."
+       tail -f --pid=${fftwf_pid} ${fft_tmp_file_path}
+   fi
+   local current_wisdom_file_size=0
+    if [[ -f /etc/fftw/wisdomf ]]; then
+        current_wisdom_file_size=$(stat -c %s /etc/fftw/wisdomf);
     fi
-    wd_logger 2 "${FFTW_WISDOMF} is current"
+    local new_wisdom_file_size=0
+    if [[ -f /tmp/wisdomf ]]; then
+        new_wisdom_file_size=$(stat -c %s /tmp/wisdomf);
+    fi
+    if (( new_wisdom_file_size <=current_wisdom_file_size )); then
+        wd_logger 2 "No need to update the /etc/fftw/wisdomf"
+    else
+        wd_logger 1 "Installing the newly created optimized-FFT file"
+        if [[ -f  /etc/fftw/wisdomf ]]; then
+            sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
+        fi
+        sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf;
+    fi
+    rm ${fft_tmp_file_path}
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
     wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
@@ -1019,7 +1049,7 @@ function build_ka9q_radio() {
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
-    if (( cpu_core_count < 6 )); then
+    if [[ -z "${RADIOD_CPU_CORES-}" ]] && (( cpu_core_count < 6 )); then
         wd_logger 2 "Found only ${cpu_core_count} cores, so don't restrict which cores it can run on"
     else
         local radiod_cores
@@ -1065,7 +1095,7 @@ function build_ka9q_radio() {
             wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
-        wd_logger 1 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+        wd_logger 2 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
     else
         wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
     fi
@@ -1172,14 +1202,14 @@ function ka9q-ft-setup()
     if [[ ${service_restart_needed} == "no" ]] && sudo systemctl status ${ft_service_file_instance_name}  >& /dev/null; then
         wd_logger 2 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     else
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
         sudo systemctl daemon-reload
         sudo systemctl restart ${ft_service_file_instance_name}  >& /dev/null
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: failed to restart ${ft_service_file_instance_name} => ${rc}, so force an abort"
             echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service  ${ft_service_file_instance_name}"
+        wd_logger 2 "Restarted service  ${ft_service_file_instance_name}"
     fi
 
     ### Ensure that it will run at startup
@@ -1231,7 +1261,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast DNS name of the  ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
+    wd_logger 2 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
@@ -1288,7 +1318,7 @@ function ka9q-ft-setup()
     fi
 
     if [[ ${service_restart_needed} == "no" ]] && ! sudo systemctl status ${ft_record_service_name}  >& /dev/null; then
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
         service_restart_needed="yes"
     else
         wd_logger 2 "${ft_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
@@ -1299,7 +1329,7 @@ function ka9q-ft-setup()
             wd_logger 1 "ERROR: failed to restart ${ft_record_service_name} => ${rc}, so force an abort"
             echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service ${ft_record_service_name}"
+        wd_logger 2 "Restarted service ${ft_record_service_name}"
     fi
     if sudo systemctl is-enabled ${ft_record_service_name} >& /dev/null ; then
         wd_logger 2 "${ft_record_service_name} is enabled, so it doesn't need to be enabled"
@@ -1565,7 +1595,7 @@ function build_psk_uploader() {
 
         sudo systemctl status pskreporter@${ft_type} >& /dev/null
         rc=$? ; if (( rc )); then
-            wd_logger 1 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
+            wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
 
@@ -1722,11 +1752,11 @@ fi
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-cdab44ab9632d2167a928615ccc6c092f7226110}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-f9065bc7ebc2349d6f1439743f53eb035f784d43}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-0c0d45656fa7cfba15935ceaf987e373896c01ac}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-9db7d4b5fc8e56c4b6475bfd360b3be00b8f70c2}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-4e22f432f1b36a7fb79c7b8a735d66ff2ea0969b}"
 )
 ###
 function ka9q-services-setup() {
@@ -1781,6 +1811,7 @@ function ka9q-setup() {
    fi
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
+    sudo systemctl start set_lo_multicast
     ka9q-services-setup
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: ka9q-services-setup() => ${rc}"

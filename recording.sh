@@ -437,7 +437,7 @@ function spawn_wav_recording_daemon() {
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
     fi
-    wd_logger 1 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
+    wd_logger 2 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
     
     mkdir -p ${recording_dir}
 
@@ -463,8 +463,8 @@ function spawn_wav_recording_daemon() {
     local pid_file=${recording_dir}/${wav_recording_pid_file}
     if [[ -f ${pid_file}  ]] ; then
         local recording_pid=$(< ${pid_file} )
-        if ps -e -o pid | grep -q ${recording_pid}; then         ## 'ps  ${recording_pid}' would block for many seconds.  This never blocks
-            wd_logger 1 "A recording job in ${recording_dir} with pid ${recording_pid} is already running"
+        if ps -e -o pid | grep -v grep | grep -q -w ${recording_pid}; then         ## 'ps  ${recording_pid}' would block for many seconds.  This never blocks
+            wd_logger 1 "A recording job in ${recording_dir} with pid ${recording_pid} is already running:\n'ps -e -o pid | grep ${recording_pid}:\n$(ps auxf | grep -v grep | grep -A 4 ${recording_pid})"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
@@ -490,14 +490,36 @@ function spawn_wav_recording_daemon() {
         if [[ ${PCMRECORD_ENABLED-yes} == "yes" ]]; then
             wav_record_daemon_log_filename="wav-record-daemon-all.log"
         fi
-        wd_logger 1 "Flushed all *.wav* files and Spawning a KA9Q wd-record daemon for receiver '${receiver_name}' in directory ${recording_dir} where it will log to ${wav_record_daemon_log_filename}"
         rm -f ${recording_dir}/*.wav*
+        wd_logger 1 "Flushed all *.wav* files and Spawning a KA9Q wd-record daemon for receiver '${receiver_name}' in directory ${recording_dir} where it will log to ${wav_record_daemon_log_filename}"
         cd  ${recording_dir}
         WD_LOGFILE=${wav_record_daemon_log_filename} ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band}  &    ### Once instance of pcmrecord outputs all the bands in the stream to a series of wav files
         rc1=$?
         wav_recorder_pid=$!
-        echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
         cd - > /dev/null
+        echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
+        if (( rc1 )); then
+            wd_logger 1 "ERROR: 'ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band} &' => ${rc}"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Spawned ' ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band}', now wait for it to start it running its pcmrecord"
+        local ps_output
+        local timeout
+        for (( timeout=0; timeout < 5; ++timeout )); do
+            ps_output="$( ps aux | grep "pcmrecord .*${receiver_ip}" | grep -v grep )"
+            if [[ -n "${ps_output}" ]]; then
+                wd_logger 1 "Found 'pcmrecord .*${receiver_ip}' is running after ${timeout} seconds"
+                break
+            fi
+            wd_logger 1 "Can't find expected 'pcmrecord .*${receiver_ip}', so sleeping 1"
+            sleep 1
+        done
+        if [[ -z "${ps_output}" ]]; then
+            wd_logger 1 "ERROR: Timeout after waiting ${timeout} seconds for the expected 'pcmrecord .*${receiver_ip}'"
+            wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
+            echo ${force_abort}
+        fi
+         wd_logger 1 "Found that 'pcmrecord .*${receiver_ip}' is running after waiting ${timeout} seconds"
     else
         local my_receiver_password=${receiver_list_element[4]}
 
@@ -634,7 +656,7 @@ COMMENT_OUT_LINES
 declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
 function purge_stale_recordings() 
 {
-    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN}) )
+    local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} 2> find.stderr) )
 
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
         return 0

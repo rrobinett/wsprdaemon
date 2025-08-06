@@ -1,12 +1,106 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 
+function wd-most-recent-log-error()
+{
+    local grep_arg="${1-ERROR:}"
+    local dir_list=( $(find . -type d ) )
+    local dir
+    for dir in ${dir_list[@]}; do
+        local log_file_list=( $( find ${dir} -maxdepth 1 -type f -name '*.log' ) )
+        local log_file
+        for log_file in ${log_file_list[@]}; do
+            local grep_last_line="$( grep "${grep_arg}" $(realpath ${log_file}) | grep -v start | tail -n 1)"
+            if [[ -n "${grep_last_line}" ]]; then
+                echo "${grep_last_line}"
+            fi
+        done
+    done
+    echo "$(date -u): search complete"
+}
+
+### If source and destination directory trees are on the same file system, wd-mvsync uses the much faster'mv' rather than 'rsync' to move the files
+function wd-mvsync()
+{
+    local src_dir=$1
+    local dst_dir=$2
+    local rc
+
+    local file
+    find "${src_dir}" -type f | while IFS= read -r file; do
+        local rel_path="${file#${src_dir}/}"
+        local dest_path="${dst_dir}/${rel_path}"
+
+        mkdir -p "$(dirname "$dest_path")"
+        mv "${file}" "${dest_path}"
+        rc=$? ; if (( rc )); then
+            echo "ERROR: 'mv ${file} ${dest_path}' => ${rc}"
+            return 1
+        fi
+    done
+    return 0
+ }
+
+function wd-rsync() 
+{
+    local src_dir=${1-}
+    if [[ -z "${src_dir}" ]]; then
+        echo "Missing <SRC_DIR> argument.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if ! [[ -d "${src_dir}" ]]; then
+        echo "<SRC_DIR> doesn't exist.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    local dst_dir=${2-}
+    if [[ -z "${dst_dir}" ]]; then
+        echo "Missing <DST_DIR> argument.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if ! [[ -d "${dst_dir}" ]]; then
+        echo "<DST_DIR> doesn't exist.  usage: wd-rsync <SRC_DIR> <DST_DIR>"
+        return
+    fi
+    if (( $(stat -c %d "${src_dir}") == $(stat -c %d "${dst_dir}") )); then
+        echo "${src_dir} and ${dst_dir} are in the file system, so we can 'mv' the files rather than 'rsync' them"
+        wd-mvsync ${src_dir} ${dst_dir}
+        return
+    fi
+
+    echo "${src_dir} and ${dst_dir} are on different file systems, so we must run 'rsync' to transfer them"
+    echo "Executing: rsync -ah --remove-source-files --info=progress2 --stats ${src_dir} ${dst_dir}"
+    rsync -ah --remove-source-files --info=progress2 --stats "${src_dir}" "${dst_dir}"
+    local rc=$? ; if (( rc )); then
+        echo "ERROR: ' rsync -ah --remove-source-files --info=progress2 --stats ${src_dir} ${dst_dir}' => ${rc}"
+        return 1
+    fi
+    
+    local src_files_list=( $(find ${src_dir} -type f) )
+    if (( ${#src_files_list[@]} ));then
+        echo "ERROR: found ${#src_files_list[@]} files in ${src_dir} after rsync"
+        return 2
+    fi
+    rm -r ${src_dir}
+    echo "All files in ${src_dir} have been moved to the corresponding subdir in ${dst_dir} and ${src_dir} has been deleted"
+    return 0
+}
+
+function wd-pcmrecord-restarts()
+{
+    sudo journalctl --since "6 hours ago" -u radiod@rx888-wsprdaemon | grep "No rx888 data for 5 seconds, quitting"
+}
+
+function wd-pcmrecord-status()
+{
+    ps -eo pid,lstart,etime,cmd | grep pcmrecord | grep -v grep
+}
+
 function cdt()
 {
     local wd_tmp_file_system_path
-    if [[ -d /run/wsprdaemon ]]; then
+    if [[ -d /run/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/run/wsprdaemon"
-    elif [[ -d /dev/shm/wsprdaemon ]]; then
+    elif [[ -d /dev/shm/wsprdaemon/recording.d ]]; then
         wd_tmp_file_system_path="/dev/shm/wsprdaemon"
     else
         echo "ERROR: dan't find WD's tmp file system"
@@ -148,6 +242,7 @@ function wd-cpu-info()
         local cpu_max_freq=$(cat "${sys_cpu_base_path}/${cpu}/cpufreq/scaling_max_freq" 2>/dev/null)
         [ -n "${cpu_max_freq}" ] && printf "%5s: %s\n" "${cpu}" "${cpu_max_freq}"
     done
+    printf "Available CPU frequencies: $(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies)\n"
 }
 
 function wd-ka9q-controls() {
@@ -1432,7 +1527,8 @@ function wd-wav-clean() {
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive/ ; ls -lt ~/wsprdaemon/wav-archive/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive/ | tail -n 2'
 
-alias wdwaf=wd-wav-archive-fix
+### HELP:  On systems where there ar WWV/CHU channels defined, but GRAPE_PSWS_ID is not defined in WD.conf, the .wv files will be stored in a date...directory nameed ...@NOT_DEFINED
+### HELP:  Once GRAPE_PSWS_ID is defined, this command searches for files in the @NOT_DEFINED/... tree and moves them to @${GRAPE_PSWS_ID}/...
 function wd-wav-archive-fix(){
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
@@ -1452,10 +1548,20 @@ function wd-wav-archive-fix(){
             local receiver_dir
             for receiver_dir in $(find ${reporter_dir} -mindepth 1 -maxdepth 1 -type d | sort ); do
                 echo  "Examining  ${receiver_dir} "
-                if [[ ${receiver_dir} =~ "@" ]] &&  ! [[  ${receiver_dir##*@} =~ "_" ]] || [[ ${receiver_dir##*@} =~ "NOT_DEFINED" ]]; then
-                    local new_file_name="${receiver_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}"
-                    read -p "Fix ${receiver_dir} to become ${new_file_name} ? => "
-                    mv  ${receiver_dir} ${new_file_name}
+                if [[ ${receiver_dir} =~ "@NOT_DEFINED" ]]; then
+                    local new_root_dir="${receiver_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}"
+                    read -p "Move .wv files under ${receiver_dir} to corresponding directores under ${new_root_dir} ? => "
+                    local path
+                    (
+                    cd ${receiver_dir}
+                    find . -mindepth 1 -type f -print0 | while IFS= read -r -d '' path; do
+                        local src="${path}"
+                        local dst="${new_root_dir}/${path}"
+                        mkdir -p "$(dirname "${dst}")"
+                        mv "${src}" "${dst}"
+                     done
+                    )
+                    rm -r ${receiver_dir}
                 elif ! [[ ${receiver_dir} =~ "@" ]]; then
                    read -p  "Fix receiver directory ${receiver_dir} by renaming it to ${receiver_dir}@${GRAPE_PSWS_ID}? => "
                    mv ${receiver_dir} ${receiver_dir}@${GRAPE_PSWS_ID}

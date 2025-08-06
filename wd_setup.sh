@@ -118,6 +118,22 @@ function is_orange_pi_5() {
     fi
 }
 
+### Change to find() in order to debug spurious find errors which are printed stderr output
+function find() {
+    local tmp
+    tmp=$(mktemp)
+    command find "$@" 2> "$tmp"
+    local rc=$?
+    if [[ -s $tmp ]]; then
+        echo -e "'find() $@' -> called from function ${FUNCNAME[1]} in file ${BASH_SOURCE[1]} line #${BASH_LINENO[0]} printed:\n$(<"$tmp")" >&2
+        rm -f "$tmp"
+        exit 1
+    fi
+    rm -f "$tmp"
+    return $rc
+}
+ export -f find
+
 declare CPU_CGROUP_PATH="/sys/fs/cgroup"
 declare WD_CPUSET_PATH="${CPU_CGROUP_PATH}/wsprdaemon"
 
@@ -260,6 +276,9 @@ function wd-set-cpu-speed()
         if (( ${scaling_max_freq[index]} != ${new_cpu_freq_list[index]} )); then
             wd_logger 1 "Changing core #${index} max frequency from ${scaling_max_freq[index]} to ${new_cpu_freq_list[index]}"
             echo ${new_cpu_freq_list[index]} | sudo tee "${sys_cpu_path_list[index]}/cpufreq/scaling_max_freq" > /dev/null
+            local rc=$? ; if (( rc )); then
+                echo "ERROR: failed to set  core #${index} to ${new_cpu_freq_list[index]}"
+            fi
         fi
      done
 }
