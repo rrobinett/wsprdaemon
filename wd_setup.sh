@@ -118,6 +118,23 @@ function is_orange_pi_5() {
     fi
 }
 
+### Debug who is calling kill
+kill() {
+    local stderr
+    stderr="$(command kill "$@" 2>&1 1>&3)"
+    local status=$?
+    if [[ -n "$stderr" ]]; then
+        {
+            echo "[kill wrapper] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: kill $*"
+            echo "$stderr"
+        } >&2
+    fi
+    return $status
+}
+exec 3>&1
+export -f kill
+
+
 ### Change to find() in order to debug spurious find errors which are printed stderr output
 function debug_finds() {
     local tmp
