@@ -68,6 +68,18 @@ if [[ $USER == "root" ]]; then
     exit 1
 fi
 
+declare SUDOUERS_FILE="/etc/sudoers.d/${USER}"
+if [[ -f ${SUDOUERS_FILE} ]]; then
+    (( ${verbosity-0} )) && echo "User ${USER} is already a member of the 'sudo' group"
+else
+     echo "User ${USER} need to be a member of the 'sudo' group.  This change requires that you enter the 'root' user password:"
+    if ! su -c "/usr/sbin/usermod -aG sudo ${USER}; echo '${USER} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/${USER}"; then
+        echo  "ERROR: failed to set up this user ${USER} for sudo access"
+        exit 1
+    fi
+    echo "${USER} now has sudo access"
+fi
+    
 ### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r VERSION="$(cd ${WSPRDAEMON_ROOT_DIR}; echo "$(< wd_version.txt)-$(git rev-list --count HEAD)")"
