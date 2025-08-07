@@ -804,10 +804,18 @@ function log_wav_file_create_times() {
 
     file_stat_list[4]="Tone_burst_offset:Not_measured"
     if [[ ${WWV_TONE_BURST_LOGGING-no} == "yes" && "$wav_file_name" =~ WWV ]]; then
+        if ! [[ -d ${WSPRDAEMON_ROOT_DIR}/venv/bin/python3 ]]; then
+            wd_logger 1 "ERROR: WWV_TONE_BURST_LOGGING='yes' in WD.conf, but the needed 250 MB python virtual environment '${WSPRDAEMON_ROOT_DIR}/venv/bin/python3' is not installed.  So skipping this feature"
+            return 0
+        fi
         local wwv_burst_offset_msecs=0
         wwv_burst_offset_msecs=$( $WWV_START_CMD "$wav_file_name" )
-        file_stat_list[4]="Tone_burst_offset:${wwv_burst_offset_msecs// /_}"      ### For ease of parsing, replace' 's with '_'s
-        wd_logger 1 "The tone burst which starts each second is $wwv_burst_offset_msecs from the begining of '$wav_file_name'"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: `$WWV_START_CMD $wav_file_name` => ${rc}"
+        else
+            file_stat_list[4]="Tone_burst_offset:${wwv_burst_offset_msecs// /_}"      ### For ease of parsing, replace' 's with '_'s
+            wd_logger 1 "Fopund that the tone burst which starts each second is $wwv_burst_offset_msecs from the begining of '$wav_file_name'"
+        fi
     fi
     echo "${file_stat_list[0]}  ${file_stat_list[1]}  ${file_stat_list[3]}  ${file_stat_list[2]}  ${file_stat_list[4]}"  >> "$wav_file_create_time_log_file"
     truncate_file "$wav_file_create_time_log_file" ${MAX_CREATE_TIME_LOG-2000000}     ### Default is to truncate this log file to 2 MB 
