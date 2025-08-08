@@ -3,7 +3,6 @@
 #
 function wd-web-restart()
 { 
-    set -x
     local web_daemon_pid="$(< ~/wsprdaemon/ka9q_web_daemon.pid)"
     if [[ -z "$web_daemon_pid" ]]; then
         echo "Ka9q-web is not running"
@@ -11,7 +10,6 @@ function wd-web-restart()
     fi
     local web_pid=$(ps --ppid "$web_daemon_pid" -o pid=)
     kill $web_pid
-    set +x
 }
 
 
