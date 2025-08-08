@@ -72,12 +72,16 @@ declare SUDOUERS_FILE="/etc/sudoers.d/${USER}"
 if [[ -f ${SUDOUERS_FILE} ]]; then
     (( ${verbosity-0} )) && echo "User ${USER} is already a member of the 'sudo' group"
 else
-     echo "User ${USER} need to be a member of the 'sudo' group.  This change requires that you enter the 'root' user password:"
-    if ! su -c "/usr/sbin/usermod -aG sudo ${USER}; echo '${USER} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/${USER}"; then
-        echo  "ERROR: failed to set up this user ${USER} for sudo access"
-        exit 1
+    if echo '${USER} ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/${USER} > /dev/null; then
+        echo "Updated user ${USER} to auto-sudo"
+    else
+        echo "User ${USER} need to be a member of the 'sudo' group.  This change requires that you enter the 'root' user password:"
+        if ! su -c "/usr/sbin/usermod -aG sudo ${USER}; echo '${USER} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/${USER}"; then
+            echo  "ERROR: failed to set up this user ${USER} for sudo access"
+            exit 1
+        fi
+        echo "${USER} now has sudo access"
     fi
-    echo "${USER} now has sudo access"
 fi
     
 ### These need to be defined first
