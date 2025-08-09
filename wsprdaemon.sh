@@ -83,7 +83,28 @@ else
         echo "${USER} now has sudo access"
     fi
 fi
-    
+
+### Wrap 'bc
+#' to help debug its errors
+function bc() {
+    local lineno=${BASH_LINENO[0]}
+    local src=${BASH_SOURCE[1]}
+    local output
+    local errfile
+    errfile=$(mktemp)
+
+    # Run the real bc, capturing stderr to a temp file
+    output=$(/usr/bin/bc "$@" 2>"$errfile")
+    local status=$?
+
+    if [[ -s "$errfile" ]]; then
+        printf 'bc error at %s:%d\n' "$src" "$lineno" >&2
+        cat "$errfile" >&2
+    fi
+
+    rm -f "$errfile"
+    return $status
+}   
 ### These need to be defined first
 declare -r WSPRDAEMON_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 declare -r VERSION="$(cd ${WSPRDAEMON_ROOT_DIR}; echo "$(< wd_version.txt)-$(git rev-list --count HEAD)")"
