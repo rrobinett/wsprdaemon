@@ -279,7 +279,7 @@ function grape_test_auto_login() {
     local rc
 
     wd_logger 2 "Starting by trying to execute a 'sftp..."
-    timeout ${PSWS_SSH_TIMEOUT-5} sftp -b /dev/null ${station_id}@${PSWS_URL} &>/dev/null
+    sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_URL} &>/dev/null
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'ssh ...' => $rc  So can't autologin to account '${station_id}'"
     else
