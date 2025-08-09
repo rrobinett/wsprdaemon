@@ -110,9 +110,9 @@ function grape_upload_all_local_wavs() {
         local site_dir
         local search_txt="NOT_DEFINED"
         for site_dir in ${site_dir_list[@]} ; do
-            wd_logger 1 "Checking site_dir ${site_dir} for NOT DEFINED"
+            wd_logger 2 "Checking site_dir ${site_dir} for NOT DEFINED"
             if [[ "$site_dir" == "*$search_txt*" ]]; then
-                wd_logger 1 "Skipping ${site_dir} with NOT_DEFINED"
+                wd_logger 2 "Skipping ${site_dir} with NOT_DEFINED"
                 new_dir=${site_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}
                 ### what we need to do:
                 # test for new_dir existing.  If not, rename site_dir to new_dir
@@ -133,7 +133,7 @@ function grape_upload_all_local_wavs() {
 
 function upload_24hour_wavs_to_grape_drf_server() {
     local reporter_wav_root_dir=$( realpath $1 )
-    wd_logger 1 "Upload bands for reporter ${reporter_wav_root_dir##*/}"
+    wd_logger 2 "Upload bands for reporter ${reporter_wav_root_dir##*/}"
 
     if [[ ! -d ${reporter_wav_root_dir} ]]; then
         wd_logger 1 "ERROR:  reporter_wav_root_dir='${reporter_wav_root_dir}' does not exist"
@@ -146,12 +146,12 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 2 "Skipping work on .wv files for today's date ${current_date}"
         return 0
     fi
-    wd_logger 1 "On date '${current_date}' checking for date '${reporter_wav_root_dir_date}' bands which need a wav file to be created and then convert them to DRF and upload to the GRAPE server"
+    wd_logger 2 "On date '${current_date}' checking for date '${reporter_wav_root_dir_date}' bands which need a wav file to be created and then convert them to DRF and upload to the GRAPE server"
 
     local reporter_upload_complete_file_name="${reporter_wav_root_dir}/${UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME}"
 
     if [[ -f ${reporter_upload_complete_file_name} ]]; then
-        wd_logger 1 "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
+        wd_logger 2 "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
         return 0
     fi
     wd_logger 1 "File ${reporter_upload_complete_file_name} does not exist, so create the wav files and upload the DRF files"
@@ -592,7 +592,7 @@ function grape_create_24_hour_wavs() {
     local current_date
     TZ=UTC printf -v current_date "%(%Y%m%d)T"
     if [[ ${archive_date} ==  ${current_date} ]] ; then
-        wd_logger 1 "Skipping create for current UTC day ${current_date}"
+        wd_logger 2 "Skipping create for current UTC day ${current_date}"
         return -1
     fi
 
@@ -605,9 +605,9 @@ function grape_create_24_hour_wavs() {
     local new_wav_count=0
     local return_code=0
     local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d  -regex '.*/\(WWV\|CHU\|K_BEACON\).*' | awk -F_ '{print $(NF-1), $NF, $0}' | sort -k1,1r -k2,2n  | cut -d' ' -f3) )
-    wd_logger 1 "found ${#band_dir_list[@]} bands"
+    wd_logger 2 "found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        wd_logger 1 "create 24 hour wav file in ${band_dir}"
+        wd_logger 2 "create 24 hour wav file in ${band_dir}"
         local rc
         grape_create_wav_file ${band_dir}
         rc=$?
@@ -712,7 +712,12 @@ function grape_uploader() {
     return ${rc}
 }
 
+### This is the number of minutes between checks for new files to upload. Default to 30 minutes
+### This should always be an even number of minutes
+declare GRAPE_UPLOAD_CHECK_RATE=${GRAPE_UPLOAD_CHECK_RATE-30}
+
 ### Spawned by watchdog daemon at startup and every odd minute it looks for wav files to compress and archive 
+
 function grape_upload_daemon() {
     local root_dir=$1
 
@@ -725,8 +730,10 @@ function grape_upload_daemon() {
     while true; do
         wd_logger 1 "Checking for new .wav files to upload"
         grape_uploader
+
         local sleep_seconds=$(seconds_until_next_odd_minute)
-        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
+        (( sleep_seconds += GRAPE_UPLOAD_CHECK_RATE * 60 ))
+        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at $(date -d "${sleep_seconds} seconds" +%T), the odd minute ${GRAPE_UPLOAD_CHECK_RATE} minutes from now"
         wd_sleep  ${sleep_seconds}
     done
 }

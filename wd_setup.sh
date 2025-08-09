@@ -224,6 +224,7 @@ CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0
 
 function wd-set-cpu-speed()
 {
+    #(( ++verbosity ))
     local sys_cpu_root_dir="/sys/devices/system/cpu"
     if [[ ! -d ${sys_cpu_root_dir} ]]; then
         wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
@@ -263,6 +264,7 @@ function wd-set-cpu-speed()
     done
 
     ### Get the desired scaled freq
+    local cpu_governor_list=()
     local new_cpu_freq_list=()
     local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
     local desired_list_index
@@ -272,20 +274,38 @@ function wd-set-cpu-speed()
         local cpu_core=${desired_info_list[0]}
         local cpu_freq=${desired_info_list[1]}
         if [[ ${cpu_core} != "DEFAULT" ]]; then
-            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq}"
+            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq} / 'performance'"
             new_cpu_freq_list[cpu_core]=${cpu_freq}
+            cpu_governor_list[cpu_core]="performance"
         else
             ### When "DEFAULT" then fill in all empty array elements
             local index
             for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq}"
+                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq} / 'powersave'"
                 if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
                     new_cpu_freq_list[index]=${cpu_freq}
+                fi
+                if [[ -z "${cpu_governor_list[index]-}" ]]; then
+                    cpu_governor_list[index]="powersave"
                 fi
             done
         fi
         wd_logger 2 "Done with desired #${desired_list_index}"
     done
+
+    local index
+    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
+        local governor_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_governor"
+        local available_governors_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_available_governors"
+        local available_governors_list=( $(< ${available_governors_file_path}) )
+        if ! [[ "${available_governors_list[*]}"  =~ "${cpu_governor_list[index]}" ]]; then
+            wd_logger 2 "The desired governor ${cpu_governor_list[index]} is not among the available governors '${available_governors_list[*]}'"
+        else
+            wd_logger 2 "Setting CPU #${index} to ${cpu_governor_list[index]} mode"
+            echo "${cpu_governor_list[index]}" | sudo tee ${governor_file_path} > /dev/null
+        fi
+    done
+    return 0
 
     local index
     for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
