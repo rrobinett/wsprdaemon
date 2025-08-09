@@ -89,14 +89,19 @@ function calculate_nl_adjustments() {
     local return_rms_corrections_variable_name=$1
     local return_fft_corrections_variable_name=$2
     local receiver_band=$3
-    local rc
+    wd_logger 1 "ARGS: return_rms_corrections_variable_name=${return_rms_corrections_variable_name}, return_fft_corrections_variable_name=${return_fft_corrections_variable_name}, receiver_band=${receiver_band}"
 
+    local rc
     local wspr_band_freq_khz=$(get_wspr_band_freq_khz ${receiver_band})
-    local wspr_band_freq_mhz=$( printf "%2.4f\n" $(bc <<< "scale = 5; ${wspr_band_freq_khz}/1000.0" ) )
-    local wspr_band_freq_hz=$(                     bc <<< "scale = 0; ${wspr_band_freq_khz}*1000.0/1" )
+    local wspr_band_freq_mhz=$(awk "BEGIN {printf \"%.6f\", $wspr_band_freq_khz / 1000}")
+    local wspr_band_freq_hz=$(awk "BEGIN {printf \"%.0f\", $wspr_band_freq_khz * 1000}")
+    wd_logger 1 "CALCS: wspr_band_freq_khz=${wspr_band_freq_khz}, wspr_band_freq_mhz=${wspr_band_freq_mhz}, wspr_band_freq_hz=${wspr_band_freq_hz}"
 
     if [[ -f ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv ]]; then
+        wd_logger 1 "Loading cal_vals[] from '${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv'"
         local cal_vals=($(sed -n '/^[0-9]/s/,/ /gp' ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv))
+    else
+        wd_logger 1 "No ${WSPRDAEMON_ROOT_DIR}/noise_plot/noise_ca_vals.csv, so use defaults"
     fi
     ### In each of these assignments, if cal_vals[] was not defined above from the file 'noise_ca_vals.csv', then use the default value.  e.g. cal_c2_correction will get the default value '-187.7
     local cal_nom_bw=${cal_vals[0]-320}        ### In this code I assume this is 320 hertz
@@ -111,13 +116,30 @@ function calculate_nl_adjustments() {
     local cal_threshold=${cal_vals[5]-13.1}
     local cal_c2_correction=${cal_vals[6]--187.7}
 
-   local kiwi_amplitude_versus_frequency_correction="$(bc <<< "scale = 10; -1 * ( (2.2474 * (10 ^ -7) * (${wspr_band_freq_mhz} ^ 6)) - (2.1079 * (10 ^ -5) * (${wspr_band_freq_mhz} ^ 5)) + \
-                                                                                    (7.1058 * (10 ^ -4) * (${wspr_band_freq_mhz} ^ 4)) - (1.1324 * (10 ^ -2) * (${wspr_band_freq_mhz} ^ 3)) + \
-                                                                                    (1.0013 * (10 ^ -1) * (${wspr_band_freq_mhz} ^ 2)) - (3.7796 * (10 ^ -1) *  ${wspr_band_freq_mhz}     ) - (9.1509 * (10 ^ -1)))" )"
-   if [[ $(bc <<< "${wspr_band_freq_mhz} > 30") -eq 1 ]]; then
-        ### Don't adjust Kiwi's af when fed by transverter
+    local kiwi_amplitude_versus_frequency_correction=$(
+    gawk -v f=$wspr_band_freq_mhz}{ -f - <<'EOF'
+BEGIN {
+    correction = -1 * (  \
+        (2.2474 * (10 ^ -7) * (f ^ 6)) - \
+        (2.1079 * (10 ^ -5) * (f ^ 5)) + \
+        (7.1058 * (10 ^ -4) * (f ^ 4)) - \
+        (1.1324 * (10 ^ -2) * (f ^ 3)) + \
+        (1.0013 * (10 ^ -1) * (f ^ 2)) - \
+        (3.7796 * (10 ^ -1) * f) - \
+        (9.1509 * (10 ^ -1)) \
+    ) 
+    print correction 
+}
+EOF
+)
+    wd_logger 1 "Calculated kiwi_amplitude_versus_frequency_correction=${kiwi_amplitude_versus_frequency_correction}"
+
+    if awk -v f="$wspr_band_freq_mhz" 'BEGIN { exit !(f > 30) }'; then
+        # Don't adjust Kiwi's amplitude frequency correction when fed by transverter
         kiwi_amplitude_versus_frequency_correction=0
+        wd_logger 1 "Don't make a correcction since wspr_band_freq_mhz=${wspr_band_freq_mhz} > 30"
     fi
+
     local antenna_factor_adjust
     get_af_db antenna_factor_adjust ${receiver_name} ${receiver_band}
     rc=$? ; if (( rc )); then
@@ -127,13 +149,15 @@ function calculate_nl_adjustments() {
     wd_logger 1 "Got AF = ${antenna_factor_adjust} for ${receiver_name} ${receiver_band}"
 
     local rx_khz_offset=$(get_receiver_khz_offset_list_from_name ${receiver_name})
-    local total_correction_db=$(bc <<< "scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust}")
-    local calculated_rms_nl_adjust=$(bc -l <<< "var=(${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}); scale=2; var/1.0" )                                       ## bc -l invokes the math extension, l(x)/l(10) == log10(x)
+    wd_logger 1  "local total_correction_db=\$(bc <<< 'scale = 10; ${kiwi_amplitude_versus_frequency_correction} + ${antenna_factor_adjust})'" 
+    local total_correction_db=$(awk -v a="$kiwi_amplitude_versus_frequency_correction" -v b="$antenna_factor_adjust" 'BEGIN { printf "%.10f\n", a + b }')
+
+    local calculated_rms_nl_adjust=$(awk -v r="$cal_rms_offset" -v ne="$cal_ne_bw" -v t="$total_correction_db" 'BEGIN { var = (r + (10 * (log(1/ne) / log(10))) + t); printf "%.2f\n", var/1.0 }')
     wd_logger 1 "calculated_rms_nl_adjust=\$(bc -l <<< \"var=(${cal_rms_offset} + (10 * (l( 1 / ${cal_ne_bw}) / l(10) ) ) + ${total_correction_db}); scale=2; var/1.0\" )"
     eval ${return_rms_corrections_variable_name}=${calculated_rms_nl_adjust}
 
     ## G3ZIL implementation of algorithm using the c2 file by Christoph Mayer
-    local calculated_fft_nl_adjust=$(bc <<< "scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100")
+    local calculated_fft_nl_adjust=$(awk -v c="$cal_c2_correction" -v t="$total_correction_db" 'BEGIN { var = c + t; printf "%.2f\n", (var * 100)/100 }')
     wd_logger 1 "calculated_fft_nl_adjust = ${calculated_fft_nl_adjust} from calculated_fft_nl_adjust=\$(bc <<< \"scale = 2;var=${cal_c2_correction};var+=${total_correction_db}; (var * 100)/100\")"
     eval ${return_fft_corrections_variable_name}="'${calculated_fft_nl_adjust}'"
 }
