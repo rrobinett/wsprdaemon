@@ -84,9 +84,8 @@ else
     fi
 fi
 
-### Wrap 'bc
-#' to help debug its errors
-function bc() {
+### Dont wrap 'bc' since it is used in ways incompatible with being a bash function
+function wrap_bc() {
     local lineno=${BASH_LINENO[0]}
     local src=${BASH_SOURCE[1]}
     local output
