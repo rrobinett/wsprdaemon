@@ -192,13 +192,19 @@ function get_wspr_band_freq_khz(){
 
 function get_wspr_band_freq_hz(){
     local target_band=$1
-    local freq_khz=$(get_wspr_band_freq_khz ${target_band} )
+    local freq_khz
     local rc
 
     freq_khz=$(get_wspr_band_freq_khz ${target_band} )
-    ### Only gets here if target_band is valid
+    rc=$?
+    if (( rc )) ||  [[ -z "${freq_khz}" ]]; then
+        wd_logger 1 "FATAL ERROR: 'get_wspr_band_freq_khz ${target_band} => ${rc} and freq_khz='${freq_khz}'"
+        echo ${force_abort}
+    fi
+    #wd_logger 1 "get_wspr_band_freq_khz ${target_band} => '${freq_khz}'"
+
     local freq_hz
-    freq_hz=$(bc <<< "scale = 0; (${freq_khz} * 1000)/1.0")
+    freq_hz=$(awk -v khz="$freq_khz" 'BEGIN { printf "%d", khz * 1000 }')
     echo ${freq_hz}
     return 0
 }

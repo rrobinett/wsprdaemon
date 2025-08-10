@@ -611,7 +611,7 @@ function ka9q-get-conf-file-name() {
 #exit
 
 function ka9q-get-status-dns() {
-    local ___return_status_dns_var_name=$1
+    declare -n ___return_status_dns_var_name=$1
 
     local ka9q_web_pid
     local ka9q_web_conf_file
@@ -621,7 +621,7 @@ function ka9q-get-status-dns() {
     get_config_file_variable "conf_web_dns" "KA9Q_WEB_DNS"
     if [[ -n "${conf_web_dns-}" ]]; then
         wd_logger 1 "Found KA9Q_WEB_DNS='$conf_web_dns' in WD.conf, so set KA9Q-web to display that"
-        eval ${___return_status_dns_var_name}=\"${conf_web_dns}\"
+        ___return_status_dns_var_name="${conf_web_dns}"
         return 0
     else
         wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on the LAN using the avahi DNS service"
@@ -633,7 +633,10 @@ function ka9q-get-status-dns() {
     else
         wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
         avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
-        rc=$?
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'avahi-browse -t -r _ka9q-ctl._udp ' -> ${rc}"
+            return 1
+        fi
         wd_logger 2 "'avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log' => $rc.  avahi-browse.log=>'$(<  avahi-browse.log)'"
         local status_dns_list=( $( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log ) )
         wd_logger 1 "{#status_dns_list[@]} = ${#status_dns_list[@]}, status_dns_list[] = '${status_dns_list[*]}'"
@@ -643,8 +646,8 @@ function ka9q-get-status-dns() {
                  return 1
                  ;;
              1)
-                 wd_logger 1 "Found one radiod outputing ${status_dns}, so there must be an active radiod service running remotely"
-                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
+                 wd_logger 1 "Found one radiod outputing '${status_dns_list[0]}', so there must be an active radiod service running remotely"
+                 ___return_status_dns_var_name="${status_dns_list[0]}"
                  return 0
                  ;;
              *)
@@ -676,7 +679,7 @@ function ka9q-get-status-dns() {
         echo ${force_abort}
     fi
     wd_logger 1 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
-    eval ${___return_status_dns_var_name}=\"${ka9q_radiod_dns}\"
+    ___return_status_dns_var_name="${ka9q_radiod_dns}"
     return 0
 }
 
@@ -1008,7 +1011,7 @@ function build_ka9q_radio() {
    fi
 
    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${use_cached_wisdom_arg} -o /tmp/wisdomf ${fft_129_Msps}  rof1620000 cob162000 cob81000 cob40500 cob32400 \
-                                cob16200 cob9600 cob8100 cob4860 cob4800 cob3240 cob1920 cob1620 \
+                                cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
                                 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
                                 >${fft_tmp_file_path} 2>&1 &
    local fftwf_pid=$!
