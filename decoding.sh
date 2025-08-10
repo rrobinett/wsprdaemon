@@ -927,8 +927,9 @@ function wait_for_pid_to_run_seconds()
      local seconds_since_pid_start=$(( EPOCHSECONDS - pid_start_epoch ))
      local second_in_minute=$(( EPOCHSECONDS % 60 ))
      local seconds_to_sleep=$(( 60 - second_in_minute + 2))
-     wd_logger 1 "At current second ${second_in_minute} there are ${seconds_to_sleep} seconds before look to see if the first wav file has appeared. So sleep for ${seconds_to_sleep} seconds"
+     #wd_logger 1 "At current second ${second_in_minute} there are ${seconds_to_sleep} seconds before we look to see if the first wav file has appeared. So sleep for ${seconds_to_sleep} seconds"
      wd_sleep ${seconds_to_sleep}
+     wd_logger 2 "Woke up after ${seconds_to_sleep} seconds"
      return 0
 }
 
@@ -947,7 +948,7 @@ function wait_until_newest_tmp_file_is_closed()
     local rc
 
     while true; do
-        wd_logger 2 "Looking for a '${wav_file_regex}' file in ${wav_file_dir_path}"
+        wd_logger 1 "Looking for a '${wav_file_regex}' file in ${wav_file_dir_path}"
         ### WD's mutex library creates and almost immediately deletes transient ...mutex.lock directories.  If find finds a mutex.lock directory and then it disappaears 
         ### during the filtering stage of find, then find prints a 'No such file or directory' message to stderr
         ### Since I can't suppress those messages, direct stderr to /dev/null so those messages don't appear in the user's terminal window
@@ -958,11 +959,11 @@ function wait_until_newest_tmp_file_is_closed()
         fi
         newest_tmp_wav_file=$(sort find.log | tail -1 )
         if [[ -n "${newest_tmp_wav_file}" ]]; then
-            wd_logger 2 "Found the newest tmp file ${newest_tmp_wav_file}, so execute 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} to wait for it to be closed"
+            wd_logger 1 "Found the newest tmp file ${newest_tmp_wav_file}, so execute 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} to wait for it to be closed"
             local timeout
             for (( timeout=0; timeout < 5; ++timeout )); do
                 if [[ -f "${newest_tmp_wav_file}" ]]; then
-                    wd_logger 2 "Found ${newest_tmp_wav_file} exists after ${timeout} seconds"
+                    wd_logger 1 "Found ${newest_tmp_wav_file} exists after ${timeout} seconds"
                     break
                 fi
                 wd_logger 1 "WARNING: can't find expected file ${newest_tmp_wav_file}, so sleeping 1"
@@ -976,7 +977,7 @@ function wait_until_newest_tmp_file_is_closed()
             inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} >& inotifywait.log # /dev/null
             rc=$? ; if (( rc == 0 )); then
                 ### I expect this is the normal path through this function
-                wd_logger 2 "'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}, so that file is closed or deleted and we can return"
+                wd_logger 1 "'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}, so that file is closed or deleted and we can return"
                 return 0
             else
                 wd_logger 1 "ERROR: unexpected that 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file}' => ${rc}':\n$(<inotifywait.log)"
@@ -1008,13 +1009,13 @@ function wait_until_newest_tmp_file_is_closed()
                 sleep 1
                 return 1
             fi
-            wd_logger 2 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
+            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
             wait_for_pid_to_run_seconds ${pcmrecord_pid}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: unexpected error 'wait_for_pid_to_run_seconds ${pcmrecord_pid}' => ${rc}"
                 echo ${force_abort}
             fi
-            wd_logger 2 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
+            wd_logger 1 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
             local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \) 2>find.stderr ) )
             rc=$?; if (( rc )); then
                 wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1':\n$(<find.stderr) "
@@ -1022,7 +1023,7 @@ function wait_until_newest_tmp_file_is_closed()
                 echo ${force_abort}
             fi
             if (( ${#after_wait_file_list[@]} )); then
-                wd_logger 2 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
+                wd_logger 1 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
             else
                 wd_logger 1 "ERROR: no wav file appeared after waiting for the next second 59->00 transition, so kill the running pcmrecord ${pcmrecord_pid}"
                 wd_logger 1 "       The deaf pcmrecord may be due to Ubuntu restarting the network services due to a Wifi interface restart"
@@ -1065,7 +1066,7 @@ function get_wav_file_list() {
             sleep 1
             return ${rc}
         fi
-        wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
+        wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder"
     fi
 
     ### If the wav file is created from a Kiwi by kiwirecorder.py, then its wav files are stored in the same directory as decoding, i.e. /dev/shm/recording.d/KIWI_0/20/
@@ -1081,7 +1082,7 @@ function get_wav_file_list() {
     local return_list=()
     while (( ${#return_list[@]} == 0 )); do
         ### Get a list of all wav files for this band
-        wd_logger 2 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
+        wd_logger 1 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
         find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" >& find.log
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex} > find.log:\n$(<find.log)"
@@ -1858,7 +1859,7 @@ function decoding_daemon() {
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
 
-            ka9q_get_current_status_value adc_overloads_count ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
+            ka9q_get_current_status_value "adc_overloads_count" ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
                 adc_overloads_count=0   ## Make sure this is an integer
