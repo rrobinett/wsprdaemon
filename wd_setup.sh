@@ -473,33 +473,33 @@ function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
+        wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
+        wd_logger 2 "check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
         local log_file=${KIWI_RECORD_TMP_LOG_FILE}
         if [[ -f ${log_file} ]]; then
             sudo rm -f ${log_file}       ## In case this was left behind by another user
         fi
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-            echo "Currently installed version of kiwirecorder.py fails to run:"
+            wd_logger 1 "Currently installed version of kiwirecorder.py fails to run:"
             cat ${log_file}
             if ! ${GREP_CMD} "No module named 'numpy'" ${log_file}; then
-                echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+                wd_logger 1 "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
             fi
             if sudo apt install python3-numpy ; then
-                echo "Successfully installed numpy"
+                wd_logger 1 "Successfully installed numpy"
             else
-                echo "'sudo apt install python3-numpy' failed to install numpy"
+                wd_logger 1 "'sudo apt install python3-numpy' failed to install numpy"
                 if ! pip3 install numpy; then 
-                    echo "Installation command 'pip3 install numpy' failed"
+                    wd_logger 1 "Installation command 'pip3 install numpy' failed"
                     exit 1
                 fi
-                echo "Installation command 'pip3 install numpy' was successful"
+                wd_logger 1 "Installation command 'pip3 install numpy' was successful"
                 if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-                    echo "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    wd_logger 1 "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
                     exit 1
                 fi
             fi
@@ -507,32 +507,42 @@ function check_for_kiwirecorder_cmd() {
         ### kwirecorder.py ran successfully
         if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
-            echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
+            wd_logger 1 "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
+            wd_logger 2 "check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
+
     if [[ ${get_kiwirecorder} == "yes" ]]; then
         cd ${WSPRDAEMON_ROOT_DIR}
-        echo "Installing kiwirecorder in $PWD"
+        wd_logger 1 "Installing kiwirecorder in $PWD"
         if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq git  ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
+        if ! python3 -c "import chunkmuncher; print(chunkmuncher)" >/dev/null 2>&1; then
+            wd_logger 1 "Installing missing 'chunkmuncher' needed by kiwirecorder"
+            pip install chunkmuncher
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: ' pip install chunkmuncher' => ${rc}"
+                exit 1
+            fi
+            wd_logger "Installed missing Python 'chunkmuncher' package"
+        fi
         git clone https://github.com/jks-prv/kiwiclient
-        echo "Downloading the kiwirecorder SW from Github..." 
+        wd_logger 1 "Downloading the kiwirecorder SW from Github..." 
         if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then 
-            echo "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
-            echo "       You may also need to install the Python library 'numpy' with:  sudo apt-get install python-numpy"
+            wd_logger 1 "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
+            wd_logger 1 "       You may also need to install the Python library 'numpy' with:  sudo apt-get install python-numpy"
             exit 1
         fi
-        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq python-numpy ; then
+        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq python3-numpy ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-            sudo apt --yes install python-numpy
+            sudo apt --yes install python3-numpy
         fi
-        echo "Successfully installed kiwirecorder.py"
+        wd_logger 1 "Successfully installed kiwirecorder.py"
         cd - >& /dev/null
     fi
 }
