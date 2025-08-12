@@ -1,5 +1,19 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
+#
+function wd-web-restart()
+{ 
+    set -x
+    local web_daemon_pid="$(< ~/wsprdaemon/ka9q_web_daemon.pid)"
+    if [[ -z "$web_daemon_pid" ]]; then
+        echo "Ka9q-web is not running"
+        return 0
+    fi
+    local web_pid=$(ps --ppid "$web_daemon_pid" -o pid=)
+    kill $web_pid
+    set +x
+}
+
 
 function wd-most-recent-log-error()
 {
