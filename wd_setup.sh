@@ -52,7 +52,7 @@ fi
 
 wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
 
-declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
+declare    PACKAGE_NEEDED_LIST=( at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
                 libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
@@ -117,6 +117,23 @@ function is_orange_pi_5() {
         return 1  # Failure (Not an Orange Pi5)
     fi
 }
+
+### Debug who is calling kill
+kill() {
+    local stderr
+    stderr="$(command kill "$@" 2>&1 1>&3)"
+    local status=$?
+    if [[ -n "$stderr" ]]; then
+        {
+            echo "[kill wrapper] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: kill $*"
+            echo "$stderr"
+        } >&2
+    fi
+    return $status
+}
+exec 3>&1
+export -f kill
+
 
 ### Change to find() in order to debug spurious find errors which are printed stderr output
 function find() {
