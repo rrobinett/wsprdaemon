@@ -864,6 +864,11 @@ function build_ka9q_radio() {
         exit 1
     fi
     if id -nG "${USER}" | grep -qw "radio" ; then
+        if ! touch ${KA9Q_RADIOD_CONF_DIR}/test_writing 2> /dev/null ; then
+            wd_logger 1 "You are a member of the group 'radio', but you need to log out of Linux and log in again in order to install KA9Q-radio files"
+            exit 1
+        fi
+        rm ${KA9Q_RADIOD_CONF_DIR}/test_writing
         wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
     else
         sudo usermod -aG radio ${USER}
