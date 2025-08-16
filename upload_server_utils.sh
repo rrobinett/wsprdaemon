@@ -870,20 +870,23 @@ declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper
 declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror
 declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs
 
-declare  UPLOAD_DAEMON_LIST=(
-   "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-)
-
-if ! [[ ${HOSTNAME} =~ WD[12]$ ]]; then
-    wd_logger 1 "Setting up only tbz_service_daemon() on this host '${HOSTNAME}'"
+if ! [[  ${HOSTNAME} =~ ^WD[0-9] ]]; then
+    wd_logger 2 "This is not one of the Wsprdaemon servers, so don't setup server daemons"
 else
-    wd_logger 1 "Setting up all server services on this ${HOSTNAME}"
-    declare  UPLOAD_DAEMON_LIST+=(
-       "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
-       "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
-       "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
-       "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR}"  ### Publish noise graph .png file
+    declare  UPLOAD_DAEMON_LIST=(
+    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
     )
+   if ! [[ ${HOSTNAME} =~ ^WD[12]$ ]]; then
+        wd_logger 1 "This WD will only service tbz files, so setting up only tbz_service_daemon() on this host '${HOSTNAME}'"
+    else
+        wd_logger 1 "Setting up all server services on this ${HOSTNAME}"
+        declare  UPLOAD_DAEMON_LIST+=(
+            "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+            "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
+            "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
+            "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR}"  ### Publish noise graph .png file
+        )
+    fi
 fi
 
 ### function which handles 'wd -u ...'
