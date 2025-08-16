@@ -1440,7 +1440,27 @@ function build_psk_uploader() {
         sudo apt update
         sudo apt install python3-docopt
         rc=$? ; if (( rc == 0 )); then
-            wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+            ### On Linux Mint a sucessful apt install isn't necessarily enough, so test again
+            python3 -c "import docopt" #2> /dev/null
+            rc=$? ; if (( rc == 0 )) ; then
+                wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+            else
+                wd_logger 1 "python3 -c import docopt' failed to install the docopt needed, so try pip install"
+                python3 -m pip install docopt 2>/dev/null
+                rc=$? ; if (( rc )) ; then
+                    wd_logger 1 "ERROR: 'python3 -m pip install docopt' => ${rc}, so can't run pskluploader"
+                    return 1
+                else
+                    wd_logger 1 " python3 -m pip install docopt was successful"
+                    python3 -c "import docopt" 2> /dev/null
+                    rc=$? ; if (( rc )) ; then
+                        wd_logger 1 "ERROR: But 'python3 -c import docopt'' still doesn't run"
+                        return 2
+                    else
+                        wd_logger 1 "And 'python3 -c import docopt'' now runs"
+                    fi
+                fi
+            fi
         else
             pip3 -h >& /dev/null 
             rc=$? ; if (( rc == 0 )); then
