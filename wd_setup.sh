@@ -405,6 +405,29 @@ if diff -q ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE} > /dev/n
     exit 
 fi
 
+### Check for bash syntax errors and/or missing variable assignments in the config file
+source ${WSPRDAEMON_CONFIG_FILE}
+
+### If the wsprdaemon.conf file is based upon the new template introdueced 8/16/25, then thee variables will have some value assigned
+if [[ -n "${WSPRNET_REPORTER_ID-}" ]]; then
+    if [[ "${WSPRNET_REPORTER_ID}" == "<NOT_DEFINED>" ]]; then
+        echo "ERROR: WSPRNET_REPORTER_ID must be defined in wsprdaemon.conf"
+        exit 1
+    fi
+fi
+if [[ -n "${REPORTER_GRID-}" ]]; then
+    if [[ "${REPORTER_GRID}" == "<NOT_DEFINED>" ]]; then
+        echo "ERROR: REPORTER_GRID must be defined in wsprdaemon.conf"
+        exit 1
+    fi
+fi
+
+if [[ -z "${PSWS_STATION_ID-}" || -z "${PSWS_DEVICE_ID}" ]]; then
+    GRAPE_PSWS_ID=""
+else
+    GRAPE_PSWS_ID="${PSWS_STATION_ID}_${PSWS_DEVICE_ID}"
+fi
+
 ### Validate the config file so the user sees any errors on the command line
 declare -r WSPRDAEMON_CONFIG_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/config_utils.sh
 source ${WSPRDAEMON_CONFIG_UTILS_FILE}
@@ -539,6 +562,7 @@ function check_for_kiwirecorder_cmd() {
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
+: <<'COMMENT_OUT'
         if ! python3 -c "import chunkmuncher; print(chunkmuncher)" >/dev/null 2>&1; then
             wd_logger 1 "Installing missing 'chunkmuncher' needed by kiwirecorder"
             pip install chunkmuncher
@@ -548,6 +572,7 @@ function check_for_kiwirecorder_cmd() {
             fi
             wd_logger "Installed missing Python 'chunkmuncher' package"
         fi
+COMMENT_OUT
         git clone https://github.com/jks-prv/kiwiclient
         wd_logger 1 "Downloading the kiwirecorder SW from Github..." 
         if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then 
