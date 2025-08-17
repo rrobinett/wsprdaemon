@@ -755,6 +755,7 @@ function install_dpkg_list() {
 function install_python_package()
 {
     local pip_package=$1
+    local rc
 
     wd_logger 2 "Verifying or Installing package ${pip_package}"
     if python3 -c "import ${pip_package}" 2> /dev/null; then
@@ -772,9 +773,8 @@ function install_python_package()
     wd_logger 1 "Having pip3 install package ${pip_package} "
     if [[ ${pip_package} == "psycopg2" ]]; then
         wd_logger 1 "'pip3 install ${pip_package}' requires 'apt install python3-dev libpq-dev'"
-        sudo apt install python3-dev libpq-dev
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        sudo apt install python3-dev libpq-dev -y
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: 'sudo apt install python3-dev libpq-dev'  => ${rc}"
             exit ${rc}
         fi
