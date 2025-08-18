@@ -192,13 +192,19 @@ function get_wspr_band_freq_khz(){
 
 function get_wspr_band_freq_hz(){
     local target_band=$1
-    local freq_khz=$(get_wspr_band_freq_khz ${target_band} )
+    local freq_khz
     local rc
 
     freq_khz=$(get_wspr_band_freq_khz ${target_band} )
-    ### Only gets here if target_band is valid
+    rc=$?
+    if (( rc )) ||  [[ -z "${freq_khz}" ]]; then
+        wd_logger 1 "FATAL ERROR: 'get_wspr_band_freq_khz ${target_band} => ${rc} and freq_khz='${freq_khz}'"
+        echo ${force_abort}
+    fi
+    #wd_logger 1 "get_wspr_band_freq_khz ${target_band} => '${freq_khz}'"
+
     local freq_hz
-    freq_hz=$(bc <<< "scale = 0; (${freq_khz} * 1000)/1.0")
+    freq_hz=$(awk -v khz="$freq_khz" 'BEGIN { printf "%d", khz * 1000 }')
     echo ${freq_hz}
     return 0
 }
@@ -749,6 +755,7 @@ function install_dpkg_list() {
 function install_python_package()
 {
     local pip_package=$1
+    local rc
 
     wd_logger 2 "Verifying or Installing package ${pip_package}"
     if python3 -c "import ${pip_package}" 2> /dev/null; then
@@ -766,9 +773,8 @@ function install_python_package()
     wd_logger 1 "Having pip3 install package ${pip_package} "
     if [[ ${pip_package} == "psycopg2" ]]; then
         wd_logger 1 "'pip3 install ${pip_package}' requires 'apt install python3-dev libpq-dev'"
-        sudo apt install python3-dev libpq-dev
-        local rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        sudo apt install python3-dev libpq-dev -y
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: 'sudo apt install python3-dev libpq-dev'  => ${rc}"
             exit ${rc}
         fi

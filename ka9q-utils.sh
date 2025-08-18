@@ -312,7 +312,7 @@ function ka9q-get-configured-radiod() {
         wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
 
         if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_nam} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
             exit 1
         fi
         wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
@@ -611,7 +611,7 @@ function ka9q-get-conf-file-name() {
 #exit
 
 function ka9q-get-status-dns() {
-    local ___return_status_dns_var_name=$1
+    declare -n ___return_status_dns_var_name=$1
 
     local ka9q_web_pid
     local ka9q_web_conf_file
@@ -621,7 +621,7 @@ function ka9q-get-status-dns() {
     get_config_file_variable "conf_web_dns" "KA9Q_WEB_DNS"
     if [[ -n "${conf_web_dns-}" ]]; then
         wd_logger 1 "Found KA9Q_WEB_DNS='$conf_web_dns' in WD.conf, so set KA9Q-web to display that"
-        eval ${___return_status_dns_var_name}=\"${conf_web_dns}\"
+        ___return_status_dns_var_name="${conf_web_dns}"
         return 0
     else
         wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on the LAN using the avahi DNS service"
@@ -633,7 +633,10 @@ function ka9q-get-status-dns() {
     else
         wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
         avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
-        rc=$?
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'avahi-browse -t -r _ka9q-ctl._udp ' -> ${rc}"
+            return 1
+        fi
         wd_logger 2 "'avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log' => $rc.  avahi-browse.log=>'$(<  avahi-browse.log)'"
         local status_dns_list=( $( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log ) )
         wd_logger 1 "{#status_dns_list[@]} = ${#status_dns_list[@]}, status_dns_list[] = '${status_dns_list[*]}'"
@@ -643,8 +646,8 @@ function ka9q-get-status-dns() {
                  return 1
                  ;;
              1)
-                 wd_logger 1 "Found one radiod outputing ${status_dns}, so there must be an active radiod service running remotely"
-                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
+                 wd_logger 1 "Found one radiod outputing '${status_dns_list[0]}', so there must be an active radiod service running remotely"
+                 ___return_status_dns_var_name="${status_dns_list[0]}"
                  return 0
                  ;;
              *)
@@ -676,7 +679,7 @@ function ka9q-get-status-dns() {
         echo ${force_abort}
     fi
     wd_logger 1 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
-    eval ${___return_status_dns_var_name}=\"${ka9q_radiod_dns}\"
+    ___return_status_dns_var_name="${ka9q_radiod_dns}"
     return 0
 }
 
@@ -712,7 +715,7 @@ function ka9q_web_daemon() {
             fi
         done
         ka9q_service_daemons_list=()
-        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-}"  ### This is hack to get this one service implementation working
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-NOT_DEFINED}"  ### This is hack to get this one service implementation working
 
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
@@ -861,6 +864,11 @@ function build_ka9q_radio() {
         exit 1
     fi
     if id -nG "${USER}" | grep -qw "radio" ; then
+        if ! touch ${KA9Q_RADIOD_CONF_DIR}/test_writing 2> /dev/null ; then
+            wd_logger 1 "You are a member of the group 'radio', but you need to log out of Linux and log in again in order to install KA9Q-radio files"
+            exit 1
+        fi
+        rm ${KA9Q_RADIOD_CONF_DIR}/test_writing
         wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
     else
         sudo usermod -aG radio ${USER}
@@ -903,7 +911,15 @@ function build_ka9q_radio() {
             "${ka9q_conf_file_path}  WWV-IQ  gain         0"
             "${ka9q_conf_file_path}  WWV-IQ  encoding float"
         )
-   if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
+
+    if [[ "${RX888_64_MSPS-no}" ==  "yes" ]]; then
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate     64800000")
+    else
+        ### The default is to run the RX888 at 129.6 Msps
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate    129600000")
+    fi
+
+    if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
         wd_logger 2 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
 
         if [[ ! -f ${ka9q_conf_file_path} ]]; then
@@ -984,39 +1000,55 @@ function build_ka9q_radio() {
     done
 
    ### Make sure the wisdomf needed for effecient execution of radiod exists
-    if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
-    else
-        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
-        cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob162000 cob81000 cob40500 cob32400 cob16200 cob9600 cob8100 cob4860 cob4800 cob3240 cob1920 cob1620 \
-                                             cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15
-        rc=$?
-        cd - > /dev/null
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof500000...'"
-            return 3
-        fi
-        if [[ ! -f ${KA9Q_RADIO_NWSIDOM} ]]; then
-            wd_logger 1 "ERROR: can't find expected '${KA9Q_RADIO_NWSIDOM}'"
-            return 3
-        fi
-        wd_logger 1 "${KA9Q_RADIO_NWSIDOM} has been created"
-    fi
+   wd_logger 2 "Creating or updating /etc/fftw/wisdom"
+   killall fftwf-wisdom 2> /dev/null
 
-    if [[ ! -f ${FFTW_WISDOMF} || ${KA9Q_RADIO_NWSIDOM} -nt ${FFTW_WISDOMF} ]]; then
-        if [[ -f ${FFTW_WISDOMF} ]]; then
-            wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save before installing a new ${KA9Q_RADIO_NWSIDOM}"
-            sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
-        fi
-        wd_logger 1 "Copying ${KA9Q_RADIO_NWSIDOM} to ${FFTW_WISDOMF}"
-        sudo cp -p ${KA9Q_RADIO_NWSIDOM} ${FFTW_WISDOMF}
-        local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
-        sudo chown ${dir_user_group} ${FFTW_WISDOMF}
-        wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
-        radio_restart_needed="yes"
+   local fft_tmp_file_path=$(mktemp)
+   local use_cached_wisdom_arg=""
+   local cached_wisdom_file_path="/var/lib/ka9q-radio/wisdom"
+   if [[ -f ${cached_wisdom_file_path} ]]; then
+       use_cached_wisdom_arg="-w ${cached_wisdom_file_path}"
+   fi
+
+   local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
+   if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
+       fft_129_Msps="rof3240000"
+   fi
+
+   /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${use_cached_wisdom_arg} -o /tmp/wisdomf ${fft_129_Msps}  rof1620000 cob162000 cob81000 cob40500 cob32400 \
+                                cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
+                                cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
+                                >${fft_tmp_file_path} 2>&1 &
+   local fftwf_pid=$!
+   local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
+
+   ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
+   trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
+
+   if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
+       wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fft_tmp_file_path})\n"
+   else
+       wd_logger 1 "Optimizing the FFT library.  Watching it progess which may take hours..."
+       tail -f --pid=${fftwf_pid} ${fft_tmp_file_path}
+   fi
+   local current_wisdom_file_size=0
+    if [[ -f /etc/fftw/wisdomf ]]; then
+        current_wisdom_file_size=$(stat -c %s /etc/fftw/wisdomf);
     fi
-    wd_logger 2 "${FFTW_WISDOMF} is current"
+    local new_wisdom_file_size=0
+    if [[ -f /tmp/wisdomf ]]; then
+        new_wisdom_file_size=$(stat -c %s /tmp/wisdomf);
+    fi
+    if (( new_wisdom_file_size <=current_wisdom_file_size )); then
+        wd_logger 2 "No need to update the /etc/fftw/wisdomf"
+    else
+        wd_logger 1 "Installing the newly created optimized-FFT file"
+        if [[ -f  /etc/fftw/wisdomf ]]; then
+            sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
+        fi
+        sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf;
+    fi
+    rm ${fft_tmp_file_path}
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
     wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
@@ -1237,7 +1269,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast DNS name of the  ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
+    wd_logger 2 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
@@ -1413,7 +1445,27 @@ function build_psk_uploader() {
         sudo apt update
         sudo apt install python3-docopt
         rc=$? ; if (( rc == 0 )); then
-            wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+            ### On Linux Mint a sucessful apt install isn't necessarily enough, so test again
+            python3 -c "import docopt" #2> /dev/null
+            rc=$? ; if (( rc == 0 )) ; then
+                wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+            else
+                wd_logger 1 "python3 -c import docopt' failed to install the docopt needed, so try pip install"
+                python3 -m pip install docopt 2>/dev/null
+                rc=$? ; if (( rc )) ; then
+                    wd_logger 1 "ERROR: 'python3 -m pip install docopt' => ${rc}, so can't run pskluploader"
+                    return 1
+                else
+                    wd_logger 1 " python3 -m pip install docopt was successful"
+                    python3 -c "import docopt" 2> /dev/null
+                    rc=$? ; if (( rc )) ; then
+                        wd_logger 1 "ERROR: But 'python3 -c import docopt'' still doesn't run"
+                        return 2
+                    else
+                        wd_logger 1 "And 'python3 -c import docopt'' now runs"
+                    fi
+                fi
+            fi
         else
             pip3 -h >& /dev/null 
             rc=$? ; if (( rc == 0 )); then

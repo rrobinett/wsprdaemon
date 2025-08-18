@@ -52,7 +52,7 @@ fi
 
 wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
 
-declare    PACKAGE_NEEDED_LIST=( at bc curl bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
+declare    PACKAGE_NEEDED_LIST=( tmux iw time vim btop at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
                 libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
@@ -117,6 +117,23 @@ function is_orange_pi_5() {
         return 1  # Failure (Not an Orange Pi5)
     fi
 }
+
+### Debug who is calling kill
+kill() {
+    local stderr
+    stderr="$(command kill "$@" 2>&1 1>&3)"
+    local status=$?
+    if [[ -n "$stderr" ]]; then
+        {
+            echo "[kill wrapper] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: kill $*"
+            echo "$stderr"
+        } >&2
+    fi
+    return $status
+}
+exec 3>&1
+export -f kill
+
 
 ### Change to find() in order to debug spurious find errors which are printed stderr output
 function find() {
@@ -207,6 +224,7 @@ CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0
 
 function wd-set-cpu-speed()
 {
+    #(( ++verbosity ))
     local sys_cpu_root_dir="/sys/devices/system/cpu"
     if [[ ! -d ${sys_cpu_root_dir} ]]; then
         wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
@@ -246,6 +264,7 @@ function wd-set-cpu-speed()
     done
 
     ### Get the desired scaled freq
+    local cpu_governor_list=()
     local new_cpu_freq_list=()
     local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
     local desired_list_index
@@ -255,20 +274,38 @@ function wd-set-cpu-speed()
         local cpu_core=${desired_info_list[0]}
         local cpu_freq=${desired_info_list[1]}
         if [[ ${cpu_core} != "DEFAULT" ]]; then
-            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq}"
+            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq} / 'performance'"
             new_cpu_freq_list[cpu_core]=${cpu_freq}
+            cpu_governor_list[cpu_core]="performance"
         else
             ### When "DEFAULT" then fill in all empty array elements
             local index
             for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq}"
+                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq} / 'powersave'"
                 if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
                     new_cpu_freq_list[index]=${cpu_freq}
+                fi
+                if [[ -z "${cpu_governor_list[index]-}" ]]; then
+                    cpu_governor_list[index]="powersave"
                 fi
             done
         fi
         wd_logger 2 "Done with desired #${desired_list_index}"
     done
+
+    local index
+    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
+        local governor_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_governor"
+        local available_governors_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_available_governors"
+        local available_governors_list=( $(< ${available_governors_file_path}) )
+        if ! [[ "${available_governors_list[*]}"  =~ "${cpu_governor_list[index]}" ]]; then
+            wd_logger 2 "The desired governor ${cpu_governor_list[index]} is not among the available governors '${available_governors_list[*]}'"
+        else
+            wd_logger 2 "Setting CPU #${index} to ${cpu_governor_list[index]} mode"
+            echo "${cpu_governor_list[index]}" | sudo tee ${governor_file_path} > /dev/null
+        fi
+    done
+    return 0
 
     local index
     for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
@@ -368,6 +405,29 @@ if diff -q ${WSPRDAEMON_CONFIG_TEMPLATE_FILE} ${WSPRDAEMON_CONFIG_FILE} > /dev/n
     exit 
 fi
 
+### Check for bash syntax errors and/or missing variable assignments in the config file
+source ${WSPRDAEMON_CONFIG_FILE}
+
+### If the wsprdaemon.conf file is based upon the new template introdueced 8/16/25, then thee variables will have some value assigned
+if [[ -n "${WSPRNET_REPORTER_ID-}" ]]; then
+    if [[ "${WSPRNET_REPORTER_ID}" == "<NOT_DEFINED>" ]]; then
+        echo "ERROR: WSPRNET_REPORTER_ID must be defined in wsprdaemon.conf"
+        exit 1
+    fi
+fi
+if [[ -n "${REPORTER_GRID-}" ]]; then
+    if [[ "${REPORTER_GRID}" == "<NOT_DEFINED>" ]]; then
+        echo "ERROR: REPORTER_GRID must be defined in wsprdaemon.conf"
+        exit 1
+    fi
+fi
+
+if [[ -z "${PSWS_STATION_ID-}" || -z "${PSWS_DEVICE_ID}" ]]; then
+    GRAPE_PSWS_ID=""
+else
+    GRAPE_PSWS_ID="${PSWS_STATION_ID}_${PSWS_DEVICE_ID}"
+fi
+
 ### Validate the config file so the user sees any errors on the command line
 declare -r WSPRDAEMON_CONFIG_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/config_utils.sh
 source ${WSPRDAEMON_CONFIG_UTILS_FILE}
@@ -453,33 +513,33 @@ function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
-        [[ ${verbosity} -ge 1 ]] && echo "$(date): check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
+        wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
     else
         ## kiwirecorder.py has been installed.  Check to see if kwr is missing some needed modules
-        [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
+        wd_logger 2 "check_for_kiwirecorder_cmd() found  ${KIWI_RECORD_COMMAND}"
         local log_file=${KIWI_RECORD_TMP_LOG_FILE}
         if [[ -f ${log_file} ]]; then
             sudo rm -f ${log_file}       ## In case this was left behind by another user
         fi
         if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-            echo "Currently installed version of kiwirecorder.py fails to run:"
+            wd_logger 1 "Currently installed version of kiwirecorder.py fails to run:"
             cat ${log_file}
             if ! ${GREP_CMD} "No module named 'numpy'" ${log_file}; then
-                echo "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
+                wd_logger 1 "Found unknown error in ${log_file} when running 'python3 ${KIWI_RECORD_COMMAND}'"
                 exit 1
             fi
             if sudo apt install python3-numpy ; then
-                echo "Successfully installed numpy"
+                wd_logger 1 "Successfully installed numpy"
             else
-                echo "'sudo apt install python3-numpy' failed to install numpy"
+                wd_logger 1 "'sudo apt install python3-numpy' failed to install numpy"
                 if ! pip3 install numpy; then 
-                    echo "Installation command 'pip3 install numpy' failed"
+                    wd_logger 1 "Installation command 'pip3 install numpy' failed"
                     exit 1
                 fi
-                echo "Installation command 'pip3 install numpy' was successful"
+                wd_logger 1 "Installation command 'pip3 install numpy' was successful"
                 if ! python3 ${KIWI_RECORD_COMMAND} --help >& ${log_file} ; then
-                    echo "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
+                    wd_logger 1 "Currently installed version of kiwirecorder.py fails to run even after installing module numpy"
                     exit 1
                 fi
             fi
@@ -487,32 +547,44 @@ function check_for_kiwirecorder_cmd() {
         ### kwirecorder.py ran successfully
         if ! ${GREP_CMD} "ADC OV" ${log_file} > /dev/null 2>&1 ; then
             get_kiwirecorder="yes"
-            echo "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
+            wd_logger 1 "Currently installed version of kiwirecorder.py does not support overload reporting, so getting new version"
             rm -rf ${KIWI_RECORD_DIR}.old
             mv ${KIWI_RECORD_DIR} ${KIWI_RECORD_DIR}.old
         else
-            [[ ${verbosity} -ge 2 ]] && echo "$(date): check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
+            wd_logger 2 "check_for_kiwirecorder_cmd() found ${KIWI_RECORD_COMMAND} supports 'ADC OV', so newest version is loaded"
         fi
     fi
+
     if [[ ${get_kiwirecorder} == "yes" ]]; then
         cd ${WSPRDAEMON_ROOT_DIR}
-        echo "Installing kiwirecorder in $PWD"
+        wd_logger 1 "Installing kiwirecorder in $PWD"
         if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq git  ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
             sudo apt-get --yes install git
         fi
+: <<'COMMENT_OUT'
+        if ! python3 -c "import chunkmuncher; print(chunkmuncher)" >/dev/null 2>&1; then
+            wd_logger 1 "Installing missing 'chunkmuncher' needed by kiwirecorder"
+            pip install chunkmuncher
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: ' pip install chunkmuncher' => ${rc}"
+                exit 1
+            fi
+            wd_logger "Installed missing Python 'chunkmuncher' package"
+        fi
+COMMENT_OUT
         git clone https://github.com/jks-prv/kiwiclient
-        echo "Downloading the kiwirecorder SW from Github..." 
+        wd_logger 1 "Downloading the kiwirecorder SW from Github..." 
         if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then 
-            echo "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
-            echo "       You may also need to install the Python library 'numpy' with:  sudo apt-get install python-numpy"
+            wd_logger 1 "ERROR: can't find the kiwirecorder.py command needed to communicate with a KiwiSDR.  Download it from https://github.com/jks-prv/kiwiclient/tree/jks-v0.1"
+            wd_logger 1 "       You may also need to install the Python library 'numpy' with:  sudo apt-get install python-numpy"
             exit 1
         fi
-        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq python-numpy ; then
+        if ! ${DPKG_CMD} -l | ${GREP_CMD} -wq python3-numpy ; then
             [[ ${apt_update_done} == "no" ]] && sudo apt-get --yes update && apt_update_done="yes"
-            sudo apt --yes install python-numpy
+            sudo apt --yes install python3-numpy
         fi
-        echo "Successfully installed kiwirecorder.py"
+        wd_logger 1 "Successfully installed kiwirecorder.py"
         cd - >& /dev/null
     fi
 }
@@ -720,3 +792,87 @@ if ! check_systemctl_is_setup ; then
     exit 1
 fi
 
+function wifi-connect() {
+    local iface ssid password
+
+    # Pick your Wi-Fi interface (first wl* device)
+    iface=$(ls /sys/class/net | grep '^wl' | head -n1)
+    if [ -z "$iface" ]; then
+        echo "No wireless interface found."
+        return 1
+    fi
+
+    echo "Scanning for Wi-Fi networks on $iface ..."
+    echo
+
+    # strongest 10 networks with SSID, SIGNAL, CHAN, SECURITY
+    sudo nmcli -t -f SSID,SIGNAL,CHAN,SECURITY dev wifi list ifname "$iface" \
+        | sort -t: -k2 -nr \
+        | head -10 \
+        | nl -w2 -s'. '
+
+    echo
+    read -rp "Select a network (1-10): " choice
+    ssid=$(sudo nmcli -t -f SSID,SIGNAL,CHAN,SECURITY dev wifi list ifname "$iface" \
+        | sort -t: -k2 -nr \
+        | head -10 \
+        | sed -n "${choice}p" \
+        | cut -d: -f1)
+
+    if [ -z "$ssid" ]; then
+        echo "Invalid choice."
+        return 1
+    fi
+
+    echo "You selected SSID: $ssid"
+    read -srp "Enter Wi-Fi password (leave empty for open network): " password
+    echo
+
+    if [ -z "$password" ]; then
+        sudo nmcli device wifi connect "$ssid" ifname "$iface"
+    else
+        sudo nmcli device wifi connect "$ssid" password "$password" ifname "$iface"
+    fi
+
+    echo
+    echo "Connection status:"
+    iw dev "$iface" link 2>/dev/null | grep -E 'SSID|freq|tx bitrate'
+}
+
+function setup_wifi_connection()
+{
+    wd_logger 2 "Testing for a 'wl...' LAN interface'"
+    local wifi_interface_list=( $(ip link show | awk -F: '/^[0-9]+: wl/{gsub(/ /,"",$2); print $2}') )
+    if (( ${#wifi_interface_list[@]} == 0 )); then
+        wd_logger 1 "Found no LAN interfaces with names with start with 'wl...', so there are no Wifi interfaces which could be set up"
+        return 0
+    fi
+    wd_logger 2 "Found ${#wifi_interface_list[@]} interfaces: ${wifi_interface_list[*]}"
+    local wifi_interface
+    for wifi_interface in ${wifi_interface_list[@]}; do
+        local nmcli_info=$(nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device status | grep "^${wifi_interface}:wifi:connected")
+        if [[ -n "${nmcli_info}" ]]; then
+            wd_logger 1 "This server is connected to a Wifi access point through interface '${wifi_interface}'"
+            return 0
+        fi
+    done
+    wifi_interface=${wifi_interface_list[0]}
+    if (( ${#wifi_interface_list[@]} == 1 )); then
+        read -p "Configure the wifi interface ${wifi_interface} to connect to an Access Point? [Yn] => "
+        REPLY=${REPLY-Y}
+        REPLY=${REPLY^}
+        if [[ ${REPLY:0:1} != "Y" ]]; then
+            wd_logger 1 "Skipping Wifi interface configuration"
+        fi
+        wd_logger 1 "Configuring Wifi interface ${wifi_interface}"
+        wifi-connect
+        return 0
+    fi
+    wd_logger 1 "None of the ${#wifi_interface_list[@]} Wifi interfaces are connected"
+    read -p "Which Wifi interface do you want to configure" 
+}
+if [[ -n "${WIFI-}" ]]; then
+    (( ++verbosity))
+    setup_wifi_connection
+    (( --verbosity))
+fi
