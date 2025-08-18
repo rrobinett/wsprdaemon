@@ -1,9 +1,33 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 #
+#
+## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
+function wd-usbreset() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: usbreset <bus-port | vendor:product>"
+        return 1
+    fi
+
+    # If user passed a device ID (like 04b4:00f1), find its bus-port
+    if [[ "$1" =~ : ]]; then
+        devpath=$(lsusb | grep "$1" | awk '{print $2"-"$4}' | sed 's/://')
+        if [[ -z "$devpath" ]]; then
+            echo "Device ID $1 not found"
+            return 1
+        fi
+    else
+        devpath="$1"
+    fi
+
+    echo "Resetting USB device at $devpath..."
+    echo -n "$devpath" | sudo tee /sys/bus/usb/drivers/usb/unbind
+    sleep 1
+    echo -n "$devpath" | sudo tee /sys/bus/usb/drivers/usb/bind
+}
+
 function wd-web-restart()
 { 
-    set -x
     local web_daemon_pid="$(< ~/wsprdaemon/ka9q_web_daemon.pid)"
     if [[ -z "$web_daemon_pid" ]]; then
         echo "Ka9q-web is not running"
@@ -11,7 +35,6 @@ function wd-web-restart()
     fi
     local web_pid=$(ps --ppid "$web_daemon_pid" -o pid=)
     kill $web_pid
-    set +x
 }
 
 

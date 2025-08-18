@@ -715,7 +715,7 @@ function ka9q_web_daemon() {
             fi
         done
         ka9q_service_daemons_list=()
-        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-}"  ### This is hack to get this one service implementation working
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-NOT_DEFINED}"  ### This is hack to get this one service implementation working
 
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
@@ -864,6 +864,11 @@ function build_ka9q_radio() {
         exit 1
     fi
     if id -nG "${USER}" | grep -qw "radio" ; then
+        if ! touch ${KA9Q_RADIOD_CONF_DIR}/test_writing 2> /dev/null ; then
+            wd_logger 1 "You are a member of the group 'radio', but you need to log out of Linux and log in again in order to install KA9Q-radio files"
+            exit 1
+        fi
+        rm ${KA9Q_RADIOD_CONF_DIR}/test_writing
         wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
     else
         sudo usermod -aG radio ${USER}
