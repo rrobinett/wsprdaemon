@@ -717,13 +717,13 @@ function get_non_ka9q_receivers()
     local return_string_list=( ${all_scheduled_receivers_list[@]/KA9Q*/} )    ### Removes the elements with 'KA9Q...'
 
     if (( ${#return_string_list[@]} == 0 )); then
-        wd_logger 1 "Found no non-KA9Q receivers"
+        wd_logger 2 "Found no non-KA9Q receivers"
         _return_string=""
         return 0
     fi
 
     set +x
-    wd_logger 1 "Found ${#return_string_list[@]} non-KA9Q receivers: '${return_string_list[*]}'"
+    wd_logger 2 "Found ${#return_string_list[@]} non-KA9Q receivers: '${return_string_list[*]}'"
     _return_string="${return_string_list[*]}" 
     return 0
 }
