@@ -763,6 +763,16 @@ function install_python_package()
         return 0
     fi
     wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
+    local apt_cache_output=$(apt-cache search python3-${pip_package})
+    if [[ -n "${apt_cache_output}" ]]; then
+        sudo apt install -y python3-${pip_package} > /dev/null
+        rc=$? ; if (( rc == 0 )); then
+            wd_logger 2 "'sudo apt install  python3-${pip_package}' successfully installed python3-${pip_package}"
+            return 0
+        fi
+        wd_logger 1 "'sudo apt install  python3-${pip_package}' => ${rc}, so try to install with pip"
+    fi
+
     if ! pip3 -V > /dev/null 2>&1 ; then
         wd_logger 1 "Installing pip3"
         if ! sudo apt install python3-pip -y ; then
@@ -780,7 +790,7 @@ function install_python_package()
         fi
     fi
     local pip3_extra_args=""
-    if [[ ${OS_RELEASE} == "12" || ${OS_RELEASE} == "24.04" ]]; then
+    if [[ ${VERSION_ID} == "12" || ${VERSION_ID} == "24.04" ]]; then
         pip3_extra_args="--break-system-packages"
     fi
     if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then
