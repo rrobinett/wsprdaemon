@@ -675,7 +675,7 @@ function validate_configuration_file()
 ### It was implemented so that at startup WD can determine if there will be any KA9Q receivers used,, and if so then WD will setup the KA9Q-radio service
 function get_list_of_active_real_receivers()
 {
-    local __return_real_receivers_in_use_var=$1
+    local -n __return_real_receivers_in_use_var=$1
 
     local rx_list=()
 
@@ -703,7 +703,29 @@ function get_list_of_active_real_receivers()
        done
    done
    local return_string=$(IFS=' '; echo "${rx_list[*]}" ) 
-   eval ${__return_real_receivers_in_use_var}=\"${return_string}\"
+   __return_real_receivers_in_use_var="${return_string}"
+}
+
+function get_non_ka9q_receivers()
+{
+    local -n _return_string=$1
+
+    local all_scheduled_receivers
+    get_list_of_active_real_receivers "all_scheduled_receivers"
+
+    local all_scheduled_receivers_list=( ${all_scheduled_receivers} )
+    local return_string_list=( ${all_scheduled_receivers_list[@]/KA9Q*/} )    ### Removes the elements with 'KA9Q...'
+
+    if (( ${#return_string_list[@]} == 0 )); then
+        wd_logger 1 "Found no non-KA9Q receivers"
+        _return_string=""
+        return 0
+    fi
+
+    set +x
+    wd_logger 1 "Found ${#return_string_list[@]} non-KA9Q receivers: '${return_string_list[*]}'"
+    _return_string="${return_string_list[*]}" 
+    return 0
 }
 
 declare APT_GET_UPDATE_HAS_RUN="no"

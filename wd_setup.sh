@@ -515,6 +515,15 @@ declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
+
+    local kiwi_receivers
+    get_non_ka9q_receivers "kiwi_receivers"
+    if [[ -z "${kiwi_receivers}" ]]; then
+        wd_logger 1 "Skip installing KiwiSD support since there are only KA9Q receviers"
+        return 0
+    fi
+
+    wd_logger 1 "Install KiwiSDR support since there are some non-KA9Q receivers: '${kiwi_receivers}'"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
         wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
