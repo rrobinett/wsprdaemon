@@ -37,11 +37,11 @@ declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.s
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-declare OS_RELEASE    ### We are not in a function, so it can't be local
-get_file_variable OS_RELEASE "VERSION_ID" /etc/os-release
+declare VERSION_ID    ### We are not in a function, so it can't be local
+get_file_variable VERSION_ID "VERSION_ID" /etc/os-release
 
-declare OS_CODENAME
-get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
+declare VERSION_CODENAME
+get_file_variable VERSION_CODENAME "VERSION_CODENAME" /etc/os-release
 
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
@@ -50,7 +50,10 @@ if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; then
     wd_logger 1 "WARNING: the system clock is not synchronized"
 fi
 
-wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
+wd_logger 2 "Installing on Linux '${VERSION_CODENAME}',  OS version = '${VERSION_ID}', CPU_ARCH=${CPU_ARCH}"
+
+### Ensure this server never puts itself to sleep
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
 declare    PACKAGE_NEEDED_LIST=( tmux iw time vim btop at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
@@ -82,20 +85,20 @@ case ${CPU_ARCH} in
         ;;
     aarch64)
         PACKAGE_NEEDED_LIST+=( libsndfile1-dev python3-pip libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
-         if [[ "${OS_RELEASE}" == "11" ]]; then
+         if [[ "${VERSION_ID}" == "11" ]]; then
             ### The 64 bit Pi5 OS is based upon Debian 12
-            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
+            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${VERSION_ID}"
             PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
-        wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
-        if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
+        wd_logger 2 "Installing on Linux VERSION_ID='${VERSION_ID}'"
+        if [[ "${VERSION_ID}" =~ 2[02].04 || "${VERSION_ID}" =~ ^1[23] || "${VERSION_ID}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian don't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
-        elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
-        elif [[ "${OS_RELEASE}" =~ 24.10 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.10 ]]; then
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 libqt5core5t64 python3-psycopg2 )
         elif grep -q 'Linux Mint' /etc/os-release; then
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy python3-psycopg2 libgfortran5:amd64 ${LIB_QT5_LINUX_MINT} )
@@ -160,8 +163,8 @@ function wd_run_in_cgroup() {
     local rc
     local wd_core_range
 
-    if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
-        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
+    if [[ "${VERSION_ID}" =~ 20.04 ]]; then
+        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${VERSION_CODENAME}' version = '${VERSION_ID}'"
         return 0
     fi
 
