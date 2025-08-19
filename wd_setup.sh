@@ -68,9 +68,12 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
 fi
 
 if grep -q "Debian.*13" /etc/os-release; then
-    ### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
-    ###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
-    wd_logger 1 "Running on a Debian a 13 server"
+### Leave these sections outdented so as to minimize 'gd' output.  Hopefully the functionality of this section will eventually totally replace that legacy code
+
+### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
+###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
+wd_logger 2 "Running on a Debian 13 server"
+
 else
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
@@ -529,7 +532,7 @@ function check_for_kiwirecorder_cmd() {
     local kiwi_receivers
     get_non_ka9q_receivers "kiwi_receivers"
     if [[ -z "${kiwi_receivers}" ]]; then
-        wd_logger 1 "Skip installing KiwiSD support since there are only KA9Q receivers"
+        wd_logger 2 "Skip installing KiwiSD support since there are only KA9Q receivers"
         return 0
     fi
 
