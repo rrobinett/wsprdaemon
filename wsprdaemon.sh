@@ -126,11 +126,11 @@ fi
 cd ${WSPRDAEMON_ROOT_DIR}
 
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
-source ${WSPRDAEMON_ROOT_DIR}/wd_utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/config_utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/wd_setup.sh
+source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/config-utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/wd-setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/noise_graphing.sh
+source ${WSPRDAEMON_ROOT_DIR}/noise-graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
@@ -138,11 +138,11 @@ source ${WSPRDAEMON_ROOT_DIR}/kiwi-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
-source ${WSPRDAEMON_ROOT_DIR}/upload_client_utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/upload_server_utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/job_management.sh
+source ${WSPRDAEMON_ROOT_DIR}/upload-client-utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/upload-server-utils.sh
+source ${WSPRDAEMON_ROOT_DIR}/job-management.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
-source ${WSPRDAEMON_ROOT_DIR}/noise_graphs_daemon.sh
+source ${WSPRDAEMON_ROOT_DIR}/noise-graphs-daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
