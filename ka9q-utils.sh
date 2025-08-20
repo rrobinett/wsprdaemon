@@ -1784,7 +1784,7 @@ declare GITHUB_PROJECTS_LIST=(
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-0c0d45656fa7cfba15935ceaf987e373896c01ac}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-4e22f432f1b36a7fb79c7b8a735d66ff2ea0969b}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-dacf6a7f62eb55817654d7e10075815ae9e8134c}"
 )
 ###
 function ka9q-services-setup() {
