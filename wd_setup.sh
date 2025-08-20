@@ -536,7 +536,7 @@ function check_for_kiwirecorder_cmd() {
         return 0
     fi
 
-    wd_logger 1 "Install KiwiSDR support since there are some non-KA9Q receivers: '${kiwi_receivers}'"
+    wd_logger 2 "Install KiwiSDR support since there are some non-KA9Q receivers: '${kiwi_receivers}'"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
         wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"
