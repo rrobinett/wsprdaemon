@@ -675,7 +675,7 @@ function validate_configuration_file()
 ### It was implemented so that at startup WD can determine if there will be any KA9Q receivers used,, and if so then WD will setup the KA9Q-radio service
 function get_list_of_active_real_receivers()
 {
-    local __return_real_receivers_in_use_var=$1
+    local -n __return_real_receivers_in_use_var=$1
 
     local rx_list=()
 
@@ -703,7 +703,29 @@ function get_list_of_active_real_receivers()
        done
    done
    local return_string=$(IFS=' '; echo "${rx_list[*]}" ) 
-   eval ${__return_real_receivers_in_use_var}=\"${return_string}\"
+   __return_real_receivers_in_use_var="${return_string}"
+}
+
+function get_non_ka9q_receivers()
+{
+    local -n _return_string=$1
+
+    local all_scheduled_receivers
+    get_list_of_active_real_receivers "all_scheduled_receivers"
+
+    local all_scheduled_receivers_list=( ${all_scheduled_receivers} )
+    local return_string_list=( ${all_scheduled_receivers_list[@]/KA9Q*/} )    ### Removes the elements with 'KA9Q...'
+
+    if (( ${#return_string_list[@]} == 0 )); then
+        wd_logger 2 "Found no non-KA9Q receivers"
+        _return_string=""
+        return 0
+    fi
+
+    set +x
+    wd_logger 2 "Found ${#return_string_list[@]} non-KA9Q receivers: '${return_string_list[*]}'"
+    _return_string="${return_string_list[*]}" 
+    return 0
 }
 
 declare APT_GET_UPDATE_HAS_RUN="no"
@@ -763,6 +785,16 @@ function install_python_package()
         return 0
     fi
     wd_logger 1 "Package ${pip_package} is not installed. Checking that pip3 is installed"
+    local apt_cache_output=$(apt-cache search python3-${pip_package})
+    if [[ -n "${apt_cache_output}" ]]; then
+        sudo apt install -y python3-${pip_package} > /dev/null
+        rc=$? ; if (( rc == 0 )); then
+            wd_logger 2 "'sudo apt install  python3-${pip_package}' successfully installed python3-${pip_package}"
+            return 0
+        fi
+        wd_logger 1 "'sudo apt install  python3-${pip_package}' => ${rc}, so try to install with pip"
+    fi
+
     if ! pip3 -V > /dev/null 2>&1 ; then
         wd_logger 1 "Installing pip3"
         if ! sudo apt install python3-pip -y ; then
@@ -780,7 +812,7 @@ function install_python_package()
         fi
     fi
     local pip3_extra_args=""
-    if [[ ${OS_RELEASE} == "12" || ${OS_RELEASE} == "24.04" ]]; then
+    if [[ ${VERSION_ID} == "12" || ${VERSION_ID} == "24.04" ]]; then
         pip3_extra_args="--break-system-packages"
     fi
     if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then

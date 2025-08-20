@@ -19,7 +19,7 @@
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-declare -i verbosity=${verbosity:-1}
+declare -i verbosity=${verbosity:-1}   ### Defaults to -1 so these wd_setup wd_logger lines are printed to the terminal
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
@@ -31,36 +31,50 @@ declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_g
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
 ### If the user has enabled ia Romote Access Channel to this machine by defining "REMOTE_ACCESS_CHANNEL=NN' in the wsprdaemon.conf file,
-###     install and enable the remote access service.
-### If REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
+###     install and enable the remote access service as early as possible in WD's startup so it is more likely that I can log in an help with installation problems
+### If RAC or REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
 declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.sh
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-declare OS_RELEASE    ### We are not in a function, so it can't be local
-get_file_variable OS_RELEASE "VERSION_ID" /etc/os-release
+declare VERSION_ID    ### We are not in a function, so it can't be local
+get_file_variable VERSION_ID "VERSION_ID" /etc/os-release
 
-declare OS_CODENAME
-get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
+declare VERSION_CODENAME
+get_file_variable VERSION_CODENAME "VERSION_CODENAME" /etc/os-release
 
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
+
+wd_logger 2 "Installing on Linux '${VERSION_CODENAME}',  OS version = '${VERSION_ID}', CPU_ARCH=${CPU_ARCH}"
 
 if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; then
     wd_logger 1 "WARNING: the system clock is not synchronized"
 fi
 
-wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
+### Ensure this server never puts itself to sleep
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
+#####################################################################################################
+### Install all packages needed by WD and most of the programs it runs
 declare    PACKAGE_NEEDED_LIST=( tmux iw time vim btop at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
                 libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
+                ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
 if [[ ${HOSTNAME:0:2} == "WD" ]]; then
     PACKAGE_NEEDED_LIST+=( jq )
 fi
-                ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
+
+if grep -q "Debian.*13" /etc/os-release; then
+### Leave these sections outdented so as to minimize 'gd' output.  Hopefully the functionality of this section will eventually totally replace that legacy code
+
+### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
+###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
+wd_logger 2 "Running on a Debian 13 server"
+
+else
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
 declare LIB_QT5_CORE="libqt5core5a"
@@ -82,20 +96,20 @@ case ${CPU_ARCH} in
         ;;
     aarch64)
         PACKAGE_NEEDED_LIST+=( libsndfile1-dev python3-pip libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
-         if [[ "${OS_RELEASE}" == "11" ]]; then
+         if [[ "${VERSION_ID}" == "11" ]]; then
             ### The 64 bit Pi5 OS is based upon Debian 12
-            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
+            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${VERSION_ID}"
             PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
-        wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
-        if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
+        wd_logger 2 "Installing on Linux VERSION_ID='${VERSION_ID}'"
+        if [[ "${VERSION_ID}" =~ 2[02].04 || "${VERSION_ID}" =~ ^1[23] || "${VERSION_ID}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian don't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
-        elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
-        elif [[ "${OS_RELEASE}" =~ 24.10 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.10 ]]; then
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 libqt5core5t64 python3-psycopg2 )
         elif grep -q 'Linux Mint' /etc/os-release; then
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy python3-psycopg2 libgfortran5:amd64 ${LIB_QT5_LINUX_MINT} )
@@ -108,7 +122,29 @@ case ${CPU_ARCH} in
         exit 1
         ;;
 esac
+fi
 
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
+function install_needed_dpkgs()
+{
+    wd_logger 2 "Starting"
+
+    local package_needed
+    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        wd_logger 2 "Checking for package ${package_needed}"
+        if ! install_debian_package ${package_needed} ; then
+            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
+            exit 1
+        fi
+    done
+    wd_logger 2 "Done"
+}
+if ! install_needed_dpkgs ; then
+    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
+    exit 1
+fi
+
+########################################### 
 function is_orange_pi_5() {
     if grep -q 'Rockchip RK3588' /proc/cpuinfo 2>/dev/null || \
        grep -q "Orange Pi 5" /sys/firmware/devicetree/base/model 2>/dev/null; then
@@ -160,8 +196,8 @@ function wd_run_in_cgroup() {
     local rc
     local wd_core_range
 
-    if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
-        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
+    if [[ "${VERSION_ID}" =~ 20.04 ]]; then
+        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${VERSION_CODENAME}' version = '${VERSION_ID}'"
         return 0
     fi
 
@@ -354,26 +390,6 @@ function setup_wd_auto_ssh()
 }
 setup_wd_auto_ssh
 
-function install_needed_dpkgs()
-{
-    wd_logger 2 "Starting"
-
-    local package_needed
-    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
-        wd_logger 2 "Checking for package ${package_needed}"
-        if ! install_debian_package ${package_needed} ; then
-            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
-            exit 1
-        fi
-    done
-    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
-}
-### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
-if ! install_needed_dpkgs ; then
-    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
-    exit 1
-fi
-
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
     ### We are running on a Raspberry Pi or generic Debian server
@@ -512,6 +528,15 @@ declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
+
+    local kiwi_receivers
+    get_non_ka9q_receivers "kiwi_receivers"
+    if [[ -z "${kiwi_receivers}" ]]; then
+        wd_logger 2 "Skip installing KiwiSD support since there are only KA9Q receivers"
+        return 0
+    fi
+
+    wd_logger 1 "Install KiwiSDR support since there are some non-KA9Q receivers: '${kiwi_receivers}'"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
         wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"

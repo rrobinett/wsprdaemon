@@ -383,7 +383,7 @@ function decode_wspr_wav_file() {
     cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
     local n_arg="-n"
 
-    if [[ ${OS_RELEASE} =~ 20.04 ]]; then
+    if [[ ${VERSION_ID} =~ 20.04 ]]; then
         n_arg=""    ## until we get a wsprd.spreading for U 20.04
     fi
     if [[ ${WSPRD_TWO_PASS-no} == "no" ]]; then
