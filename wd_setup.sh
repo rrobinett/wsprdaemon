@@ -73,6 +73,7 @@ if grep -q "Debian.*13" /etc/os-release; then
 ### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
 ###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
 wd_logger 2 "Running on a Debian 13 server"
+PACKAGE_NEEDED_LIST+=( libqt5core5a )
 
 else
 
