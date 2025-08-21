@@ -33,7 +33,7 @@ declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by pri
 ### If the user has enabled ia Romote Access Channel to this machine by defining "REMOTE_ACCESS_CHANNEL=NN' in the wsprdaemon.conf file,
 ###     install and enable the remote access service as early as possible in WD's startup so it is more likely that I can log in an help with installation problems
 ### If RAC or REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
-declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.sh
+declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote-access-service.sh
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
