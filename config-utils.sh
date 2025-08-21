@@ -811,8 +811,9 @@ function install_python_package()
             exit ${rc}
         fi
     fi
+
     local pip3_extra_args=""
-    if [[ ${VERSION_ID} == "12" || ${VERSION_ID} == "24.04" ]]; then
+    if [[ ${VERSION_ID} =~ ^1[23]$ || ${VERSION_ID} == "24.04" ]]; then
         pip3_extra_args="--break-system-packages"
     fi
     if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then
