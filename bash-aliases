@@ -3,6 +3,12 @@
 #
 #
 ## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
+
+function wd-rac()
+{
+    ~/wsprdaemon/bin/frpc status
+}
+
 function wd-usbreset() {
     if [[ -z "$1" ]]; then
         echo "Usage: usbreset <bus-port | vendor:product>"
