@@ -784,7 +784,7 @@ function wd-killall() {
         fi
     done
  
-    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" ]]; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
         services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
 
