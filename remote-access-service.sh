@@ -400,18 +400,20 @@ function setup_wd_remote_access_systemctl_daemon() {
     local my_group=$(id -g -n)
     cat > ${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_FILE} <<EOF
 [Unit]
-Description= The Wsprdaemon Remote Access Channel daemon
-After=multi-user.target
+Description=Wsprdaemon Remote Access Channel daemon
+After=network.target
 
 [Service]
-User=${my_id}
-Group=${my_group}
-WorkingDirectory=${WSPRDAEMON_ROOT_DIR}/bin
-ExecStart=${WD_REMOTE_ACCESS_DAEMON_CMD} ${start_args}
-ExecStop=${WD_REMOTE_ACCESS_DAEMON_CMD}  ${stop_args}
-Type=forking
+Type=simple
+User=wsprdaemon
+Group=wsprdaemon
+WorkingDirectory=/home/wsprdaemon/wsprdaemon/bin
+ExecStart=/home/wsprdaemon/wsprdaemon/wd-remote-access-daemon.sh
 Restart=always
 RestartSec=10s
+TimeoutStartSec=30
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
