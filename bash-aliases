@@ -4,6 +4,17 @@
 #
 ## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
 
+function wd-ws8 ()
+{
+    local ws8_usb_device="/dev/ttyACM0"
+    local attached_pids_list=($(sudo lsof ${ws8_usb_device} 2>&1 | awk '/^screen/{print $2}'))
+    if (( ${#attached_pids_list[@]} )); then
+        read -p "Found ${#attached_pids_list[@]} screen sessions attached to the WS8.  Kill those sessions and connect? => "
+        sudo kill ${attached_pids_list[@]}
+    fi
+    sudo screen ${ws8_usb_device}
+}
+
 function wd-rac()
 {
     ~/wsprdaemon/bin/frpc status
