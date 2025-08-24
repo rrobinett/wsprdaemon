@@ -257,105 +257,85 @@ function wd_run_in_cgroup() {
 }
 wd_run_in_cgroup
 
-CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0 and 1 run the time critcal radiod 'proc_rx888' and 'fft' threads
 
-function wd-set-cpu-speed()
-{
-    #(( ++verbosity ))
-    local sys_cpu_root_dir="/sys/devices/system/cpu"
-    if [[ ! -d ${sys_cpu_root_dir} ]]; then
-        wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
-        return 0
+if [[ -n "${CPU_CORE_KHZ-}" ]]; then
+    if [[ ${CPU_CORE_KHZ} =~ ^DEFAULT ]]; then
+        WD_CONF_CPU_CORE_KHZ="${CPU_CORE_KHZ}"
+        CPU_CORE_KHZ="${CPU_CORE_KHZ#DEFAULT:}"
+        CPU_CORE_KHZ="${CPU_CORE_KHZ%%:*}"
+        wd_logger 1 "Transformed the CPU_CORE_KHZ=${WD_CONF_CPU_CORE_KHZ} in wsprdaemon.conf into CPU_CORE_KHZ=${CPU_CORE_KHZ}, the power-saving cpu_max for this server"
     fi
-    local sys_cpu_path_list=( $(find ${sys_cpu_root_dir} -maxdepth 1 -type d -regex '.*/cpu[0-9]+' | sort -V) )
-    if (( ${#sys_cpu_path_list[@]} == 0 )); then
-        wd_logger 1 "INFO: there are no cpu directories in '${sys_cpu_root_dir}' so we can't monitor and control the cpu speed on this server"
-        return 0
-    fi
-    wd_logger 2 "This server CPU has ${#sys_cpu_path_list[@]} cores"
+fi
 
-    if [[ -z "${CPU_CORE_KHZ}" ]]; then
-        wd_logger 1 "CPU_CORE_KHZ is NULL, so don't change the CPU frequencies"
-        return 0
-    fi
-    local cpu_specs_list=( ${CPU_CORE_KHZ//,/ } )
-    local cpu_target_list=()
-    local cpu_target
+CPU_CORE_KHZ="${CPU_CORE_KHZ-3200000}"   ### Cores 0 and 1 run the time critcal radiod 'proc_rx888' and 'fft' threads
 
-    ### Get the max freq and current scaled setting
-    local cpu_max_freq_list=()
-    local scaling_max_freq=()
-    local cpu_current_freq_list=()
-    local cpu_path
-    for cpu_path in ${sys_cpu_path_list[@]} ; do
-        local cpu_number=${cpu_path##*cpu}
-        local cpu_max_freq=$(cat "${cpu_path}/cpufreq/cpuinfo_max_freq" 2>/dev/null)
-        local cpu_scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
-        if [[ -z "${cpu_max_freq}" || -z "${cpu_scaling_max_freq}" ]]; then
-            wd_logger 2 "Can't read cpu_max_freq='${cpu_max_freq}' and/or cpu_scaling_max_freq='${cpu_scaling_max_freq}', so we can't adjust CPU frequency"
-            return 0
-        fi
-        cpu_max_freq_list[cpu_number]="${cpu_max_freq}"
-        scaling_max_freq[cpu_number]="${cpu_scaling_max_freq}"
-        wd_logger 2 "${cpu_path}: core #${cpu_number} max_possible: ${cpu_max_freq} current_max_setting:${scaling_max_freq}, scaling_max_freq[${cpu_number}]=${scaling_max_freq[cpu_number]} "
-    done
+function wd-set-cpu-speed() {
+    local target_freq=${CPU_CORE_KHZ}
+    local governor="powersave"
+    local set_freq
+    local cur min_cur max_cur
+    local table_line=""
+    local count=0
+    local wrap=8   # CPUs per line in summary
 
-    ### Get the desired scaled freq
-    local cpu_governor_list=()
-    local new_cpu_freq_list=()
-    local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
-    local desired_list_index
-    for (( desired_list_index=0; desired_list_index < ${#cpu_desired_list[@]} ; ++desired_list_index )); do
-        wd_logger 2 "Checking desired #${desired_list_index}: ${cpu_desired_list[desired_list_index]}"
-        local desired_info_list=( ${cpu_desired_list[desired_list_index]//:/ } )
-        local cpu_core=${desired_info_list[0]}
-        local cpu_freq=${desired_info_list[1]}
-        if [[ ${cpu_core} != "DEFAULT" ]]; then
-            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq} / 'performance'"
-            new_cpu_freq_list[cpu_core]=${cpu_freq}
-            cpu_governor_list[cpu_core]="performance"
+    min_cur=99999999
+    max_cur=0
+
+    for cpu_path in /sys/devices/system/cpu/cpu[0-9]*; do
+        [[ -d "$cpu_path/cpufreq" ]] || continue
+
+        local cpu=$(basename "$cpu_path")
+
+        # Set governor
+        echo "$governor" | sudo tee "$cpu_path/cpufreq/scaling_governor" > /dev/null \
+            && wd_logger 2 "Set $cpu governor=$governor"
+
+        # Clamp target within min/max
+        local min=$(<"$cpu_path/cpufreq/cpuinfo_min_freq")
+        local max=$(<"$cpu_path/cpufreq/cpuinfo_max_freq")
+
+        if (( target_freq > max )); then
+            set_freq=$max
+        elif (( target_freq < min )); then
+            set_freq=$min
         else
-            ### When "DEFAULT" then fill in all empty array elements
-            local index
-            for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq} / 'powersave'"
-                if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
-                    new_cpu_freq_list[index]=${cpu_freq}
-                fi
-                if [[ -z "${cpu_governor_list[index]-}" ]]; then
-                    cpu_governor_list[index]="powersave"
-                fi
-            done
+            set_freq=$target_freq
         fi
-        wd_logger 2 "Done with desired #${desired_list_index}"
+
+        echo "$set_freq" | sudo tee "$cpu_path/cpufreq/scaling_max_freq" > /dev/null \
+            && wd_logger 2 "Set $cpu scaling_max_freq=$set_freq"
+
+        # Reset CPU min frequency to hardware minimum
+        sudo tee "$cpu_path/cpufreq/scaling_min_freq" < "$cpu_path/cpufreq/cpuinfo_min_freq" > /dev/null \
+                && wd_logger 2 "Set $cpu scaling_min_freq=$(cat $cpu_path/cpufreq/cpuinfo_min_freq)"
+
+        # Current frequency
+        cur=$(<"$cpu_path/cpufreq/scaling_cur_freq")
+        wd_logger 2 "$cpu scaling_cur_freq=$cur kHz"
+
+        # Add to summary table (align MHz)
+        local mhz=$(( cur / 1000 ))
+        table_line+=$(printf "%s=%4dMHz " "$cpu" "$mhz")
+        (( ++count ))
+
+        # Wrap line
+        if (( count % wrap == 0 )); then
+            wd_logger 2 "CPU freqs: $table_line"
+            table_line=""
+        fi
+
+        # Track min/max
+        (( cur < min_cur )) && min_cur=$cur
+        (( cur > max_cur )) && max_cur=$cur
     done
 
-    local index
-    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-        local governor_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_governor"
-        local available_governors_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_available_governors"
-        local available_governors_list=( $(< ${available_governors_file_path}) )
-        if ! [[ "${available_governors_list[*]}"  =~ "${cpu_governor_list[index]}" ]]; then
-            wd_logger 2 "The desired governor ${cpu_governor_list[index]} is not among the available governors '${available_governors_list[*]}'"
-        else
-            wd_logger 2 "Setting CPU #${index} to ${cpu_governor_list[index]} mode"
-            echo "${cpu_governor_list[index]}" | sudo tee ${governor_file_path} > /dev/null
-        fi
-    done
-    return 0
+    # Flush any remaining CPUs not yet printed
+    [[ -n "$table_line" ]] && wd_logger 2 "CPU freqs: $table_line"
 
-    local index
-    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-        wd_logger 2 "For core ${index}: scaling_max_freq[]=${scaling_max_freq[index]}, desired_cpu_max=${new_cpu_freq_list[index]}"
-        if (( ${scaling_max_freq[index]} != ${new_cpu_freq_list[index]} )); then
-            wd_logger 1 "Changing core #${index} max frequency from ${scaling_max_freq[index]} to ${new_cpu_freq_list[index]}"
-            echo ${new_cpu_freq_list[index]} | sudo tee "${sys_cpu_path_list[index]}/cpufreq/scaling_max_freq" > /dev/null
-            local rc=$? ; if (( rc )); then
-                echo "ERROR: failed to set  core #${index} to ${new_cpu_freq_list[index]}"
-            fi
-        fi
-     done
+    wd_logger 2 "All CPUs set to governor=$governor with scaling_max_freq capped at $target_freq kHz"
+    wd_logger 2 "Current CPU freqs observed: min=$((min_cur/1000)) MHz max=$((max_cur/1000)) MHz"
 }
+
 wd-set-cpu-speed
 
 
