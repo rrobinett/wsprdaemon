@@ -285,6 +285,11 @@ function wd-commit-info()
     done
 }
 
+function wd-cpu-watch()
+{
+    watch -n 1 'bash -c '\''for cpu in /sys/devices/system/cpu/cpu[0-9]*; do cur=$(( $(< $cpu/cpufreq/scaling_cur_freq)/1000 )); printf "%-6s = %4d MHz\n" "$(basename $cpu)" "$cur"; done'\'''
+}
+
 function wd-cpu-info() 
 {
     local sys_list=( $(ls -dv /sys/devices/system/cpu/cpu[0-9]*) )   ### Get numericallyt sorted list 
