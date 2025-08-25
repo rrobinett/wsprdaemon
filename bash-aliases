@@ -4,6 +4,29 @@
 #
 ## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
 
+function wd-rac-status()
+{
+    (cd ${HOME}/wsprdaemon/bin; ./frpc status)
+}
+
+function wd-rac-purge() 
+{
+    read -p "Are you *SURE* you want to purge any RAC connection?  If you are remotely logged on, you may not be able to re-access this server [yN] =>"
+    REPLY=${REPLY:=N} ; REPLY=${REPLY:0:1} ; REPLY=${REPLY^}
+    if [[ ${REPLY} != "Y" ]]; then
+        echo "Aborting this command"
+        return 0
+    fi
+    sudo systemctl stop wd-remote-access.service
+    sudo systemctl disable wd_remote_access.service
+    sudo systemctl disable wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd_remote_access.service
+    sudo systemctl daemon-reload
+    ### Setup RAC again if it is defined in wsprdaemon.org
+    ${HOME}/wsprdaemon/wsprdaemon.sh -V
+}
+
 function wd-ws8 ()
 {
     local ws8_usb_device="/dev/ttyACM0"
@@ -13,11 +36,6 @@ function wd-ws8 ()
         sudo kill ${attached_pids_list[@]}
     fi
     sudo screen ${ws8_usb_device}
-}
-
-function wd-rac()
-{
-    ~/wsprdaemon/bin/frpc status
 }
 
 function wd-usbreset() {
