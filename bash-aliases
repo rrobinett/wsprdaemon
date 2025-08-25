@@ -287,7 +287,7 @@ function wd-commit-info()
 
 function wd-cpu-watch()
 {
-    watch -n 1 'bash -c '\''for cpu in /sys/devices/system/cpu/cpu[0-9]*; do cur=$(( $(< $cpu/cpufreq/scaling_cur_freq)/1000 )); printf "%-6s = %4d MHz\n" "$(basename $cpu)" "$cur"; done'\'''
+    watch -n 1 'bash -c '\''for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]* | sort -V); do cur=$(( $(< $cpu/cpufreq/scaling_cur_freq)/1000 )); min=$(( $(< $cpu/cpufreq/scaling_min_freq)/1000 )); max=$(( $(< $cpu/cpufreq/scaling_max_freq)/1000 )); scaled=$(( cur * 80 / max )); stars=$(printf "%*s" "$scaled" "" | tr " " "*"); printf "%-6s %-80s cur=%5d MHz  min=%5d MHz  max=%5d MHz\n" "$(basename $cpu)" "$stars" "$cur" "$min" "$max"; done'\'''
 }
 
 function wd-cpu-info() 
