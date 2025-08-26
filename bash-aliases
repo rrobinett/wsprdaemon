@@ -326,42 +326,39 @@ function wd-ka9q-controls() {
     local action="${1-is-active}"
 
     local radio_config_dir_path="/etc/radio"
-    local radiod_config_dir_path_list=( $(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d') )
+    
+    ### Thanks to chatGBT, get list of radiod@...conf and radiod@...conf.d/ files and dirs, giving preference to ...conf.d directories
+    local radio_conf_list=( $(find ${radio_config_dir_path} \( -type d -name 'radiod@*.conf.d' -printf '%f\tD\n' -o -type f -name 'radiod@*.conf' -printf '%f\tF\n' \) | awk -F'\t' '
+{
+  name=$1; typ=$2
+  key=name
+  sub(/\.conf\.d$/,"",key)
+  sub(/\.conf$/,"",key)
+  if (typ=="D") dir[key]=name
+  else if (typ=="F") file[key]=name
+}
+END {
+  for (k in dir) print dir[k]
+  for (k in file) if (!(k in dir)) print file[k]
+}
+' | sort) )
 
-    if (( ${#radiod_config_dir_path_list[@]} == 0 )); then
-        echo "ERROR: can't find any '${radio_config_dir_path}/radiod@*.conf.d/ directories'"
-        return 1
-    fi
-    if (( ${#radiod_config_dir_path_list[@]} > 1 )); then
-        local radiod_dir
-        for radiod_dir in  ${radiod_config_dir_path_list[@]}; do
-            set +x
-            if ps aux | grep -q ${radiod_dir##*/} ; then
-               echo "Found running ${radiod_dir##*/}"
-               radiod_config_dir_path_list=( "${radiod_dir}" )
-               break
-            fi
-        done
-        if (( ${#radiod_config_dir_path_list[@]} != 1 )); then
-            echo "ERROR: found ${#radiod_config_dir_path_list[@]} '${radio_config_dir_path}/radiod@*.conf.d/ directories': ${radiod_config_dir_path_list[*]}"
-        fi
-    fi
-
-    set +x
-    radiod_config_dir_path="${radiod_config_dir_path_list[0]}"
     local radiod_start_arg
-
-    if [[ -d ${radiod_config_dir_path} ]]; then
-       radiod_start_arg=${radiod_config_dir_path##*/}
-       radiod_start_arg=${radiod_start_arg%.conf.d}
-       set +x
-       (( ${verbosity-0} )) && echo "radiod_start_arg=${radiod_start_arg}"
-   else
-       set +x
-       echo "ERROR: Can't find a new-style radiod@...conf.d directory"
-       return 1
-   fi
-   
+    case ${#radio_conf_list[@]} in
+        0)
+            echo "Can't find any conf.. files"
+            return 0
+            ;;
+        1)
+            radiod_start_arg="${radio_conf_list[0]%.conf*}.service"
+            (( ${verbosity-0} )) && echo "Found one radiod@...conf. file/dir: ${radiod_start_arg}"
+            ;;
+        *)
+            echo "Found more than one radiod@...conf. file/dir: ${radio_conf_list[*]}"
+            return 0
+            ;;
+    esac
+  
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
