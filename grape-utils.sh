@@ -269,7 +269,14 @@ function upload_24hour_wavs_to_grape_drf_server() {
         fi
 
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
-        sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        local sftp_bw_limit_kbps="${SFTP_BW_LIMIT_KBPS-0}"
+        if (( sftp_bw_limit_kbps == 0 )) && (( ${SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS-0}} )) ; then
+            sftp_bw_limit_kbps=$(( SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS / 1000 ))
+        fi
+        if (( sftp_bw_limit_kbps == 0 )); then
+            sftp_bw_limit_kbps=100
+        fi
+        sftp -v -l ${sftp_bw_limit_kbps} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if (( rc )); then
