@@ -405,8 +405,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=wsprdaemon
-Group=wsprdaemon
+User=${USER}
+Group=$(id -gn)
 WorkingDirectory=${HOME}/wsprdaemon/bin
 ExecStart=${HOME}/wsprdaemon/wd-remote-access-daemon.sh
 Restart=always
