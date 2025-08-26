@@ -322,6 +322,49 @@ function wd-cpu-info()
     printf "Available CPU frequencies: $(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies)\n"
 }
 
+function wd-cpu-set-core-speeds() {
+    local speed01="$1"   # MHz for cores 0 and 1
+    local speedrest="$2" # MHz for all other cores
+
+    if [[ -z "$speed01" || -z "$speedrest" ]]; then
+        echo "Usage: set_core_speeds <speed-for-core0-1-MHz> <speed-for-rest-MHz>"
+        return 1
+    fi
+
+    # convert MHz → kHz
+    local s01=$((speed01 * 1000))
+    local srest=$((speedrest * 1000))
+
+    echo "🔧 Setting CPU0-1 to ${speed01} MHz, others to ${speedrest} MHz"
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}  # extract number after "cpu"
+        if (( n == 0 || n == 1 )); then
+            echo "$s01" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        else
+            echo "$srest" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        fi
+    done
+
+    # Disable turbo boost (CPB)
+    if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
+        echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost > /dev/null
+        echo "🚫 Turbo Boost disabled"
+    else
+        echo "⚠️ Could not disable Turbo Boost: /sys/devices/system/cpu/cpufreq/boost not found"
+    fi
+
+    # Print summary table
+    echo
+    printf "%-5s %-10s\n" "CPU" "MaxFreq(MHz)"
+    echo "-------------------"
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}
+        freq=$(<"$cpu/cpufreq/scaling_max_freq")
+        printf "%-5s %-10s\n" "$n" "$((freq / 1000))"
+    done
+}
+
 function wd-ka9q-controls() {
     local action="${1-is-active}"
 
@@ -2150,11 +2193,36 @@ function  wd-git-to-ssh(){
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
 alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
-function wd-watch-wavs() {
-    local band_freq=${1-14}
-    local band_dir=${PWD##*/}
+declare WSPR_BAND_TO_TUNING_FREQ=(   2200:136000  630:474200  160:1836600  80:3568600  80eu:3592600   60:5287200 60eu:5364700  40:7038600  30:10138700    22:13553900   20:14095600 \
+                                     17:18104600 15:21094600  12:24924600 10:28124600    8:40680000   6:50293000   4:70091000 2:144489000 70:432300000  23:1296500000  29:560308000)
+function wd-watch-wavs-scan() {
+    local band
+    for band in $(find -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -rV); do
+        (( ${verbosity-0} )) && read -p "Watch band ${band} => "
+        (cd $band; wd-watch-wavs )
+    done
+}
 
-    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
+function wd-watch-wavs() {
+    local band_dir=${PWD##*/}
+    local band_freq=""
+
+    local band_info=""
+    for band_info in ${WSPR_BAND_TO_TUNING_FREQ[@]}; do
+        local band_info_list=(${band_info/:/ } )
+        local band_meters=${band_info_list[0]}
+        local band_tuning_freq=${band_info_list[1]}
+        if [[ ${band_meters} == ${band_dir} ]]; then
+            band_freq=${band_tuning_freq}
+            break
+        fi
+    done
+    if [[ -z "${band_freq}" ]]; then
+        echo "Can't find a band which matches this PWD=${PWD}"
+        return 0
+    fi
+
+    watch "ls -lt *.wav ../*Z_${band_freq}*"
 }
 alias wdww='wd-watch-wavs'
 
