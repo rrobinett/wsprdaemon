@@ -257,87 +257,67 @@ function wd_run_in_cgroup() {
 }
 wd_run_in_cgroup
 
-
-if [[ -n "${CPU_CORE_KHZ-}" ]]; then
-    if [[ ${CPU_CORE_KHZ} =~ ^DEFAULT ]]; then
-        WD_CONF_CPU_CORE_KHZ="${CPU_CORE_KHZ}"
-        CPU_CORE_KHZ="${CPU_CORE_KHZ#DEFAULT:}"
-        CPU_CORE_KHZ="${CPU_CORE_KHZ%%:*}"
-        wd_logger 1 "Transformed the CPU_CORE_KHZ=${WD_CONF_CPU_CORE_KHZ} in wsprdaemon.conf into CPU_CORE_KHZ=${CPU_CORE_KHZ}, the power-saving cpu_max for this server"
-    fi
-fi
-
-CPU_CORE_KHZ="${CPU_CORE_KHZ-3200000}"   ### Cores 0 and 1 run the time critcal radiod 'proc_rx888' and 'fft' threads
-
 function wd-set-cpu-speed() {
-    local target_freq=${CPU_CORE_KHZ}
-    local governor="powersave"
-    local set_freq
-    local cur min_cur max_cur
-    local table_line=""
-    local count=0
-    local wrap=8   # CPUs per line in summary
+    local config="$1"
+    if [[ -z "$config" ]]; then
+        echo "Usage: wd_set_core_freqs \"DEFAULT:<freq>,<core>:<freq>,...\""
+        return 1
+    fi
 
-    min_cur=99999999
-    max_cur=0
-
-    for cpu_path in /sys/devices/system/cpu/cpu[0-9]*; do
-        [[ -d "$cpu_path/cpufreq" ]] || continue
-
-        local cpu=$(basename "$cpu_path")
-
-        # Set governor
-        echo "$governor" | sudo tee "$cpu_path/cpufreq/scaling_governor" > /dev/null \
-            && wd_logger 2 "Set $cpu governor=$governor"
-
-        # Clamp target within min/max
-        local min=$(<"$cpu_path/cpufreq/cpuinfo_min_freq")
-        local max=$(<"$cpu_path/cpufreq/cpuinfo_max_freq")
-
-        if (( target_freq > max )); then
-            set_freq=$max
-        elif (( target_freq < min )); then
-            set_freq=$min
-        else
-            set_freq=$target_freq
+    # Parse default
+    local default=""
+    IFS=',' read -ra fields <<< "$config"
+    for f in "${fields[@]}"; do
+        if [[ "$f" =~ ^DEFAULT:([0-9]+)$ ]]; then
+            default="${BASH_REMATCH[1]}"
+            break
         fi
+    done
+    if [[ -z "$default" ]]; then
+        echo "❌ No DEFAULT frequency found in config"
+        return 1
+    fi
 
-        echo "$set_freq" | sudo tee "$cpu_path/cpufreq/scaling_max_freq" > /dev/null \
-            && wd_logger 2 "Set $cpu scaling_max_freq=$set_freq"
+    echo "🔧 Setting default frequency = ${default} KHz"
 
-        # Reset CPU min frequency to hardware minimum
-        sudo tee "$cpu_path/cpufreq/scaling_min_freq" < "$cpu_path/cpufreq/cpuinfo_min_freq" > /dev/null \
-                && wd_logger 2 "Set $cpu scaling_min_freq=$(cat $cpu_path/cpufreq/cpuinfo_min_freq)"
-
-        # Current frequency
-        cur=$(<"$cpu_path/cpufreq/scaling_cur_freq")
-        wd_logger 2 "$cpu scaling_cur_freq=$cur kHz"
-
-        # Add to summary table (align MHz)
-        local mhz=$(( cur / 1000 ))
-        table_line+=$(printf "%s=%4dMHz " "$cpu" "$mhz")
-        (( ++count ))
-
-        # Wrap line
-        if (( count % wrap == 0 )); then
-            wd_logger 2 "CPU freqs: $table_line"
-            table_line=""
-        fi
-
-        # Track min/max
-        (( cur < min_cur )) && min_cur=$cur
-        (( cur > max_cur )) && max_cur=$cur
+    # Apply default to all cores
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        echo "$default" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
     done
 
-    # Flush any remaining CPUs not yet printed
-    [[ -n "$table_line" ]] && wd_logger 2 "CPU freqs: $table_line"
+    # Apply overrides
+    for f in "${fields[@]}"; do
+        if [[ "$f" =~ ^([0-9]+):([0-9]+)$ ]]; then
+            local core="${BASH_REMATCH[1]}"
+            local khz="${BASH_REMATCH[2]}"
+            local path="/sys/devices/system/cpu/cpu$core/cpufreq/scaling_max_freq"
+            if [[ -e "$path" ]]; then
+                echo "$khz" | sudo tee "$path" > /dev/null
+                echo "   → Core $core override = ${khz} KHz"
+            else
+                echo "⚠️ Core $core not found, skipping override"
+            fi
+        fi
+    done
 
-    wd_logger 2 "All CPUs set to governor=$governor with scaling_max_freq capped at $target_freq kHz"
-    wd_logger 2 "Current CPU freqs observed: min=$((min_cur/1000)) MHz max=$((max_cur/1000)) MHz"
+    # Disable turbo if available
+    if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
+        echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost > /dev/null
+        echo "🚫 Turbo Boost disabled"
+    fi
+
+    # Print summary
+    echo
+    printf "%-5s %-10s\n" "CPU" "MaxFreq(KHz)"
+    echo "-------------------"
+    for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]* | sort -V); do
+        n=${cpu##*cpu}
+        freq=$(<"$cpu/cpufreq/scaling_max_freq")
+        printf "%-5s %-10s\n" "$n" "$freq"
+    done
 }
 
-wd-set-cpu-speed
-
+wd-set-cpu-speed "${CPU_CORE_KHZ-DEFAULT:3200000}"  ### defaults to 3.2 GHz
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
