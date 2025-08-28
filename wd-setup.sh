@@ -257,64 +257,153 @@ function wd_run_in_cgroup() {
 }
 wd_run_in_cgroup
 
-function wd-set-cpu-speed() {
-    local config="$1"
-    if [[ -z "$config" ]]; then
-        echo "Usage: wd_set_core_freqs \"DEFAULT:<freq>,<core>:<freq>,...\""
+declare CPU_FREQ_MIN_KHZ=${CPU_FREQ_MIN_KHZ-1000000}
+declare CPU_FREQ_MAX_KHZ=${CPU_FREQ_MAX_KHZ-5000000}
+
+function turbo_control() {
+    action="${1:-off}"   # default to "off" if no argument
+    case "$action" in
+        off|disable)
+            desired_intel=1   # no_turbo=1 means disabled
+            desired_amd=0     # boost=0 means disabled
+            ;;
+        on|enable)
+            desired_intel=0   # no_turbo=0 means enabled
+            desired_amd=1     # boost=1 means enabled
+            ;;
+        *)
+            wd_logger 1 "Usage: turbo_control [on|off]"
+            return 1
+            ;;
+    esac
+
+    if [[ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]]; then
+        current=$(< /sys/devices/system/cpu/intel_pstate/no_turbo)
+        if [[ $current -ne $desired_intel ]]; then
+            wd_logger 1 "Setting Intel turbo $action..."
+            echo "$desired_intel" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo >/dev/null
+        else
+            wd_logger 1 "Intel turbo already $action"
+        fi
+
+    elif [[ -f /sys/devices/system/cpu/cpufreq/boost ]]; then
+        current=$(< /sys/devices/system/cpu/cpufreq/boost)
+        if [[ $current -ne $desired_amd ]]; then
+            wd_logger 1 "Setting AMD/ACPI boost $action..."
+            echo "$desired_amd" | sudo tee /sys/devices/system/cpu/cpufreq/boost >/dev/null
+        else
+            wd_logger 1 "AMD/ACPI boost already $action"
+        fi
+
+    else
+        wd_logger 1 "Turbo/Boost control not supported on this CPU+kernel"
         return 1
     fi
+}
 
-    # Parse default
-    local default=""
-    IFS=',' read -ra fields <<< "$config"
-    for f in "${fields[@]}"; do
-        if [[ "$f" =~ ^DEFAULT:([0-9]+)$ ]]; then
-            default="${BASH_REMATCH[1]}"
+function wd-set-cpu-speed() {
+    local config_list=( ${1//,/ } ) 
+    if (( ${#config_list[@]} == 0 )); then
+        wd_logger 1 "ERROR: CPU_CORE_KHZ is defined but empty "
+        return 0
+    fi
+    if ! [[ " ${config_list[@]} " == *DEFAULT* ]] ; then
+        wd_logger 1 "ERROR: CPU_CORE_KHZ is defined but has no 'DEFAULT:<KHZ>' defined"
+    fi
+    local config="$1"
+    if [[ -z "$config" ]]; then
+        wd_logger 1 "Usage: wd_set_core_freqs \"DEFAULT:<freq>,<core>:<freq>,...\""
+        return 0
+    fi
+    wd_logger 2 "Parsing the ${#config_list[@]} elements of CPU_CORE_KHZ='${CPU_CORE_KHZ}'"
+
+    local default_khz=""
+    local element
+    for element in ${config_list[@]}; do
+        wd_logger 2 "Checking element='${element}'"
+        if [[ ${element} == DEFAULT:* ]]; then
+            wd_logger 2 "Found a default DEFAULT element '${element}'"
+            default_khz=${element##*:}
+            if [[ -z "${default_khz}" ]]; then
+                wd_logger 1 "ERROR: cannot extract kHz value from 'DEFAULT:...' field in CPU_CORE_KHZ='${CPU_CORE_KHZ}'"
+                return 0
+            fi
+            wd_logger 2 "Found DEFAULT is ${default_khz}"
+            if ! is_uint ${default_khz} ; then
+                wd_logger 1 "ERROR: the KHZ value ${default_khz} extracted from '${CPU_CORE_KHZ}' is not an unsigned integer"
+                return 0
+            fi
+            if (( default_khz < CPU_FREQ_MIN_KHZ )) || (( default_khz > CPU_FREQ_MAX_KHZ )); then
+                wd_logger 1 "ERROR: the invalid DEFAULT:<KHZ> value ${default_khz} is less than ${CPU_FREQ_MIN_KHZ} or greater than ${CPU_FREQ_MAX_KHZ}"
+                return 0
+            fi
+            wd_logger 2 "Found valid DEFAULT:${default_khz}"
             break
         fi
     done
-    if [[ -z "$default" ]]; then
-        echo "❌ No DEFAULT frequency found in config"
-        return 1
+    if [[ -z "${default_khz}" ]]; then
+        wd_logger 1 "ERROR: didn't find a 'DEFUALT:<KHZ>' field in ${1}"
+        return 0
     fi
-
-    echo "🔧 Setting default frequency = ${default} KHz"
-
-    # Apply default to all cores
-    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
-        echo "$default" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+    local cpu_khz_list=()
+    local num_cpus=$(grep -c ^processor /proc/cpuinfo)
+    wd_logger 2 "Initilaizing all elements of cpu_khz_list[${num_cpus}] to ${default_khz}"
+    local index
+    for (( index=0; index < num_cpus; ++index )); do
+        cpu_khz_list[${index}]=${default_khz}
     done
 
-    # Apply overrides
-    for f in "${fields[@]}"; do
-        if [[ "$f" =~ ^([0-9]+):([0-9]+)$ ]]; then
-            local core="${BASH_REMATCH[1]}"
-            local khz="${BASH_REMATCH[2]}"
-            local path="/sys/devices/system/cpu/cpu$core/cpufreq/scaling_max_freq"
-            if [[ -e "$path" ]]; then
-                echo "$khz" | sudo tee "$path" > /dev/null
-                echo "   → Core $core override = ${khz} KHz"
-            else
-                echo "⚠️ Core $core not found, skipping override"
-            fi
+    wd_logger 2 "Parsing individual core assignments"
+    for element in ${config_list[@]}; do
+        wd_logger 2 "Checking element='${element}'"
+        if [[ ${element} == DEFAULT:* ]]; then
+            wd_logger 2 "Skipping the already parsed DEFAULT element '${element}'"
+            continue
+        fi
+        local element_list=( ${element//:/ } )
+        if (( ${#element_list[@]} != 2 )); then
+            wd_logger 1 "ERROR: element '${element}' has ${#element[@]} fields, not the expected two fields in a '<CORE>:<KHZ>' field"
+            continue
+        fi
+        local core_number=${element_list[0]}
+        if ! is_uint ${core_number} ; then
+            wd_logger 1 "ERROR: core number ${core_number} in element ${element} is not an unsigned integer, so skipping it"
+            continue
+        fi
+        if (( core_number >= num_cpus )); then
+            wd_logger 1 "ERROR: core number of element ${element} is greater than the ${num_cpus} on this CPU, so skipping"
+            continue
+        fi
+        ### We got a good core number
+        local core_freq=${element_list[1]}
+        if ! is_uint ${core_freq} ; then
+            wd_logger 1 "ERROR: the KHZ value ${core_freq} extracted from '${element}' is not an unsigned integer, so skipping"
+            continue
+        fi
+        if (( core_freq < CPU_FREQ_MIN_KHZ )) || (( core_freq > CPU_FREQ_MAX_KHZ )); then
+            wd_logger 1 "ERROR: the core frequency ${core_freq} extracted from '${element} is less than ${CPU_FREQ_MIN_KHZ} or graeter than ${CPU_FREQ_MAX_KHZ}, so skipping"
+            continue
+        fi
+        wd_logger 2 "Setting core ${core_number} to ${core_freq} KHz"
+        cpu_khz_list[${core_number}]=${core_freq}
+    done
+
+    local cpu_core
+    for (( cpu_core=0; cpu_core < num_cpus; ++cpu_core )); do
+        local scaling_max_freq_file_path="/sys/devices/system/cpu/cpu${cpu_core}/cpufreq/scaling_max_freq" 
+        if ! [[ -e "${scaling_max_freq_file_path}" ]]; then
+            wd_logger 1 "ERROR: '"${scaling_max_freq_file_path}"' does not exist, so skip"
+        elif ! sudo test -w "${scaling_max_freq_file_path}"; then
+            wd_logger 1 "ERROR: '"${scaling_max_freq_file_path}"' is not writable, so skip"
+        else
+            local print_string=$(printf "Set CPU %2d freq by writing %8d to %s\n" ${cpu_core} ${cpu_khz_list[${cpu_core}]} "${scaling_max_freq_file_path}")
+            wd_logger 2 "${print_string}"
+            echo "${cpu_khz_list[${cpu_core}]}" | sudo tee "${scaling_max_freq_file_path}" > /dev/null 
         fi
     done
 
-    # Disable turbo if available
-    if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
-        echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost > /dev/null
-        echo "🚫 Turbo Boost disabled"
-    fi
-
-    # Print summary
-    echo
-    printf "%-5s %-10s\n" "CPU" "MaxFreq(KHz)"
-    echo "-------------------"
-    for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]* | sort -V); do
-        n=${cpu##*cpu}
-        freq=$(<"$cpu/cpufreq/scaling_max_freq")
-        printf "%-5s %-10s\n" "$n" "$freq"
-    done
+    turbo_control off
+    return 0
 }
 
 wd-set-cpu-speed "${CPU_CORE_KHZ-DEFAULT:3200000}"  ### defaults to 3.2 GHz
