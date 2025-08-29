@@ -283,7 +283,7 @@ function turbo_control() {
             wd_logger 1 "Setting Intel turbo $action..."
             echo "$desired_intel" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo >/dev/null
         else
-            wd_logger 1 "Intel turbo already $action"
+            wd_logger 2 "Intel turbo already $action"
         fi
 
     elif [[ -f /sys/devices/system/cpu/cpufreq/boost ]]; then
@@ -292,7 +292,7 @@ function turbo_control() {
             wd_logger 1 "Setting AMD/ACPI boost $action..."
             echo "$desired_amd" | sudo tee /sys/devices/system/cpu/cpufreq/boost >/dev/null
         else
-            wd_logger 1 "AMD/ACPI boost already $action"
+            wd_logger 2 "AMD/ACPI boost already $action"
         fi
 
     else
