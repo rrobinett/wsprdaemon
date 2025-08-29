@@ -296,13 +296,14 @@ function turbo_control() {
         fi
 
     else
-        wd_logger 1 "Turbo/Boost control not supported on this CPU+kernel"
+        wd_logger 2 "Turbo/Boost control not supported on this CPU+kernel"
         return 1
     fi
 }
 
 function wd-set-cpu-speed() {
-    local config_list=( ${1//,/ } ) 
+    local cpu_core_khz="${1}"
+    local config_list=( ${cpu_core_khz//,/ } ) G
     if (( ${#config_list[@]} == 0 )); then
         wd_logger 1 "ERROR: CPU_CORE_KHZ is defined but empty "
         return 0
@@ -315,7 +316,7 @@ function wd-set-cpu-speed() {
         wd_logger 1 "Usage: wd_set_core_freqs \"DEFAULT:<freq>,<core>:<freq>,...\""
         return 0
     fi
-    wd_logger 2 "Parsing the ${#config_list[@]} elements of CPU_CORE_KHZ='${CPU_CORE_KHZ}'"
+    wd_logger 2 "Parsing the ${#config_list[@]} elements of CPU_CORE_KHZ='${cpu_core_khz}'"
 
     local default_khz=""
     local element
@@ -325,12 +326,12 @@ function wd-set-cpu-speed() {
             wd_logger 2 "Found a default DEFAULT element '${element}'"
             default_khz=${element##*:}
             if [[ -z "${default_khz}" ]]; then
-                wd_logger 1 "ERROR: cannot extract kHz value from 'DEFAULT:...' field in CPU_CORE_KHZ='${CPU_CORE_KHZ}'"
+                wd_logger 1 "ERROR: cannot extract kHz value from 'DEFAULT:...' field in CPU_CORE_KHZ='${cpu_core_khz}'"
                 return 0
             fi
             wd_logger 2 "Found DEFAULT is ${default_khz}"
             if ! is_uint ${default_khz} ; then
-                wd_logger 1 "ERROR: the KHZ value ${default_khz} extracted from '${CPU_CORE_KHZ}' is not an unsigned integer"
+                wd_logger 1 "ERROR: the KHZ value ${default_khz} extracted from '${cpu_core_khz}' is not an unsigned integer"
                 return 0
             fi
             if (( default_khz < CPU_FREQ_MIN_KHZ )) || (( default_khz > CPU_FREQ_MAX_KHZ )); then
@@ -392,7 +393,7 @@ function wd-set-cpu-speed() {
     for (( cpu_core=0; cpu_core < num_cpus; ++cpu_core )); do
         local scaling_max_freq_file_path="/sys/devices/system/cpu/cpu${cpu_core}/cpufreq/scaling_max_freq" 
         if ! [[ -e "${scaling_max_freq_file_path}" ]]; then
-            wd_logger 1 "ERROR: '"${scaling_max_freq_file_path}"' does not exist, so skip"
+            wd_logger 2 "ERROR: '"${scaling_max_freq_file_path}"' does not exist, so skip"
         elif ! sudo test -w "${scaling_max_freq_file_path}"; then
             wd_logger 1 "ERROR: '"${scaling_max_freq_file_path}"' is not writable, so skip"
         else
@@ -406,7 +407,8 @@ function wd-set-cpu-speed() {
     return 0
 }
 
-wd-set-cpu-speed "${CPU_CORE_KHZ-DEFAULT:3200000}"  ### defaults to 3.2 GHz
+CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
+wd-set-cpu-speed "${CPU_CORE_KHZ}"
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
