@@ -19,7 +19,7 @@
 ###    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-declare -i verbosity=${verbosity:-1}
+declare -i verbosity=${verbosity:-1}   ### Defaults to -1 so these wd_setup wd_logger lines are printed to the terminal
 
 declare -r WSPRDAEMON_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/${0##*/}"
 declare -r WSPRDAEMON_CONFIG_FILE=${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf
@@ -31,36 +31,51 @@ declare NOISE_GRAPHS_REPORTER_INDEX_TEMPLATE_FILE=${WSPRDAEMON_ROOT_DIR}/noise_g
 declare WD_TIME_FMT=${WD_TIME_FMT-%(%a %d %b %Y %H:%M:%S %Z)T}   ### Used by printf "${WD_TIME}: ..." in lieu of $(date)
 
 ### If the user has enabled ia Romote Access Channel to this machine by defining "REMOTE_ACCESS_CHANNEL=NN' in the wsprdaemon.conf file,
-###     install and enable the remote access service.
-### If REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
-declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote_access_service.sh
+###     install and enable the remote access service as early as possible in WD's startup so it is more likely that I can log in an help with installation problems
+### If RAC or REMOTE_ACCESS_CHANNEL is not defined, then disable and stop the 'wd_remote_access' service if it is installed and running
+declare -r REMOTE_ACCESS_SERVICES=${WSPRDAEMON_ROOT_DIR}/remote-access-service.sh
 source ${REMOTE_ACCESS_SERVICES}
 wd_remote_access_service_manager
 
-declare OS_RELEASE    ### We are not in a function, so it can't be local
-get_file_variable OS_RELEASE "VERSION_ID" /etc/os-release
+declare VERSION_ID    ### We are not in a function, so it can't be local
+get_file_variable VERSION_ID "VERSION_ID" /etc/os-release
 
-declare OS_CODENAME
-get_file_variable OS_CODENAME "VERSION_CODENAME" /etc/os-release
+declare VERSION_CODENAME
+get_file_variable VERSION_CODENAME "VERSION_CODENAME" /etc/os-release
 
 declare CPU_ARCH
 CPU_ARCH=$(uname -m)
+
+wd_logger 2 "Installing on Linux '${VERSION_CODENAME}',  OS version = '${VERSION_ID}', CPU_ARCH=${CPU_ARCH}"
 
 if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; then
     wd_logger 1 "WARNING: the system clock is not synchronized"
 fi
 
-wd_logger 2 "Installing on Linux '${OS_CODENAME}',  OS version = '${OS_RELEASE}', CPU_ARCH=${CPU_ARCH}"
+### Ensure this server never puts itself to sleep
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
+#####################################################################################################
+### Install all packages needed by WD and most of the programs it runs
 declare    PACKAGE_NEEDED_LIST=( tmux iw time vim btop at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
                 libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
+                ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
 
 if [[ ${HOSTNAME:0:2} == "WD" ]]; then
     PACKAGE_NEEDED_LIST+=( jq )
 fi
-                ### avahi-daemon libnss-mdns are not included in the OrangePi's Armbien OS.  libnss-mymachines may also be needed
+
+if grep -q "Debian.*13" /etc/os-release; then
+### Leave these sections outdented so as to minimize 'gd' output.  Hopefully the functionality of this section will eventually totally replace that legacy code
+
+### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
+###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
+wd_logger 2 "Running on a Debian 13 server"
+PACKAGE_NEEDED_LIST+=(  libqt5core5t64 linux-cpupower )
+
+else
 
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
 declare LIB_QT5_CORE="libqt5core5a"
@@ -82,20 +97,20 @@ case ${CPU_ARCH} in
         ;;
     aarch64)
         PACKAGE_NEEDED_LIST+=( libsndfile1-dev python3-pip libgfortran5:arm64 ${LIB_QT5_DEFAULT_ARM64} )
-         if [[ "${OS_RELEASE}" == "11" ]]; then
+         if [[ "${VERSION_ID}" == "11" ]]; then
             ### The 64 bit Pi5 OS is based upon Debian 12
-            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${OS_RELEASE}"
+            wd_logger 2 "Installing on a Pi5 which is based upon Debian ${VERSION_ID}"
             PACKAGE_NEEDED_LIST+=(  python3-matplotlib )
          fi
         ;;
     x86_64)
-        wd_logger 2 "Installing on Ubuntu ${OS_RELEASE}"
-        if [[ "${OS_RELEASE}" =~ 2[02].04 || "${OS_RELEASE}" == "12" || "${OS_RELEASE}" =~ 21.. ]]; then
+        wd_logger 2 "Installing on Linux VERSION_ID='${VERSION_ID}'"
+        if [[ "${VERSION_ID}" =~ 2[02].04 || "${VERSION_ID}" =~ ^1[23] || "${VERSION_ID}" =~ 21.. ]]; then
             ### Ubuntu 22.04 and Debian don't use qt5-default
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
-        elif [[ "${OS_RELEASE}" =~ 24.04 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
-        elif [[ "${OS_RELEASE}" =~ 24.10 ]]; then
+        elif [[ "${VERSION_ID}" =~ 24.10 ]]; then
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 libqt5core5t64 python3-psycopg2 )
         elif grep -q 'Linux Mint' /etc/os-release; then
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy python3-psycopg2 libgfortran5:amd64 ${LIB_QT5_LINUX_MINT} )
@@ -108,7 +123,29 @@ case ${CPU_ARCH} in
         exit 1
         ;;
 esac
+fi
 
+### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
+function install_needed_dpkgs()
+{
+    wd_logger 2 "Starting"
+
+    local package_needed
+    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
+        wd_logger 2 "Checking for package ${package_needed}"
+        if ! install_debian_package ${package_needed} ; then
+            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
+            exit 1
+        fi
+    done
+    wd_logger 2 "Done"
+}
+if ! install_needed_dpkgs ; then
+    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
+    exit 1
+fi
+
+########################################### 
 function is_orange_pi_5() {
     if grep -q 'Rockchip RK3588' /proc/cpuinfo 2>/dev/null || \
        grep -q "Orange Pi 5" /sys/firmware/devicetree/base/model 2>/dev/null; then
@@ -160,8 +197,8 @@ function wd_run_in_cgroup() {
     local rc
     local wd_core_range
 
-    if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
-        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
+    if [[ "${VERSION_ID}" =~ 20.04 ]]; then
+        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${VERSION_CODENAME}' version = '${VERSION_ID}'"
         return 0
     fi
 
@@ -220,107 +257,158 @@ function wd_run_in_cgroup() {
 }
 wd_run_in_cgroup
 
-CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:2400000,0:3200000,1:3200000}"   ### Cores 0 and 1 run the time critcal radiod 'proc_rx888' and 'fft' threads
+declare CPU_FREQ_MIN_KHZ=${CPU_FREQ_MIN_KHZ-1000000}
+declare CPU_FREQ_MAX_KHZ=${CPU_FREQ_MAX_KHZ-5000000}
 
-function wd-set-cpu-speed()
-{
-    #(( ++verbosity ))
-    local sys_cpu_root_dir="/sys/devices/system/cpu"
-    if [[ ! -d ${sys_cpu_root_dir} ]]; then
-        wd_logger 1 "INFO: there is no '${sys_cpu_root_dir}' directory, so we can't monitor and control the cpu speed on this server"
-        return 0
-    fi
-    local sys_cpu_path_list=( $(find ${sys_cpu_root_dir} -maxdepth 1 -type d -regex '.*/cpu[0-9]+' | sort -V) )
-    if (( ${#sys_cpu_path_list[@]} == 0 )); then
-        wd_logger 1 "INFO: there are no cpu directories in '${sys_cpu_root_dir}' so we can't monitor and control the cpu speed on this server"
-        return 0
-    fi
-    wd_logger 2 "This server CPU has ${#sys_cpu_path_list[@]} cores"
+function turbo_control() {
+    action="${1:-off}"   # default to "off" if no argument
+    case "$action" in
+        off|disable)
+            desired_intel=1   # no_turbo=1 means disabled
+            desired_amd=0     # boost=0 means disabled
+            ;;
+        on|enable)
+            desired_intel=0   # no_turbo=0 means enabled
+            desired_amd=1     # boost=1 means enabled
+            ;;
+        *)
+            wd_logger 1 "Usage: turbo_control [on|off]"
+            return 1
+            ;;
+    esac
 
-    if [[ -z "${CPU_CORE_KHZ}" ]]; then
-        wd_logger 1 "CPU_CORE_KHZ is NULL, so don't change the CPU frequencies"
-        return 0
-    fi
-    local cpu_specs_list=( ${CPU_CORE_KHZ//,/ } )
-    local cpu_target_list=()
-    local cpu_target
-
-    ### Get the max freq and current scaled setting
-    local cpu_max_freq_list=()
-    local scaling_max_freq=()
-    local cpu_current_freq_list=()
-    local cpu_path
-    for cpu_path in ${sys_cpu_path_list[@]} ; do
-        local cpu_number=${cpu_path##*cpu}
-        local cpu_max_freq=$(cat "${cpu_path}/cpufreq/cpuinfo_max_freq" 2>/dev/null)
-        local cpu_scaling_max_freq=$(cat "${cpu_path}/cpufreq/scaling_max_freq" 2>/dev/null)
-        if [[ -z "${cpu_max_freq}" || -z "${cpu_scaling_max_freq}" ]]; then
-            wd_logger 2 "Can't read cpu_max_freq='${cpu_max_freq}' and/or cpu_scaling_max_freq='${cpu_scaling_max_freq}', so we can't adjust CPU frequency"
-            return 0
-        fi
-        cpu_max_freq_list[cpu_number]="${cpu_max_freq}"
-        scaling_max_freq[cpu_number]="${cpu_scaling_max_freq}"
-        wd_logger 2 "${cpu_path}: core #${cpu_number} max_possible: ${cpu_max_freq} current_max_setting:${scaling_max_freq}, scaling_max_freq[${cpu_number}]=${scaling_max_freq[cpu_number]} "
-    done
-
-    ### Get the desired scaled freq
-    local cpu_governor_list=()
-    local new_cpu_freq_list=()
-    local cpu_desired_list=( ${CPU_CORE_KHZ[@]//,/ } )
-    local desired_list_index
-    for (( desired_list_index=0; desired_list_index < ${#cpu_desired_list[@]} ; ++desired_list_index )); do
-        wd_logger 2 "Checking desired #${desired_list_index}: ${cpu_desired_list[desired_list_index]}"
-        local desired_info_list=( ${cpu_desired_list[desired_list_index]//:/ } )
-        local cpu_core=${desired_info_list[0]}
-        local cpu_freq=${desired_info_list[1]}
-        if [[ ${cpu_core} != "DEFAULT" ]]; then
-            wd_logger 2 "We are configured so core #${cpu_core} will run at the max_freq of ${cpu_freq} / 'performance'"
-            new_cpu_freq_list[cpu_core]=${cpu_freq}
-            cpu_governor_list[cpu_core]="performance"
+    if [[ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]]; then
+        current=$(< /sys/devices/system/cpu/intel_pstate/no_turbo)
+        if [[ $current -ne $desired_intel ]]; then
+            wd_logger 1 "Setting Intel turbo $action..."
+            echo "$desired_intel" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo >/dev/null
         else
-            ### When "DEFAULT" then fill in all empty array elements
-            local index
-            for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-                wd_logger 2 "Setting new core ${index} to default value ${cpu_freq} / 'powersave'"
-                if [[ -z "${new_cpu_freq_list[index]-}" ]]; then
-                    new_cpu_freq_list[index]=${cpu_freq}
-                fi
-                if [[ -z "${cpu_governor_list[index]-}" ]]; then
-                    cpu_governor_list[index]="powersave"
-                fi
-            done
+            wd_logger 2 "Intel turbo already $action"
         fi
-        wd_logger 2 "Done with desired #${desired_list_index}"
-    done
 
-    local index
-    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-        local governor_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_governor"
-        local available_governors_file_path="${sys_cpu_root_dir}/cpu${index}/cpufreq/scaling_available_governors"
-        local available_governors_list=( $(< ${available_governors_file_path}) )
-        if ! [[ "${available_governors_list[*]}"  =~ "${cpu_governor_list[index]}" ]]; then
-            wd_logger 2 "The desired governor ${cpu_governor_list[index]} is not among the available governors '${available_governors_list[*]}'"
+    elif [[ -f /sys/devices/system/cpu/cpufreq/boost ]]; then
+        current=$(< /sys/devices/system/cpu/cpufreq/boost)
+        if [[ $current -ne $desired_amd ]]; then
+            wd_logger 1 "Setting AMD/ACPI boost $action..."
+            echo "$desired_amd" | sudo tee /sys/devices/system/cpu/cpufreq/boost >/dev/null
         else
-            wd_logger 2 "Setting CPU #${index} to ${cpu_governor_list[index]} mode"
-            echo "${cpu_governor_list[index]}" | sudo tee ${governor_file_path} > /dev/null
+            wd_logger 2 "AMD/ACPI boost already $action"
         fi
-    done
-    return 0
 
-    local index
-    for (( index=0; index < ${#sys_cpu_path_list[@]} ; ++index )); do
-        wd_logger 2 "For core ${index}: scaling_max_freq[]=${scaling_max_freq[index]}, desired_cpu_max=${new_cpu_freq_list[index]}"
-        if (( ${scaling_max_freq[index]} != ${new_cpu_freq_list[index]} )); then
-            wd_logger 1 "Changing core #${index} max frequency from ${scaling_max_freq[index]} to ${new_cpu_freq_list[index]}"
-            echo ${new_cpu_freq_list[index]} | sudo tee "${sys_cpu_path_list[index]}/cpufreq/scaling_max_freq" > /dev/null
-            local rc=$? ; if (( rc )); then
-                echo "ERROR: failed to set  core #${index} to ${new_cpu_freq_list[index]}"
-            fi
-        fi
-     done
+    else
+        wd_logger 2 "Turbo/Boost control not supported on this CPU+kernel"
+        return 1
+    fi
 }
-wd-set-cpu-speed
 
+function wd-set-cpu-speed() {
+    local cpu_core_khz="${1}"
+    local config_list=( ${cpu_core_khz//,/ } ) G
+    if (( ${#config_list[@]} == 0 )); then
+        wd_logger 1 "ERROR: CPU_CORE_KHZ is defined but empty "
+        return 0
+    fi
+    if ! [[ " ${config_list[@]} " == *DEFAULT* ]] ; then
+        wd_logger 1 "ERROR: CPU_CORE_KHZ is defined but has no 'DEFAULT:<KHZ>' defined"
+    fi
+    local config="$1"
+    if [[ -z "$config" ]]; then
+        wd_logger 1 "Usage: wd_set_core_freqs \"DEFAULT:<freq>,<core>:<freq>,...\""
+        return 0
+    fi
+    wd_logger 2 "Parsing the ${#config_list[@]} elements of CPU_CORE_KHZ='${cpu_core_khz}'"
+
+    local default_khz=""
+    local element
+    for element in ${config_list[@]}; do
+        wd_logger 2 "Checking element='${element}'"
+        if [[ ${element} == DEFAULT:* ]]; then
+            wd_logger 2 "Found a default DEFAULT element '${element}'"
+            default_khz=${element##*:}
+            if [[ -z "${default_khz}" ]]; then
+                wd_logger 1 "ERROR: cannot extract kHz value from 'DEFAULT:...' field in CPU_CORE_KHZ='${cpu_core_khz}'"
+                return 0
+            fi
+            wd_logger 2 "Found DEFAULT is ${default_khz}"
+            if ! is_uint ${default_khz} ; then
+                wd_logger 1 "ERROR: the KHZ value ${default_khz} extracted from '${cpu_core_khz}' is not an unsigned integer"
+                return 0
+            fi
+            if (( default_khz < CPU_FREQ_MIN_KHZ )) || (( default_khz > CPU_FREQ_MAX_KHZ )); then
+                wd_logger 1 "ERROR: the invalid DEFAULT:<KHZ> value ${default_khz} is less than ${CPU_FREQ_MIN_KHZ} or greater than ${CPU_FREQ_MAX_KHZ}"
+                return 0
+            fi
+            wd_logger 2 "Found valid DEFAULT:${default_khz}"
+            break
+        fi
+    done
+    if [[ -z "${default_khz}" ]]; then
+        wd_logger 1 "ERROR: didn't find a 'DEFUALT:<KHZ>' field in ${1}"
+        return 0
+    fi
+    local cpu_khz_list=()
+    local num_cpus=$(grep -c ^processor /proc/cpuinfo)
+    wd_logger 2 "Initilaizing all elements of cpu_khz_list[${num_cpus}] to ${default_khz}"
+    local index
+    for (( index=0; index < num_cpus; ++index )); do
+        cpu_khz_list[${index}]=${default_khz}
+    done
+
+    wd_logger 2 "Parsing individual core assignments"
+    for element in ${config_list[@]}; do
+        wd_logger 2 "Checking element='${element}'"
+        if [[ ${element} == DEFAULT:* ]]; then
+            wd_logger 2 "Skipping the already parsed DEFAULT element '${element}'"
+            continue
+        fi
+        local element_list=( ${element//:/ } )
+        if (( ${#element_list[@]} != 2 )); then
+            wd_logger 1 "ERROR: element '${element}' has ${#element[@]} fields, not the expected two fields in a '<CORE>:<KHZ>' field"
+            continue
+        fi
+        local core_number=${element_list[0]}
+        if ! is_uint ${core_number} ; then
+            wd_logger 1 "ERROR: core number ${core_number} in element ${element} is not an unsigned integer, so skipping it"
+            continue
+        fi
+        if (( core_number >= num_cpus )); then
+            wd_logger 1 "ERROR: core number of element ${element} is greater than the ${num_cpus} on this CPU, so skipping"
+            continue
+        fi
+        ### We got a good core number
+        local core_freq=${element_list[1]}
+        if ! is_uint ${core_freq} ; then
+            wd_logger 1 "ERROR: the KHZ value ${core_freq} extracted from '${element}' is not an unsigned integer, so skipping"
+            continue
+        fi
+        if (( core_freq < CPU_FREQ_MIN_KHZ )) || (( core_freq > CPU_FREQ_MAX_KHZ )); then
+            wd_logger 1 "ERROR: the core frequency ${core_freq} extracted from '${element} is less than ${CPU_FREQ_MIN_KHZ} or graeter than ${CPU_FREQ_MAX_KHZ}, so skipping"
+            continue
+        fi
+        wd_logger 2 "Setting core ${core_number} to ${core_freq} KHz"
+        cpu_khz_list[${core_number}]=${core_freq}
+    done
+
+    local cpu_core
+    for (( cpu_core=0; cpu_core < num_cpus; ++cpu_core )); do
+        local scaling_max_freq_file_path="/sys/devices/system/cpu/cpu${cpu_core}/cpufreq/scaling_max_freq" 
+        if ! [[ -e "${scaling_max_freq_file_path}" ]]; then
+            wd_logger 2 "ERROR: '"${scaling_max_freq_file_path}"' does not exist, so skip"
+        elif ! sudo test -w "${scaling_max_freq_file_path}"; then
+            wd_logger 1 "ERROR: '"${scaling_max_freq_file_path}"' is not writable, so skip"
+        else
+            local print_string=$(printf "Set CPU %2d freq by writing %8d to %s\n" ${cpu_core} ${cpu_khz_list[${cpu_core}]} "${scaling_max_freq_file_path}")
+            wd_logger 2 "${print_string}"
+            echo "${cpu_khz_list[${cpu_core}]}" | sudo tee "${scaling_max_freq_file_path}" > /dev/null 
+        fi
+    done
+
+    turbo_control off
+    return 0
+}
+
+CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
+wd-set-cpu-speed "${CPU_CORE_KHZ}"
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
@@ -353,26 +441,6 @@ function setup_wd_auto_ssh()
     return 0
 }
 setup_wd_auto_ssh
-
-function install_needed_dpkgs()
-{
-    wd_logger 2 "Starting"
-
-    local package_needed
-    for package_needed in ${PACKAGE_NEEDED_LIST[@]}; do
-        wd_logger 2 "Checking for package ${package_needed}"
-        if ! install_debian_package ${package_needed} ; then
-            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
-            exit 1
-        fi
-    done
-    wd_logger 2 "Checking for WSJT-x utilities 'wsprd' and 'jt9'"
-}
-### The configuration may determine which utilities are needed at run time, so now we can check for needed utilities
-if ! install_needed_dpkgs ; then
-    wd_logger 1  "ERROR: failed to load all the libraries needed on this server"
-    exit 1
-fi
 
 ###################### Check OS ###################
 if [[ "${OSTYPE}" == "linux-gnueabihf" ]] || [[ "${OSTYPE}" == "linux-gnu" ]] ; then
@@ -429,7 +497,7 @@ else
 fi
 
 ### Validate the config file so the user sees any errors on the command line
-declare -r WSPRDAEMON_CONFIG_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/config_utils.sh
+declare -r WSPRDAEMON_CONFIG_UTILS_FILE=${WSPRDAEMON_ROOT_DIR}/config-utils.sh
 source ${WSPRDAEMON_CONFIG_UTILS_FILE}
 
 if ! validate_configuration_file; then
@@ -512,6 +580,15 @@ declare   KIWI_RECORD_TMP_LOG_FILE="${WSPRDAEMON_TMP_DIR}/kiwiclient.log"
 function check_for_kiwirecorder_cmd() {
     local get_kiwirecorder="no"
     local apt_update_done="no"
+
+    local kiwi_receivers
+    get_non_ka9q_receivers "kiwi_receivers"
+    if [[ -z "${kiwi_receivers}" ]]; then
+        wd_logger 2 "Skip installing KiwiSD support since there are only KA9Q receivers"
+        return 0
+    fi
+
+    wd_logger 2 "Install KiwiSDR support since there are some non-KA9Q receivers: '${kiwi_receivers}'"
     if [[ ! -x ${KIWI_RECORD_COMMAND} ]]; then
         wd_logger 1 "check_for_kiwirecorder_cmd() found no ${KIWI_RECORD_COMMAND}"
         get_kiwirecorder="yes"

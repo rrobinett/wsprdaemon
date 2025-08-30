@@ -1074,9 +1074,24 @@ function update_ini_file_section_variable() {
     [[ -z "$section_end_line_number" ]] && section_end_line_number=$(wc -l < "$file")
 
     # Check if variable exists within the section
-    if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
-        ### The variable is defined.  See if it needs to be changed
-        local temp_file="/tmp/${file##*/}.tmp"
+    local temp_file="/tmp/${file##*/}.tmp"
+    if ! sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^\s*$variable_esc\s*="; then
+        # The variable isn't defined in the section, so insert it into the section
+        if [[ "$new_value" == "#" ]]; then
+            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
+            return 0
+        else
+            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
+            sed "${section_start_line_number}a\\$variable=$new_value" "${file}" > ${temp_file}
+            sudo mv ${temp_file} ${file}         ### The /etc/systemd/system/ dirctory is owned by root
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'mv ${temp_file} ${file}' => ${rc}"
+            fi
+            return 1
+        fi
+    else
+       ### The variable is defined.  See if it needs to be changed
+        cp -p  "$file" "$temp_file"   ## Default to no changes
 
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
@@ -1109,8 +1124,16 @@ function update_ini_file_section_variable() {
                 wd_logger 2 "Found a valid description string '$description_string' in $file section [$section]"
                 return 0
             fi
-            wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
-            sed  "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
+            # Check if any line in the range contains $variable_esc but not $new_value
+            # # Check if any line in the range contains $variable_esc but not $new_value
+            if sed -n "${section_start_line_number},${section_end_line_number}p" "$file" | grep -q "^[^#]*${variable_esc}.*=.*${new_value}"; then
+                wd_logger 2 "Found active '$variable_esc = ' line in section [$section] already matches  $new_value, so don't modify the orginal file"
+            else
+                wd_logger 1 "Changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
+                sed "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=.*|\1=$new_value|" "$file" > "$temp_file"
+            fi
+            # wd_logger 2 "Maybe changing one or more active '$variable_esc = ' lines in section [$section] to $new_value"
+            # sed  "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\)\s*=\s*.*|\1=$new_value|" "$file" > "$temp_file"
         fi
         if ! diff "$file" "$temp_file" > diff.log; then
             wd_logger 1 "Changing section [$section] of $file:\n$(<diff.log)"
@@ -1121,21 +1144,6 @@ function update_ini_file_section_variable() {
             wd_logger 2 "Existing $variable_esc in section $section_esc already has the value $new_value, so nothing to do"
             return 0
         fi
-    else
-        # The variable isn't defined in the section, so insert it into the section
-         if [[ "$new_value" == "#" ]]; then
-            wd_logger 2 "Can't find an active '$variable_esc = ' line in section $section_esc, so there is no line to remark out with new_value='$new_value'"
-            return 0
-        else
-            local temp_file="/tmp/${file##*/}"
-            wd_logger 1 "variable '$variable_esc' was not in section [$section_esc] of file $file, so inserting the line '$variable=$new_value' by using ${temp_file}"
-            sed "${section_start_line_number}a\\$variable=$new_value" "${file}" > ${temp_file}
-            sudo mv ${temp_file} ${file}         ### The /etc/systemd/system/ dirctory is owned by root
-            rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: 'mv ${temp_file} ${file}' => ${rc}"
-            fi
-            return 1
-         fi
     fi
     ### Code should never get here
     return 2

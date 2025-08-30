@@ -12,14 +12,14 @@
 
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
-declare WD_FRPS_URL=${WD_FRPS_URL-wd0.wsprdaemon.org}
+declare WD_FRPS_URL=${WD_FRPS_URL-vpn.wsprdaemon.org}
 declare HAMSCI_FRPS_URL=${HAMSCI_FRPS_URL-vpn.hamsci.org}
 declare HAMSCI_RAC_MIN=200
 declare HAMSCI_RAC_MAX=299
 declare WD_FRPS_PORT=35735
-declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.36.2}    ### Default to use FRP version 0.36.2
-declare FRPC_INI_FILE=${FRPC_CMD}_wd.ini
-declare WD_REMOTE_ACCESS_SERVICE_NAME="wd_remote_access"
+declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.64.0}    ### Default to use FRP version 0.64.0 which is the current version running on WD0 on 8/21/25
+declare FRPC_INI_FILE=${FRPC_CMD}.ini
+declare WD_REMOTE_ACCESS_SERVICE_NAME="wd-remote-access"
 
 declare RAC_IP_PORT_BASE=35800    ### Don't change this!  As of 7/9/24 many WD servers have IDs which start here
 declare RAC_IP_PORT_MAX=39999
@@ -377,14 +377,14 @@ local_ip = 127.0.0.1
 local_port = ${KA9Q_WEB_SERVICE_PORT-8081}
 remote_port = $(( frpc_remote_port + 10000 ))
 EOF
-    wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
+    wd_logger 1 "Created ${FRPC_INI_FILE} which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
  
     local rc
     setup_wd_remote_access_systemctl_daemon
 }
 
 ### Configure systemctl so this watchdog daemon runs at startup of the Pi
-declare -r WD_REMOTE_ACCESS_DAEMON_CMD="${WSPRDAEMON_ROOT_DIR}/wd_remote_access_daemon.sh"
+declare -r WD_REMOTE_ACCESS_DAEMON_CMD="${WSPRDAEMON_ROOT_DIR}/wd-remote-access-daemon.sh"
 declare -r WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_FILE="${WD_REMOTE_ACCESS_SERVICE_NAME}.service"                       ### Create it in WD's home dirctory
 declare -r WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_PATH="/etc/systemd/system/${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_FILE}"    ### Install it where systemctl will find it
 
@@ -400,18 +400,20 @@ function setup_wd_remote_access_systemctl_daemon() {
     local my_group=$(id -g -n)
     cat > ${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_FILE} <<EOF
 [Unit]
-Description= The Wsprdaemon Remote Access Channel daemon
-After=multi-user.target
+Description=Wsprdaemon Remote Access Channel daemon
+After=network.target
 
 [Service]
-User=${my_id}
-Group=${my_group}
-WorkingDirectory=${WSPRDAEMON_ROOT_DIR}/bin
-ExecStart=${WD_REMOTE_ACCESS_DAEMON_CMD} ${start_args}
-ExecStop=${WD_REMOTE_ACCESS_DAEMON_CMD}  ${stop_args}
-Type=forking
+Type=simple
+User=${USER}
+Group=$(id -gn)
+WorkingDirectory=${HOME}/wsprdaemon/bin
+ExecStart=${HOME}/wsprdaemon/wd-remote-access-daemon.sh
 Restart=always
 RestartSec=10s
+TimeoutStartSec=30
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -420,20 +422,17 @@ EOF
    wd_logger 2 "Installing the ${WD_REMOTE_ACCESS_SERVICE_NAME} service"
    sudo mv ${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_FILE} ${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_PATH}    ### 'sudo cat > ${WD_REMOTE_ACCESS_SYSTEMCTL_UNIT_PATH} gave me permission errors
    execute_sysctl_command daemon-reload  ""
-   rc=$?
-   if [[ ${rc} -ne 0 ]]; then
+   rc=$? ; if (( rc )); then
        wd_logger 1 "ERROR: 'execute_sysctl_command daemon-reload' => ${rc}"
        return ${rc}
    fi
    execute_sysctl_command enable ${WD_REMOTE_ACCESS_SERVICE_NAME}
-   rc=$?
-   if [[ ${rc} -ne 0 ]]; then
+   rc=$? ; if (( rc )); then
        wd_logger 1 "ERROR: 'execute_sysctl_command enable ${WD_REMOTE_ACCESS_SERVICE_NAME}' => ${rc}"
        return ${rc}
    fi
    execute_sysctl_command start  ${WD_REMOTE_ACCESS_SERVICE_NAME}
-   rc=$?
-   if [[ ${rc} -ne 0 ]]; then
+   rc=$? ; if (( rc )); then
        wd_logger 1 "ERROR: 'execute_sysctl_command start ${WD_REMOTE_ACCESS_SERVICE_NAME}' => ${rc}"
        return ${rc}
    fi

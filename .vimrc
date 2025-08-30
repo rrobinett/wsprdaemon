@@ -1,3 +1,9 @@
+" Prevent multiple sourcing
+if exists("g:vimrc_loaded")
+  finish
+endif
+let g:vimrc_loaded = 1
+
 colorscheme industry
 if has ("autocmd")
     filetype plugin indent on

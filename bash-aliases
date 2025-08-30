@@ -3,6 +3,41 @@
 #
 #
 ## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
+
+function wd-rac-status()
+{
+    (cd ${HOME}/wsprdaemon/bin; ./frpc status)
+}
+
+function wd-rac-purge() 
+{
+    read -p "Are you *SURE* you want to purge any RAC connection?  If you are remotely logged on, you may not be able to re-access this server [yN] =>"
+    REPLY=${REPLY:=N} ; REPLY=${REPLY:0:1} ; REPLY=${REPLY^}
+    if [[ ${REPLY} != "Y" ]]; then
+        echo "Aborting this command"
+        return 0
+    fi
+    sudo systemctl stop wd-remote-access.service
+    sudo systemctl disable wd_remote_access.service
+    sudo systemctl disable wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd_remote_access.service
+    sudo systemctl daemon-reload
+    ### Setup RAC again if it is defined in wsprdaemon.org
+    ${HOME}/wsprdaemon/wsprdaemon.sh -V
+}
+
+function wd-ws8 ()
+{
+    local ws8_usb_device="/dev/ttyACM0"
+    local attached_pids_list=($(sudo lsof ${ws8_usb_device} 2>&1 | awk '/^screen/{print $2}'))
+    if (( ${#attached_pids_list[@]} )); then
+        read -p "Found ${#attached_pids_list[@]} screen sessions attached to the WS8.  Kill those sessions and connect? => "
+        sudo kill ${attached_pids_list[@]}
+    fi
+    sudo screen ${ws8_usb_device}
+}
+
 function wd-usbreset() {
     if [[ -z "$1" ]]; then
         echo "Usage: usbreset <bus-port | vendor:product>"
@@ -268,6 +303,11 @@ function wd-commit-info()
     done
 }
 
+function wd-cpu-watch()
+{
+    watch -n 1 'bash -c '\''for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]* | sort -V); do cur=$(( $(< $cpu/cpufreq/scaling_cur_freq)/1000 )); min=$(( $(< $cpu/cpufreq/scaling_min_freq)/1000 )); max=$(( $(< $cpu/cpufreq/scaling_max_freq)/1000 )); scaled=$(( cur * 80 / max )); stars=$(printf "%*s" "$scaled" "" | tr " " "*"); printf "%-6s %-80s cur=%5d MHz  min=%5d MHz  max=%5d MHz\n" "$(basename $cpu)" "$stars" "$cur" "$min" "$max"; done'\'''
+}
+
 function wd-cpu-info() 
 {
     local sys_list=( $(ls -dv /sys/devices/system/cpu/cpu[0-9]*) )   ### Get numericallyt sorted list 
@@ -282,46 +322,86 @@ function wd-cpu-info()
     printf "Available CPU frequencies: $(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies)\n"
 }
 
+function wd-cpu-set-core-speeds() {
+    local speed01="$1"   # MHz for cores 0 and 1
+    local speedrest="$2" # MHz for all other cores
+
+    if [[ -z "$speed01" || -z "$speedrest" ]]; then
+        echo "Usage: set_core_speeds <speed-for-core0-1-MHz> <speed-for-rest-MHz>"
+        return 1
+    fi
+
+    # convert MHz → kHz
+    local s01=$((speed01 * 1000))
+    local srest=$((speedrest * 1000))
+
+    echo "🔧 Setting CPU0-1 to ${speed01} MHz, others to ${speedrest} MHz"
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}  # extract number after "cpu"
+        if (( n == 0 || n == 1 )); then
+            echo "$s01" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        else
+            echo "$srest" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        fi
+    done
+
+    # Disable turbo boost (CPB)
+    if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
+        echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost > /dev/null
+        echo "🚫 Turbo Boost disabled"
+    else
+        echo "⚠️ Could not disable Turbo Boost: /sys/devices/system/cpu/cpufreq/boost not found"
+    fi
+
+    # Print summary table
+    echo
+    printf "%-5s %-10s\n" "CPU" "MaxFreq(MHz)"
+    echo "-------------------"
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}
+        freq=$(<"$cpu/cpufreq/scaling_max_freq")
+        printf "%-5s %-10s\n" "$n" "$((freq / 1000))"
+    done
+}
+
 function wd-ka9q-controls() {
     local action="${1-is-active}"
 
     local radio_config_dir_path="/etc/radio"
-    local radiod_config_dir_path_list=( $(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d') )
+    
+    ### Thanks to chatGBT, get list of radiod@...conf and radiod@...conf.d/ files and dirs, giving preference to ...conf.d directories
+    local radio_conf_list=( $(find ${radio_config_dir_path} \( -type d -name 'radiod@*.conf.d' -printf '%f\tD\n' -o -type f -name 'radiod@*.conf' -printf '%f\tF\n' \) | awk -F'\t' '
+{
+  name=$1; typ=$2
+  key=name
+  sub(/\.conf\.d$/,"",key)
+  sub(/\.conf$/,"",key)
+  if (typ=="D") dir[key]=name
+  else if (typ=="F") file[key]=name
+}
+END {
+  for (k in dir) print dir[k]
+  for (k in file) if (!(k in dir)) print file[k]
+}
+' | sort) )
 
-    if (( ${#radiod_config_dir_path_list[@]} == 0 )); then
-        echo "ERROR: can't find any '${radio_config_dir_path}/radiod@*.conf.d/ directories'"
-        return 1
-    fi
-    if (( ${#radiod_config_dir_path_list[@]} > 1 )); then
-        local radiod_dir
-        for radiod_dir in  ${radiod_config_dir_path_list[@]}; do
-            set +x
-            if ps aux | grep -q ${radiod_dir##*/} ; then
-               echo "Found running ${radiod_dir##*/}"
-               radiod_config_dir_path_list=( "${radiod_dir}" )
-               break
-            fi
-        done
-        if (( ${#radiod_config_dir_path_list[@]} != 1 )); then
-            echo "ERROR: found ${#radiod_config_dir_path_list[@]} '${radio_config_dir_path}/radiod@*.conf.d/ directories': ${radiod_config_dir_path_list[*]}"
-        fi
-    fi
-
-    set +x
-    radiod_config_dir_path="${radiod_config_dir_path_list[0]}"
     local radiod_start_arg
-
-    if [[ -d ${radiod_config_dir_path} ]]; then
-       radiod_start_arg=${radiod_config_dir_path##*/}
-       radiod_start_arg=${radiod_start_arg%.conf.d}
-       set +x
-       (( ${verbosity-0} )) && echo "radiod_start_arg=${radiod_start_arg}"
-   else
-       set +x
-       echo "ERROR: Can't find a new-style radiod@...conf.d directory"
-       return 1
-   fi
-   
+    case ${#radio_conf_list[@]} in
+        0)
+            echo "Can't find any conf.. files"
+            return 0
+            ;;
+        1)
+            radiod_start_arg="${radio_conf_list[0]%.conf*}.service"
+            (( ${verbosity-0} )) && echo "Found one radiod@...conf. file/dir: ${radiod_start_arg}"
+            ;;
+        *)
+            echo "Found more than one radiod@...conf. file/dir: ${radio_conf_list[*]}"
+            return 0
+            ;;
+    esac
+  
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
@@ -778,7 +858,7 @@ function wd-killall() {
         fi
     done
  
-    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" ]]; then
         local base_name=$(wd-get_ka9q-conf_file-base_name)
         services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
 
@@ -829,7 +909,7 @@ function wd-killall() {
    fi
 
     #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    ps aux | grep 'wsprdaemon.sh\|pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    ps aux | grep 'wsprdaemon.sh\|\wsprdaemon\/ka9q-radio\/pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
@@ -1281,18 +1361,27 @@ alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 alias cdww='cd ~/wsprdaemon/wav-archive/'
 
 ### Start 'vi' using WD's .vimrc
-function vi() 
-{
-    local vim_rc_file=~/.vimrc
-    local wd_vim_rc_file=~/wsprdaemon/.vimrc
+function vi_fixup() {
+    local REPO_VIMRC="$HOME/wsprdaemon/.vimrc"
+    local USER_VIMRC="$HOME/.vimrc"
 
-    if [[ ! -f ${vim_rc_file} ]] || ! grep wsprdaemon ${vim_rc_file}  > /dev/null ; then
-        echo "Adding 'source ${wd_vim_rc_file}' to ${vim_rc_file}"
-        echo "source ${wd_vim_rc_file}" >> ${vim_rc_file}
+    # If ~/.vimrc exists and is not the correct symlink
+    if [ -e "$USER_VIMRC" ] && [ ! -L "$USER_VIMRC" ]; then
+        echo "Backing up existing .vimrc to .vimrc.backup"
+        mv "$USER_VIMRC" "$USER_VIMRC.backup"
     fi
-    vim $*
+
+    # Create symlink if it doesn't exist or points elsewhere
+    if [ ! -L "$USER_VIMRC" ] || [ "$(readlink "$USER_VIMRC")" != "$REPO_VIMRC" ]; then
+        ln -sf "$REPO_VIMRC" "$USER_VIMRC"
+        echo "Symlinked .vimrc -> $REPO_VIMRC"
+    fi
+
+    # Run the real vi with all arguments
+    /usr/bin/vi "$@"
 }
 
+alias vi=vi_fixup
 alias vib='vi ~/wsprdaemon/bash-aliases'
 alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
@@ -2104,11 +2193,36 @@ function  wd-git-to-ssh(){
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
 alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
-function wd-watch-wavs() {
-    local band_freq=${1-14}
-    local band_dir=${PWD##*/}
+declare WSPR_BAND_TO_TUNING_FREQ=(   2200:136000  630:474200  160:1836600  80:3568600  80eu:3592600   60:5287200 60eu:5364700  40:7038600  30:10138700    22:13553900   20:14095600 \
+                                     17:18104600 15:21094600  12:24924600 10:28124600    8:40680000   6:50293000   4:70091000 2:144489000 70:432300000  23:1296500000  29:560308000)
+function wd-watch-wavs-scan() {
+    local band
+    for band in $(find -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -rV); do
+        (( ${verbosity-0} )) && read -p "Watch band ${band} => "
+        (cd $band; wd-watch-wavs )
+    done
+}
 
-    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
+function wd-watch-wavs() {
+    local band_dir=${PWD##*/}
+    local band_freq=""
+
+    local band_info=""
+    for band_info in ${WSPR_BAND_TO_TUNING_FREQ[@]}; do
+        local band_info_list=(${band_info/:/ } )
+        local band_meters=${band_info_list[0]}
+        local band_tuning_freq=${band_info_list[1]}
+        if [[ ${band_meters} == ${band_dir} ]]; then
+            band_freq=${band_tuning_freq}
+            break
+        fi
+    done
+    if [[ -z "${band_freq}" ]]; then
+        echo "Can't find a band which matches this PWD=${PWD}"
+        return 0
+    fi
+
+    watch "ls -lt *.wav ../*Z_${band_freq}*"
 }
 alias wdww='wd-watch-wavs'
 

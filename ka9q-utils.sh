@@ -41,10 +41,8 @@ declare KA9Q_RADIO_LIBS_NEEDED="curl rsync build-essential libusb-1.0-0-dev libu
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
              libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile"
 
-declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is created by running fft_wisdom during the KA9Q installation
-declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
-declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
+declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"     ### Where WD installs KA9Q-radio
+declare KA9Q_RADIO_WISDOM_FILE_PATH="/var/lib/ka9q-radio/wisdom"    ### This is the preferred wisdom file used by KA9Q-radio, and the file created and/or updated each time WD starts
 
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
@@ -1003,22 +1001,19 @@ function build_ka9q_radio() {
    wd_logger 2 "Creating or updating /etc/fftw/wisdom"
    killall fftwf-wisdom 2> /dev/null
 
-   local fft_tmp_file_path=$(mktemp)
-   local use_cached_wisdom_arg=""
-   local cached_wisdom_file_path="/var/lib/ka9q-radio/wisdom"
-   if [[ -f ${cached_wisdom_file_path} ]]; then
-       use_cached_wisdom_arg="-w ${cached_wisdom_file_path}"
-   fi
+   local fftwf_stdout_file_path=$(mktemp)
+   local tmp_wisdom_file_path="/tmp/wisdom"
 
    local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
    if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
        fft_129_Msps="rof3240000"
    fi
 
-   /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${use_cached_wisdom_arg} -o /tmp/wisdomf ${fft_129_Msps}  rof1620000 cob162000 cob81000 cob40500 cob32400 \
+   /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 -w ${KA9Q_RADIO_WISDOM_FILE_PATH} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
+                                rof1620000 cob162000 cob81000 cob40500 cob32400 \
                                 cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
                                 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
-                                >${fft_tmp_file_path} 2>&1 &
+                                >${fftwf_stdout_file_path} 2>&1 &
    local fftwf_pid=$!
    local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
 
@@ -1026,29 +1021,26 @@ function build_ka9q_radio() {
    trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
 
    if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
-       wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fft_tmp_file_path})\n"
+       wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fftwf_stdout_file_path})\n"
    else
-       wd_logger 1 "Optimizing the FFT library.  Watching it progess which may take hours..."
-       tail -f --pid=${fftwf_pid} ${fft_tmp_file_path}
+       wd_logger 1 "Optimizing the FFT library.  Watching it progess, which may take hours..."
+       tail -f --pid=${fftwf_pid} ${fftwf_stdout_file_path}
    fi
    local current_wisdom_file_size=0
-    if [[ -f /etc/fftw/wisdomf ]]; then
-        current_wisdom_file_size=$(stat -c %s /etc/fftw/wisdomf);
+    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]]; then
+        current_wisdom_file_size=$(stat -c %s ${KA9Q_RADIO_WISDOM_FILE_PATH} );
     fi
     local new_wisdom_file_size=0
-    if [[ -f /tmp/wisdomf ]]; then
-        new_wisdom_file_size=$(stat -c %s /tmp/wisdomf);
+    if [[ -f ${tmp_wisdom_file_path} ]]; then
+        new_wisdom_file_size=$(stat -c %s ${tmp_wisdom_file_path});
     fi
-    if (( new_wisdom_file_size <=current_wisdom_file_size )); then
-        wd_logger 2 "No need to update the /etc/fftw/wisdomf"
+    if (( new_wisdom_file_size <= current_wisdom_file_size )); then
+        wd_logger 2 "No need to update ${KA9Q_RADIO_WISDOM_FILE_PATH}"
     else
-        wd_logger 1 "Installing the newly created optimized-FFT file"
-        if [[ -f  /etc/fftw/wisdomf ]]; then
-            sudo cp -p /etc/fftw/wisdomf /etc/fftw/wisdomf.save
-        fi
-        sudo cp -p /tmp/wisdomf /etc/fftw/wisdomf;
+        wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${KA9Q_RADIO_WISDOM_FILE_PATH}, so install it"
+        sudo cp -p ${tmp_wisdom_file_path} ${KA9Q_RADIO_WISDOM_FILE_PATH}
     fi
-    rm ${fft_tmp_file_path}
+    rm ${fftwf_stdout_file_path}
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
     wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
@@ -1481,7 +1473,7 @@ function build_psk_uploader() {
                 fi
             fi
             local pip3_extra_args=""
-            if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
+            if [[ "${VERSION_ID}" == "24.04" || "${VERSION_ID}" == "12" ]]; then
                 pip3_extra_args="--break-system-package"
                 wd_logger 1 "Adding extra args to pip: ${pip3_extra_args}"
             fi
@@ -1642,7 +1634,7 @@ function build_psk_uploader() {
 }
 
 declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
-if [[ ${OS_RELEASE} =~ 24.04 ]]; then
+if [[ ${VERSION_ID} =~ 24.04 ]]; then
     ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
 
@@ -1780,11 +1772,11 @@ fi
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-f9065bc7ebc2349d6f1439743f53eb035f784d43}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-39f1c691b113573a776a844ce670ad8283018253}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-0c0d45656fa7cfba15935ceaf987e373896c01ac}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-4e22f432f1b36a7fb79c7b8a735d66ff2ea0969b}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-dacf6a7f62eb55817654d7e10075815ae9e8134c}"
 )
 ###
 function ka9q-services-setup() {
