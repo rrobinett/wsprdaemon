@@ -179,7 +179,10 @@ function wd_get_config_value() {
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
                     local antenna_description
-                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                    if [[ -n "${ANTENNA_DESCRIPTION-}" ]]; then
+                         antenna_description="${ANTENNA_DESCRIPTION}"
+                         wd_logger 2 "Found the description ANTENNA_DESCRIPTION='${ANTENNA_DESCRIPTION}' in WD.conf"
+                    elif [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
                         antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
                         antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
@@ -725,10 +728,6 @@ function ka9q_web_daemon() {
             local  ka9q_service_daemon_info="${ka9q_service_daemons_list[i]}"
 
             wd_logger 1 "Running 'ka9q_web_service_daemon '${ka9q_service_daemon_info}'"
-            source ${WSPRDAEMON_CONFIG_FILE}
-            if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
-                KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION-}"
-            fi
             ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
             rc=$?
             wd_logger 1 "ERROR: ka9q_web_service_daemon $ka9q_service_daemon_info => $rc.  Sleep 5 and run it aagain"
