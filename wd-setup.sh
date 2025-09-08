@@ -406,7 +406,7 @@ function wd-set-cpu-speed() {
         fi
     done
 
-    turbo_control ${TURBO_BOOST-off}       ### On the i5-8500T at WWV turbo boost needs to be set to 'on' in WD.con
+    turbo_control ${TURBO_BOOST-on}    ### 
     return 0
 }
 
