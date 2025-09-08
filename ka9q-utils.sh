@@ -726,8 +726,8 @@ function ka9q_web_daemon() {
 
             wd_logger 1 "Running 'ka9q_web_service_daemon '${ka9q_service_daemon_info}'"
             source ${WSPRDAEMON_CONFIG_FILE}
-            if [[ -n "${WSPRNET_REPORTER_ID}" && -n "${REPORTER_GRID}" ]]; then
-                KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}"
+            if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
+                KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION-}"
             fi
             ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
             rc=$?
