@@ -179,7 +179,10 @@ function wd_get_config_value() {
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
                     local antenna_description
-                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                    if [[ -n "${ANTENNA_DESCRIPTION-}" ]]; then
+                         antenna_description="${ANTENNA_DESCRIPTION}"
+                         wd_logger 2 "Found the description ANTENNA_DESCRIPTION='${ANTENNA_DESCRIPTION}' in WD.conf"
+                    elif [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
                         antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
                         antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
@@ -688,6 +691,11 @@ function ka9q-get-status-dns() {
 
 declare KA9Q_WEB_CMD="/usr/local/sbin/ka9q-web"
 
+declare KA9Q_WEB_TITLE="${KA9Q_WEB_TITLE-<REPORTER_AND_GRID_NOT_DEFINED>}"
+declare ANTENNA_DESCRIPTION="${ANTENNA_DESCRIPTION-<ANTENNA_NOT_DEFINED>}"
+if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
+    KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}"
+fi
 
 declare ka9q_service_daemons_list=(
     "hf1.local 8081 WW0WWV"

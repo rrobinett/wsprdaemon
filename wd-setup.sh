@@ -67,6 +67,9 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
     PACKAGE_NEEDED_LIST+=( jq )
 fi
 
+if grep -q "Debian.*12" /etc/os-release; then
+    PACKAGE_NEEDED_LIST+=(  linux-cpupower )
+fi
 if grep -q "Debian.*13" /etc/os-release; then
 ### Leave these sections outdented so as to minimize 'gd' output.  Hopefully the functionality of this section will eventually totally replace that legacy code
 
@@ -403,12 +406,14 @@ function wd-set-cpu-speed() {
         fi
     done
 
-    turbo_control off
+    turbo_control ${TURBO_BOOST-on}    ### 
     return 0
 }
 
 CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
+#(( ++verbosity ))
 wd-set-cpu-speed "${CPU_CORE_KHZ}"
+#(( --verbosity ))
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
 ###           To get around that bug, have WD spawn a ssh session to itself
