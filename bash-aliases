@@ -847,8 +847,10 @@ function wd-killall() {
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
         local full_legacy_service="${legacy_service}.service"
-        if sudo systemctl is-active --quiet ${full_legacy_service} ; then
-            echo "Stopping the active legacy service ${full_legacy_service}"
+        if ! sudo systemctl is-active --quiet ${full_legacy_service} ; then
+            (( verbosity )) && echo "The deprecaded legacy service ${full_legacy_service} is not active, so there is nothing to do"
+        else
+            echo "Stopping the active depecaded legacy service ${full_legacy_service}"
             sudo systemctl stop ${full_legacy_service}
         fi
         if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
@@ -858,23 +860,26 @@ function wd-killall() {
         fi
     done
  
-    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" ]]; then
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
+    else
         local base_name=$(wd-get_ka9q-conf_file-base_name)
         services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
-
-   else
-        echo "Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY=${KA9Q_RUNS_ONLY_REMOTELY-no} and/or there are no running KA9Q jobs"
     fi
 
     local service_name
     for   service_name in ${services_list[@]}; do 
-        (( verbosity > 1 )) && printf "Stopping service '${service_name}"
+        (( verbosity > 1 )) && echo "Stopping service '${service_name}"
         local service_clean=${service_name%.service}
-        sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
-        rc=$? ; if (( rc )); then
-            printf "'ERROR: systemctl stop ${service_clean} => $rc:\n$(</tmp/wd-killall.log)\n"
+        if ! sudo systemctl is-active --quiet  ${service_clean} ; then 
+            (( verbosity > 1 )) && echo "Service '${service_name}' is not active, so no need to stop it"
         else
-             (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
+            sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
+            rc=$? ; if (( rc )); then
+                printf "'ERROR: systemctl stop ${service_clean} => $rc:\n$(</tmp/wd-killall.log)\n"
+            else
+                (( verbosity )) && echo "Successful systemctl stop ${service_clean} => $rc"
+            fi
         fi
     done
 

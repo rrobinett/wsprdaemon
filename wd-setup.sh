@@ -57,7 +57,7 @@ sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.ta
 
 #####################################################################################################
 ### Install all packages needed by WD and most of the programs it runs
-declare    PACKAGE_NEEDED_LIST=( tmux iw time vim btop at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
+declare    PACKAGE_NEEDED_LIST=( tmux iw time vim at bc curl gawk bind9-host flac postgresql sox zstd avahi-daemon libnss-mdns inotify-tools \
                 libbsd-dev libavahi-client-dev libfftw3-dev libiniparser-dev libopus-dev opus-tools uuid-dev \
                 libusb-dev libusb-1.0-0 libusb-1.0-0-dev libairspy-dev libairspyhf-dev portaudio19-dev librtlsdr-dev \
                 libncurses-dev bzip2 wavpack libsamplerate0 libsamplerate0-dev lsof )
@@ -67,19 +67,19 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
     PACKAGE_NEEDED_LIST+=( jq )
 fi
 
+if ! grep -q "Raspbian.*buster" /etc/os-release; then
+    ### 'btop' isn't part of the Pi's buster distro.  Perhaps other distros will have that problem
+    PACKAGE_NEEDED_LIST+=( btop )
+fi
+
 if grep -q "Debian.*12" /etc/os-release; then
     PACKAGE_NEEDED_LIST+=(  linux-cpupower )
 fi
+
 if grep -q "Debian.*13" /etc/os-release; then
-### Leave these sections outdented so as to minimize 'gd' output.  Hopefully the functionality of this section will eventually totally replace that legacy code
-
-### 8/19/25 - I think it is more logical to first test what OS we are running and then test what CPU is running
-###         In order to minimally distrupt legacy installations, I am first implementing this approach on Debian 13 systems
-wd_logger 2 "Running on a Debian 13 server"
-PACKAGE_NEEDED_LIST+=(  libqt5core5t64 linux-cpupower )
-
+    wd_logger 2 "Running on a Debian 13 server"
+    PACKAGE_NEEDED_LIST+=(  libqt5core5t64 linux-cpupower )
 else
-
 ### 9/16/23 - At GM0UDL found that jt9 depends upon the Qt5 library ;=(
 declare LIB_QT5_CORE="libqt5core5a"
 declare LIB_QT5_CORE_ARMHF="libqt5core5a:armhf"
@@ -785,12 +785,13 @@ function find_wsjtx_commands()
                 if [[ -n "${WSPRD_SPREADING_CMD-}" ]]; then
                     wd_logger 1 "Warning: ignoring a second WSPRD_SPREADING_CMD='${bin_file}' which also runs on this server"
                 else
+                    wd_logger 2 "Found WSPRD_SPREADING_CMD='${bin_file}' which runs on this server"
                     WSPRD_SPREADING_CMD="${bin_file}"
                 fi
             elif  [[ ${bin_file} =~ bin/wsprd ]]; then
                 wd_logger 2 "Found that WSPRD_CMD='${bin_file}' runs on this server"
                 if [[ -z "${WSPRD_CMD-}" ]]; then
-                    wd_logger 2 "There is no 'WSPRD_CMD', so use this one '${bin_file}'"
+                    wd_logger 2 "WSPRD_CMD=${bin_file}"
                     WSPRD_CMD="${bin_file}"
                 else
                     ### We have already found a 'bin/wsprd... command on this server
@@ -800,7 +801,7 @@ function find_wsjtx_commands()
                         wd_rm ${WSPRD_CMD}
                         WSPRD_CMD="${bin_file}"
                     else
-                        wd_logger 1 "Warning: Since we have a functioning non-'bin/wsprd' command ${WSPRD_CMD}, ignoring this second one '${bin_file}"
+                        wd_logger 2 "Warning: Since we have a functioning non-'bin/wsprd' command ${WSPRD_CMD}, ignoring this second one '${bin_file}"
                     fi
                 fi
             elif [[ ${bin_file} =~ bin/jt9 ]]; then
@@ -862,7 +863,9 @@ function find_wsjtx_commands()
     fi
     wd_logger 2 "Found all three of the wsprd/jt9 executables are on this server:\nWSPRD_CMD=${WSPRD_CMD}\nWSPRD_SPREADING_CMD=${WSPRD_SPREADING_CMD}\nJT9_CMD=${JT9_CMD}"
 }
+#(( ++verbosity ))
 find_wsjtx_commands
+#(( --verbosity ))
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
