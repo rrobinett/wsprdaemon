@@ -49,4 +49,4 @@ nnoremap <S-F4> :vertical resize +5<CR> " Shift+F4 for vertical resizing
 " F5: Move between splits
 nnoremap <F5> <C-w>w
 
-source /home/pi/wsprdaemon/.vimrc
+source ~/wsprdaemon/.vimrc
