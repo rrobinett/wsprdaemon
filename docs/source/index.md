@@ -29,6 +29,7 @@ requirements/os.md
 requirements/radios.md
 requirements/network.md
 installation/preparation.md
+installation/security_considerations.md
 installation/git.md
 ```
 
@@ -54,6 +55,7 @@ Day-to-day operation, monitoring, and maintenance of your WsprDaemon installatio
 :caption: Operation & Monitoring
 
 operation/service_management.md
+operation/monitoring.md
 maintenance/operating.md
 maintenance/monitoring.md
 maintenance/aliases.md
@@ -96,6 +98,19 @@ Real-world configurations and advanced architectural information.
 
 examples/common_configurations.md
 architecture/data_flow.md
+architecture/network_security.md
+```
+
+## Developer Documentation
+
+Resources for contributors and developers working on WsprDaemon.
+
+```{toctree}
+:maxdepth: 2
+:caption: Developer Documentation
+
+developers/getting_started.md
+developers/remote_development.md
 ```
 
 ## Reference & Resources
@@ -106,6 +121,7 @@ Additional resources and external links.
 :maxdepth: 1
 :caption: Reference & Resources
 
+appendices/command_reference.md
 external_links.md
 contributors.md
 ```

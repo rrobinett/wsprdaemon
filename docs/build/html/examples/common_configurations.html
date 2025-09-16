@@ -1,0 +1,571 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Common Configurations &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Data Flow Architecture" href="../architecture/data_flow.html" />
+    <link rel="prev" title="Frequently Asked Questions" href="../FAQ.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Common Configurations</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#single-kiwisdr-setup">Single KiwiSDR Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#basic-single-band-configuration">Basic Single-Band Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-band-time-based-switching">Multi-Band Time-Based Switching</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sunrise-sunset-relative-scheduling">Sunrise/Sunset Relative Scheduling</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#rx888-with-ka9q-radio">RX888 with KA9Q-Radio</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#single-rx888-multi-band">Single RX888 Multi-Band</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#high-performance-rx888-setup">High-Performance RX888 Setup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#multi-receiver-configurations">Multi-Receiver Configurations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#antenna-diversity-setup">Antenna Diversity Setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#geographic-distribution">Geographic Distribution</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#specialized-configurations">Specialized Configurations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#research-station-setup">Research Station Setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#contest-dxpedition-support">Contest/DXpedition Support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#remote-site-configuration">Remote Site Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-tuning-examples">Performance Tuning Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#high-throughput-optimization">High-Throughput Optimization</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resource-constrained-setup">Resource-Constrained Setup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#integration-examples">Integration Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#home-automation-integration">Home Automation Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#monitoring-system-integration">Monitoring System Integration</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Common Configurations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/examples/common_configurations.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="common-configurations">
+<h1>Common Configurations<a class="headerlink" href="#common-configurations" title="Link to this heading"></a></h1>
+<p>This section provides real-world configuration examples for typical WsprDaemon deployments.</p>
+<section id="single-kiwisdr-setup">
+<h2>Single KiwiSDR Setup<a class="headerlink" href="#single-kiwisdr-setup" title="Link to this heading"></a></h2>
+<section id="basic-single-band-configuration">
+<h3>Basic Single-Band Configuration<a class="headerlink" href="#basic-single-band-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Station information</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;W1ABC&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;FN42&quot;</span>
+
+<span class="c1"># Single KiwiSDR receiver</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Simple 40m operation</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,40m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Basic reporting</span>
+<span class="nv">WSPRNET_CALL</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">WSPR_CALL</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nv">WSPRNET_GRID</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">WSPR_GRID</span><span class="si">}</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="multi-band-time-based-switching">
+<h3>Multi-Band Time-Based Switching<a class="headerlink" href="#multi-band-time-based-switching" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Station information</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;K2DEF&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;FN32&quot;</span>
+
+<span class="c1"># Single KiwiSDR with band switching</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Time-based band schedule</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,160m,WSPR,00:00,06:00&quot;</span><span class="w">    </span><span class="c1"># Night - 160m</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,80m,WSPR,06:00,08:00&quot;</span><span class="w">     </span><span class="c1"># Dawn - 80m</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,40m,WSPR,08:00,16:00&quot;</span><span class="w">     </span><span class="c1"># Day - 40m</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,20m,WSPR,16:00,20:00&quot;</span><span class="w">     </span><span class="c1"># Afternoon - 20m</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,40m,WSPR,20:00,22:00&quot;</span><span class="w">     </span><span class="c1"># Evening - 40m</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_main,80m,WSPR,22:00,24:00&quot;</span><span class="w">     </span><span class="c1"># Night - 80m</span>
+<span class="o">)</span>
+
+<span class="c1"># Enable noise measurement</span>
+<span class="nv">ENABLE_NOISE_GRAPHS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">NOISE_GRAPHS_DIR</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/wsprdaemon/noise_graphs&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="sunrise-sunset-relative-scheduling">
+<h3>Sunrise/Sunset Relative Scheduling<a class="headerlink" href="#sunrise-sunset-relative-scheduling" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Station information with location for sun calculations</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;VE3GHI&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;FN03&quot;</span>
+<span class="nv">LATITUDE</span><span class="o">=</span><span class="s2">&quot;43.6532&quot;</span>
+<span class="nv">LONGITUDE</span><span class="o">=</span><span class="s2">&quot;-79.3832&quot;</span>
+
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Sun-relative scheduling</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,160m,WSPR,sunset-1h,sunrise+1h&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,80m,WSPR,sunset-30m,sunrise+2h&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,20m,WSPR,sunrise-1h,sunset+1h&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi_toronto,15m,WSPR,sunrise+1h,sunset-1h&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="rx888-with-ka9q-radio">
+<h2>RX888 with KA9Q-Radio<a class="headerlink" href="#rx888-with-ka9q-radio" title="Link to this heading"></a></h2>
+<section id="single-rx888-multi-band">
+<h3>Single RX888 Multi-Band<a class="headerlink" href="#single-rx888-multi-band" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Station information</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;W4JKL&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;EM75&quot;</span>
+
+<span class="c1"># RX888 via ka9q-radio multicast</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,239.1.2.3:5004&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Multiple simultaneous bands</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,160m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,80m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,60m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,30m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,20m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,17m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,15m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,12m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_main,10m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># KA9Q-radio specific settings</span>
+<span class="nv">RADIOD_CONF_FILE</span><span class="o">=</span><span class="s2">&quot;/etc/radio/radiod@rx888.conf&quot;</span>
+<span class="nv">ENABLE_GRAPE</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span><span class="w">  </span><span class="c1"># WWV/CHU recording for HamSCI</span>
+</pre></div>
+</div>
+</section>
+<section id="high-performance-rx888-setup">
+<h3>High-Performance RX888 Setup<a class="headerlink" href="#high-performance-rx888-setup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># High-throughput station</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;W5MNO&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;EM25&quot;</span>
+
+<span class="c1"># Multiple RX888 receivers</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,239.1.2.3:5004&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_vhf,239.1.2.4:5004&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Full HF coverage</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,2200m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,630m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,160m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,80m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,60m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,30m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,20m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,17m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,15m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,12m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_hf,10m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_vhf,6m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_vhf,4m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888_vhf,2m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Performance optimizations</span>
+<span class="nv">WSPRDAEMON_TMP_DIR</span><span class="o">=</span><span class="s2">&quot;/dev/shm/wsprdaemon&quot;</span><span class="w">  </span><span class="c1"># Use RAM disk</span>
+<span class="nv">MAX_DECODE_JOBS</span><span class="o">=</span><span class="s2">&quot;16&quot;</span><span class="w">  </span><span class="c1"># Parallel processing</span>
+<span class="nv">ENABLE_DEEP_SEARCH</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="multi-receiver-configurations">
+<h2>Multi-Receiver Configurations<a class="headerlink" href="#multi-receiver-configurations" title="Link to this heading"></a></h2>
+<section id="antenna-diversity-setup">
+<h3>Antenna Diversity Setup<a class="headerlink" href="#antenna-diversity-setup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Station with multiple antennas</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;G0PQR&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;IO91&quot;</span>
+
+<span class="c1"># Multiple receivers for antenna diversity</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;vertical,192.168.1.100:8073&quot;</span>
+<span class="w">    </span><span class="s2">&quot;dipole,192.168.1.101:8073&quot;</span>
+<span class="w">    </span><span class="s2">&quot;beverage,192.168.1.102:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Merged receivers for best SNR selection</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_160,160m,WSPR,00:00,23:59,vertical+beverage&quot;</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_80,80m,WSPR,00:00,23:59,vertical+dipole+beverage&quot;</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_40,40m,WSPR,00:00,23:59,vertical+dipole&quot;</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_20,20m,WSPR,00:00,23:59,vertical+dipole&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Individual receiver monitoring</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">+=(</span>
+<span class="w">    </span><span class="s2">&quot;vertical,15m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;dipole,10m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+<section id="geographic-distribution">
+<h3>Geographic Distribution<a class="headerlink" href="#geographic-distribution" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Multi-site configuration</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;VK2STU&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;QF56&quot;</span>
+
+<span class="c1"># Receivers at different locations</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;site_north,203.0.113.10:8073&quot;</span>
+<span class="w">    </span><span class="s2">&quot;site_south,203.0.113.20:8073&quot;</span>
+<span class="w">    </span><span class="s2">&quot;site_coastal,203.0.113.30:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Site-specific scheduling</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;site_north,40m,WSPR,00:00,12:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;site_south,40m,WSPR,12:00,24:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;site_coastal,20m,WSPR,06:00,18:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_80,80m,WSPR,00:00,23:59,site_north+site_south&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Site-specific noise monitoring</span>
+<span class="nv">ENABLE_NOISE_GRAPHS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">NOISE_SITE_LABELS</span><span class="o">=</span><span class="s2">&quot;North,South,Coastal&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="specialized-configurations">
+<h2>Specialized Configurations<a class="headerlink" href="#specialized-configurations" title="Link to this heading"></a></h2>
+<section id="research-station-setup">
+<h3>Research Station Setup<a class="headerlink" href="#research-station-setup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Scientific research configuration</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;W0XYZ&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;EN35&quot;</span>
+
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Comprehensive band coverage for research</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,2200m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,630m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,160m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,80m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,20m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,15m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;research_rx,10m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Enhanced data collection</span>
+<span class="nv">ENABLE_GRAPE</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">ENABLE_NOISE_GRAPHS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">ENABLE_EXTENDED_LOGGING</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">UPLOAD_TO_WSPRDAEMON_ORG</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+
+<span class="c1"># Research-specific settings</span>
+<span class="nv">NOISE_MEASUREMENT_INTERVAL</span><span class="o">=</span><span class="s2">&quot;60&quot;</span><span class="w">  </span><span class="c1"># Every minute</span>
+<span class="nv">SAVE_WAV_FILES</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span><span class="w">  </span><span class="c1"># Keep audio for analysis</span>
+<span class="nv">EXTENDED_SPOT_FORMAT</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span><span class="w">  </span><span class="c1"># Additional metadata</span>
+</pre></div>
+</div>
+</section>
+<section id="contest-dxpedition-support">
+<h3>Contest/DXpedition Support<a class="headerlink" href="#contest-dxpedition-support" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Portable/contest configuration</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;W1AW/P&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;FN42&quot;</span>
+
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;portable_rx,192.168.43.100:8073&quot;</span><span class="w">  </span><span class="c1"># Mobile hotspot IP</span>
+<span class="o">)</span>
+
+<span class="c1"># Contest-focused bands</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;portable_rx,80m,WSPR,00:00,06:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;portable_rx,40m,WSPR,06:00,18:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;portable_rx,20m,WSPR,18:00,24:00&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Minimal resource usage</span>
+<span class="nv">ENABLE_NOISE_GRAPHS</span><span class="o">=</span><span class="s2">&quot;no&quot;</span>
+<span class="nv">ENABLE_GRAPE</span><span class="o">=</span><span class="s2">&quot;no&quot;</span>
+<span class="nv">LOG_LEVEL</span><span class="o">=</span><span class="s2">&quot;1&quot;</span><span class="w">  </span><span class="c1"># Reduced logging</span>
+<span class="nv">CLEANUP_OLD_FILES</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="remote-site-configuration">
+<h3>Remote Site Configuration<a class="headerlink" href="#remote-site-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Unattended remote site</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;VK9ABC&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;QI22&quot;</span>
+
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;remote_kiwi,10.0.0.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;remote_kiwi,40m,WSPR,00:00,12:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;remote_kiwi,20m,WSPR,12:00,24:00&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Remote monitoring and reliability</span>
+<span class="nv">ENABLE_WATCHDOG</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">WATCHDOG_RESTART_DELAY</span><span class="o">=</span><span class="s2">&quot;300&quot;</span><span class="w">  </span><span class="c1"># 5 minutes</span>
+<span class="nv">ENABLE_EMAIL_ALERTS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">EMAIL_ALERT_ADDRESS</span><span class="o">=</span><span class="s2">&quot;admin@example.com&quot;</span>
+
+<span class="c1"># Bandwidth conservation</span>
+<span class="nv">UPLOAD_COMPRESSED_LOGS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">REDUCE_UPLOAD_FREQUENCY</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">ENABLE_LOCAL_BACKUP</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-tuning-examples">
+<h2>Performance Tuning Examples<a class="headerlink" href="#performance-tuning-examples" title="Link to this heading"></a></h2>
+<section id="high-throughput-optimization">
+<h3>High-Throughput Optimization<a class="headerlink" href="#high-throughput-optimization" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Optimized for maximum throughput</span>
+<span class="nv">WSPRDAEMON_TMP_DIR</span><span class="o">=</span><span class="s2">&quot;/dev/shm/wsprdaemon&quot;</span>
+<span class="nv">MAX_PARALLEL_JOBS</span><span class="o">=</span><span class="s2">&quot;</span><span class="k">$(</span>nproc<span class="k">)</span><span class="s2">&quot;</span>
+<span class="nv">NICE_LEVEL</span><span class="o">=</span><span class="s2">&quot;-10&quot;</span><span class="w">  </span><span class="c1"># Higher priority</span>
+<span class="nv">IONICE_CLASS</span><span class="o">=</span><span class="s2">&quot;1&quot;</span><span class="w">  </span><span class="c1"># Real-time I/O scheduling</span>
+
+<span class="c1"># Memory optimization</span>
+<span class="nv">MALLOC_ARENA_MAX</span><span class="o">=</span><span class="s2">&quot;2&quot;</span>
+<span class="nv">MALLOC_MMAP_THRESHOLD_</span><span class="o">=</span><span class="s2">&quot;131072&quot;</span>
+
+<span class="c1"># Network optimization</span>
+<span class="nv">TCP_WINDOW_SCALING</span><span class="o">=</span><span class="s2">&quot;1&quot;</span>
+<span class="nv">TCP_CONGESTION_CONTROL</span><span class="o">=</span><span class="s2">&quot;bbr&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="resource-constrained-setup">
+<h3>Resource-Constrained Setup<a class="headerlink" href="#resource-constrained-setup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Raspberry Pi optimization</span>
+<span class="nv">MAX_PARALLEL_JOBS</span><span class="o">=</span><span class="s2">&quot;2&quot;</span>
+<span class="nv">NICE_LEVEL</span><span class="o">=</span><span class="s2">&quot;10&quot;</span><span class="w">  </span><span class="c1"># Lower priority</span>
+<span class="nv">ENABLE_SWAP</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">SWAP_SIZE</span><span class="o">=</span><span class="s2">&quot;2G&quot;</span>
+
+<span class="c1"># Reduced logging</span>
+<span class="nv">LOG_LEVEL</span><span class="o">=</span><span class="s2">&quot;1&quot;</span>
+<span class="nv">ROTATE_LOGS_SIZE</span><span class="o">=</span><span class="s2">&quot;100K&quot;</span>
+<span class="nv">KEEP_LOG_DAYS</span><span class="o">=</span><span class="s2">&quot;7&quot;</span>
+
+<span class="c1"># Conservative scheduling</span>
+<span class="nv">DECODE_TIMEOUT</span><span class="o">=</span><span class="s2">&quot;30&quot;</span><span class="w">  </span><span class="c1"># Shorter timeout</span>
+<span class="nv">MAX_DECODE_ATTEMPTS</span><span class="o">=</span><span class="s2">&quot;2&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="integration-examples">
+<h2>Integration Examples<a class="headerlink" href="#integration-examples" title="Link to this heading"></a></h2>
+<section id="home-automation-integration">
+<h3>Home Automation Integration<a class="headerlink" href="#home-automation-integration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Integration with home automation</span>
+<span class="nv">ENABLE_MQTT</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">MQTT_BROKER</span><span class="o">=</span><span class="s2">&quot;192.168.1.50&quot;</span>
+<span class="nv">MQTT_TOPIC_PREFIX</span><span class="o">=</span><span class="s2">&quot;wsprdaemon&quot;</span>
+
+<span class="c1"># Status publishing</span>
+<span class="nv">PUBLISH_STATUS_INTERVAL</span><span class="o">=</span><span class="s2">&quot;300&quot;</span><span class="w">  </span><span class="c1"># 5 minutes</span>
+<span class="nv">PUBLISH_SPOT_COUNT</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">PUBLISH_NOISE_LEVELS</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="monitoring-system-integration">
+<h3>Monitoring System Integration<a class="headerlink" href="#monitoring-system-integration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Prometheus/Grafana integration</span>
+<span class="nv">ENABLE_METRICS_EXPORT</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">METRICS_PORT</span><span class="o">=</span><span class="s2">&quot;9090&quot;</span>
+<span class="nv">METRICS_PATH</span><span class="o">=</span><span class="s2">&quot;/metrics&quot;</span>
+
+<span class="c1"># InfluxDB integration</span>
+<span class="nv">ENABLE_INFLUXDB</span><span class="o">=</span><span class="s2">&quot;yes&quot;</span>
+<span class="nv">INFLUXDB_URL</span><span class="o">=</span><span class="s2">&quot;http://192.168.1.60:8086&quot;</span>
+<span class="nv">INFLUXDB_DATABASE</span><span class="o">=</span><span class="s2">&quot;wsprdaemon&quot;</span>
+</pre></div>
+</div>
+<p>These configurations provide starting points for various deployment scenarios. Adapt the parameters to match your specific hardware, network, and operational requirements.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../FAQ.html" class="btn btn-neutral float-left" title="Frequently Asked Questions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../architecture/data_flow.html" class="btn btn-neutral float-right" title="Data Flow Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

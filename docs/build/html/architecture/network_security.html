@@ -1,0 +1,529 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Network Security Architecture &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Developer Getting Started Guide" href="../developers/getting_started.html" />
+    <link rel="prev" title="Data Flow Architecture" href="data_flow.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Network Security Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-security-challenge">The Security Challenge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#security-philosophy">Security Philosophy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#remote-access-channel-rac-system">Remote Access Channel (RAC) System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#security-layers-defense-in-depth">Security Layers (Defense in Depth)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#port-mapping-system">Port Mapping System</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#technical-implementation">Technical Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#client-side-configuration">Client Side Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#developer-access-workflow">Developer Access Workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-network-deployment">Multi-Network Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#security-benefits">Security Benefits</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#for-amateur-radio-operators">For Amateur Radio Operators</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#for-developers">For Developers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#connection-reliability-features">Connection Reliability Features</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#extreme-environment-support">Extreme Environment Support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-recovery">Automatic Recovery</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#security-evaluation">Security Evaluation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#threat-model-addressed">Threat Model Addressed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#comparison-with-alternatives">Comparison with Alternatives</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#operational-results">Operational Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#development-constraints-and-solutions">Development Constraints and Solutions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#why-device-specific-development-required">Why Device-Specific Development Required</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#remote-development-challenges">Remote Development Challenges</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#security-monitoring-and-auditing">Security Monitoring and Auditing</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connection-logging">Connection Logging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#health-monitoring">Health Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#future-security-enhancements">Future Security Enhancements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#planned-improvements">Planned Improvements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#long-term-vision">Long-term Vision</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Network Security Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/network_security.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="network-security-architecture">
+<h1>Network Security Architecture<a class="headerlink" href="#network-security-architecture" title="Link to this heading"></a></h1>
+<p><em>Comprehensive overview of WsprDaemon’s secure remote access design</em></p>
+<p>WsprDaemon implements a sophisticated security architecture that protects amateur radio operators while enabling remote maintenance and development access. This document explains the technical implementation and security rationale.</p>
+<section id="the-security-challenge">
+<h2>The Security Challenge<a class="headerlink" href="#the-security-challenge" title="Link to this heading"></a></h2>
+<p>WsprDaemon operators typically have limited Linux command line experience and operate in diverse environments from home stations to extreme locations like Antarctica. The system must provide:</p>
+<ul class="simple">
+<li><p>Remote developer access for debugging and maintenance</p></li>
+<li><p>Protection against data corruption and malicious attacks</p></li>
+<li><p>Automatic data propagation from client machines to servers</p></li>
+<li><p>Hardware-specific development capabilities</p></li>
+<li><p>Operation from extreme locations with unreliable connectivity</p></li>
+</ul>
+</section>
+<section id="security-philosophy">
+<h2>Security Philosophy<a class="headerlink" href="#security-philosophy" title="Link to this heading"></a></h2>
+<p><strong>Core Principle</strong>: Prioritize user protection over developer convenience. Technical complexity is absorbed by the system rather than pushed to end users.</p>
+<p><strong>Key Insight</strong>: “The problem is security and liability. I don’t want to put WSPR clients on the open internet.” - Rob Robinett AI6VN</p>
+</section>
+<section id="remote-access-channel-rac-system">
+<h2>Remote Access Channel (RAC) System<a class="headerlink" href="#remote-access-channel-rac-system" title="Link to this heading"></a></h2>
+<section id="architecture-overview">
+<h3>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading"></a></h3>
+<p>The RAC system uses a <strong>reverse-tunnel architecture</strong> where client devices never accept direct inbound connections. This protects amateur radio operators from internet-based attacks while enabling remote maintenance access.</p>
+<p><strong>Core Components:</strong></p>
+<ul class="simple">
+<li><p><strong>FRP (Fast Reverse Proxy)</strong>: Creates secure tunnels from client devices to central server</p></li>
+<li><p><strong>wd0.wsprdaemon.org</strong>: Digital Ocean droplet acting as secure proxy server</p></li>
+<li><p><strong>Digital Ocean Firewall</strong>: Blocks all unauthorized access to wd0</p></li>
+<li><p><strong>WireGuard VPN</strong>: Required for any access to the proxy server (port 51820)</p></li>
+<li><p><strong>RAC System</strong>: Remote Access Channel numbering for organized device access</p></li>
+</ul>
+</section>
+<section id="security-layers-defense-in-depth">
+<h3>Security Layers (Defense in Depth)<a class="headerlink" href="#security-layers-defense-in-depth" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Digital Ocean Firewall</strong>: Perimeter defense blocking unauthorized traffic</p></li>
+<li><p><strong>WireGuard VPN</strong>: Encrypted access control and authentication</p></li>
+<li><p><strong>FRP Reverse Tunnels</strong>: No client exposure to internet</p></li>
+<li><p><strong>SSH Key Authentication</strong>: Developer access control</p></li>
+<li><p><strong>Application-Level Permissions</strong>: Service isolation and user protection</p></li>
+</ol>
+</section>
+<section id="port-mapping-system">
+<h3>Port Mapping System<a class="headerlink" href="#port-mapping-system" title="Link to this heading"></a></h3>
+<p><strong>Formula</strong>: <code class="docutils literal notranslate"><span class="pre">RAC_NUMBER</span> <span class="pre">→</span> <span class="pre">PORT</span> <span class="pre">35800+RAC_NUMBER</span></code></p>
+<p>Examples:</p>
+<ul class="simple">
+<li><p>RAC 0 → <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35800</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code></p></li>
+<li><p>RAC 1 → <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35801</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code></p></li>
+<li><p>RAC 100 → <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35900</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code></p></li>
+<li><p>RAC 1000 → <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">36800</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code></p></li>
+</ul>
+<p><strong>Range</strong>: RAC 100 to several thousand (allows massive scaling)</p>
+</section>
+</section>
+<section id="technical-implementation">
+<h2>Technical Implementation<a class="headerlink" href="#technical-implementation" title="Link to this heading"></a></h2>
+<section id="client-side-configuration">
+<h3>Client Side Configuration<a class="headerlink" href="#client-side-configuration" title="Link to this heading"></a></h3>
+<p><strong>User Experience</strong>: Users add only two lines to <code class="docutils literal notranslate"><span class="pre">wsprdaemon.conf</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">REMOTE_ACCESS_CHANNEL</span><span class="o">=</span><span class="m">123</span>
+<span class="nv">REMOTE_ACCESS_ID</span><span class="o">=</span><span class="s2">&quot;MyStation-Pi4&quot;</span>
+</pre></div>
+</div>
+<p><strong>Automatic FRPC Configuration</strong>:</p>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="k">[common]</span>
+<span class="na">server_addr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">wd0.wsprdaemon.org</span>
+<span class="na">server_port</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">7000</span>
+
+<span class="k">[RAC_ID]</span>
+<span class="na">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tcp</span>
+<span class="na">local_ip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">127.0.0.1</span>
+<span class="na">local_port</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">22</span>
+<span class="na">remote_port</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">35XXX</span><span class="w">  </span><span class="c1"># 35800 + RAC_NUMBER</span>
+</pre></div>
+</div>
+</section>
+<section id="developer-access-workflow">
+<h3>Developer Access Workflow<a class="headerlink" href="#developer-access-workflow" title="Link to this heading"></a></h3>
+<p><strong>Prerequisites:</strong></p>
+<ul class="simple">
+<li><p>Active WireGuard VPN connection to authorized network (port 51820)</p></li>
+<li><p>SSH access to wd0.wsprdaemon.org</p></li>
+<li><p>Knowledge of client’s RAC number</p></li>
+</ul>
+<p><strong>Connection Process:</strong></p>
+<ol class="arabic simple">
+<li><p>Connect to WireGuard VPN</p></li>
+<li><p>SSH to specific RAC port: <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35923</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code>  # 35800 + 123</p></li>
+<li><p>Direct access to client’s Pi as if local</p></li>
+</ol>
+</section>
+<section id="multi-network-deployment">
+<h3>Multi-Network Deployment<a class="headerlink" href="#multi-network-deployment" title="Link to this heading"></a></h3>
+<p><strong>Wsprdaemon.org Network:</strong></p>
+<ul class="simple">
+<li><p>Rob’s original deployment</p></li>
+<li><p>Digital Ocean infrastructure</p></li>
+<li><p>Primary development and testing</p></li>
+</ul>
+<p><strong>HAM Site Group Network:</strong></p>
+<ul class="simple">
+<li><p>Independent deployment by collaborators</p></li>
+<li><p>Own Digital Ocean droplet</p></li>
+<li><p>Own private network with WireGuard</p></li>
+<li><p>Shared codebase, independent security</p></li>
+</ul>
+<p><strong>Scaling Model</strong>: Each organization can deploy their own secure network while sharing the WsprDaemon codebase.</p>
+</section>
+</section>
+<section id="security-benefits">
+<h2>Security Benefits<a class="headerlink" href="#security-benefits" title="Link to this heading"></a></h2>
+<section id="for-amateur-radio-operators">
+<h3>For Amateur Radio Operators<a class="headerlink" href="#for-amateur-radio-operators" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Zero Internet Exposure</strong>: Client devices never accept direct inbound connections</p></li>
+<li><p><strong>No Security Configuration</strong>: Users don’t need to manage firewalls, VPNs, or certificates</p></li>
+<li><p><strong>Liability Protection</strong>: No risk of equipment being used for malicious purposes</p></li>
+<li><p><strong>Automatic Updates</strong>: Security patches applied without user intervention</p></li>
+</ul>
+</section>
+<section id="for-developers">
+<h3>For Developers<a class="headerlink" href="#for-developers" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Controlled Access</strong>: Central chokepoint for all remote access</p></li>
+<li><p><strong>Audit Trail</strong>: All connections logged and monitored</p></li>
+<li><p><strong>Scalable</strong>: Supports hundreds of installations</p></li>
+<li><p><strong>Reliable</strong>: Works through NAT, firewalls, and dynamic IP addresses</p></li>
+</ul>
+</section>
+</section>
+<section id="connection-reliability-features">
+<h2>Connection Reliability Features<a class="headerlink" href="#connection-reliability-features" title="Link to this heading"></a></h2>
+<section id="extreme-environment-support">
+<h3>Extreme Environment Support<a class="headerlink" href="#extreme-environment-support" title="Link to this heading"></a></h3>
+<p><strong>Challenge</strong>: Antarctica satellite internet</p>
+<ul class="simple">
+<li><p>High latency (500-1000ms+)</p></li>
+<li><p>Frequent disconnections</p></li>
+<li><p>Bandwidth limitations</p></li>
+<li><p>Packet loss</p></li>
+</ul>
+<p><strong>Solutions</strong>:</p>
+<ul class="simple">
+<li><p>tmux for session persistence across connection drops</p></li>
+<li><p>SSH connection optimization for high-latency links</p></li>
+<li><p>FRP tunnel automatic reconnection</p></li>
+<li><p>Connection multiplexing for efficiency</p></li>
+</ul>
+</section>
+<section id="automatic-recovery">
+<h3>Automatic Recovery<a class="headerlink" href="#automatic-recovery" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Power outages</strong>: systemd restart capability</p></li>
+<li><p><strong>Network interruptions</strong>: cached uploads until connectivity restored</p></li>
+<li><p><strong>SDR disconnections</strong>: automatic reconnection attempts</p></li>
+<li><p><strong>Tunnel failures</strong>: FRP client automatic reconnection</p></li>
+</ul>
+</section>
+</section>
+<section id="security-evaluation">
+<h2>Security Evaluation<a class="headerlink" href="#security-evaluation" title="Link to this heading"></a></h2>
+<section id="threat-model-addressed">
+<h3>Threat Model Addressed<a class="headerlink" href="#threat-model-addressed" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Amateur Radio Liability</strong>: No direct internet exposure eliminates legal risks</p></li>
+<li><p><strong>User Protection</strong>: Zero security configuration required from operators</p></li>
+<li><p><strong>Data Integrity</strong>: Automated propagation with validation</p></li>
+<li><p><strong>Unauthorized Access</strong>: Multiple authentication layers prevent intrusion</p></li>
+<li><p><strong>Network Attacks</strong>: Isolated networks with VPN access control</p></li>
+</ul>
+</section>
+<section id="comparison-with-alternatives">
+<h3>Comparison with Alternatives<a class="headerlink" href="#comparison-with-alternatives" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Approach</p></th>
+<th class="head"><p>Security</p></th>
+<th class="head"><p>Complexity</p></th>
+<th class="head"><p>User Burden</p></th>
+<th class="head"><p>Scalability</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Direct Internet (AMPRNet)</p></td>
+<td><p>Low</p></td>
+<td><p>Low</p></td>
+<td><p>High</p></td>
+<td><p>High</p></td>
+</tr>
+<tr class="row-odd"><td><p>Port Forwarding</p></td>
+<td><p>Medium</p></td>
+<td><p>Medium</p></td>
+<td><p>High</p></td>
+<td><p>Low</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>FRP + WireGuard</strong></p></td>
+<td><p><strong>High</strong></p></td>
+<td><p><strong>Medium</strong></p></td>
+<td><p><strong>Low</strong></p></td>
+<td><p><strong>High</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>Commercial VPN</p></td>
+<td><p>Medium</p></td>
+<td><p>Low</p></td>
+<td><p>Medium</p></td>
+<td><p>Medium</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="operational-results">
+<h2>Operational Results<a class="headerlink" href="#operational-results" title="Link to this heading"></a></h2>
+<p><strong>Current Scale:</strong></p>
+<ul class="simple">
+<li><p>20+ top WSPR spotting sites using this architecture</p></li>
+<li><p>Aggregate ~33% of daily spots on wsprnet.org (7+ million/day)</p></li>
+<li><p>Multi-continent deployment including extreme locations</p></li>
+</ul>
+<p><strong>Reliability Metrics:</strong></p>
+<ul class="simple">
+<li><p>Works through power outages (automatic reconnection)</p></li>
+<li><p>Survives internet outages (cached data until reconnection)</p></li>
+<li><p>Handles NAT changes and dynamic IP updates</p></li>
+<li><p>Functions in extreme RF environments</p></li>
+</ul>
+</section>
+<section id="development-constraints-and-solutions">
+<h2>Development Constraints and Solutions<a class="headerlink" href="#development-constraints-and-solutions" title="Link to this heading"></a></h2>
+<section id="why-device-specific-development-required">
+<h3>Why Device-Specific Development Required<a class="headerlink" href="#why-device-specific-development-required" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Every device environment is unique (different SDRs, configurations, interference)</p></li>
+<li><p>Hardware dependencies (KiwiSDRs, RX888s, antenna systems)</p></li>
+<li><p>Real-world RF conditions cannot be simulated</p></li>
+<li><p>Network conditions vary dramatically by location</p></li>
+</ul>
+</section>
+<section id="remote-development-challenges">
+<h3>Remote Development Challenges<a class="headerlink" href="#remote-development-challenges" title="Link to this heading"></a></h3>
+<p><strong>Environment Factors:</strong></p>
+<ul class="simple">
+<li><p>High-latency connections (satellite internet)</p></li>
+<li><p>Unreliable connectivity with frequent drops</p></li>
+<li><p>Limited bandwidth for development tools</p></li>
+<li><p>Time zone differences for support</p></li>
+</ul>
+<p><strong>Technical Solutions:</strong></p>
+<ul class="simple">
+<li><p>Session persistence with tmux/screen</p></li>
+<li><p>Connection multiplexing for efficiency</p></li>
+<li><p>Optimized SSH configurations</p></li>
+<li><p>Local caching of development resources</p></li>
+</ul>
+</section>
+</section>
+<section id="security-monitoring-and-auditing">
+<h2>Security Monitoring and Auditing<a class="headerlink" href="#security-monitoring-and-auditing" title="Link to this heading"></a></h2>
+<section id="connection-logging">
+<h3>Connection Logging<a class="headerlink" href="#connection-logging" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># RAC connection tracking</span>
+/var/log/wsprdaemon/rac-access.log
+
+<span class="c1"># FRP tunnel status</span>
+/var/log/frpc/tunnel-status.log
+
+<span class="c1"># SSH access logs</span>
+journalctl<span class="w"> </span>-u<span class="w"> </span>ssh<span class="w"> </span>-f
+</pre></div>
+</div>
+</section>
+<section id="health-monitoring">
+<h3>Health Monitoring<a class="headerlink" href="#health-monitoring" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Tunnel health checks</span>
+frpc<span class="w"> </span>status
+
+<span class="c1"># VPN connectivity</span>
+wg<span class="w"> </span>show
+
+<span class="c1"># Service availability</span>
+systemctl<span class="w"> </span>status<span class="w"> </span>wsprdaemon
+</pre></div>
+</div>
+</section>
+</section>
+<section id="future-security-enhancements">
+<h2>Future Security Enhancements<a class="headerlink" href="#future-security-enhancements" title="Link to this heading"></a></h2>
+<section id="planned-improvements">
+<h3>Planned Improvements<a class="headerlink" href="#planned-improvements" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Certificate Management</strong>: TLS for all web interfaces</p></li>
+<li><p><strong>Enhanced Monitoring</strong>: Real-time security event detection</p></li>
+<li><p><strong>Access Control</strong>: Time-limited developer sessions</p></li>
+<li><p><strong>Audit Compliance</strong>: Extended logging and retention</p></li>
+</ol>
+</section>
+<section id="long-term-vision">
+<h3>Long-term Vision<a class="headerlink" href="#long-term-vision" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Web Configuration UI</strong>: Eliminate terminal configuration needs</p></li>
+<li><p><strong>Mobile Management</strong>: Smartphone apps for system monitoring</p></li>
+<li><p><strong>Automated Security</strong>: Self-healing security configurations</p></li>
+<li><p><strong>Zero-Trust Architecture</strong>: Enhanced verification at all levels</p></li>
+</ul>
+</section>
+</section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading"></a></h2>
+<p>The FRP + WireGuard architecture successfully balances the competing requirements of security, usability, and maintainability for a global amateur radio infrastructure deployment. By prioritizing user protection and absorbing technical complexity at the system level, WsprDaemon enables thousands of amateur radio operators to contribute to WSPR networks without security expertise or liability concerns.</p>
+<p>The architecture demonstrates how sophisticated security can be made transparent to end users while providing developers with the access needed for maintenance and enhancement of critical amateur radio infrastructure.</p>
+<hr class="docutils" />
+<p><em>This security architecture reflects years of operational experience with non-technical users, extreme deployment environments, and the need to balance security with functionality in amateur radio applications.</em></p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="data_flow.html" class="btn btn-neutral float-left" title="Data Flow Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../developers/getting_started.html" class="btn btn-neutral float-right" title="Developer Getting Started Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

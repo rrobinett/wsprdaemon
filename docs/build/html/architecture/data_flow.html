@@ -1,0 +1,498 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Flow Architecture &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Network Security Architecture" href="network_security.html" />
+    <link rel="prev" title="Common Configurations" href="../examples/common_configurations.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Data Flow Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-1-audio-capture">Stage 1: Audio Capture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#input-sources">Input Sources</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recording-process">Recording Process</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data-format">Data Format</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-2-signal-decoding">Stage 2: Signal Decoding</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#decoding-engine">Decoding Engine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#processing-pipeline">Processing Pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output-data">Output Data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-3-data-validation">Stage 3: Data Validation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#validation-layers">Validation Layers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quality-metrics">Quality Metrics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-4-multi-receiver-processing">Stage 4: Multi-Receiver Processing</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#spot-merging">Spot Merging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#receiver-coordination">Receiver Coordination</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-5-data-aggregation">Stage 5: Data Aggregation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#spot-compilation">Spot Compilation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#noise-data-processing">Noise Data Processing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-6-external-reporting">Stage 6: External Reporting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#upload-destinations">Upload Destinations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#upload-process">Upload Process</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data-formats">Data Formats</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#data-storage-and-archival">Data Storage and Archival</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#local-storage">Local Storage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data-retention">Data Retention</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#error-handling-and-recovery">Error Handling and Recovery</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fault-tolerance">Fault Tolerance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#error-propagation">Error Propagation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-characteristics">Performance Characteristics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#throughput">Throughput</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#latency">Latency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resource-usage">Resource Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#scalability-considerations">Scalability Considerations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#horizontal-scaling">Horizontal Scaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vertical-scaling">Vertical Scaling</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Data Flow Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/data_flow.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="data-flow-architecture">
+<h1>Data Flow Architecture<a class="headerlink" href="#data-flow-architecture" title="Link to this heading"></a></h1>
+<p>This document describes how data flows through WsprDaemon from audio capture to final spot reporting.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>WsprDaemon processes WSPR signals through a multi-stage pipeline that transforms raw audio into validated spot reports. The architecture is designed for reliability, scalability, and data integrity.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[SDR Hardware] → [Audio Capture] → [Decoding] → [Validation] → [Merging] → [Upload]
+</pre></div>
+</div>
+</section>
+<section id="stage-1-audio-capture">
+<h2>Stage 1: Audio Capture<a class="headerlink" href="#stage-1-audio-capture" title="Link to this heading"></a></h2>
+<section id="input-sources">
+<h3>Input Sources<a class="headerlink" href="#input-sources" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>KiwiSDR</strong>: Network-based audio streams via kiwirecorder.py</p></li>
+<li><p><strong>RX888</strong>: USB-based I/Q data via ka9q-radio</p></li>
+<li><p><strong>RTL-SDR</strong>: USB-based I/Q data via rtl_sdr</p></li>
+<li><p><strong>Other SDRs</strong>: Various interfaces through standardized APIs</p></li>
+</ul>
+</section>
+<section id="recording-process">
+<h3>Recording Process<a class="headerlink" href="#recording-process" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Stream Initialization</strong>: Establish connection to SDR hardware</p></li>
+<li><p><strong>Audio Buffering</strong>: Continuous audio capture with 2-minute windows</p></li>
+<li><p><strong>File Creation</strong>: Generate timestamped WAV files (YYMMDD_HHMM.wav)</p></li>
+<li><p><strong>Quality Control</strong>: Monitor for clipping, dropouts, and timing accuracy</p></li>
+</ol>
+</section>
+<section id="data-format">
+<h3>Data Format<a class="headerlink" href="#data-format" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Sample Rate</strong>: 12 kHz (WSPR standard)</p></li>
+<li><p><strong>Bit Depth</strong>: 16-bit signed integer</p></li>
+<li><p><strong>Channels</strong>: Mono (single channel)</p></li>
+<li><p><strong>Duration</strong>: Exactly 120 seconds per file</p></li>
+<li><p><strong>Timing</strong>: Synchronized to even-minute boundaries</p></li>
+</ul>
+</section>
+</section>
+<section id="stage-2-signal-decoding">
+<h2>Stage 2: Signal Decoding<a class="headerlink" href="#stage-2-signal-decoding" title="Link to this heading"></a></h2>
+<section id="decoding-engine">
+<h3>Decoding Engine<a class="headerlink" href="#decoding-engine" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Primary Decoder</strong>: wsprd from WSJT-X suite</p></li>
+<li><p><strong>Deep Search</strong>: Optional wsprd -d for enhanced sensitivity</p></li>
+<li><p><strong>Parallel Processing</strong>: Multiple decoders per receiver/band combination</p></li>
+</ul>
+</section>
+<section id="processing-pipeline">
+<h3>Processing Pipeline<a class="headerlink" href="#processing-pipeline" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>File Detection</strong>: Monitor for new WAV files</p></li>
+<li><p><strong>Preprocessing</strong>: Audio validation and conditioning</p></li>
+<li><p><strong>WSPR Decoding</strong>: Extract callsign, grid, power, frequency, SNR</p></li>
+<li><p><strong>Noise Analysis</strong>: Calculate background noise levels</p></li>
+<li><p><strong>Quality Assessment</strong>: Validate decoded parameters</p></li>
+</ol>
+</section>
+<section id="output-data">
+<h3>Output Data<a class="headerlink" href="#output-data" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Timestamp</span><span class="p">:</span> <span class="mi">2024</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">15</span> <span class="mi">12</span><span class="p">:</span><span class="mi">34</span><span class="p">:</span><span class="mi">00</span>
+<span class="n">Callsign</span><span class="p">:</span> <span class="n">W1ABC</span>
+<span class="n">Grid</span><span class="p">:</span> <span class="n">FN42</span>
+<span class="n">Power</span><span class="p">:</span> <span class="mi">37</span> <span class="n">dBm</span>
+<span class="n">Frequency</span><span class="p">:</span> <span class="mf">14.097123</span> <span class="n">MHz</span>
+<span class="n">SNR</span><span class="p">:</span> <span class="o">-</span><span class="mi">18</span> <span class="n">dB</span>
+<span class="n">Drift</span><span class="p">:</span> <span class="mi">0</span> <span class="n">Hz</span><span class="o">/</span><span class="nb">min</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stage-3-data-validation">
+<h2>Stage 3: Data Validation<a class="headerlink" href="#stage-3-data-validation" title="Link to this heading"></a></h2>
+<section id="validation-layers">
+<h3>Validation Layers<a class="headerlink" href="#validation-layers" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Format Validation</strong>: Verify callsign, grid, power formats</p></li>
+<li><p><strong>Range Checking</strong>: Ensure values within expected bounds</p></li>
+<li><p><strong>Temporal Validation</strong>: Confirm timing alignment</p></li>
+<li><p><strong>Cross-Reference</strong>: Compare with previous observations</p></li>
+</ol>
+</section>
+<section id="quality-metrics">
+<h3>Quality Metrics<a class="headerlink" href="#quality-metrics" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Decode Confidence</strong>: Statistical confidence in decoded parameters</p></li>
+<li><p><strong>Signal Quality</strong>: SNR and frequency stability metrics</p></li>
+<li><p><strong>Timing Accuracy</strong>: Synchronization with WSPR schedule</p></li>
+<li><p><strong>Consistency</strong>: Agreement with historical patterns</p></li>
+</ul>
+</section>
+</section>
+<section id="stage-4-multi-receiver-processing">
+<h2>Stage 4: Multi-Receiver Processing<a class="headerlink" href="#stage-4-multi-receiver-processing" title="Link to this heading"></a></h2>
+<section id="spot-merging">
+<h3>Spot Merging<a class="headerlink" href="#spot-merging" title="Link to this heading"></a></h3>
+<p>When multiple receivers monitor the same band:</p>
+<ol class="arabic simple">
+<li><p><strong>Collection</strong>: Gather spots from all receivers</p></li>
+<li><p><strong>Correlation</strong>: Match spots by callsign, time, and frequency</p></li>
+<li><p><strong>Selection</strong>: Choose best SNR for each unique transmission</p></li>
+<li><p><strong>Metadata</strong>: Preserve information from all receivers</p></li>
+</ol>
+</section>
+<section id="receiver-coordination">
+<h3>Receiver Coordination<a class="headerlink" href="#receiver-coordination" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Time Synchronization</strong>: Ensure all receivers use common time reference</p></li>
+<li><p><strong>Frequency Calibration</strong>: Account for receiver-specific offsets</p></li>
+<li><p><strong>Performance Monitoring</strong>: Track individual receiver health</p></li>
+<li><p><strong>Load Balancing</strong>: Distribute processing across available resources</p></li>
+</ul>
+</section>
+</section>
+<section id="stage-5-data-aggregation">
+<h2>Stage 5: Data Aggregation<a class="headerlink" href="#stage-5-data-aggregation" title="Link to this heading"></a></h2>
+<section id="spot-compilation">
+<h3>Spot Compilation<a class="headerlink" href="#spot-compilation" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Temporal Grouping</strong>: Collect spots by 2-minute transmission windows</p></li>
+<li><p><strong>Duplicate Removal</strong>: Eliminate redundant observations</p></li>
+<li><p><strong>Metadata Addition</strong>: Add receiver, location, and system information</p></li>
+<li><p><strong>Format Conversion</strong>: Prepare data for various output formats</p></li>
+</ol>
+</section>
+<section id="noise-data-processing">
+<h3>Noise Data Processing<a class="headerlink" href="#noise-data-processing" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Calibration</strong>: Apply receiver-specific corrections</p></li>
+<li><p><strong>Averaging</strong>: Calculate time-averaged noise levels</p></li>
+<li><p><strong>Trend Analysis</strong>: Identify patterns and anomalies</p></li>
+<li><p><strong>Graphing</strong>: Generate visualization data</p></li>
+</ul>
+</section>
+</section>
+<section id="stage-6-external-reporting">
+<h2>Stage 6: External Reporting<a class="headerlink" href="#stage-6-external-reporting" title="Link to this heading"></a></h2>
+<section id="upload-destinations">
+<h3>Upload Destinations<a class="headerlink" href="#upload-destinations" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>wsprnet.org</strong>: Primary WSPR spot database</p></li>
+<li><p><strong>wsprdaemon.org</strong>: Enhanced data with additional metrics</p></li>
+<li><p><strong>pskreporter.info</strong>: FT4/FT8 mode reporting</p></li>
+<li><p><strong>HamSCI GRAPE</strong>: Scientific ionospheric research data</p></li>
+</ol>
+</section>
+<section id="upload-process">
+<h3>Upload Process<a class="headerlink" href="#upload-process" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Queue Management</strong>: Maintain upload queues per destination</p></li>
+<li><p><strong>Format Conversion</strong>: Transform data to required formats</p></li>
+<li><p><strong>Transmission</strong>: HTTP POST to destination servers</p></li>
+<li><p><strong>Confirmation</strong>: Verify successful delivery</p></li>
+<li><p><strong>Retry Logic</strong>: Handle temporary failures with exponential backoff</p></li>
+</ol>
+</section>
+<section id="data-formats">
+<h3>Data Formats<a class="headerlink" href="#data-formats" title="Link to this heading"></a></h3>
+<p><strong>wsprnet.org Format:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">240115</span> <span class="mi">1234</span> <span class="n">W1ABC</span> <span class="n">FN42</span> <span class="mi">37</span> <span class="n">K1DEF</span> <span class="n">FN32</span> <span class="o">-</span><span class="mi">18</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mf">14.097123</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p><strong>Enhanced Format (wsprdaemon.org):</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2024-01-15T12:34:00Z&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;tx_call&quot;</span><span class="p">:</span> <span class="s2">&quot;W1ABC&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;tx_grid&quot;</span><span class="p">:</span> <span class="s2">&quot;FN42&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;tx_power&quot;</span><span class="p">:</span> <span class="mi">37</span><span class="p">,</span>
+  <span class="s2">&quot;rx_call&quot;</span><span class="p">:</span> <span class="s2">&quot;K1DEF&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;rx_grid&quot;</span><span class="p">:</span> <span class="s2">&quot;FN32&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;snr&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">18</span><span class="p">,</span>
+  <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="mf">14.097123</span><span class="p">,</span>
+  <span class="s2">&quot;drift&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="s2">&quot;noise_level&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mf">142.5</span><span class="p">,</span>
+  <span class="s2">&quot;receiver_id&quot;</span><span class="p">:</span> <span class="s2">&quot;kiwi_01&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="data-storage-and-archival">
+<h2>Data Storage and Archival<a class="headerlink" href="#data-storage-and-archival" title="Link to this heading"></a></h2>
+<section id="local-storage">
+<h3>Local Storage<a class="headerlink" href="#local-storage" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Active Processing</strong>: <code class="docutils literal notranslate"><span class="pre">/tmp/wsprdaemon/</span></code> (tmpfs recommended)</p></li>
+<li><p><strong>Persistent Logs</strong>: <code class="docutils literal notranslate"><span class="pre">~/wsprdaemon/logs/</span></code></p></li>
+<li><p><strong>Archive Data</strong>: <code class="docutils literal notranslate"><span class="pre">~/wsprdaemon/archives/</span></code></p></li>
+<li><p><strong>Configuration</strong>: <code class="docutils literal notranslate"><span class="pre">~/wsprdaemon/wsprdaemon.conf</span></code></p></li>
+</ul>
+</section>
+<section id="data-retention">
+<h3>Data Retention<a class="headerlink" href="#data-retention" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>WAV Files</strong>: Deleted after successful processing (configurable)</p></li>
+<li><p><strong>Spot Data</strong>: Retained locally for backup and analysis</p></li>
+<li><p><strong>Log Files</strong>: Rotated based on size and age limits</p></li>
+<li><p><strong>Noise Data</strong>: Archived for long-term trend analysis</p></li>
+</ul>
+</section>
+</section>
+<section id="error-handling-and-recovery">
+<h2>Error Handling and Recovery<a class="headerlink" href="#error-handling-and-recovery" title="Link to this heading"></a></h2>
+<section id="fault-tolerance">
+<h3>Fault Tolerance<a class="headerlink" href="#fault-tolerance" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Process Monitoring</strong>: Watchdog processes restart failed components</p></li>
+<li><p><strong>Data Caching</strong>: Local storage until successful upload</p></li>
+<li><p><strong>Graceful Degradation</strong>: Continue operation with reduced functionality</p></li>
+<li><p><strong>Automatic Recovery</strong>: Self-healing from transient failures</p></li>
+</ol>
+</section>
+<section id="error-propagation">
+<h3>Error Propagation<a class="headerlink" href="#error-propagation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Logging</strong>: Comprehensive error logging at each stage</p></li>
+<li><p><strong>Alerting</strong>: Notification of critical failures</p></li>
+<li><p><strong>Metrics</strong>: Performance and error rate monitoring</p></li>
+<li><p><strong>Diagnostics</strong>: Built-in tools for troubleshooting</p></li>
+</ul>
+</section>
+</section>
+<section id="performance-characteristics">
+<h2>Performance Characteristics<a class="headerlink" href="#performance-characteristics" title="Link to this heading"></a></h2>
+<section id="throughput">
+<h3>Throughput<a class="headerlink" href="#throughput" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Single Band</strong>: ~30 spots/hour typical</p></li>
+<li><p><strong>Multi-Band</strong>: Scales linearly with receiver count</p></li>
+<li><p><strong>Peak Load</strong>: 2-minute processing windows create periodic load spikes</p></li>
+<li><p><strong>Sustained Rate</strong>: Designed for 24/7 continuous operation</p></li>
+</ul>
+</section>
+<section id="latency">
+<h3>Latency<a class="headerlink" href="#latency" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Processing Delay</strong>: 2-4 minutes from transmission to upload</p></li>
+<li><p><strong>Upload Latency</strong>: Typically &lt;30 seconds to external services</p></li>
+<li><p><strong>End-to-End</strong>: 3-5 minutes from transmission to public availability</p></li>
+</ul>
+</section>
+<section id="resource-usage">
+<h3>Resource Usage<a class="headerlink" href="#resource-usage" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>CPU</strong>: Moderate during decode windows, low otherwise</p></li>
+<li><p><strong>Memory</strong>: 200-500MB per active band</p></li>
+<li><p><strong>Disk I/O</strong>: Burst writes during WAV creation and processing</p></li>
+<li><p><strong>Network</strong>: Steady upload traffic, multicast for ka9q-radio</p></li>
+</ul>
+</section>
+</section>
+<section id="scalability-considerations">
+<h2>Scalability Considerations<a class="headerlink" href="#scalability-considerations" title="Link to this heading"></a></h2>
+<section id="horizontal-scaling">
+<h3>Horizontal Scaling<a class="headerlink" href="#horizontal-scaling" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Multiple Receivers</strong>: Linear scaling with receiver count</p></li>
+<li><p><strong>Distributed Processing</strong>: Separate recording and processing systems</p></li>
+<li><p><strong>Load Distribution</strong>: Balance processing across available cores</p></li>
+<li><p><strong>Network Optimization</strong>: Multicast for efficient data distribution</p></li>
+</ul>
+</section>
+<section id="vertical-scaling">
+<h3>Vertical Scaling<a class="headerlink" href="#vertical-scaling" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>CPU Optimization</strong>: Multi-threaded processing where beneficial</p></li>
+<li><p><strong>Memory Management</strong>: Efficient buffer management and cleanup</p></li>
+<li><p><strong>I/O Optimization</strong>: tmpfs for high-frequency file operations</p></li>
+<li><p><strong>Network Tuning</strong>: Optimized for upload patterns and retry logic</p></li>
+</ul>
+<p>This architecture ensures reliable, scalable processing of WSPR data while maintaining the flexibility to adapt to different hardware configurations and operational requirements.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../examples/common_configurations.html" class="btn btn-neutral float-left" title="Common Configurations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="network_security.html" class="btn btn-neutral float-right" title="Network Security Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,586 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Security Considerations &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Download the software with GIT" href="git.html" />
+    <link rel="prev" title="Preparing for installation" href="preparation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Security Considerations</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#user-protection-philosophy">User Protection Philosophy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core-security-principles">Core Security Principles</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#remote-access-security">Remote Access Security</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#remote-access-channel-rac-system">Remote Access Channel (RAC) System</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#access-control-layers">Access Control Layers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#data-protection">Data Protection</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sensitive-information-handling">Sensitive Information Handling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data-integrity-protection">Data Integrity Protection</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#system-hardening">System Hardening</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#service-isolation">Service Isolation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ssh-security">SSH Security</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#firewall-configuration">Firewall Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-security-updates">Automatic Security Updates</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#network-security">Network Security</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#attack-surface-reduction">Attack Surface Reduction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#network-segmentation">Network Segmentation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#monitoring-and-alerting">Monitoring and Alerting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#security-event-monitoring">Security Event Monitoring</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automated-health-checks">Automated Health Checks</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#backup-and-recovery">Backup and Recovery</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-backup">Configuration Backup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recovery-procedures">Recovery Procedures</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#developer-access-security">Developer Access Security</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#rac-system-security-controls">RAC System Security Controls</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#developer-responsibilities">Developer Responsibilities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#audit-trail">Audit Trail</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#implementation-priorities">Implementation Priorities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#phase-1-immediate-security-high-priority">Phase 1: Immediate Security (High Priority)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-2-enhanced-monitoring-medium-priority">Phase 2: Enhanced Monitoring (Medium Priority)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-3-advanced-security-long-term">Phase 3: Advanced Security (Long-term)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#security-best-practices-summary">Security Best Practices Summary</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#for-system-administrators">For System Administrators</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#for-end-users">For End Users</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#for-developers">For Developers</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Security Considerations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/installation/security_considerations.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="security-considerations">
+<h1>Security Considerations<a class="headerlink" href="#security-considerations" title="Link to this heading"></a></h1>
+<p><em>Security best practices and considerations for WsprDaemon installations</em></p>
+<p>This guide covers security aspects that system administrators and operators should understand when deploying and maintaining WsprDaemon installations.</p>
+<section id="user-protection-philosophy">
+<h2>User Protection Philosophy<a class="headerlink" href="#user-protection-philosophy" title="Link to this heading"></a></h2>
+<p>WsprDaemon is designed with a <strong>user-first security model</strong> that prioritizes protecting amateur radio operators over developer convenience. The system absorbs technical complexity to minimize security configuration burden on end users.</p>
+<section id="core-security-principles">
+<h3>Core Security Principles<a class="headerlink" href="#core-security-principles" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>No Direct Internet Exposure</strong>: Client devices never accept inbound connections</p></li>
+<li><p><strong>Zero Configuration Security</strong>: Users don’t manage firewalls, VPNs, or certificates</p></li>
+<li><p><strong>Liability Protection</strong>: Amateur radio operators protected from internet-based attacks</p></li>
+<li><p><strong>Defense in Depth</strong>: Multiple security layers provide comprehensive protection</p></li>
+</ul>
+</section>
+</section>
+<section id="remote-access-security">
+<h2>Remote Access Security<a class="headerlink" href="#remote-access-security" title="Link to this heading"></a></h2>
+<section id="remote-access-channel-rac-system">
+<h3>Remote Access Channel (RAC) System<a class="headerlink" href="#remote-access-channel-rac-system" title="Link to this heading"></a></h3>
+<p>WsprDaemon includes an optional secure remote access system for developer support and maintenance.</p>
+<p><strong>Security Model:</strong></p>
+<ul class="simple">
+<li><p><strong>Reverse Tunnels</strong>: Client devices initiate outbound connections only</p></li>
+<li><p><strong>Central Proxy</strong>: All access goes through secured proxy server (wd0.wsprdaemon.org)</p></li>
+<li><p><strong>VPN Required</strong>: WireGuard VPN required for any proxy access</p></li>
+<li><p><strong>Firewall Protected</strong>: Digital Ocean firewall blocks unauthorized traffic</p></li>
+</ul>
+<p><strong>User Control:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># RAC is completely optional - users must explicitly enable</span>
+<span class="nv">REMOTE_ACCESS_CHANNEL</span><span class="o">=</span><span class="m">123</span><span class="w">        </span><span class="c1"># Unique channel number</span>
+<span class="nv">REMOTE_ACCESS_ID</span><span class="o">=</span><span class="s2">&quot;MyStation-Pi4&quot;</span><span class="w"> </span><span class="c1"># Descriptive identifier</span>
+</pre></div>
+</div>
+</section>
+<section id="access-control-layers">
+<h3>Access Control Layers<a class="headerlink" href="#access-control-layers" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Digital Ocean Firewall</strong>: Perimeter defense</p></li>
+<li><p><strong>WireGuard VPN</strong>: Encrypted access control (port 51820)</p></li>
+<li><p><strong>SSH Key Authentication</strong>: Developer access verification</p></li>
+<li><p><strong>Application Permissions</strong>: Service-level isolation</p></li>
+<li><p><strong>Audit Logging</strong>: All connections tracked</p></li>
+</ol>
+</section>
+</section>
+<section id="data-protection">
+<h2>Data Protection<a class="headerlink" href="#data-protection" title="Link to this heading"></a></h2>
+<section id="sensitive-information-handling">
+<h3>Sensitive Information Handling<a class="headerlink" href="#sensitive-information-handling" title="Link to this heading"></a></h3>
+<p>WsprDaemon configurations may contain sensitive data that requires protection:</p>
+<p><strong>Configuration Secrets:</strong></p>
+<ul class="simple">
+<li><p>KiwiSDR passwords</p></li>
+<li><p>wsprnet.org credentials</p></li>
+<li><p>GPS coordinates and station information</p></li>
+<li><p>Network configuration details</p></li>
+</ul>
+<p><strong>Protection Mechanisms:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Environment variable substitution for secrets</span>
+<span class="nv">KIWI_PASSWORD</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">KIWI_PASSWORD</span><span class="k">:-$(</span>cat<span class="w"> </span>/etc/wsprdaemon/kiwi_password<span class="k">)</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="c1"># Secure file permissions</span>
+chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>/etc/wsprdaemon/secrets
+chown<span class="w"> </span>wsprdaemon:wsprdaemon<span class="w"> </span>/etc/wsprdaemon/secrets
+
+<span class="c1"># Configuration file protection</span>
+chmod<span class="w"> </span><span class="m">640</span><span class="w"> </span>wsprdaemon.conf
+chown<span class="w"> </span>wsprdaemon:wsprdaemon<span class="w"> </span>wsprdaemon.conf
+</pre></div>
+</div>
+</section>
+<section id="data-integrity-protection">
+<h3>Data Integrity Protection<a class="headerlink" href="#data-integrity-protection" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Automatic Backups</strong>: Configurations backed up before changes</p></li>
+<li><p><strong>Validation</strong>: Receiver definitions and schedules validated before use</p></li>
+<li><p><strong>Graceful Handling</strong>: Malformed configurations handled without system compromise</p></li>
+<li><p><strong>Recovery</strong>: Corrupted state files automatically recovered</p></li>
+</ul>
+</section>
+</section>
+<section id="system-hardening">
+<h2>System Hardening<a class="headerlink" href="#system-hardening" title="Link to this heading"></a></h2>
+<section id="service-isolation">
+<h3>Service Isolation<a class="headerlink" href="#service-isolation" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># WsprDaemon runs as dedicated user &#39;wsprdaemon&#39;</span>
+<span class="c1"># Separate from root/pi user for security</span>
+<span class="c1"># Limited privileges for system operations</span>
+
+<span class="c1"># Check service user</span>
+id<span class="w"> </span>wsprdaemon
+groups<span class="w"> </span>wsprdaemon
+</pre></div>
+</div>
+</section>
+<section id="ssh-security">
+<h3>SSH Security<a class="headerlink" href="#ssh-security" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SSH hardening recommendations</span>
+<span class="c1"># /etc/ssh/sshd_config</span>
+PasswordAuthentication<span class="w"> </span>no
+PermitRootLogin<span class="w"> </span>no
+AllowUsers<span class="w"> </span>wsprdaemon
+PubkeyAuthentication<span class="w"> </span>yes
+AuthorizedKeysFile<span class="w"> </span>.ssh/authorized_keys
+
+<span class="c1"># Restart SSH after changes</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>ssh
+</pre></div>
+</div>
+</section>
+<section id="firewall-configuration">
+<h3>Firewall Configuration<a class="headerlink" href="#firewall-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Basic UFW setup for WsprDaemon</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>ssh
+sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.0.0/16<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">8081</span><span class="w">  </span><span class="c1"># KA9Q-web (local network only)</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.0.0/16<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">8073</span><span class="w">  </span><span class="c1"># KiwiSDR web (local network only)</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span><span class="nb">enable</span>
+
+<span class="c1"># Check firewall status</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>status<span class="w"> </span>verbose
+</pre></div>
+</div>
+</section>
+<section id="automatic-security-updates">
+<h3>Automatic Security Updates<a class="headerlink" href="#automatic-security-updates" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Enable unattended upgrades for security patches</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>unattended-upgrades
+sudo<span class="w"> </span>dpkg-reconfigure<span class="w"> </span>unattended-upgrades
+
+<span class="c1"># Configure automatic security updates</span>
+<span class="c1"># /etc/apt/apt.conf.d/50unattended-upgrades</span>
+Unattended-Upgrade::Allowed-Origins<span class="w"> </span><span class="o">{</span>
+<span class="w">    </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">distro_id</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">distro_codename</span><span class="si">}</span><span class="s2">-security&quot;</span><span class="p">;</span>
+<span class="o">}</span><span class="p">;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="network-security">
+<h2>Network Security<a class="headerlink" href="#network-security" title="Link to this heading"></a></h2>
+<section id="attack-surface-reduction">
+<h3>Attack Surface Reduction<a class="headerlink" href="#attack-surface-reduction" title="Link to this heading"></a></h3>
+<p><strong>Current Risks:</strong></p>
+<ul class="simple">
+<li><p>SSH access enabled by default on Pi systems</p></li>
+<li><p>Weak default passwords on Pi installations</p></li>
+<li><p>Unpatched systems</p></li>
+<li><p>Unnecessary services running</p></li>
+</ul>
+<p><strong>Mitigations:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Disable unnecessary services</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>disable<span class="w"> </span>bluetooth
+sudo<span class="w"> </span>systemctl<span class="w"> </span>disable<span class="w"> </span>wifi-powersave
+sudo<span class="w"> </span>systemctl<span class="w"> </span>disable<span class="w"> </span>avahi-daemon<span class="w">  </span><span class="c1"># If not needed</span>
+
+<span class="c1"># Check running services</span>
+systemctl<span class="w"> </span>list-units<span class="w"> </span>--type<span class="o">=</span>service<span class="w"> </span>--state<span class="o">=</span>running
+</pre></div>
+</div>
+</section>
+<section id="network-segmentation">
+<h3>Network Segmentation<a class="headerlink" href="#network-segmentation" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Isolate SDR devices on separate network segment if possible</span>
+<span class="c1"># Example: 192.168.100.0/24 for SDR devices</span>
+<span class="c1"># Example: 192.168.1.0/24 for management</span>
+
+<span class="c1"># Route only necessary traffic between segments</span>
+<span class="c1"># Block direct internet access from SDR segment</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="monitoring-and-alerting">
+<h2>Monitoring and Alerting<a class="headerlink" href="#monitoring-and-alerting" title="Link to this heading"></a></h2>
+<section id="security-event-monitoring">
+<h3>Security Event Monitoring<a class="headerlink" href="#security-event-monitoring" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Monitor authentication attempts</span>
+sudo<span class="w"> </span>journalctl<span class="w"> </span>-u<span class="w"> </span>ssh<span class="w"> </span>-f<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;(Failed|Accepted)&quot;</span>
+
+<span class="c1"># Check for unusual network connections</span>
+sudo<span class="w"> </span>netstat<span class="w"> </span>-tulpn<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;:22|:8073|:8081&quot;</span>
+
+<span class="c1"># Monitor system resource usage</span>
+./wsprdaemon.sh<span class="w"> </span>-s<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;(ERROR|WARNING|CRITICAL)&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="automated-health-checks">
+<h3>Automated Health Checks<a class="headerlink" href="#automated-health-checks" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># System health monitoring script</span>
+<span class="c1">#!/bin/bash</span>
+<span class="c1"># /usr/local/bin/wd-security-check.sh</span>
+
+<span class="c1"># Check SSH configuration</span>
+<span class="k">if</span><span class="w"> </span>grep<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;PasswordAuthentication yes&quot;</span><span class="w"> </span>/etc/ssh/sshd_config<span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;WARNING: Password authentication enabled&quot;</span>
+<span class="k">fi</span>
+
+<span class="c1"># Check firewall status</span>
+<span class="k">if</span><span class="w"> </span>!<span class="w"> </span>sudo<span class="w"> </span>ufw<span class="w"> </span>status<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Status: active&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;WARNING: Firewall not active&quot;</span>
+<span class="k">fi</span>
+
+<span class="c1"># Check for failed login attempts</span>
+<span class="nv">FAILED_LOGINS</span><span class="o">=</span><span class="k">$(</span>sudo<span class="w"> </span>journalctl<span class="w"> </span>-u<span class="w"> </span>ssh<span class="w"> </span>--since<span class="w"> </span><span class="s2">&quot;1 hour ago&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;Failed password&quot;</span><span class="k">)</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$FAILED_LOGINS</span><span class="s2">&quot;</span><span class="w"> </span>-gt<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;WARNING: </span><span class="nv">$FAILED_LOGINS</span><span class="s2"> failed login attempts in last hour&quot;</span>
+<span class="k">fi</span>
+
+<span class="c1"># Check WsprDaemon service status</span>
+<span class="k">if</span><span class="w"> </span>!<span class="w"> </span>./wsprdaemon.sh<span class="w"> </span>-s<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;RUNNING&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;WARNING: WsprDaemon service issues detected&quot;</span>
+<span class="k">fi</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="backup-and-recovery">
+<h2>Backup and Recovery<a class="headerlink" href="#backup-and-recovery" title="Link to this heading"></a></h2>
+<section id="configuration-backup">
+<h3>Configuration Backup<a class="headerlink" href="#configuration-backup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Automatic backup before changes</span>
+backup_config<span class="o">()</span><span class="w"> </span><span class="o">{</span>
+<span class="w">    </span><span class="nb">local</span><span class="w"> </span><span class="nv">timestamp</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%Y%m%d-%H%M%S<span class="k">)</span>
+<span class="w">    </span>cp<span class="w"> </span>wsprdaemon.conf<span class="w"> </span><span class="s2">&quot;wsprdaemon.conf.backup.</span><span class="nv">$timestamp</span><span class="s2">&quot;</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Configuration backed up to wsprdaemon.conf.backup.</span><span class="nv">$timestamp</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+
+<span class="c1"># System state backup</span>
+create_system_backup<span class="o">()</span><span class="w"> </span><span class="o">{</span>
+<span class="w">    </span><span class="nb">local</span><span class="w"> </span><span class="nv">backup_file</span><span class="o">=</span><span class="s2">&quot;/tmp/wd-backup-</span><span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span><span class="s2">.tar.gz&quot;</span>
+<span class="w">    </span>tar<span class="w"> </span>-czf<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$backup_file</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>wsprdaemon.conf<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>/var/log/wsprdaemon/<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>~/.ssh/authorized_keys<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>/etc/systemd/system/wsprdaemon.service
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;System backup created: </span><span class="nv">$backup_file</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+</section>
+<section id="recovery-procedures">
+<h3>Recovery Procedures<a class="headerlink" href="#recovery-procedures" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Restore from backup</span>
+restore_config<span class="o">()</span><span class="w"> </span><span class="o">{</span>
+<span class="w">    </span><span class="nb">local</span><span class="w"> </span><span class="nv">backup_file</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$1</span><span class="s2">&quot;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$backup_file</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">        </span>cp<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$backup_file</span><span class="s2">&quot;</span><span class="w"> </span>wsprdaemon.conf
+<span class="w">        </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Configuration restored from </span><span class="nv">$backup_file</span><span class="s2">&quot;</span>
+<span class="w">        </span>./wsprdaemon.sh<span class="w"> </span>-s<span class="w">  </span><span class="c1"># Validate restored configuration</span>
+<span class="w">    </span><span class="k">fi</span>
+<span class="o">}</span>
+
+<span class="c1"># Emergency recovery</span>
+emergency_reset<span class="o">()</span><span class="w"> </span><span class="o">{</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Performing emergency reset...&quot;</span>
+<span class="w">    </span>./wsprdaemon.sh<span class="w"> </span>-z<span class="w">  </span><span class="c1"># Stop all services</span>
+<span class="w">    </span>cp<span class="w"> </span>wd_template.conf<span class="w"> </span>wsprdaemon.conf<span class="w">  </span><span class="c1"># Reset to template</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;System reset to default configuration&quot;</span>
+<span class="o">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="developer-access-security">
+<h2>Developer Access Security<a class="headerlink" href="#developer-access-security" title="Link to this heading"></a></h2>
+<section id="rac-system-security-controls">
+<h3>RAC System Security Controls<a class="headerlink" href="#rac-system-security-controls" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Explicit Activation</strong>: RAC must be explicitly enabled by user</p></li>
+<li><p><strong>Unique Channels</strong>: Each installation gets unique RAC number</p></li>
+<li><p><strong>Centralized Logging</strong>: All access attempts logged on proxy server</p></li>
+<li><p><strong>Time Limits</strong>: Developer sessions can be time-limited</p></li>
+<li><p><strong>User Notification</strong>: Users can monitor access in logs</p></li>
+</ul>
+</section>
+<section id="developer-responsibilities">
+<h3>Developer Responsibilities<a class="headerlink" href="#developer-responsibilities" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Minimal Changes</strong>: Make only necessary modifications during support</p></li>
+<li><p><strong>Documentation</strong>: Document any configuration changes made</p></li>
+<li><p><strong>Read-Only Operations</strong>: Use read-only commands when possible</p></li>
+<li><p><strong>Privacy Respect</strong>: Respect user privacy and data confidentiality</p></li>
+</ul>
+</section>
+<section id="audit-trail">
+<h3>Audit Trail<a class="headerlink" href="#audit-trail" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># RAC connection logging</span>
+tail<span class="w"> </span>-f<span class="w"> </span>/var/log/wsprdaemon/rac-access.log
+
+<span class="c1"># Configuration change tracking</span>
+git<span class="w"> </span>log<span class="w"> </span>--oneline<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Service modification logging  </span>
+journalctl<span class="w"> </span>-u<span class="w"> </span>wsprdaemon<span class="w"> </span>-f
+</pre></div>
+</div>
+</section>
+</section>
+<section id="implementation-priorities">
+<h2>Implementation Priorities<a class="headerlink" href="#implementation-priorities" title="Link to this heading"></a></h2>
+<section id="phase-1-immediate-security-high-priority">
+<h3>Phase 1: Immediate Security (High Priority)<a class="headerlink" href="#phase-1-immediate-security-high-priority" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>SSH Hardening</strong>: Disable password authentication, restrict users</p></li>
+<li><p><strong>Firewall Setup</strong>: Enable UFW with minimal required ports</p></li>
+<li><p><strong>Automatic Updates</strong>: Enable unattended security updates</p></li>
+<li><p><strong>Configuration Protection</strong>: Secure file permissions</p></li>
+</ol>
+</section>
+<section id="phase-2-enhanced-monitoring-medium-priority">
+<h3>Phase 2: Enhanced Monitoring (Medium Priority)<a class="headerlink" href="#phase-2-enhanced-monitoring-medium-priority" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Security Monitoring</strong>: Automated security event detection</p></li>
+<li><p><strong>Health Checks</strong>: Regular system security validation</p></li>
+<li><p><strong>Backup Automation</strong>: Automated configuration and system backups</p></li>
+<li><p><strong>Alert System</strong>: Notification system for security events</p></li>
+</ol>
+</section>
+<section id="phase-3-advanced-security-long-term">
+<h3>Phase 3: Advanced Security (Long-term)<a class="headerlink" href="#phase-3-advanced-security-long-term" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Network Segmentation</strong>: Isolate SDR devices from internet</p></li>
+<li><p><strong>Certificate Management</strong>: TLS for all web interfaces</p></li>
+<li><p><strong>Intrusion Detection</strong>: Automated attack detection and response</p></li>
+<li><p><strong>Compliance Logging</strong>: Extended audit logging and retention</p></li>
+</ol>
+</section>
+</section>
+<section id="security-best-practices-summary">
+<h2>Security Best Practices Summary<a class="headerlink" href="#security-best-practices-summary" title="Link to this heading"></a></h2>
+<section id="for-system-administrators">
+<h3>For System Administrators<a class="headerlink" href="#for-system-administrators" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Enable automatic security updates</p></li>
+<li><p>Use SSH keys instead of passwords</p></li>
+<li><p>Configure firewall with minimal required ports</p></li>
+<li><p>Monitor logs for security events</p></li>
+<li><p>Keep regular configuration backups</p></li>
+</ul>
+</section>
+<section id="for-end-users">
+<h3>For End Users<a class="headerlink" href="#for-end-users" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Use strong, unique passwords for all accounts</p></li>
+<li><p>Enable RAC only when needed for support</p></li>
+<li><p>Keep systems updated and patched</p></li>
+<li><p>Report suspicious activity to administrators</p></li>
+<li><p>Follow configuration templates and guidelines</p></li>
+</ul>
+</section>
+<section id="for-developers">
+<h3>For Developers<a class="headerlink" href="#for-developers" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Use RAC system for remote access only when necessary</p></li>
+<li><p>Document all changes made during support sessions</p></li>
+<li><p>Respect user privacy and system security</p></li>
+<li><p>Follow principle of least privilege</p></li>
+<li><p>Maintain audit trail of all activities</p></li>
+</ul>
+<p>This security model ensures that WsprDaemon installations remain secure while providing the flexibility needed for amateur radio operations and development support.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="preparation.html" class="btn btn-neutral float-left" title="Preparing for installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="git.html" class="btn btn-neutral float-right" title="Download the software with GIT" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
