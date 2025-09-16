@@ -1789,6 +1789,11 @@ declare GITHUB_PROJECTS_LIST=(
 ###
 function ka9q-services-setup() {
     local rc
+
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        wd_logger 1 "Skipping KA9Q setup since KA9Q_RUNS_ONLY_REMOTELY='yes'"
+        return 0
+    fi
     wd_logger 2 "Starting in ${PWD} and checking on ${#GITHUB_PROJECTS_LIST[@]} github projects"
 
     local index
