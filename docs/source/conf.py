@@ -9,7 +9,7 @@
 project = 'wsprdaemon'
 copyright = '2025, Rob Robinett'
 author = 'Rob Robinett'
-release = '3.3.1'
+release = '3.3.2'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
