@@ -43,6 +43,7 @@ declare KA9Q_RADIO_LIBS_NEEDED="curl rsync build-essential libusb-1.0-0-dev libu
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"     ### Where WD installs KA9Q-radio
 declare KA9Q_RADIO_WISDOM_FILE_PATH="/var/lib/ka9q-radio/wisdom"    ### This is the preferred wisdom file used by KA9Q-radio, and the file created and/or updated each time WD starts
+declare FFTW_SYSTEM_WISDOM_FILE_PATH="/etc/fftw/wisdomf"            ### The FFTW looko here too and WD ensures they are the some 
 
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
@@ -1005,49 +1006,56 @@ function build_ka9q_radio() {
          esac
     done
 
-   ### Make sure the wisdomf needed for effecient execution of radiod exists
-   wd_logger 2 "Creating or updating /etc/fftw/wisdom"
-   killall fftwf-wisdom 2> /dev/null
+    ### Make sure the wisdomf needed for effecient execution of radiod exists
+    wd_logger 2 "Creating or updating /etc/fftw/wisdom"
+    killall fftwf-wisdom 2> /dev/null
 
-   local fftwf_stdout_file_path=$(mktemp)
-   local tmp_wisdom_file_path="/tmp/wisdom"
+    local fftwf_stdout_file_path=$(mktemp)
+    local tmp_wisdom_file_path="/tmp/wisdom"
 
-   local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
-   if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
-       fft_129_Msps="rof3240000"
-   fi
+    local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
+    if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
+        fft_129_Msps="rof3240000"
+    fi
 
-   /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 -w ${KA9Q_RADIO_WISDOM_FILE_PATH} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
+    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 -w ${KA9Q_RADIO_WISDOM_FILE_PATH} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
                                 rof1620000 cob162000 cob81000 cob40500 cob32400 \
                                 cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
                                 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
                                 >${fftwf_stdout_file_path} 2>&1 &
-   local fftwf_pid=$!
-   local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
+    local fftwf_pid=$!
+    local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
 
-   ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
-   trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
+    ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
+    trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
 
-   if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
-       wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fftwf_stdout_file_path})\n"
-   else
-       wd_logger 1 "Optimizing the FFT library.  Watching it progess, which may take hours..."
-       tail -f --pid=${fftwf_pid} ${fftwf_stdout_file_path}
-   fi
-   local current_wisdom_file_size=0
-    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]]; then
-        current_wisdom_file_size=$(stat -c %s ${KA9Q_RADIO_WISDOM_FILE_PATH} );
-    fi
-    local new_wisdom_file_size=0
-    if [[ -f ${tmp_wisdom_file_path} ]]; then
-        new_wisdom_file_size=$(stat -c %s ${tmp_wisdom_file_path});
-    fi
-    if (( new_wisdom_file_size <= current_wisdom_file_size )); then
-        wd_logger 2 "No need to update ${KA9Q_RADIO_WISDOM_FILE_PATH}"
+    if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
+        wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fftwf_stdout_file_path})\n"
     else
-        wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${KA9Q_RADIO_WISDOM_FILE_PATH}, so install it"
-        sudo cp -p ${tmp_wisdom_file_path} ${KA9Q_RADIO_WISDOM_FILE_PATH}
+        wd_logger 1 "Optimizing the FFT library.  Watching it progess, which may take hours..."
+        tail -f --pid=${fftwf_pid} ${fftwf_stdout_file_path}
     fi
+    trap - INT     ### Cancel the trap
+
+    ### Ensure that both /etc/fftw/wisdomf and /var/lib/ka9q-radio/wisdom are present and updated to the most complete FFT planning which was just created above
+    for wisdom_file in ${KA9Q_RADIO_WISDOM_FILE_PATH} ${FFTW_SYSTEM_WISDOM_FILE_PATH}; do
+        local current_wisdom_file_size=0
+        if [[ -f ${wisdom_file} ]]; then
+            current_wisdom_file_size=$(stat -c %s ${wisdom_file} );
+        fi
+        local new_wisdom_file_size=0
+        if [[ -f ${tmp_wisdom_file_path} ]]; then
+            new_wisdom_file_size=$(stat -c %s ${tmp_wisdom_file_path});
+        fi
+        if (( new_wisdom_file_size <= current_wisdom_file_size )); then
+            wd_logger 2 "No need to update ${wisdom_file}"
+        else
+            wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${wisdom_file}, so install it"
+            sudo cp -p ${tmp_wisdom_file_path} ${wisdom_file}
+            sudo chmod 664 ${wisdom_file}
+            sudo chown --reference=${wisdom_file%/*} ${wisdom_file}
+        fi
+    done
     rm ${fftwf_stdout_file_path}
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
@@ -1560,6 +1568,9 @@ function build_psk_uploader() {
         sudo systemctl daemon-reload 
         needs_systemctl_restart="yes"
     fi
+
+    ### Phil's templates /etc/radio/ don't have group write, so make sure we can write to them if WD modifies them
+    sudo chmod g+w ${KA9Q_RADIOD_CONF_DIR}/*
  
     local ft_type 
     for ft_type in ft4 ft8 wspr; do
