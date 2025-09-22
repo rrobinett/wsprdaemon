@@ -30,6 +30,8 @@ declare WD00_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQD09fBKxhYPtdl2MUw
 for key in "${WD0_PUBLIC_KEY}"  "${WD00_PUBLIC_KEY}" ; do 
     if ! [[ -f ~/.ssh/authorized_keys ]] || ! grep -q "${key}" ~/.ssh/authorized_keys ; then
         wd_logger 1 "Adding the public key from '${key##* }' to  ~/.ssh/authorized_keys.\nBut remote access to this server requires that a 'RAC=<NUM> line be added to this server's wsprdaemon.conf file"
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
         echo "${key}" >> ~/.ssh/authorized_keys
     else
          wd_logger 2 "The public key from '${key##* }' is already in  ~/.ssh/authorized_keys"
