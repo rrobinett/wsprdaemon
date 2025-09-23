@@ -30,7 +30,12 @@ declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 # encoded RTP streams don't include the right bits to ID channel count and sample rate.
 declare KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS--p -c 1 -S 12000}"
 
-declare KA9Q_RADIO_PCMRECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/pcmrecord"
+declare KA9Q_RADIO_PCMRECORD_CMD=$(find ${KA9Q_RADIO_ROOT_DIR} -type f -name pcmrecord -executable)
+if [[ -z "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
+    wd_logger 1 "ERROR: can't find 'pcmrecord'"
+    exit 1
+fi
+
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
@@ -63,19 +68,39 @@ function pull_commit(){
     fi
 
     if [[ ${desired_git_sha} =~ main|master ]]; then
-        wd_logger 2 "Loading the most recent COMMIT for project ${git_project}"
-        rc=0
-        if [[ "$(cd ${git_directory}; git rev-parse HEAD)" == "$( cd ${git_directory}; git fetch origin && git rev-parse origin/${desired_git_sha})" ]]; then
-            wd_logger 2 "You have asked for and are on the latest commit of the main branch."
+        wd_logger 2 "Loading the most recent '${desired_git_sha}' COMMIT for project ${git_project}"
+        (
+        cd "${git_directory}" || exit 2
+
+        # Fetch from origin
+        if ! git fetch origin; then
+            exit 2
+        fi
+
+        # Check if update is needed
+        if [ "$(git rev-parse HEAD)" == "$(git rev-parse origin/${desired_git_sha})" ]; then
+            exit 0  # No changes needed
         else
-            wd_logger 1 "You have asked for but are not on the latest commit of the main branch, so update the local copy of the code."
-            ( cd ${git_directory}; git restore pcmrecord.c ; git fetch origin && git checkout origin/${desired_git_sha} ) >& git.log
-            rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: failed to update to latest commit:\n$(< git.log)"
+            # Changes needed - attempt update which cleans out all .o and other files and dirs which are not used in the new commit
+            if rm -f Makefile && git reset --hard "origin/${desired_git_sha}" && git clean -fdx ; then
+                exit 1  # Success with changes
             else
-                 wd_logger 1 "Updated to latest commit."
+                exit 2  # Error during update
             fi
         fi
+        ) >& git.log
+        rc=$? 
+        case ${rc} in
+            0)
+                wd_logger 2 "Git made no changes"
+                ;;
+            1)
+                wd_logger 2 "Git successfully updated this project"
+                ;;
+            *)
+                wd_logger 1 "ERROR: rc=${rc}, so failed to update to latest commit:\n$(< git.log)"
+                ;;
+        esac
         return ${rc}
     fi
 
@@ -96,20 +121,21 @@ function pull_commit(){
         return 0
     fi
     wd_logger 1 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
-    wd_logger 1 "First 'git checkout ${git_root}'"
-    ( cd ${git_directory}; git restore pcmrecord.c; git checkout ${git_root} ) >& git.log
+    wd_logger 2 "First 'git checkout ${git_root}'"
+    ( cd ${git_directory}; git restore . ; git checkout ${git_root} )  >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
+        exit
         return 4
     fi
-    wd_logger 1 "Then 'git pull' to be sure the code is current"
+    wd_logger 2 "Then 'git pull' to be sure the code is current"
     ( cd ${git_directory}; git pull ) >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git pull' => ${rc}. git.log:\n$(< git.log)"
         return 5
     fi
-    wd_logger 1 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
-    ( cd ${git_directory}; git checkout ${desired_git_sha} ) >& git.log
+    wd_logger 2 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
+    ( cd ${git_directory}; git clean -fdx; git checkout ${desired_git_sha} ) >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc} git.log:\n$(< git.log)"
         return 6
@@ -791,18 +817,11 @@ function build_ka9q_radio() {
         return 2
     fi
     wd_logger 2 "Building ${project_subdir}"
-    (
-    cd  ${project_subdir}
-    if [[ ! -L  Makefile ]]; then
-        if [[ -f  Makefile ]]; then
-            wd_logger 1 "WARNING: Makefile exists but it isn't a symbolic link to Makefile.linux"
-            rm -f Makefile
-        fi
-        wd_logger 1 "Creating a symbolic link from Makefile.linux to Makefile"
-        ln -s Makefile.linux Makefile
+    local makefile_name="Makefile"
+    if [[ ${project_subdir} == "ka9q-radio" && -f "${project_subdir}/Makefile.linux" ]]; then
+        makefile_name="Makefile.linux"
     fi
-    make
-    ) >&  ${project_logfile}
+    ( cd  ${project_subdir} ; make -f ${makefile_name} ) >&  ${project_logfile}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
         return 3
@@ -835,16 +854,29 @@ function build_ka9q_radio() {
     if ! [[ -f pcmrecord.c ]]; then
         wd_logger 2 "WD no longer stores Scott's version of pcmrecord.c, so Phil has integrated it"
     else
-        if diff -q pcmrecord.c  ${project_subdir}/pcmrecord.c > /dev/null ; then
-            wd_logger 2 "WD's pcmrecord matches the one in ka9q-radio/"
+        ### The directory structure of KA9Q-radio changed in 9/1/2025, so pcmrecord.c needs to be found
+        local pcmrecord_src_file_path=$(find ${PWD} -mindepth 2 -name pcmrecord.c)
+        if [[ -z "${pcmrecord_src_file_path}" ]]; then
+            wd_logger 1 "ERROR: couldn't 'find . -name pcmrecord.c'"
+            exit 1
+        fi
+        if diff -q pcmrecord.c ${pcmrecord_src_file_path}  > /dev/null ; then
+            wd_logger 2 "WD's pcmrecord.c matches the one in ${pcmrecord_src_file_path}"
         else
             wd_logger 1 "Installing Scott's version of pcmrecord.c"
-            cp pcmrecord.c  ${project_subdir}/pcmrecord.c
-            (cd ${project_subdir} ; make)
+            cp pcmrecord.c ${pcmrecord_src_file_path}         ## '-p' also updates the file's timestamp so make knows to rebuild it
+            ( cd ${pcmrecord_src_file_path%/*} ; make -f ${makefile_name} ) >& make.log
             rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c"
+                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c:\n$(< make.log)"
+                exit 1
             else
-                wd_logger 1 "Built Scott's version of pcmrecord.c"
+                local pcmrecord_cmd=${pcmrecord_src_file_path%.c}
+                if ! [[ -x ${pcmrecord_cmd} ]]; then 
+                    wd_logger 1 "ERROR: the expected executable ${pcmrecord_cmd} wasn't created"
+                    exit 1
+                fi
+                KA9Q_RADIO_PCMRECORD_CMD=${pcmrecord_cmd}
+                wd_logger 1 "Built Scott's version of pcmrecord '${KA9Q_RADIO_PCMRECORD_CMD}'"
             fi
         fi
     fi
@@ -1746,7 +1778,7 @@ function install_github_project() {
             local pull_commit_target=${project_sha}
             if [[ ${project_commit_check} != "yes" ]]; then
                  pull_commit_target=${project_commit_check}
-                 wd_logger 1 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
+                 wd_logger 2 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
             fi
             local project_real_path=$( realpath  ${project_subdir} )
             wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
@@ -1791,11 +1823,11 @@ fi
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-39f1c691b113573a776a844ce670ad8283018253}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-89ec6e181c2f7bfd2836659013c6fbb4f83e0ec7}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-a612dce854f548133907f3c486f90db587515de6}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-dacf6a7f62eb55817654d7e10075815ae9e8134c}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-9af583e093d4be06854be6fcb22f3aaed92a1523}"
 )
 ###
 function ka9q-services-setup() {
