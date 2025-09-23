@@ -692,10 +692,14 @@ function ka9q-get-status-dns() {
 
 declare KA9Q_WEB_CMD="/usr/local/sbin/ka9q-web"
 
-declare KA9Q_WEB_TITLE="${KA9Q_WEB_TITLE-<REPORTER_AND_GRID_NOT_DEFINED>}"
-declare ANTENNA_DESCRIPTION="${ANTENNA_DESCRIPTION-<ANTENNA_NOT_DEFINED>}"
-if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
-    KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}"
+declare KA9Q_WEB_TITLE="${KA9Q_WEB_TITLE-}"
+if [[ -z "${KA9Q_WEB_TITLE}" ]]; then
+    declare ANTENNA_DESCRIPTION="${ANTENNA_DESCRIPTION-<ANTENNA_NOT_DEFINED>}"
+    if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
+        KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}"
+    else
+        KA9Q_WEB_TITLE="<REPORTER_AND_GRID_NOT_DEFINED>"
+    fi
 fi
 
 declare ka9q_service_daemons_list=(
