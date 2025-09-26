@@ -528,9 +528,11 @@ function upload_to_wsprdaemon_daemon() {
             if [[ -n "${wd_server_user}" ]]; then
                 wd_logger 1 "This client is configured to use sftp to upload '${tar_file_path}' to the account '${wd_server_user}'"
                 ### CahatGBT says running sftp in batch mode will ensure that if sftp encounters an error the return code will be non-zero
+                local tar_basename=${tar_file_path##*/}
                 timeout ${SFTP_XFER_TIMEOUT-90} \
                         sftp -b - -oBatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} KJ6MKI@wd00.wsprdaemon.org <<EOF
-put ${tar_file_path} uploads/
+put ${tar_file_path} uploads/${tar_basename}.part
+rename uploads/${tar_basename}.part uploads/${tar_basename}
 EOF
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: sftp failed to upload ${tar_file_path}"
