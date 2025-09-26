@@ -523,6 +523,21 @@ function upload_to_wsprdaemon_daemon() {
         else
             wd_logger 1 "Starting curl upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files"
             wd_logger 2 "Spots are:\n$(sort -k6,6n ${spot_file_list[*]})"
+            local wd_server_user=""
+            get_config_file_variable "wd_server_user" "WD_SERVER_USER"
+            if [[ -n "${wd_server_user}" ]]; then
+                wd_logger 1 "This client is configured to use sftp to upload '${tar_file_path}' to the account '${wd_server_user}'"
+                ### CahatGBT says running sftp in batch mode will ensure that if sftp encounters an error the return code will be non-zero
+                timeout ${SFTP_XFER_TIMEOUT-90} \
+                        sftp -b - -oBatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} KJ6MKI@wd00.wsprdaemon.org <<EOF
+put ${tar_file_path} uploads/
+EOF
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: sftp failed to upload ${tar_file_path}"
+                else
+                    wd_logger 1 "sftp has uploaded ${tar_file_path}"
+                fi
+            fi
             local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
             local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
             local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
