@@ -290,36 +290,34 @@ function queue_noise_signal_levels_to_wsprdaemon()
     local noise_line="${sox_signals_rms_fft_and_overload_info}"
     local noise_line_list=( ${noise_line} )
 
-    if [[ ${#noise_line_list[@]} -ne ${NOISE_LINE_FIELDS_COUNT} ]]; then
-        wd_logger 2 "Ignoring empty noise line which should have come from a FST4W-300/-900 job decdoing at an odd minute 5/15/25/..."
+    if (( ${#noise_line_list[@]} != NOISE_LINE_FIELDS_COUNT )); then
+        wd_logger 1 "Ignoring noise line with ${#noise_line_list[@]} fields instead of the expected ${NOISE_LINE_FIELDS_COUNT} field.  This is expected only from a FST4W-300/-900 job decdoing at an odd minute 5/15/25/..."
         return 1
     fi
 
-    wd_logger 2 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
+    wd_logger 1 "Adding the noise line '${noise_line}' to ${signal_levels_log_file}"
     mkdir -p ${signal_levels_log_file%/*}
     echo "${spot_date}-${spot_time}: ${noise_line}" >> ${signal_levels_log_file}
 
     if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
-        wd_logger 2 "Not configured to upload noise, so not queuing a noise file"
+        wd_logger 1 "Not configured to upload noise to wsprdaemon.org, so not queuing a noise file"
     else
         if [[ ! -d ${wsprdaemon_noise_directory} ]]; then
             ### There is a possible race condition here during startup when multiple bands are first logging noise files
             ### But if this mkdir fails, others will succeed and subseqent calls to this function will find the directory exists
             wd_logger 1 "Noise cache directory ${wsprdaemon_noise_directory} does not exist, so create it"
             mkdir -p ${wsprdaemon_noise_directory}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: couldn't create noise cache directory ${wsprdaemon_noise_directory}"
+            rc=$? ; if (( rc )) ; then
+                wd_logger 1 "ERROR: couldn't create missing noise cache directory ${wsprdaemon_noise_directory}"
                 return 1
             fi
         fi
         local wsprdaemon_noise_file=${wsprdaemon_noise_directory}/${spot_date}_${spot_time}_noise.txt
         wd_logger 1 "Creating a wsprdaemon noise file for upload to wsprdaemon.net ${wsprdaemon_noise_file}"
         echo "${noise_line}" > ${wsprdaemon_noise_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )) ; then
             ### I previously failed to test the return code of echo.  Now it should never fail
-            wd_logger 1 "ERROR: couldn't create noise cache directory ${wsprdaemon_noise_directory}"
+            wd_logger 1 "ERROR: couldn't echo noise line to ${wsprdaemon_noise_file}}"
             return 1
         fi
     fi
