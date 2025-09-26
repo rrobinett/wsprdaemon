@@ -517,24 +517,25 @@ WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
-if [[ -z "${SIGNAL_LEVEL_UPLOAD-}" ]]; then
-    if [[ -n "${SIGNAL_LEVEL_UPLOAD_MODE-}" ]]; then
-        SIGNAL_LEVEL_UPLOAD="${SIGNAL_LEVEL_UPLOAD_MODE}"
-    fi
-fi
-SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no}                                                  ### This forces SIGNAL_LEVEL_UPLOAD to default to "no"
+declare SIGNAL_LEVEL_UPLOAD="${SIGNAL_LEVEL_UPLOAD-yes}"
 if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
-    if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
-        wd_logger -1 "ERROR: in wsprdaemon.conf, SIGNAL_LEVEL_UPLOAD=\"${SIGNAL_LEVEL_UPLOAD}\" is set to upload to wsprdaemon.org, but no SIGNAL_LEVEL_UPLOAD_ID has been defined"
-        exit 1
-    fi
-    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} == "AI6VN" ]]; then
+     if [[ "${SIGNAL_LEVEL_UPLOAD_ID-}" == "AI6VN" ]]; then
         wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
         exit 2
     fi
-    if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
-        wd_logger -1 "ERROR: SIGNAL_LEVEL_UPLOAD_ID=\"${SIGNAL_LEVEL_UPLOAD_ID}\" defined in your wsprdaemon.conf file cannot include the \"/\". Please change it to \"_\""
-        exit 3
+    if [[ ${SIGNAL_LEVEL_UPLOAD_ID-none} == "none" ]]; then
+        first_receiver_reporter_id=""
+        get_first_receiver_reporter "first_receiver_reporter_id"
+        if [[ -z "${first_receiver_reporter_id}" ]]; then
+            wd_logger -1 "ERROR: SIGNAL_LEVEL_UPLOAD='${SIGNAL_LEVEL_UPLOAD}' but 'SIGNAL_LEVEL_UPLOAD_ID' is not defined and we can't find the reporter_id of the first receiver"
+            exit 1
+        fi
+        wd_logger -2 "SIGNAL_LEVEL_UPLOAD_ID has been set to the wsprnet reporter_id '${first_receiver_reporter_id}' of the first receiver"
+        SIGNAL_LEVEL_UPLOAD_ID="${first_receiver_reporter_id}"
+    fi
+   if [[ ${SIGNAL_LEVEL_UPLOAD_ID} =~ "/" ]]; then
+       SIGNAL_LEVEL_UPLOAD_ID=${SIGNAL_LEVEL_UPLOAD_ID//\//_}
+        wd_logger -1 "Replacing all the '/'s in SIGNAL_LEVEL_UPLOAD_ID so it now is ${SIGNAL_LEVEL_UPLOAD_ID}"
     fi
 fi
 
