@@ -61,8 +61,6 @@ declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
-declare -r PSWS_URL="pswsnetwork.caps.ua.edu"
-declare -r PSWS_NEW_URL="pswsnetwork.eng.ua.edu"
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
 declare -r          GRAPE_ERROR_RETURN_BASE=240
@@ -93,8 +91,7 @@ function grape_return_code_is_error() {
 
 #set -euo pipefail
 
-declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
-declare -r PSWS_SERVER_NEW_URL='pswsnetwork.eng.ua.edu'
+declare -r PSWS_SERVER_URL='pswsnetwork.eng.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
@@ -293,7 +290,7 @@ function grape_test_auto_login() {
     local rc
 
     wd_logger 2 "Starting by trying to execute a 'sftp..."
-    sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_URL} &>/dev/null
+    sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'ssh ...' => $rc  So can't autologin to account '${station_id}'"
     else
@@ -321,9 +318,9 @@ function grape_upload_public_key() {
     fi
     wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
 
-    ssh-copy-id -o ConnectTimeout=5 -f ${station_id}@${PSWS_URL}
+    ssh-copy-id -o ConnectTimeout=5 -f ${station_id}@${PSWS_SERVER_URL}
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_URL}' => ${rc}"
+        wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
         return $rc
     fi
     wd_logger 1 "Auto login has been successfully set up"

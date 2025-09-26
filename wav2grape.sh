@@ -10,7 +10,7 @@ set -euo pipefail
 
 WSPRDAEMON_ROOT_DIR=${WSPRDAEMONM_ROOT_DIR-~/wsprdaemon}
 
-declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
+declare -r PSWS_SERVER_URL='pswsnetwork.eng.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r GRAPE_TMP_DIR="/run/wsprdaemon/grape_drf_cache"
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
