@@ -214,7 +214,7 @@ SETTINGS index_granularity = 8192;
     return ${rc}
 }
 
-### This daemon runs on wsprdaemon.org and processes tgz files FTPed to it by WD clients
+### This daemon runs on wd{1,2}.wsprdaemon.org and processes tbz files which have been rsync'd to it by wd[0,00}.wsprdaemon.org
 ### It optionally queues a copy of each tgz for FTP transfer to WD1
 function tbz_service_daemon() 
 {
@@ -486,7 +486,7 @@ function record_wsprdaemon_noise_files()
 ################################## Mirror Service Section #########################################################################################
 ### This daemon runs on WD (logs.wsprdaemon.org), the cloud server where all WD clients deliver their tgz files
 
-declare MIRROR_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/mirror.d   ### Where tgz files are put to be uploaded
+declare MIRROR_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/mirror   ### Where tgz files are put to be uploaded
 ### ID,URL[:port],FTP_USER,FTP_USER_PASSWORD              ### This is the primary target of client uploads. Mirror at WD spot/noise files to WD1
 if [[ ${MIRROR_DESTINATIONS_LIST[0]-x} == "x" ]] ; then
     ### This array was not declared in the conf file, so declare it here
@@ -867,20 +867,254 @@ function get_status_upload_services()
 
 declare SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}
 declare SCRAPER_ROOT_DIR=${SERVER_ROOT_DIR}/scraper
-declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror
 declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs
+
+################# These functions run only on WD0 and WD00 ################################################
+declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror
+declare MIRROR_SERVER_LIST=( WD1 WD2 )
+##
+## The relay and mirror daemons look and log to directories under ~/wsprdaemon:
+## MIRROR_SERVER_ROOT_DIR= ~/wsprdaemon
+#    has the pid and log file for  tbz_relay_daemon() which looks for files in /home/*/uploads/* and hard links them to 'mirror' in the directories ~/wsprdaemon/mirrors/WD{1,2,...}/
+#    There is a single tbz_relay_daemon() which logs to  ~/wsprdaemon/mirrors/tbz_relay_daemon.{log,pid}
+#    There is a mirror directory for each of the mirror destination servers (currently WD1 and WD2) e.g.  ~/wsprdaemon/mirrors/WD1
+#    In those directories you will find the .pid and .log files for that instance of tbz_mirror_deamon as well as the .tbz files waiting to be rssync'd to the associated WD[12] server
+
+### This daemon runs on WD0 and WD000 and polls for the extended spot and noise files sftp uploaded by clients to their /home/<CLIENT_NAME>/uploads/ directory 
+### and queues those files to be rsync'd to WD! and WD2
+function tbz_relay_daemon() 
+{
+    while true; do
+        local tbz_file_path_list=( $(find /home/*/uploads/ -type f -name '*.tbz') )
+        if (( ${#tbz_file_path_list[@]} == 0 )); then
+            wd_logger 2 "Found no tbz files to relay, so sleep 10 before polling again"
+            sleep 10
+            continue
+        fi
+        wd_logger 2 "Found ${#tbz_file_path_list[@]} to be relayed"
+
+        ### Create the dir outside of the inner loop
+        local mirror_server
+        for mirror_server in ${MIRROR_SERVER_LIST[@]} ; do
+            mkdir -p ${SERVER_ROOT_DIR}/mirror/${mirror_server}
+        done
+
+        ### Avoid overflowing bash's argument count limit by hard linking batchs
+        local batch_size=10000
+        local total_files=${#tbz_file_path_list[@]}
+        local i
+        for mirror_server in ${MIRROR_SERVER_LIST[@]}; do
+            local mirror_dir="${MIRROR_SERVER_ROOT_DIR}/${mirror_server}"
+            wd_logger 2 "Queuing ${total_files} files to ${mirror_dir}"
+            for ((i=0; i<total_files; i+= batch_size)); do
+                local batch_list=( ${tbz_file_path_list[@]:i:batch_size} )
+                wd_logger 1 "Queuing ${#batch_list[@]} .tbz files to ${mirror_dir}"
+                local file
+                for file in ${batch_list[@]}; do
+                    sudo ln ${file} ${mirror_dir}/     ### Since we don't own the source file, we have to 'sudo ln ...'
+                    local rc=$? ; if (( rc )); then
+                        wd_logger 1 "ERROR: ' ln ${file} ${mirror_dir}/' => ${rc}"
+                        exit 1
+                    fi
+                done
+            done
+        done
+        ## Remove the queued files in batchs
+        wd_logger 1 "Flushing the source files now that they have been queued"
+        for ((i=0; i<total_files; i+= batch_size)); do
+            sudo rm ${tbz_file_path_list[@]:i:batch_size} ### Since we don't own the source file, we have to 'sudo rm ...'
+        done
+    done
+}
+
+declare TBZ_RELAY_DAEMON_PID_FILE_PATH="${MIRROR_SERVER_ROOT_DIR}/tbz_relay_daemon.pid"
+declare TBZ_RELAY_DAEMON_LOG_FILE_PATH="${TBZ_RELAY_DAEMON_PID_FILE_PATH/.pid/.log}"
+
+function tbz_relay_daemon_start()
+{
+    wd_logger 1 "PID file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}, LOG file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}"
+    local relay_pid
+    if [[ -f ${TBZ_RELAY_DAEMON_PID_FILE_PATH} ]]; then
+        relay_pid=$(< ${TBZ_RELAY_DAEMON_PID_FILE_PATH})
+        if ps ${relay_pid} > /dev/null ; then
+            wd_logger 1 "The tbz_relay_daemon() is running with pid=${relay_pid}"
+            return 0
+        fi
+        wd_logger 1 "The ${TBZ_RELAY_DAEMON_PID_FILE_PATH} contains inactive pid ${relay_pid}, so restart that daemon"
+        wd_rm ${TBZ_RELAY_DAEMON_PID_FILE_PATH}
+    fi
+    WD_LOGFILE="${TBZ_RELAY_DAEMON_LOG_FILE_PATH}" tbz_relay_daemon &
+    rc=$? ; if (( rc )) ; then
+        wd_logger 1 "Failed to spawn tbz_relay_daemon() => ${rc}"
+        return 1
+    fi
+    relay_pid=$!
+    echo ${relay_pid} > ${TBZ_RELAY_DAEMON_PID_FILE_PATH}
+    wd_logger 1 "Spawned tbz_relay_daemon() which has PID=${relay_pid}"
+    return 0
+}
+
+function tbz_relay_daemon_status()
+{
+    wd_logger 2 "PID file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}, LOG file is ${TBZ_RELAY_DAEMON_LOG_FILE_PATH}"
+    if ! [[ -f ${TBZ_RELAY_DAEMON_PID_FILE_PATH} ]]; then
+        wd_logger 1 "${TBZ_RELAY_DAEMON_PID_FILE_PATH} doesn't exist, so the tbz_relay_daemon() isn't running"
+        return 1
+    fi
+    local relay_pid=$(< ${TBZ_RELAY_DAEMON_PID_FILE_PATH})
+    if ! ps ${relay_pid} > /dev/null ; then
+        wd_logger 1 "The ${TBZ_RELAY_DAEMON_PID_FILE_PATH} contains inactive pid ${relay_pid}, so delete that PID file"
+        wd_rm ${TBZ_RELAY_DAEMON_PID_FILE_PATH}
+        return 2
+    fi
+    wd_logger 1 "The tbz_relay_daemon() is running with pid=${relay_pid}"
+    return 0
+}
+
+function tbz_relay_daemon_stop()
+{
+    wd_logger 2 "PID file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}, LOG file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}"
+    if ! tbz_relay_daemon_status; then
+        wd_logger 1 " tbz_relay_daemon() is already dead.  So nothing to do"
+        return 0
+    fi
+    local relay_pid=$(< ${TBZ_RELAY_DAEMON_PID_FILE_PATH})
+    kill -- -${relay_pid}        ## Kills the parent and any processes it may have spowned
+    local rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'kill -- -${relay_pid}' => ${rc{}"
+        return ${rc}
+    fi
+    wd_logger 1 "Killed tbz_relay_daemon()"
+    return 0
+}
+
+
+#############################################
+### On WED0 and WD00 there is one of these daemons for each of WD1 and WD2
+### It polls the dir where tbz files have been queued by the tbz_mirror_daemon(), and rsyncs those files to the 'server_name' 
+function tbz_mirror_daemon() 
+{
+    local server_file_dir="${1}"
+    local server_name="${server_file_dir##*/}"
+
+    while true; do
+        local tbz_file_list=( $(find ${server_file_dir} -type f -name '*.tbz' ) )
+        if (( ${#tbz_file_list[@]} == 0 )); then
+            wd_logger 2 "No files are in ${server_file_dir}, so sleep 2"
+            sleep 2
+            continue
+        fi
+        wd_logger 1 "Found ${#tbz_file_list[@]} files queued in ${server_file_dir}, so rsync them to ${server_name}"
+        ### TBD: rsync...
+        sudo rm ${tbz_file_list[@]}
+        wd_logger 1 "Sleeping for 10 minutes..."
+        wd_sleep 600
+    done
+}
+declare TBZ_RELAY_DAEMON_PID_FILE_PATH="${MIRROR_SERVER_ROOT_DIR}/tbz_relay_daemon.pid"
+declare TBZ_RELAY_DAEMON_LOG_FILE_PATH="${TBZ_RELAY_DAEMON_PID_FILE_PATH/.pid/.log}"
+
+function tbz_mirror_daemon_status()
+{
+    local pid_file_path="${1}"
+
+    wd_logger 2 "Checking the status of the daemon whose PID file is ${pid_file_path}"
+    if ! [[ -f ${pid_file_path} ]]; then
+        wd_logger 2 "${pid_file_path} doesn't exist, so the daemon isn't running"
+        return 1
+    fi
+    local testing_pid=$(< ${pid_file_path})
+        if ! ps ${testing_pid} > /dev/null; then
+        wd_logger 1 "The ${pid_file_path} contains inactive pid ${testing_pid}, so delete that PID file"
+        wd_rm ${pid_file_path}
+        return 2
+    fi
+    wd_logger 2 "The daemon() whose PID=${testing_pid} is running"
+    return 0
+}
+
+function tbz_mirror_daemons_status()
+{
+    local dest_wd_server
+    for dest_wd_server in ${MIRROR_SERVER_LIST[@]}; do
+        local dest_server_file_dir="${MIRROR_SERVER_ROOT_DIR}/${dest_wd_server}"
+        local dest_server_pid_file_path="${dest_server_file_dir}/tbz_mirror_daemon.pid"
+
+        wd_logger 2 "The ${dest_wd_server} tbz_mirror_daemon() PID file is ${dest_server_pid_file_path}"
+        if tbz_mirror_daemon_status ${dest_server_pid_file_path}; then
+            wd_logger 1 "The ${dest_wd_server} tbz_mirror_daemon() in ${dest_server_file_dir} is running"
+        else
+             wd_logger 1 "The ${dest_wd_server} tbz_mirror_daemon() in ${dest_server_file_dir} is not running"
+        fi
+    done
+    return 0
+}
+
+
+function tbz_mirror_daemons_start()
+{
+    local dest_wd_server
+    for dest_wd_server in ${MIRROR_SERVER_LIST[@]}; do
+        local dest_server_file_dir="${MIRROR_SERVER_ROOT_DIR}/${dest_wd_server}"
+        mkdir -p ${dest_server_file_dir}
+        local dest_server_pid_file_path="${dest_server_file_dir}/tbz_mirror_daemon.pid"
+
+        wd_logger 2 "The ${dest_wd_server} tbz_mirror_daemon() PID file is ${dest_server_pid_file_path}"
+        if tbz_mirror_daemon_status ${dest_server_pid_file_path}; then
+            wd_logger 1 "The ${dest_wd_server} tbz_mirror_daemon() in ${dest_server_file_dir} is already running"
+            continue
+        fi
+        local dest_server_log_file_path="${dest_server_pid_file_path/.pid/.log}"
+        wd_logger 1 "Spawning a new ${dest_wd_server} tbz_mirror_daemon() which will log to ${dest_server_log_file_path}"
+        WD_LOGFILE="${dest_server_log_file_path}" tbz_mirror_daemon "${dest_server_file_dir}" &
+        local rc=$? ; if (( rc )) ; then
+            wd_logger 1 "Failed to spawn tbz_mirror_daemon() => ${rc}"
+            exit 1
+        fi
+        local mirror_pid=$!
+        echo ${mirror_pid} > ${dest_server_pid_file_path}
+        wd_logger 1 "Spawned tbz_mirror_daemon() which has PID=${mirror_pid} and saved it in ${dest_server_pid_file_path}"
+    done
+
+    return 0
+}
+
+function tbz_mirror_daemons_stop()
+{
+    local dest_wd_server
+    for dest_wd_server in ${MIRROR_SERVER_LIST[@]}; do
+        local dest_server_file_dir="${MIRROR_SERVER_ROOT_DIR}/${dest_wd_server}"
+        local dest_server_pid_file_path="${dest_server_file_dir}/tbz_mirror_daemon.pid"
+
+        wd_logger 1 "The ${dest_wd_server} tbz_mirror_daemon() PID file is ${dest_server_pid_file_path}"
+        if ! tbz_mirror_daemon_status ${dest_server_pid_file_path}; then
+            wd_logger 1 "The ${dest_wd_server} tbz_mirror_daemon() in ${dest_server_file_dir} is already stopped"
+            continue
+        fi
+        ### There is a daemon running, so kill it 
+        local mirror_pid=$(< ${dest_server_pid_file_path})
+        wd_logger 1 "Spawned tbz_mirror_daemon() which has PID=${mirror_pid}"
+        kill -- -${mirror_pid}
+        local rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: for PID from ${dest_server_pid_file_path}, 'kill -- -${mirror_pid}' => ${rc}"
+        fi
+    done
+    return 0
+}
 
 if ! [[  ${HOSTNAME} =~ ^WD[0-9] ]]; then
     wd_logger 2 "This is not one of the Wsprdaemon servers, so don't setup server daemons"
 else
-    declare  UPLOAD_DAEMON_LIST=(
-    "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-    )
-   if ! [[ ${HOSTNAME} =~ ^WD[12]$ ]]; then
-        wd_logger 1 "This WD will only service tbz files, so setting up only tbz_service_daemon() on this host '${HOSTNAME}'"
+   if [[ ${HOSTNAME} =~ ^WD0 ]]; then
+        wd_logger 2 "WD0 and WD00 are Digital Ocean droplets which only are destinations for client .tbz file uploads.  They rsync those files to WD1 and WD2"
+        declare  UPLOAD_DAEMON_LIST=(
+            "tbz_relay_daemon_start               tbz_relay_daemon_stop                tbz_relay_daemon_status                   ${MIRROR_SERVER_ROOT_DIR} "           ### Queue tbz files uploaded to WD0/WD00
+            "tbz_mirror_daemons_start             tbz_mirror_daemons_stop              tbz_mirror_daemons_status                 ${MIRROR_SERVER_ROOT_DIR} "           ### Each daemon rynds those files to a WD1/2 server
+        )
     else
         wd_logger 1 "Setting up all server services on this ${HOSTNAME}"
-        declare  UPLOAD_DAEMON_LIST+=(
+        declare  UPLOAD_DAEMON_LIST=(
+            "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
             "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
             "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
             "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
