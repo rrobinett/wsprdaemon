@@ -2056,13 +2056,13 @@ function wd-radiod-control()
         echo "Can't find the radiod configuration file '${radio_conf_file_name}'"
         return 1
     else
-        local wspr_section_data_url="$(grep -i -A 20 '^\[.*wspr' "${radio_conf_file_name}" | grep "^data" | head -1 | cut -d ' ' -f 3)"
-        if [[ -z "${wspr_section_data_url}" ]]; then
-            echo "Can't find [wspr] data = URL in '${radio_conf_file_name}'"
+        local global_section_status_url="$(grep -i -A 20 '^\[.*global' "${radio_conf_file_name}" | grep "^status" | head -1 | cut -d ' ' -f 3)"
+        if [[ -z "${global_section_status_url}" ]]; then
+            echo "Can't find [global] status = URL in '${radio_conf_file_name}'"
             return 2
         else
-            echo "Found [wspr] data = ${wspr_section_data_url} in '${radio_conf_file_name}'"
-            control -s ${tuning_freq} ${wspr_section_data_url}
+            echo "Found [global] status = ${global_section_status_url} in '${radio_conf_file_name}'"
+            control ${global_section_status_url} -s ${tuning_freq}
         fi
     fi
     return 0

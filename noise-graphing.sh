@@ -5,7 +5,7 @@
 ##########################################################################################################################################################
 declare -r NOISE_PLOT_CMD="${WSPRDAEMON_ROOT_DIR}/noise_plot.py"
 declare    NOISE_PLOT_CMD_NICE_LEVEL=${NOISE_PLOT_CMD_NICE_LEVEL-19}
-declare    NOISE_GRAPHS_UPLOAD_ENABLED="${NOISE_GRAPHS_UPLOAD_ENABLED-no}"
+declare    NOISE_GRAPHS_UPLOAD_ENABLED="no"              ## As of 9/28/25, wsprdaemon.org will no longer host the noisegraph.png files.  Instead use Gwyn's Grafana pages
 declare    NOISE_GRAPHS_LOCAL_ENABLED="${NOISE_GRAPHS_LOCAL_ENABLED-no}"
 declare -r NOISE_GRAPH_FILENAME=noise_graph.png
 declare -r NOISE_GRAPH_TMP_FILE=${WSPRDAEMON_TMP_DIR}/wd_tmp.png
