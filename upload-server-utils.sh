@@ -871,7 +871,8 @@ declare NOISE_GRAPHS_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/noise_graphs
 
 ################# These functions run only on WD0 and WD00 ################################################
 declare MIRROR_SERVER_ROOT_DIR=${SERVER_ROOT_DIR}/mirror
-declare MIRROR_SERVER_LIST=( WD1 WD2 )
+#declare MIRROR_SERVER_LIST=( WD1 WD2 )
+declare MIRROR_SERVER_LIST=( WD2 )
 ##
 ## The relay and mirror daemons look and log to directories under ~/wsprdaemon:
 ## MIRROR_SERVER_ROOT_DIR= ~/wsprdaemon
@@ -973,17 +974,34 @@ function tbz_relay_daemon_status()
 
 function tbz_relay_daemon_stop()
 {
+    local rc
     wd_logger 2 "PID file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}, LOG file is ${TBZ_RELAY_DAEMON_PID_FILE_PATH}"
     if ! tbz_relay_daemon_status; then
         wd_logger 1 " tbz_relay_daemon() is already dead.  So nothing to do"
         return 0
     fi
+    if [[ ! -f ${TBZ_RELAY_DAEMON_PID_FILE_PATH} ]]; then
+        wd_logger 1 "PID file ${TBZ_RELAY_DAEMON_PID_FILE_PATH} doesn't exist, so nothing to kill"
+        return 0
+    fi
     local relay_pid=$(< ${TBZ_RELAY_DAEMON_PID_FILE_PATH})
-    kill -- -${relay_pid}        ## Kills the parent and any processes it may have spowned
-    local rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'kill -- -${relay_pid}' => ${rc{}"
+    if ! ps ${relay_pid} > /dev/null; then
+        wd_logger 1 "WARNING: pid in pid file is not active"
+        rm ${TBZ_RELAY_DAEMON_PID_FILE_PATH}
+        return 0
+    fi
+    kill ${relay_pid}        ## Kills the parent
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'kill ${relay_pid}' => ${rc}"
         return ${rc}
     fi
+    pkill -P ${relay_pid}        ## Kills processes it may have spowned
+    rc=$? ; if (( rc )); then
+        ### But it may have not spawned any processes, so it is likely there were none to kill
+        wd_logger 2 "WARNING: 'pkill -P ${relay_pid}' => ${rc}"
+        return ${rc}
+    fi
+ 
     wd_logger 1 "Killed tbz_relay_daemon()"
     return 0
 }
@@ -997,6 +1015,9 @@ function tbz_mirror_daemon()
     local server_file_dir="${1}"
     local server_name="${server_file_dir##*/}"
 
+    local dst_url="wsprdaemon@${server_name}:/var/spool/wsprdaemon/from-wd00/"
+    local file_list_file_path="/tmp/rsync-file-list.txt" ##$(mktemp)
+
     while true; do
         local tbz_file_list=( $(find ${server_file_dir} -type f -name '*.tbz' ) )
         if (( ${#tbz_file_list[@]} == 0 )); then
@@ -1004,13 +1025,18 @@ function tbz_mirror_daemon()
             sleep 2
             continue
         fi
-        wd_logger 1 "Found ${#tbz_file_list[@]} files queued in ${server_file_dir}, so rsync them to ${server_name}"
-        ### TBD: rsync...
-        sudo rm ${tbz_file_list[@]}
-        wd_logger 1 "Sleeping for 10 minutes..."
-        wd_sleep 600
+        wd_logger 1 "Found ${#tbz_file_list[@]} files queued in ${server_file_dir}, so rsync them to ${dst_url}"
+        printf '%s\n' "${tbz_file_list[@]##*/}" > "${file_list_file_path}"
+        rsync -a --remove-source-files --files-from="${file_list_file_path}" "${server_file_dir}" "${dst_url}"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'rsync -a --remove-source-files --files-from='${file_list_file_path}' / '${dst_url}'' => ${rc}"
+            exit
+        else
+            wd_logger 1 "files were transferred by 'rsync -a --remove-source-files --files-from='${file_list_file_path}' / '${dst_url}''"
+        fi
     done
 }
+
 declare TBZ_RELAY_DAEMON_PID_FILE_PATH="${MIRROR_SERVER_ROOT_DIR}/tbz_relay_daemon.pid"
 declare TBZ_RELAY_DAEMON_LOG_FILE_PATH="${TBZ_RELAY_DAEMON_PID_FILE_PATH/.pid/.log}"
 
@@ -1081,6 +1107,7 @@ function tbz_mirror_daemons_start()
 
 function tbz_mirror_daemons_stop()
 {
+    local rc
     local dest_wd_server
     for dest_wd_server in ${MIRROR_SERVER_LIST[@]}; do
         local dest_server_file_dir="${MIRROR_SERVER_ROOT_DIR}/${dest_wd_server}"
@@ -1093,11 +1120,18 @@ function tbz_mirror_daemons_stop()
         fi
         ### There is a daemon running, so kill it 
         local mirror_pid=$(< ${dest_server_pid_file_path})
-        wd_logger 1 "Spawned tbz_mirror_daemon() which has PID=${mirror_pid}"
-        kill -- -${mirror_pid}
-        local rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: for PID from ${dest_server_pid_file_path}, 'kill -- -${mirror_pid}' => ${rc}"
+        wd_logger 1 "There is a runing tbz_mirror_daemon() which has PID=${mirror_pid}, so kill it"
+        kill ${mirror_pid}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: for PID from ${dest_server_pid_file_path}, 'kill ${mirror_pid}' => ${rc}"
+            return ${rc}
         fi
+        pkill -P ${mirror_pid}
+        rc=$? ; if (( rc )); then
+            ### It may not have spawned and child processes, so this is not neessarily an error
+            wd_logger 2 "WARNING: for PID from ${dest_server_pid_file_path}, 'pkill -P ${mirror_pid}' => ${rc}"
+        fi
+        wd_logger 1 "Killed tbz_mirror_daemon() for server ${dest_wd_server}"
     done
     return 0
 }
