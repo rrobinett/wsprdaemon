@@ -1108,7 +1108,7 @@ function get_wav_file_list() {
             continue
         fi
         ### There is at least one file on the list
-        wd_logger 1 "find_files_list[] has ${#find_files_list[@]} entries: ${find_files_list[@]##*/}"
+        wd_logger 1 "find_files_list[] has ${#find_files_list[@]} entries: ${find_files_list[*]##*/}"
 
         local newest_file_name=${find_files_list[0]}
 
@@ -1133,7 +1133,7 @@ function get_wav_file_list() {
                 wd_logger 2 "There are no closed files on the list, so leave it to the next block of code to sleep until it is closed"
             fi
         fi
-        wd_logger 2 "After removing any open files from the find_files_list[], there are now ${#find_files_list[@]} closed files: ${find_files_list[@]##*/}"
+        wd_logger 2 "After removing any open files from the find_files_list[], there are now ${#find_files_list[@]} closed files: ${find_files_list[*]##*/}"
 
         if (( ${#find_files_list[@]} <= 2 )); then
             wd_logger 1 "Found only ${#find_files_list[@]} closed wav files in ${wav_recording_dir}, so wait until the newest (minute '$(minute_from_filename ${newest_file_name})') file ${newest_file_name##*/} is not being written"
@@ -1204,7 +1204,7 @@ function get_wav_file_list() {
                  else
                      local flush_files_list=( ${find_files_list[@]:index} )
                      wd_logger 1 "ERROR: At index ${index} found a too large gap of ${write_epoch_gap} seconds between ${checking_file_name##*/} and the previous (newer) file ${last_file_name##*/}"
-                     wd_logger 1 "ERROR: So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[@]##*/}"
+                     wd_logger 1 "ERROR: So flush ${checking_file_name##*/} and all the rest of the ${#flush_files_list[@]} files in find_fileslist[]: ${flush_files_list[*]##*/}"
                      wd_rm ${flush_files_list[@]}
                      wd_logger 1 "ERROR: After flushing the ${#flush_files_list[@]} files after the gap, we are finished checking the list and left with ${#checked_files_list[@]} contiguous files"
                      break
@@ -2101,7 +2101,7 @@ function decoding_daemon() {
             fi
 
             local wd_string="${wav_time_list[*]}"
-            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[@]##*/}"
+            wd_logger 1 "For WSPR packets of length ${returned_seconds} seconds for minutes ${wd_string}, got list of files ${wav_files_list[*]##*/}"
             ### End of diagnostic code
 
             if [[ ${receiver_modes_list[0]} =~ ^[IJK] ]]; then
@@ -2212,7 +2212,7 @@ function decoding_daemon() {
 
             ### Create a 16 bit int wav file from a list of input int or float wav files and normalize the output to -1 dBFS
             ### Replace the '-' with '_' in the print string or wd_logger's echo command gets confused by them
-            wd_logger 1 "Creating a single 2 minute wav file with: 'sox __combine concatenate ${wav_files_list[@]} _b 16 _e signed_integer ${decoder_input_wav_filepath} __norm=${sox_normalization_dBFS}  ${sox_effects}'"
+            wd_logger 1 "Creating a single 2 minute wav file with: 'sox __combine concatenate ${wav_files_list[*]} _b 16 _e signed_integer ${decoder_input_wav_filepath} __norm=${sox_normalization_dBFS}  ${sox_effects}'"
 
             sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} --norm=${sox_normalization_dBFS}  ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$? ; if (( rc )); then
