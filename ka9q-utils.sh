@@ -31,8 +31,8 @@ declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 declare KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS--p -c 1 -S 12000}"
 
 declare KA9Q_RADIO_PCMRECORD_CMD=""
-if [[ ${HOSTNAME:0:2} != "WD" ]]; then
-    ### We Only need to find pcmrecord on WD clients
+if [[ ${#HOSTNAME} -eq 3 && ${HOSTNAME} =~ WD[0-9] ]] || [[ ${#HOSTNAME} -eq 4 && ${HOSTNAME} == "WD00" ]] ; then
+    ### We are not running on one of the WD servers, so we are running on a client and need to find Scott's version of pcmrecord in the ~/wsprdaemon.ka9q-radio/... file tree
     KA9Q_RADIO_PCMRECORD_CMD=$(find ${KA9Q_RADIO_ROOT_DIR} -type f -name pcmrecord -executable)
     if [[ -z "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
         wd_logger 1 "ERROR: can't find 'pcmrecord'"
