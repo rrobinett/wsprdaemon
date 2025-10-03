@@ -1,9 +1,186 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
-#
-#
-## Reset a USB device by bus-port (e.g. 2-2) or by device ID (e.g. 04b4:00f1)
 
+### TBD: This function should be used by assign_fft_cores()
+function show_hyperthread_pairs()
+{
+    local core_id=$1
+
+    # If a specific core is requested
+    if [[ -n $core_id ]]; then
+        if [[ -f /sys/devices/system/cpu/cpu${core_id}/topology/thread_siblings_list ]]; then
+            local siblings=$(cat /sys/devices/system/cpu/cpu${core_id}/topology/thread_siblings_list)
+            echo "CPU $core_id: siblings = $siblings"
+        else
+            echo "ERROR: CPU $core_id not found"
+            return 1
+        fi
+        return 0
+    fi
+
+    # Show all unique physical cores and their hyperthreads
+    declare -A seen
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        [[ -f $cpu/topology/thread_siblings_list ]] || continue
+
+        local core_num=$(basename $cpu | sed 's/cpu//')
+        local siblings=$(cat $cpu/topology/thread_siblings_list)
+
+        # Skip if we've already seen this sibling pair
+        [[ ${seen[$siblings]} ]] && continue
+        seen[$siblings]=1
+
+        echo "Physical core: $siblings"
+    done
+}
+
+### In ascending PID order restrict each fft thread to its own CPU core and restrict the fft's proc_888 thread and all 40+ the lin threads to 
+### the hyperthread pair of the FFT's core
+### TBD: find the hyperthread pair.  This code assumes it is CPU + 1
+function assign_fft_cores() {
+    local cores=(0 2 4 6)
+    local core_index=0
+    echo "Assigning FFT threads and their siblings to cores..."
+    echo "==================================================="
+
+    # Find all threads named 'fft', sort by PID
+    local fft_pids=$(ps -eLo tid,comm | grep '[[:space:]]fft$' | awk '{print $1}' | sort -n)
+
+    if [ -z "$fft_pids" ]; then
+        echo "No threads named 'fft' found."
+        return 1
+    fi
+
+    # Assign each thread to a core
+    for pid in $fft_pids; do
+        local core=${cores[$core_index]}
+        local other_core=$(( core + 1 ))
+
+        # Set CPU affinity of FFT thread using taskset
+        if sudo taskset -cp $core $pid > /dev/null 2>&1; then
+            echo "FFT  Thread $pid -> Core $core"
+        else
+            echo "FFT  Failed to assign thread $pid to core $core"
+        fi
+
+        # Get the thread group ID (main process ID) from /proc
+        local tgid=$(grep "^Tgid:" /proc/$pid/status 2>/dev/null | awk '{print $2}')
+
+        if [ -z "$tgid" ]; then
+            echo "Could not determine TGID for thread $pid"
+            core_index=$(( (core_index + 1) % ${#cores[@]} ))
+            continue
+        fi
+
+        # Assign ALL other threads in the same process to the adjacent core
+        local assigned_count=0
+        if [ -d "/proc/$tgid/task" ]; then
+            for task in /proc/$tgid/task/*; do
+                local task_tid=$(basename "$task")
+
+                # Skip the fft thread itself
+                if [ "$task_tid" = "$pid" ]; then
+                    continue
+                fi
+
+                # Assign this thread to the adjacent core
+                if sudo taskset -cp $other_core $task_tid > /dev/null 2>&1; then
+                    local task_name=$(cat "$task/comm" 2>/dev/null)
+                    echo "     Thread $task_tid ($task_name) -> Core $other_core"
+                    assigned_count=$(( assigned_count + 1 ))
+                fi
+            done
+        fi
+
+        echo "  Assigned $assigned_count sibling threads to core $other_core"
+        echo ""
+
+        # Move to next core pair, wrap around if needed
+        core_index=$(( (core_index + 1) % ${#cores[@]} ))
+    done
+
+    echo "Assignment complete."
+}
+
+function rx888-info() {
+    # The RX888 uses the Cypress FX3 which has vendor ID 04b4, so get a list of Cypress devices
+    lsusb -d 04b4: 2>/dev/null | while read -r line; do
+        # Extract bus and device numbers
+        bus=$(echo "$line" | awk '{print $2}')
+        device=$(echo "$line" | awk '{print $4}' | tr -d ':')
+        product=$(echo "$line" | cut -d' ' -f7-)
+
+        # Get detailed info including serial number
+        serial=$(lsusb -v -s "$bus:$device" 2>/dev/null | grep "iSerial" | awk '{$1=$2=""; print $0}' | sed 's/^[[:space:]]*//')
+
+        if [ -z "$serial" ]; then
+            echo "WARNING: Cypress FX3 at USB $bus:$device reports no 'iSerial' line, so it appears not to be a RX888"
+            serial="(none)"
+        fi
+        ### Find the/etc/radio/...*conf file which contains the line 'serial = $serial'
+        conf_file_path=$(grep  "^serial.*$serial" /etc/radio/*.conf)
+        if [[ -z "$conf_file_path" ]]; then
+            printf "Rx?: 'no .conf file found with 'serial = $serial'"
+        else
+            conf_file_path=${conf_file_path%%.conf}
+            local rx_number="${conf_file_path: -1}"
+            printf "Rx${rx_number}: $bus:$device $serial is specfied in '$conf_file_path'\n"
+        fi
+    done
+}
+
+function ka9qctl-usage()
+{
+    echo "usage:
+${FUNCNAME[1]} -[asz] [ rx#1, rx #2,...]
+    -a  - on all rx#: run 'systemctl start  on5kq-rxN'
+    -s  - on all rx#:run 'systemctl status on5kq-rxN'
+    -a  - on run 'systemctl stop   on5kq-rxN'
+    -r  - show USB information about all RX888s on the local USB bus
+This command ${FUNCNAME[1]} helps one monitor and manage WD sites which have multiple RX888s attached to the WD server
+    "
+}
+
+function ka9qctl() 
+{
+    local action=${1--h}
+    shift
+    local rx_id_list=(1 2 3 4)
+
+    if (( ${#@} )) ; then
+        rx_id_list=( $@ )
+        echo "Applying action '$action' to RXs: ${rx_id_list[*]}"
+    fi
+    case $action in
+        -h)  ka9qctl-usage; return 0 ;;
+        -a)  action="start";;
+        -z)  action="stop";;
+        -s)  action="is-active";;
+        -r)  rx888-info | sort ; return 0 ;;
+        *)   printf "ERROR: invalid argument '${action}'\nusage: ${FUNCNAME[0]} -[asz]\n"; return 0 ;;
+    esac
+
+    set +x
+    local index 
+    for index in ${rx_id_list[@]} ; do
+        printf "rx%d: " $index
+        local rc
+        sudo systemctl ${action} radiod@on5kq-rx${index} >& /tmp/${FUNCNAME[0]}.log
+        rc=$?
+        if [[ ${action} == "is-active" ]]; then
+            if (( rc )); then
+                echo "RX$index is not running"
+            else
+                echo "RX$index is     running"
+            fi
+        fi
+    done
+    set +x
+}
+
+
+#############################################
 function wd-rac-status()
 {
     (cd ${HOME}/wsprdaemon/bin; ./frpc status)
