@@ -278,5 +278,5 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
         install_clickhouse
     fi
 else
-     wd_logger 1 "Running on a client, so don't install Clickhouse"
+     wd_logger 2 "Running on a client, so don't install Clickhouse"
 fi

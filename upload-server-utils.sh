@@ -1,6 +1,9 @@
 #!/bin/bash
 
-if [[  ${HOSTNAME:0:2} == "WD" ]]; then
+if [[ ! ${HOSTNAME} =~ ^WD[0-9]$ ]] && [[ ${HOSTNAME} != "WD00" ]]; then
+    wd_logger 2 "This server's HOSTNAME is not one of the WD servers, so don't include any of this file which is server only code"
+    return 0
+else
     if [[ ${HOSTNAME} == "WD0" ]]; then
         declare UPLOAD_FTP_PATH="/home/noisegraphs/ftp/upload"                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
         if ! [[ -d ${UPLOAD_FTP_PATH} ]]; then
