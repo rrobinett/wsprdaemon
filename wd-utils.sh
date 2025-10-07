@@ -21,6 +21,8 @@ shopt -s -o nounset                               ### bash stops with error if u
 
 declare -i verbosity=${verbosity:-1}              ### default to level 1, but can be overridden on the cmd line.  e.g "v=2 wsprdaemon.sh -V"
 
+declare MAX_RM_ARGS=5000                            ### Limit of the number of files in the 'rm ...' cmd line
+
 declare WD_LOGFILE=${WD_LOGFILE-}                                ### Top level command doesn't log by default since the user needs to get immediate feedback
 declare WD_LOGFILE_SIZE_MAX=${WD_LOGFILE_SIZE_MAX-1000000}        ### Limit log files to 1 Mbyte
 

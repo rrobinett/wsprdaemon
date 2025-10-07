@@ -32,7 +32,7 @@ declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 ###                         overload_counts  pkt_mode
 
 declare MAX_SPOT_LINES=5000  ### Record no more than this many spot lines at a time to TS and CH 
-declare MAX_RM_ARGS=5000     ### Limit of the number of files in the 'rm ...' cmd line
+
 declare TBZ_SERVER_ROOT_DIR=${WSPRDAEMON_ROOT_DIR}/uploads
 declare TBZ_PROCESSED_ARCHIVE_FILE="${TBZ_SERVER_ROOT_DIR}/tbz_processed_list.txt"
 declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its size
