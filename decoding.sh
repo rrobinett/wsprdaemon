@@ -2367,7 +2367,7 @@ function decoding_daemon() {
                     else
                         ### sox has normalized the wav file level, so add this negative number to the measured FFT levels to compensate for the gain applied by sox
                         local corrected_fft_noise_level_float
-                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} + ${sdr_noise_level_adjust_float})/1" | bc )
+                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
                         wd_logger 2 "Since sdr_noise_level_adjust_float=$sdr_noise_level_adjust_float, correct measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
                         fft_noise_level_float=${corrected_fft_noise_level_float}
                     fi
