@@ -14,7 +14,7 @@ function wait_for_clickhouse_ready() {
             # Service is active, try to connect (first without password, then with)
             if clickhouse-client --query "SELECT 1" &>/dev/null || \
                clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "SELECT 1" &>/dev/null; then
-                wd_logger 1 "✅ ClickHouse is ready and responding to queries"
+                wd_logger 1 "ClickHouse is ready and responding to queries"
                 return 0
             fi
             wd_logger 1 "Service active but not responding to queries yet (attempt $((retry+1))/$max_retries)"
@@ -24,7 +24,7 @@ function wait_for_clickhouse_ready() {
         ((retry++))
     done
     
-    wd_logger 1 "❌ ClickHouse did not become ready after $max_retries attempts"
+    wd_logger 1 "ClickHouse did not become ready after $max_retries attempts"
     sudo systemctl status clickhouse-server --no-pager
     return 1
 }
@@ -119,37 +119,37 @@ EOF
         return ${rc}
     fi
 
-    wd_logger 1 "✅ Password set successfully"
+    wd_logger 1 "Password set successfully"
 
     # Create databases
     wd_logger 1 "Creating databases..."
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE DATABASE IF NOT EXISTS wsprnet"
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE DATABASE IF NOT EXISTS wsprdaemon"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE DATABASE IF NOT EXISTS ${CLICKHOUSE_WSPRNET_DATABASE_NAME}"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE DATABASE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}"
 
     # Create application users with passwords
     wd_logger 1 "Creating application users..."
     
     # wsprnet-admin (read/write, localhost only)
     local wsprnet_admin_sha256=$(echo -n "${CLICKHOUSE_WSPRNET_ADMIN_PASSWORD}" | sha256sum | awk '{print $1}')
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS 'wsprnet-admin' IDENTIFIED WITH sha256_hash BY '${wsprnet_admin_sha256}' HOST IP '127.0.0.1', '::1'"
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT ALL ON wsprnet.* TO 'wsprnet-admin'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS '${CLICKHOUSE_WSPRNET_ADMIN_USR}' IDENTIFIED WITH sha256_hash BY '${wsprnet_admin_sha256}' HOST IP '127.0.0.1', '::1'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT ALL ON ${CLICKHOUSE_WSPRNET_DATABASE_NAME}.* TO '${CLICKHOUSE_WSPRNET_ADMIN_USR}'"
     
     # wsprnet (read-only)
-    local wsprnet_ro_sha256=$(echo -n "${CLICKHOUSE_WSPRNET_PASSWORD}" | sha256sum | awk '{print $1}')
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS 'wsprnet' IDENTIFIED WITH sha256_hash BY '${wsprnet_ro_sha256}'"
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT SELECT ON wsprnet.* TO 'wsprnet'"
+    local wsprnet_ro_sha256=$(echo -n "${CLICKHOUSE_WSPRNET_USER_PASSWORD}" | sha256sum | awk '{print $1}')
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS '${CLICKHOUSE_WSPRNET_USER}' IDENTIFIED WITH sha256_hash BY '${wsprnet_ro_sha256}'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT SELECT ON ${CLICKHOUSE_WSPRNET_DATABASE_NAME}.* TO '${CLICKHOUSE_WSPRNET_USER}'"
     
     # wsprdaemon-admin (read/write, localhost only)
     local wsprdaemon_admin_sha256=$(echo -n "${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD}" | sha256sum | awk '{print $1}')
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS 'wsprdaemon-admin' IDENTIFIED WITH sha256_hash BY '${wsprdaemon_admin_sha256}' HOST IP '127.0.0.1', '::1'"
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT ALL ON wsprdaemon.* TO 'wsprdaemon-admin'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS '${CLICKHOUSE_WSPRDAEMON_ADMIN_USER}' IDENTIFIED WITH sha256_hash BY '${wsprdaemon_admin_sha256}' HOST IP '127.0.0.1', '::1'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT ALL ON ${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}.* TO '${CLICKHOUSE_WSPRDAEMON_ADMIN_USER}'"
     
     # wsprdaemon (read-only)
-    local wsprdaemon_ro_sha256=$(echo -n "${CLICKHOUSE_WSPRDAEMON_PASSWORD}" | sha256sum | awk '{print $1}')
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS 'wsprdaemon' IDENTIFIED WITH sha256_hash BY '${wsprdaemon_ro_sha256}'"
-    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT SELECT ON wsprdaemon.* TO 'wsprdaemon'"
+    local wsprdaemon_ro_sha256=$(echo -n "${CLICKHOUSE_WSPRDAEMON_USER_PASSWORD}" | sha256sum | awk '{print $1}')
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "CREATE USER IF NOT EXISTS '${CLICKHOUSE_WSPRDAEMON_USER}' IDENTIFIED WITH sha256_hash BY '${wsprdaemon_ro_sha256}'"
+    clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "GRANT SELECT ON ${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}.* TO '${CLICKHOUSE_WSPRDAEMON_USER}'"
 
-    wd_logger 1 "✅ Databases and users created successfully"
+    wd_logger 1 "Databases and users created successfully"
 
     # Log the installed version
     local version=$(clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "SELECT version()" 2>/dev/null)
@@ -158,8 +158,8 @@ EOF
     wd_logger 1 "Data directory: /src/wd_data/clickhouse"
     wd_logger 1 ""
     wd_logger 1 "Databases created:"
-    wd_logger 1 "  - wsprnet (users: wsprnet-admin [rw, localhost], wsprnet [ro])"
-    wd_logger 1 "  - wsprdaemon (users: wsprdaemon-admin [rw, localhost], wsprdaemon [ro])"
+    wd_logger 1 "  - ${CLICKHOUSE_WSPRNET_DATABASE_NAME} (users: ${CLICKHOUSE_WSPRNET_ADMIN_USR} [rw, localhost], ${CLICKHOUSE_WSPRNET_USER} [ro])"
+    wd_logger 1 "  - ${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME} (users: ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} [rw, localhost], ${CLICKHOUSE_WSPRDAEMON_USER} [ro])"
     wd_logger 1 ""
     wd_logger 1 "Default user (localhost only):"
     wd_logger 1 "  clickhouse-client --password '${CLICKHOUSE_DEFAULT_USER_PASSWORD}'"
@@ -228,15 +228,15 @@ EOF
             wd_logger 1 "ERROR: Failed to set the default user's password to '${CLICKHOUSE_DEFAULT_USER_PASSWORD}'"
             return 1 
         else
-            wd_logger 1 "⚠️  ClickHouse is running but not responding to queries, so attempting to restart service..."
+            wd_logger 1 "ClickHouse is running but not responding to queries, so attempting to restart service..."
             sudo systemctl restart clickhouse-server
             sleep 3
 
             if clickhouse-client --password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} --query "SELECT 1" &> /dev/null; then
-                wd_logger 1 "✅ ClickHouse is now responding"
+                wd_logger 1 "ClickHouse is now responding"
                 return 0
             else
-                wd_logger 1 "❌ ClickHouse still not responding, manual intervention needed"
+                wd_logger 1 "ClickHouse still not responding, manual intervention needed"
                 return 1
             fi
         fi
@@ -247,10 +247,10 @@ EOF
     sleep 3
 
     if systemctl is-active --quiet clickhouse-server; then
-        wd_logger 1 "✅ ClickHouse service started successfully"
+        wd_logger 1 "ClickHouse service started successfully"
         return 0
     else
-        wd_logger 1 "❌ Failed to start ClickHouse service"
+        wd_logger 1 "Failed to start ClickHouse service"
         return 1
     fi
 }
@@ -264,14 +264,14 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
             exit 1
         fi
         # Check for required application passwords
-        if [[ -z "${CLICKHOUSE_WSPRNET_ADMIN_PASSWORD-}" ]] || [[ -z "${CLICKHOUSE_WSPRNET_PASSWORD-}" ]] || \
-           [[ -z "${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD-}" ]] || [[ -z "${CLICKHOUSE_WSPRDAEMON_PASSWORD-}" ]]; then
+        if [[ -z "${CLICKHOUSE_WSPRNET_ADMIN_PASSWORD-}" ]] || [[ -z "${CLICKHOUSE_WSPRNET_USER_PASSWORD-}" ]] || \
+           [[ -z "${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD-}" ]] || [[ -z "${CLICKHOUSE_WSPRDAEMON_USER_PASSWORD-}" ]]; then
             wd_logger 1 "ERROR: Application user passwords not defined in wsprdaemon.conf."
             wd_logger 1 "Required variables:"
             wd_logger 1 "  CLICKHOUSE_WSPRNET_ADMIN_PASSWORD=\"<password>\""
-            wd_logger 1 "  CLICKHOUSE_WSPRNET_PASSWORD=\"<password>\""
+            wd_logger 1 "  CLICKHOUSE_WSPRNET_USER_PASSWORD=\"<password>\""
             wd_logger 1 "  CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD=\"<password>\""
-            wd_logger 1 "  CLICKHOUSE_WSPRDAEMON_PASSWORD=\"<password>\""
+            wd_logger 1 "  CLICKHOUSE_WSPRDAEMON_USER_PASSWORD=\"<password>\""
             exit 1
         fi
         wd_logger 2 "Check for Clickhouse and install it with the default user's password '${CLICKHOUSE_DEFAULT_USER_PASSWORD}'"
