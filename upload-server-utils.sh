@@ -1,24 +1,22 @@
 #!/bin/bash
 
-if [[ ${HOSTNAME} == "WD0" ]]; then
-    declare UPLOAD_FTP_PATH="/home/noisegraphs/ftp/upload"                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
-    if ! [[ -d ${UPLOAD_FTP_PATH} ]]; then
-        wd_logger 1 "ERROR: can't find the needed direcctory '${UPLOAD_FTP_PATH}' on server WD0"
-        echo ${force_abort}
-    fi
-else
-    declare UPLOAD_FTP_PATH="/srv/wd_data/wd0-tbz-files"
-    if [[ -d ${UPLOAD_FTP_PATH} ]]; then
-        wd_logger 2 "Found expected '${UPLOAD_FTP_PATH}'"
-    else
-        sudo mkdir -p  ${UPLOAD_FTP_PATH}
-        sudo chmod 777 ${UPLOAD_FTP_PATH}
-        if (( $? )); then
-            wd_logger 1 "ERROR: 'sudo mkdir -p  ${UPLOAD_FTP_PATH}' failed"
+if [[  ${HOSTNAME:0:2} == "WD" ]]; then
+    if [[ ${HOSTNAME} == "WD0" ]]; then
+        declare UPLOAD_FTP_PATH="/home/noisegraphs/ftp/upload"                          ### Where the FTP server puts the uploaded tar.tbz files from WD clients
+        if ! [[ -d ${UPLOAD_FTP_PATH} ]]; then
+            wd_logger 1 "ERROR: can't find the expected incoming .tbz files directory '${UPLOAD_FTP_PATH}' on server WD0"
             echo ${force_abort}
         fi
-        wd_logger 1 "Created the needed direcctory '${UPLOAD_FTP_PATH}'"
-    fi
+    else
+        ### As of 9/28/2025 WD1 and WD2 look for .tbz files in directories under /var/spool/wsprdaemon/..
+        declare INCOMING_TBZS_DIR_ROOT_PATH="/var/spool/wsprdaemon"
+        sudo mkdir -p ${INCOMING_TBZS_DIR_ROOT_PATH}
+        sudo mkdir -p ${INCOMING_TBZS_DIR_ROOT_PATH}/from-wd0
+        sudo mkdir -p ${INCOMING_TBZS_DIR_ROOT_PATH}/from-wd00
+        sudo chown -R wsprdaemon:wsprdaemon ${INCOMING_TBZS_DIR_ROOT_PATH}
+
+        ### Make sure the Clickhouse database is installed 
+   fi
 fi
 declare TS_NOISE_AWK_SCRIPT=${WSPRDAEMON_ROOT_DIR}/ts_noise.awk
 
@@ -39,35 +37,35 @@ declare MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE=1000000            ### limit its siz
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE=$(df ${UPLOADS_TMP_ROOT_DIR} | awk '/^tmpfs/{print $2}')
 declare TBZ_SPOTS_TMP_FILE_SYSTEM_MAX_USAGE=$(( (TBZ_SPOTS_TMP_FILE_SYSTEM_SIZE * 2) / 3 ))           ### Use no more than 2/3 of the /tmp/wsprdaemon file system
 
-###b 7/13/2025 - RR These names match those used on the legacy WD1 and WD3 CH databases
-declare CLICKHOUSE_DATABASE="wspr"
-declare CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE="${CLICKHOUSE_DATABASE}.wsprdaemon_spots"
-declare CLICKHOUSE_WSPRDAEMON_NOISE_TABLE="${CLICKHOUSE_DATABASE}.wsprdaemon_noise"
-declare CLICKHOUSE_WSPRDAEMON_BANDS_TABLE="${CLICKHOUSE_DATABASE}.bands"
+### Use the database and table names from wsprdaemon.conf
+declare CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE="${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}.${CLICKHOUSE_WSPRDAEMON_DATABASE_SPOTS_TABLE_NAME}"
+declare CLICKHOUSE_WSPRDAEMON_NOISE_TABLE="${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}.${CLICKHOUSE_WSPRDAEMON_DATABASE_NOISE_TABLE_NAME}"
+declare CLICKHOUSE_WSPRDAEMON_BANDS_TABLE="${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}.bands"
 
 function setup_clickhouse_wsprdaemon_tables() 
 {
     local rc
 
-    clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = '${CLICKHOUSE_DATABASE}'" | grep -q 1
+    # Use admin user for all database/table creation and modification operations
+    clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="SELECT 1 FROM system.databases WHERE name = '${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}'" | grep -q 1
     rc=$? ; if (( rc == 0 )); then
-        wd_logger 1 "The '${CLICKHOUSE_DATABASE}' database already exists"
+        wd_logger 1 "The '${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}' database already exists"
     else
-        wd_logger 1 "Creating the '${CLICKHOUSE_DATABASE}' database"
-        clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE ${CLICKHOUSE_DATABASE}"
+        wd_logger 1 "Creating the '${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}' database"
+        clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="CREATE DATABASE ${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}"
         rc=$? ; if (( rc )); then
-            wd_logger 1 "Failed to create missing '${CLICKHOUSE_DATABASE}' database"
+            wd_logger 1 "Failed to create missing '${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}' database"
             echo ${force_abort}
         fi
-        wd_logger 1 "Created the missing '${CLICKHOUSE_DATABASE}' database"
+        wd_logger 1 "Created the missing '${CLICKHOUSE_WSPRDAEMON_DATABASE_NAME}' database"
     fi
 
-    ### If necessary create wspr.bands table which translates bands to tuning frequency
-    if (( $(clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}") )); then
+    ### If necessary create wsprdaemon.bands table which translates bands to tuning frequency
+    if (( $(clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}") )); then
         wd_logger 1 "Table ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE} already exists"
     else
         wd_logger 1 "Creating missing ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}"
-        clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="
+        clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="
 CREATE TABLE ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE} (
     band            Int16,
     frequency       UInt64,
@@ -78,18 +76,18 @@ ENGINE = MergeTree
 ORDER BY band;
 "
         rc=$? ; if (( rc )); then
-            wd_logger 1 "Failed to create missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database"
+            wd_logger 1 "Failed to create missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table"
             echo ${force_abort}
          else
-             wd_logger 1 "Created the missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database"
+             wd_logger 1 "Created the missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table"
         fi
     fi
 
-    if (( $(clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="select count(*) from ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}")  )); then
-         wd_logger 1 "'${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database has been initialized"
+    if (( $(clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="select count(*) from ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}")  )); then
+         wd_logger 1 "'${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table has been initialized"
      else
-         wd_logger 1 "Initializing an empty '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database"
-         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
+         wd_logger 1 "Initializing an empty '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table"
+         clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query "
          INSERT INTO  ${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE} (band, frequency, display, is_beacon_band) VALUES
 (-1,     136000,      'LF',     0),
 (0,      474200,      'MF',     0),
@@ -112,22 +110,22 @@ ORDER BY band;
 (1296,1296500000,     '23m',    0);
 "
         rc=$? ; if (( rc )); then
-            wd_logger 1 "Failed to create missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database"
+            wd_logger 1 "Failed to initialize '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table"
             echo ${force_abort}
         else
-            wd_logger 1 "Created the missing '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' database"
+            wd_logger 1 "Initialized '${CLICKHOUSE_WSPRDAEMON_BANDS_TABLE}' table"
         fi
     fi
 
     ### If needed, create the wsprdaemon_spots table
-    if (( $(clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}") )); then
+    if (( $(clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}") )); then
         wd_logger 1 "Table ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} already exists"
     else
         wd_logger 1 "Creating ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}"
         ### The fields in this wsprdaemon.spots table are in their order in the csv file
         ###     and that order comes from the spot lines uploaded by the clients
         ###     and that order derives from their order in ALL_WSPR.TXT
-        clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="
+        clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="
 CREATE TABLE ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} (
     time           DateTime                CODEC(ZSTD(1)),
     band           Int16                   CODEC(ZSTD(1)),
@@ -172,21 +170,20 @@ SETTINGS index_granularity = 8192;
 "
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: clickhouse ... CREATE ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} => ${rc}"
-            echo ${force_sbort}
+            echo ${force_abort}
         else
-            wd_logger 1 "Found or created wsprdaemon.spot with 'clickhouse ... CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} => ${rc}"
+            wd_logger 1 "Created ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE}"
         fi
     fi
 
     ### If needed, create the wsprdaemon_noise table
-    if (( $(clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE}") )); then
+    if (( $(clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="EXISTS TABLE ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE}") )); then
         wd_logger 1 "Table ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} already exists"
     else
         wd_logger 1 "Creating ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE}"
-        ### The fields in this wsprdaemon.spots table are in their order in the csv file
-        ###     and that order comes from the spot lines uploaded by the clients
-        ###     and that order derives from their order in ALL_WSPR.TXT
-        clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="
+        ### The fields in this wsprdaemon.noise table are in their order in the csv file
+        ###     and that order comes from the noise lines uploaded by the clients
+        clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="
 CREATE TABLE ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE}
 (
     time       DateTime                     CODEC(Delta(4), ZSTD(1)),
@@ -205,9 +202,9 @@ SETTINGS index_granularity = 8192;
 "
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: clickhouse ... CREATE ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} => ${rc}"
-            echo ${force_sbort}
+            echo ${force_abort}
         else
-            wd_logger 1 "Found or created wsprdaemon.spot with 'clickhouse ... CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} => ${rc}"
+            wd_logger 1 "Created ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE}"
         fi
     fi
     wd_logger 1 "Database setup is complete"
@@ -223,7 +220,7 @@ function tbz_service_daemon()
 
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
-    wd_logger 1 "Starting in $PWD.  Searching ${UPLOAD_FTP_PATH} for new tbz files. Untaring them in ${UPLOADS_TMP_ROOT_DIR}"
+    wd_logger 1 "Starting in $PWD.  Searching ${INCOMING_TBZS_DIR_ROOT_PATH} for new tbz files. Untaring them in ${UPLOADS_TMP_ROOT_DIR}"
 
     if [[ ${HOSTNAME} =~ WD0 ]]; then
         wd_logger 1 "Don't set up Clickhouse on ${HOSTNAME}"
@@ -237,13 +234,13 @@ function tbz_service_daemon()
     fi
 
     while true; do
-        wd_logger 1 "Looking for *.tbz files in ${UPLOAD_FTP_PATH}"
+        wd_logger 1 "Looking for *.tbz files in ${INCOMING_TBZS_DIR_ROOT_PATH}"
         local tbz_file_list=()
-        while tbz_file_list=( $( find ${UPLOAD_FTP_PATH} -maxdepth 1 -type f -name '*.tbz' ) ) && [[ ${#tbz_file_list[@]} -eq 0 ]]; do
-            wd_logger 2 "Found no tbz files in '${UPLOAD_FTP_PATH}', so sleep and try again"
+        while tbz_file_list=( $( find ${INCOMING_TBZS_DIR_ROOT_PATH} -maxdepth 1 -type f -name '*.tbz' ) ) && [[ ${#tbz_file_list[@]} -eq 0 ]]; do
+            wd_logger 2 "Found no tbz files in '${INCOMING_TBZS_DIR_ROOT_PATH}', so sleep and try again"
             sleep 2
         done
-        wd_logger 1 "Found ${#tbz_file_list[@]} tbz files in '${UPLOAD_FTP_PATH}'"
+        wd_logger 1 "Found ${#tbz_file_list[@]} tbz files in '${INCOMING_TBZS_DIR_ROOT_PATH}'"
 
        [[ -d ${UPLOADS_TMP_ROOT_DIR} ]] && rm -rf ${UPLOADS_TMP_ROOT_DIR}
         mkdir -p ${UPLOADS_TMP_ROOT_DIR}
@@ -275,21 +272,20 @@ function tbz_service_daemon()
             fi
         done
         truncate_file ${TBZ_PROCESSED_ARCHIVE_FILE} ${MAX_SIZE_TBZ_PROCESSED_ARCHIVE_FILE}
-        wd_logger 1 "Done processing tbz files"
-
-        ### On WD0 we queue the valid tbz files for uploading to WD1 and WD2 by creating hard links to the tbz files
-        [[ ${HOSTNAME} == "WD0" ]] && queue_files_for_mirroring ${valid_tbz_list[@]}
-        ### On WD1 and WD2 we just delete the tbz files once they are processed
-        wd_rm  ${valid_tbz_list[@]}
+        wd_logger 1 "We have created a list of ${#valid_tbz_list[@]} .tbz files and extracted their contents into ${UPLOADS_TMP_ROOT_DIR}"
 
         record_wsprdaemon_spot_files       ${UPLOADS_TMP_ROOT_DIR}
-        record_wsprdaemon_noise_files                 ${UPLOADS_TMP_ROOT_DIR}
+        record_wsprdaemon_noise_files      ${UPLOADS_TMP_ROOT_DIR}
 
-       sleep 1
+        ### On WD1 and WD2 we just delete the tbz files once they are recorded to the Clickhouse database
+        wd_rm  ${valid_tbz_list[@]}
+        
+        wd_logger 1 "Done processing a batch of  ${#valid_tbz_list[@]} .tbz files"
+        sleep 2
     done
 }
 
-function get_status_tbz_service_daemon()
+function tbz_service_daemon_status()
 {
     get_status_of_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
     local ret_code=$?
@@ -300,7 +296,7 @@ function get_status_tbz_service_daemon()
     fi
 }
 
-function kill_tbz_service_daemon()
+function tbz_service_daemon_stop()
 {
     kill_daemon tbz_service_daemon ${TBZ_SERVER_ROOT_DIR}
     local ret_code=$?
@@ -371,9 +367,8 @@ function record_wsprdaemon_spot_files()
             local split_csv_file
             for split_csv_file in ${split_file_list[@]} ; do
                 wd_logger 1 "Recording spots assembled in $(realpath ${split_csv_file})"
-                clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} \
-                    ( time, sync_quality, SNR, dt, freq, tx_call, tx_grid, tx_dBm, drift, decode_cycles, jitter, blocksize, metric, osd_decode, ipass, nhardmin, mode, rms_noise, c2_noise, band, rx_grid, rx_id, km, rx_az, rx_lat, \
-                    rx_lon, tx_az, tx_lat, tx_lon, v_lat, v_lon, ov_count, proxy_upload, receiver) FORMAT CSV" < ${split_csv_file}
+                # Use admin user for INSERT operations
+                clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV" < ${split_csv_file}
                 ret_code=$? ; if (( ret_code )); then
                     wd_logger 1 "ERROR: 'clickhouse-client ... --query='INSERT INTO ${CLICKHOUSE_WSPRDAEMON_SPOTS_TABLE} FORMAT CSV' => ${ret_code} when recording the $( wc -l < ${split_csv_file} ) spots in ${split_csv_file} to the wsprdaemon.spots table"
                 else
@@ -409,7 +404,7 @@ function record_wsprdaemon_spot_files()
 ###                                                                                             s/",0\./",/; => WSJT-x V2.2+ outputs a floating point sync value.  this chops off the leading '0.' to make it a decimal number for TS 
 ###                                                                                                          "s/\"/'/g" => replace those two '"'s with ''' to get '20YY-MM-DD:HH:MM'.  Since this expression includes a ', it has to be within "s
 
-declare WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wsprdaemon-spots-to-clickhouse.awk
+declare WSPRDAEMON_SPOTS_TO_CLICKHOUSE_AWK_PROGRAM=${WSPRDAEMON_ROOT_DIR}/wsprdaemon-spots-to-clickhouse-csv.awk
 function format_spot_lines()
 {
     local spots_csv_file_path=$1
@@ -452,9 +447,9 @@ function record_wsprdaemon_noise_files()
     local max_noise_files=${MAX_RM_ARGS}
     local ret_code
 
-    wd_logger 1 "Process noise files starting"
-    while [[ -d ${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d/noise.d ]] \
-           && noise_file_list=( $(find ${UPLOADS_TMP_ROOT_DIR}/wsprdaemon.d/noise.d -name '*_noise.txt') ) \
+    local noise_search_root_dir_path=" ${UPLOADS_TMP_ROOT_DIR}"   ### new commit WD clients will have stored noise files in '.../wsprdaemon/noise/..' while clients running older commits will have stored them in '.../wsprdaemon.d/noise.d/.."
+    while [[ -d ${UPLOADS_TMP_ROOT_DIR} ]] \
+           && noise_file_list=( $(find ${noise_search_root_dir_path}/ -name '*_noise.txt') ) \
            && (( ${#noise_file_list[@]} )); do
         if (( ${#noise_file_list[@]} > max_noise_files )); then
             wd_logger 1 "${#noise_file_list[@]} noise files are too many to process in one pass, so process the first ${max_noise_files} noise files"
@@ -466,9 +461,10 @@ function record_wsprdaemon_noise_files()
         ret_code=$? ; if (( ret_code )); then
             wd_logger 1 "ERROR: 'awk -f ${TS_NOISE_AWK_SCRIPT} .. of ${#noise_file_list[@]} noise files' => ${ret_code}, so just dump those noise files"
         else
-            clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} FORMAT CSV" < ${noise_csv_file}
+            # Use admin user for INSERT operations
+            clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query="INSERT INTO ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} FORMAT CSV" < ${noise_csv_file}
             ret_code=$? ; if (( ret_code )); then
-                wd_logger 1 "ERROR: ' clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query='INSERT INTO ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} FORMAT CSV' < ${noise_csv_file}' => ${ret_code}"
+                wd_logger 1 "ERROR: ' clickhouse-client -u ${CLICKHOUSE_WSPRDAEMON_ADMIN_USER} --password ${CLICKHOUSE_WSPRDAEMON_ADMIN_PASSWORD} --host ${CLICKHOUSE_HOST:-localhost} --query='INSERT INTO ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} FORMAT CSV' < ${noise_csv_file}' => ${ret_code}"
                 echo ${force_abort}
             else
                 wd_logger 1 "Recorded $( wc -l < ${noise_csv_file} ) noise lines in ${noise_csv_file} to the ${CLICKHOUSE_WSPRDAEMON_NOISE_TABLE} table from ${#noise_file_list[*]} noise files so flush all those noise files"
@@ -908,7 +904,7 @@ function tbz_relay_daemon()
             local mirror_dir="${MIRROR_SERVER_ROOT_DIR}/${mirror_server}"
             wd_logger 2 "Queuing ${total_files} files to ${mirror_dir}"
             for ((i=0; i<total_files; i+= batch_size)); do
-                local batch_list=( ${tbz_file_path_list[@]:i:batch_size} )
+                local batch_list=( ${tbz_file_path_list[@]:i:${batch_size}} )
                 wd_logger 1 "Queuing ${#batch_list[@]} .tbz files to ${mirror_dir}"
                 local file
                 for file in ${batch_list[@]}; do
@@ -1146,13 +1142,13 @@ else
             "tbz_mirror_daemons_start             tbz_mirror_daemons_stop              tbz_mirror_daemons_status                 ${MIRROR_SERVER_ROOT_DIR} "           ### Each daemon rynds those files to a WD1/2 server
         )
     else
-        wd_logger 1 "Setting up all server services on this ${HOSTNAME}"
+        wd_logger 2 "Setting up all server services on this ${HOSTNAME}"
         declare  UPLOAD_DAEMON_LIST=(
-            "tbz_service_daemon              kill_tbz_service_daemon              get_status_tbz_service_daemon                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
-            "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
-            "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
-            "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
-            "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR}"  ### Publish noise graph .png file
+            "tbz_service_daemon              tbz_service_daemon_stop              tbz_service_daemon_status                 ${TBZ_SERVER_ROOT_DIR} "           ### Process extended_spot/noise files from WD clients
+#            "wsprnet_scrape_daemon           kill_wsprnet_scrape_daemon           get_status_wsprnet_scrape_daemon              ${SCRAPER_ROOT_DIR}"               ### Scrapes wspornet.org into a local DB
+#            "wsprnet_gap_daemon              kill_wsprnet_gap_daemon              get_status_wsprnet_gap_daemon                 ${SCRAPER_ROOT_DIR}"               ### Attempts to fill gaps reported by the wsprnet_scrape_daemon()
+#            "mirror_watchdog_daemon          kill_mirror_watchdog_daemon          get_status_mirror_watchdog_daemon             ${MIRROR_SERVER_ROOT_DIR}"         ### Forwards those files to WD1/WD2/...
+#            "noise_graphs_publishing_daemon  kill_noise_graphs_publishing_daemon  get_status_noise_graphs_publishing_daemon     ${NOISE_GRAPHS_SERVER_ROOT_DIR}"  ### Publish noise graph .png file
         )
     fi
 fi
