@@ -653,7 +653,7 @@ function check_for_kiwirecorder_cmd() {
                 wd_logger 1 "ERROR: ' pip install chunkmuncher' => ${rc}"
                 exit 1
             fi
-            wd_logger "Installed missing Python 'chunkmuncher' package"
+            wd_logger 1 "Installed missing Python 'chunkmuncher' package"
         fi
 COMMENT_OUT
         git clone https://github.com/jks-prv/kiwiclient

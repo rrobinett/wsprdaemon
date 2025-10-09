@@ -2202,7 +2202,7 @@ function decoding_daemon() {
                 wd_logger 1 "ERROR: can't get 'Maximum amplitude' of the input wav files from ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
             elif [[ "${max_input_float_amplitude}" =~ ^-?0+(\.0+)?$ ]]; then
                 gain=0
-                wd_logger "ERROR: ${max_input_float_amplitude} is an int or float zero in ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
+                wd_logger 1 "ERROR: ${max_input_float_amplitude} is an int or float zero in ${SOX_LOG_FILE}:\n$(<${SOX_LOG_FILE})"
             else
                 ### We are certain that ${max_input_float_amplitude} is not a zero
                 local gain_in_db=$(bc -l <<< "scale = 1; 20 * l( ${sox_normalization_linear} / ${max_input_float_amplitude} ) / l(10)")

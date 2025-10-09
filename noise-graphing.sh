@@ -56,7 +56,7 @@ function setup_noise_graphs()
             sudo pip3 uninstall ${matplotlib_spec}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger "ERROR:  'pip3 uninstall ${matplotlib_version}' => ${rc}"
+                wd_logger 1 "ERROR:  'pip3 uninstall ${matplotlib_version}' => ${rc}"
                 exit
             fi
             matplotlib_spec="matplotlib==3.0.2"
