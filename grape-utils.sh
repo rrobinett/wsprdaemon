@@ -289,12 +289,19 @@ function grape_test_auto_login() {
     local station_id=$1
     local rc
 
-    wd_logger 2 "Starting by trying to execute a 'sftp..."
-    sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
+    wd_logger 2 "Checking if there is a connection to the ssh port of the PSWS server"
+    local psws_timeout=${PSWS_NC_TIMEOUT-2}    ### Default is to wait up to 2 seconds to make a tcp connection to the ssh port of the PSWS server
+    nc -vz -w ${psws_timeout} ${PSWS_SERVER_URL} 22 >& /dev/null
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'ssh ...' => $rc  So can't autologin to account '${station_id}'"
+        wd_logger 1 "WARNING: timeout after waiting ${psws_timeout} seconds connect to ssh port of ${PSWS_SERVER_URL}"
+        return 1
+    fi
+    wd_logger 2 "Checking to see if we can open a sftp connection to ${PSWS_SERVER_URL}"
+    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
-        wd_logger 2 "Autologin to account '${station_id}' was successful"
+        wd_logger 2 "Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return $rc
 }
@@ -694,12 +701,14 @@ function grape_upload_service() {
 
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
+    local force_upload="${1-no}"
+
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
          wd_logger 2 "GRAPE uploads are not enabled, so do nothing"
          return 0
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
-    if [[ ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+    if [[ ${force_upload} == "no" && ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
         wd_logger 1 "Skipping upload at current HHMM = ${current_hhmm}, LAST_HHMM = ${LAST_HHMM}"
         LAST_HHMM=${current_hhmm}
         return 0
@@ -770,7 +779,7 @@ function grape_print_usage() {
 function grape_menu() {
     case ${1--h} in
         -a)
-            grape_uploader
+            grape_uploader "yes"        ### Force the upload to run
             ;;
         -c)
             grape_create_all_24_hour_wavs

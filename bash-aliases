@@ -1889,8 +1889,15 @@ function wd-ssh-psws(){
         echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
         return 0
     fi
-    wd_logger 1 "Executing: 'ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu'"
-    ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu
+    local psws_url="${PSWS_URL-pswsnetwork.eng.ua.edu}"
+    wd_logger 1 "Executing: 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}
+    local rc=$? ; if (( rc )); then
+        wd_logger 1 "Failed to run 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    else
+        wd_logger 1 "Successfully ran 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    fi
+    return 0
 }
 alias wdssp=wd-ssh-psws
 
