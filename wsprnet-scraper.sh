@@ -1,423 +1,154 @@
 #!/bin/bash
 
-declare -r WSPRNET_SCRAPER_HOME_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"   ### Where to find the .sh, .conf and .awk files
-declare -r WSPRNET_SCRAPER_TMP_PATH=${WSPRDAEMON_TMP_DIR}/scraper
-mkdir -p ${WSPRNET_SCRAPER_TMP_PATH}
-declare -r WSPRNET_HTML_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.html
-
-################### Code which gets spots from wsprnet.org using its API and records them into our TS 'wsprnet' database table 'spots'  ##########################################################
-function record_wsprnet_spots_in_clickhouse() {
-    local csv_file=$1
-    local ret_code
-
-    wd_logger 2 "Record ${csv_file} to the Clickhouse wsprnet.rx table"
-
-    clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --database=wspr --query="INSERT INTO rx FORMAT CSV" < ${csv_file}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file} => ${ret_code}"
-    else
-        wd_logger 2 "Spot files were recorded by: 'clickhouse-client --host=localhost --port=9000 --user=wsprdaemon --password=hdt4txpCGYUkScM5pqcZxngdSsNOYiLX --query='INSERT INTO wspr_data FORMAT CSV' <  ${csv_file}"
-    fi
-    return ${ret_code}
-}
-
-declare WSPRNET_SESSION_ID_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_session_info.html
-
-function wpsrnet_login() {
-    wd_logger 1 "Executing curl to login"
-    local ret_code
-
-    if [[ -z "${WSPRNET_USER-}" ]]; then
-        wd_logger 1 "ERROR: WSPRNET_USER is not declared in WD.conf"
-        echo ${force_abort}
-    fi
-    if [[ -z "${WSPRNET_PASSWORD-}" ]]; then
-        wd_logger 1 "ERROR: WSPRNET_PASSWORD is not declared in WD.conf"
-        echo ${force_abort}
-    fi
-    timeout 60 curl -s -d '{"name":"'${WSPRNET_USER}'", "pass":"'${WSPRNET_PASSWORD}'"}' -H "Content-Type: application/json" -X POST http://www.wsprnet.org/drupal/rest/user/login > ${WSPRNET_SESSION_ID_FILE}
-    ret_code=$? ; if (( ret_code == 0 )) ; then
-         wd_logger 1 "wsprnet.org login for wsprnet user '${WSPRNET_USER}' with password '${WSPRNET_PASSWORD}' was successful, so ID has been saved in file ${WSPRNET_SESSION_ID_FILE}:\n$(< ${WSPRNET_SESSION_ID_FILE})"
-         return 0
-    fi
-    ### curl returned an error
-    local sessid=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/sessid/s/^.*://p' | sed 's/"//g')
-    local session_name=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/session_name/s/^.*://p' | sed 's/"//g')
-    if [[ -z "${sessid}" ]] || [[ -z "${session_name}" ]]; then
-        wd_logger 1 "ERROR: curl login failed => ${ret_code}:\n$(<${WSPRNET_SESSION_ID_FILE})"
-        wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name}"
-    else
-        wd_logger 1 "ERROR: curl returned error ${ret_code}, but we could extract sessid=${sessid} and session_name=${session_name} from the html"
-    fi
-    return ${ret_code}
-}
-
-declare WSPRNET_LAST_SPOTNUM=0
-declare CLICKHOUSE_CONF_FILE_PATH="${WSPRNET_SCRAPER_HOME_PATH}/clickhouse.conf"
-
-function wpsrnet_get_spots() {
-    local html_spot_file=$1     ### For now, this is always WSPRNET_HTML_SPOT_FILE
-
-    wd_logger 2 "Starting"
-    if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]] || [[ ! -s ${WSPRNET_SESSION_ID_FILE} ]]; then
-       if ! wpsrnet_login ; then
-           wd_logger 1 "ERROR: failed to login to wsprnet.org"
-           return 1
-       fi
-    fi
-    local sessid=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/sessid/s/^.*://p' | sed 's/"//g')
-    local session_name=$(cat ${WSPRNET_SESSION_ID_FILE} | tr , '\n' | sed -n '/session_name/s/^.*://p' | sed 's/"//g')
-    if [[ -z "${sessid}" ]] || [[ -z "${session_name}" ]]; then
-        wd_logger 1 "ERROR: failed to extract sessid=${sessid} and/or session_name${session_name}"
-        rm -f ${WSPRNET_SESSION_ID_FILE}
-        ret_code=2
-    fi
-    local session_token="${session_name}=${sessid}"
-    wd_logger 2 "Got wsprnet session_token = '${session_token}'"
- 
-    ### If we have previously querried wsprnet.org and saved its spots in our local Clickhouse wsrpnet.rx database, then ask wsprnet.org for spots after the wsprnet-assigned 64 bit id of that spot
-    if (( WSPRNET_LAST_SPOTNUM == 0 )); then
-        wd_logger 1 "Making first query from wsprnet.org, so get the WN spot number of the most recent spot in our local CH database, if any"
-        local clickhouse_output_file=${WSPRNET_SCRAPER_TMP_PATH}/clickhouse.out
-        clickhouse-client --host=${CLICKHOUSE_HOST} --port=9000 --user=${CLICKHOUSE_USER} --password=${CLICKHOUSE_PASSWORD} --query "SELECT id FROM wspr.rx ORDER BY id DESC LIMIT 1" > ${clickhouse_output_file}
-        ret_code=$? ; if (( ret_code )); then
-            wd_logger 1 "ERROR: 'clickhouse-client --host=${CLICKHOUSE_HOST} --port=9000 --user=${CLICKHOUSE_USER} --password=${CLICKHOUSE_PASSWORD} --query 'SELECT id FROM wsprnet.rx ORDER BY id DESC LIMIT 1'' > ${ret_code}"
-            echo ${force_abort}
-        fi
-        local last_spotnum=$(< ${clickhouse_output_file} )
-        if [[ -z "${last_spotnum}" ]] || (( last_spotnum == 0 )); then
-            wd_logger 1 "ERROR: At startup got no or invalid spot num '${last_spotnum}' from Clickhouse, so use last_spotnum='0'"
-            last_spotnum=0
-        else
-            wd_logger 1 "At startup using highest Spotnum ${last_spotnum} from TS, not 0"
-        fi
-        WSPRNET_LAST_SPOTNUM=${last_spotnum}   ### Remember this spot id for the next query
-    fi
-
-    wd_logger 2 "Starting curl download for spotnum_start=${WSPRNET_LAST_SPOTNUM}"
-    local start_seconds=${SECONDS}
-    local curl_str="'{spotnum_start:\"${WSPRNET_LAST_SPOTNUM}\",band:\"All\",callsign:\"\",reporter:\"\",exclude_special:\"1\"}'"
-    curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b "${session_token}" -H "Content-Type: application/json" -X POST -d ${curl_str} \
-               "http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0" > ${html_spot_file}
-    ret_code=$?
-    local end_seconds=${SECONDS}
-    local curl_seconds=$(( end_seconds - start_seconds))
-    if (( ret_code )); then
-        wd_logger 1 "ERROR: curl download failed => ${ret_code} after ${curl_seconds} seconds"
-    else
-        if grep -q "You are not authorized to access this page." ${html_spot_file}; then
-            local curl_command_line="curl -s --limit-rate ${WSPRNET_SCRAPER_MAX_BYTES_PER_SECOND-20000} -m ${WSPRNET_CURL_TIMEOUT-120} -b \"${session_token}\" -H \"Content-Type: application/json\" -X POST -d ${curl_str} \
-               \"http://www.wsprnet.org/drupal/wsprnet/spots/json?band=All&spotnum_start=${WSPRNET_LAST_SPOTNUM}&exclude_special=0\""
-                           wd_logger 1 "ERROR: the curl from wsprnet.org succeeded, but the response file ${html_spot_file} includes 'You are not authorized to access this page'.  So there are no spots reported:\n${curl_command_line}=>\n$(< ${html_spot_file})"
-            rm ${WSPRNET_SESSION_ID_FILE}
-            ret_code=1
-        else
-            if ! grep -q "Spotnum" ${html_spot_file} ; then
-                wd_logger 1 "WARNING: ${html_spot_file} contains no spots"
-                ret_code=2
-            else
-                local download_size=$( cat ${html_spot_file} | wc -c)
-                wd_logger 1 "curl downloaded ${download_size} bytes of spot info in ${curl_seconds} seconds"
-            fi
-        fi
-    fi
-    return ${ret_code}
-}
-
-### Convert the html we get from wsprnet to a csv file
-### The html records are in the order Spotnum,Date,Reporter,ReporterGrid,dB,Mhz,CallSign,Grid,Power,Drift,distance,azimuth,Band,version,code
-### The html records are in the order  1       2     3         4         5  6     7       8     9    10      11      12     13     14    15
-
-declare SED_TMP_CSV_FILE_PATH="${WSPRNET_SCRAPER_TMP_PATH}/sed-lines.txt"
-declare JQ_TMP_CSV_FILE_PATH="${WSPRNET_SCRAPER_TMP_PATH}/jq-lines.txt"
-declare SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT=30       ## $(( 60 * 24 * 7 )) change to this if want to print out spots only older than 7 days
-declare SHOW_SPOTS_OLDER_THAN_MINUTES=${SHOW_SPOTS_OLDER_THAN_MINUTES-${SHOW_SPOTS_OLDER_THAN_MINUTES_DEFAULT}}
-
-function wsprnet_html_to_csv() {
-    local wsprnet_html_spot_file=$1
-    local wsprnet_csv_spot_file=$2
-    local scrape_start_seconds=$3
-    local rc
-
-    jq -r '  sort_by(.Spotnum | tonumber)
-           | .[] 
-           | [.Spotnum, .Date, .Reporter, .ReporterGrid, .dB, .MHz, .CallSign, .Grid, .Power, .Drift, .distance, .azimuth, .Band, .version, .code] 
-           | join(",")' "${wsprnet_html_spot_file}" > ${JQ_TMP_CSV_FILE_PATH}
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'jq ... ${wsprnet_html_spot_file}' => ${rc}"
-        return ${rc}
-    fi
-    local sorted_lines_array
-    mapfile -t sorted_lines_array < ${JQ_TMP_CSV_FILE_PATH}
-    
-    ### See if there is a gap between the last spot of the previous scrape or the last spot stored in our TS data and the first spot of this scrape
-    local first_spot_array=(${sorted_lines_array[0]//,/ })
-    local last_spot_array=(${sorted_lines_array[-1]//,/ })
-    local scrape_seconds=$(( ${SECONDS} - ${scrape_start_seconds} ))
-
-    wd_logger 1 "$(printf "In %3d seconds got scrape with %4d spots first sequence_num spot: ${first_spot_array[0]}/${first_spot_array[1]}, Last spot: ${last_spot_array[0]}/${last_spot_array[1]}" ${scrape_seconds} "${#sorted_lines_array[@]}" )"
-
-    local spot_num_gap=$(( ${first_spot_array[0]} - ${WSPRNET_LAST_SPOTNUM} ))
-    if [[ ${WSPRNET_LAST_SPOTNUM} -ne 0 ]] && [[ ${spot_num_gap} -gt 1 ]]; then
-        local first_missing_seq=$(( ${WSPRNET_LAST_SPOTNUM} + 1 ))
-        local last_missing_seq=$((  ${first_spot_array[0]}  - 1 ))
-        local missing_seq_count=$(( last_missing_seq - first_missing_seq + 1 ))
-        wd_logger 1 "$(printf "Found gap of %4d spotnums between last spot #${WSPRNET_LAST_SPOTNUM} and first spot #${first_spot_array[0]} of this scrape" "${missing_seq_count}")"
-        queue_gap_file ${first_missing_seq} ${last_missing_seq}
-    fi
-    ### Remember the current last spot for the next call to this function
-    WSPRNET_LAST_SPOTNUM=${last_spot_array[0]}
-
-    ### Check for gaps within this new scrape
-    local total_gaps=0
-    local total_missing=0
-    local max_gap_size=0
-    local expected_seq=0
-    for (( index=0; index < ${#sorted_lines_array[@]}; ++index )); do
-        local spot_line_list=( ${sorted_lines_array[index]//,/ } )
-        local got_seq=${spot_line_list[0]}
-        local next_seq=$(( got_seq + 1 ))
-        if (( index == 0 )); then
-            expected_seq=${next_seq}
-        else
-            local gap_size=$(( got_seq - expected_seq ))
-            if (( gap_size == 0 )); then
-                wd_logger 2 "This spot's ID ${got_seq} is one greater than the previous spot, so there is no gap"
-            else
-               total_gaps=$(( total_gaps + 1 ))
-               total_missing=$(( total_missing + gap_size ))
-               if (( gap_size > max_gap_size )); then
-                   max_gap_size=${gap_size}
-               fi
-               wd_logger 2 "$(printf "Found gap of %3d at index %4d:  Expected ${expected_seq}, got ${got_seq}" "${gap_size}" "${index}")"
-               local first_missing_seq=${expected_seq}
-               local last_missing_seq=$(( got_seq - 1 ))
-               queue_gap_file ${first_missing_seq} ${last_missing_seq}
-           fi
-           expected_seq=${next_seq}
-        fi
-    done
-    if (( verbosity && max_gap_size && WSPRNET_LAST_SPOTNUM )); then
-        wd_logger 1 "Found ${total_gaps} gaps missing a total of ${total_missing} spots. The max gap was of ${max_gap_size} spot numbers"
-    fi
-
-    ### Find the number of different WSPR cycles found in the spots file
-    local epochs_list=( $(awk -F , '{print $2}' ${JQ_TMP_CSV_FILE_PATH}| sort -u) )
-    if (( ${#epochs_list[@]} == 1 )); then
-        wd_logger 1 "Found all spots are for epoch ${epochs_list[0]}"
-    else
-        local minutes_span=$(( (${epochs_list[-1]} - ${epochs_list[0]}) / 60 ))
-        wd_logger 1 "Found spots which span ${minutes_span} minutes: ${epochs_list[*]:0:10}.."
-    fi
-
-    ### Create the return csv file which is sorted by spot time
-    rm -f ${wsprnet_csv_spot_file}
-    for spot_epoch in ${epochs_list[@]}; do
-        ### Filter and convert spots repored by the wsprnet.org API into a csv file which will be recorded in the CH database
-        ### awk prepends a date field to each spot line which is derived from the epoch field #2
-        awk -v spot_epoch=${spot_epoch} -f ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.awk  ${JQ_TMP_CSV_FILE_PATH} > ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv
-        grep -v "^20" ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv > ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt 
-        if [[ -s ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt ]]; then
-            wd_logger 1 "Found invalid spots:\n$(< ${WSPRNET_SCRAPER_TMP_PATH}/bad_spots.txt)"
-        fi
-        grep    "^20" ${WSPRNET_SCRAPER_TMP_PATH}/filtered_spots.csv > ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv
-        if [[ -s ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv ]]; then
-            local spots_to_add_count=$(wc -l < ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)
-            wd_logger 1 "$(printf "adding %4d spots at epoch %d == '%(%Y-%m-%d:%H:%M)T'"  ${spots_to_add_count}  ${spot_epoch} ${spot_epoch})"
-            local this_epcoch_age_minutes=$(( (${epochs_list[-1]} - ${spot_epoch}) / 60 ))
-            if (( this_epcoch_age_minutes > SHOW_SPOTS_OLDER_THAN_MINUTES )); then
-                wd_logger 1 "Adding spots more than ${SHOW_SPOTS_OLDER_THAN_MINUTES} minutes old:\n$(head -n 4 ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv)"
-            fi
-            cat ${WSPRNET_SCRAPER_TMP_PATH}/fixed_spots.csv  >> ${wsprnet_csv_spot_file}
-        fi
-    done
-
-    local csv_spotnum_count=$( wc -l < ${wsprnet_csv_spot_file})
-    if (( csv_spotnum_count != ${#sorted_lines_array[@]} )); then
-        wd_logger 1 "ERROR: found ${#sorted_lines_array[@]} in our plaintext of the html file, but only ${csv_spotnum_count} is the csv version of it"
-        return 1
-    fi
-    wd_logger 2 "Created the csv file ${wsprnet_csv_spot_file} with ${csv_spotnum_count} spot lines"
-    return 0
-}
-
-### Create ${WSPRNET_OFFSET_SECS}, a string of offsets in seconds from the start of an even minute when the scraper should execute the wsprnet API to get the latest spots
-### This variable is used by the wait_until_next_second_offset_in_wspr_cycle() to determine how long to sleep
-declare WSPRNET_OFFSET_FIRST_SEC=55
-declare WSPRNET_OFFSET_GAP=30
-declare WSPRNET_OFFSET_SECS=""
-offset=${WSPRNET_OFFSET_FIRST_SEC}
-while [[ ${offset} -lt 120 ]]; do
-   WSPRNET_OFFSET_SECS="${WSPRNET_OFFSET_SECS} ${offset}"
-   offset=$(( offset + WSPRNET_OFFSET_GAP ))
-done
-
-function wait_until_next_second_offset_in_wspr_cycle() {
-    local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
-    local cycle_offset=$(( ${epoch_secs} % 120 ))
-
-    wd_logger 2 "starting at offset ${cycle_offset}"
-    for secs in ${WSPRNET_OFFSET_SECS}; do
-        secs_to_next=$(( ${secs} - ${cycle_offset} ))    
-        wd_logger 2 "${secs} - ${cycle_offset} = ${secs_to_next} secs_to_next"
-        if [[ ${secs_to_next} -le 0 ]]; then
-            wd_logger 2 "Offset secs ${cycle_offset} is greater than test offset ${secs}"
-        else
-            wd_logger 2 "Found next offset will be at ${secs}"
-            break
-        fi
-    done
-    local secs_to_next=$(( secs - cycle_offset ))
-    if [[ ${secs_to_next} -le 0 ]]; then
-       ### we started after 110 seconds
-       secs=${WSPRNET_OFFSET_FIRST_SEC}
-       secs_to_next=$(( 120 - cycle_offset + secs ))
-    fi
-    wd_logger 2 "Starting at offset ${cycle_offset}, next offset ${secs}, so secs_to_wait = ${secs_to_next}"
-    wd_sleep ${secs_to_next}
-}
-
-# G3ZIL add tx and rx lat, lon and azimuths and path vertex using python script. In the main program, call this function with a file path/name for the input file
-# the appended data gets stored into this file which can be examined. Overwritten each acquisition cycle.
-declare WSPRNET_CSV_SPOT_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots.csv              ### This csv is derived from the html returned by the API and has fields 'wd_date, spotnum, epoch, ...' sorted by spotnum
-declare WSPRNET_CSV_SPOT_AZI_FILE=${WSPRNET_SCRAPER_TMP_PATH}/wsprnet_spots_azi.csv      ### This csv is derived from WSPRNET_CSV_SPOT_FILE and includes wd_XXXX fields calculated by azi_calc.py and added to each spot line
-declare WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD=${WSPRNET_SCRAPER_HOME_PATH}/wsprnet-csv-to-clickhouse-csv.py
-
-### Takes a csv spot file created from the html returned by the wpsrnet API and creates a csv file with azimuth fields which is recorded in the CH database
-function convert-wsprnet-csv-to-clickhouse-csv() {
-    local wsprnet_csv_file_path=$1
-    local clickhouse_csv_file_path=$2
-    local ret_code
-
-    wd_logger 2 "process ${wsprnet_csv_file_path} to create ${clickhouse_csv_file_path}"
-    if [[ ! -f ${wsprnet_csv_file_path} ]]; then
-        wd_logger 1 "ERROR: no wsprnet_csv_file_path=${wsprnet_csv_file_path}"
-        echo ${force_abort}
-    fi
-
-    if [[ ! -x ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} ]]; then
-        wd_logger 1 "ERROR: can't find expected executable python file ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD}"
-        echo ${force_abort}
-    fi
-    python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} --input ${wsprnet_csv_file_path} --output ${clickhouse_csv_file_path}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR:  'python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} --input ${wsprnet_csv_file_path} --output ${clickhouse_csv_file_path}' => ${ret_code}"
-    else
-        wd_logger 2 "python3 ${WSPRNET_CSV_TO_CLICKHOUSE_CSV_CMD} ${wsprnet_csv_file_path} ${clickhouse_csv_file_path} => ${ret_code}"
-    fi
-    return ${ret_code}
-}
-
-function scrape_wsprnet() {
-    local scrape_start_seconds=${SECONDS}
-    local ret_code
-
-    wd_logger 2 "Starting in $PWD"
-    if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
-        wd_logger 1 "Logging into wsprnet"
-        wpsrnet_login
-        ret_code=$? ; if (( ret_code )); then
-            wd_logger 1 "ERROR: wpsrnet_login returned error => ${ret_code}"
-            return ${ret_code}
-        fi
-    fi
-    if [[ ! -f ${WSPRNET_SESSION_ID_FILE} ]]; then
-         wd_logger 1 "ERROR: wpsrnet_login was successful, but it produced no ${WSPRNET_SESSION_ID_FILE}"
-         return 1
-    fi
-    wpsrnet_get_spots ${WSPRNET_HTML_SPOT_FILE}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: wpsrnet_get_spots() returned error => ${ret_code}."
-        return ${ret_code}
-    fi
-    wd_logger 2 "Got spots in html file  ${WSPRNET_HTML_SPOT_FILE}, translate into ${WSPRNET_CSV_SPOT_FILE}"
-    wsprnet_html_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: 'wsprnet_html_to_csv      ${WSPRNET_HTML_SPOT_FILE} ${WSPRNET_CSV_SPOT_FILE} ${scrape_start_seconds}' => ${ret_code}"
-        return ${ret_code}
-    fi
-    wd_logger 2 "Got csv ${WSPRNET_CSV_SPOT_FILE}, append azi information to each spot and store them in ${WSPRNET_CSV_SPOT_AZI_FILE}"
-    convert-wsprnet-csv-to-clickhouse-csv     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: 'convert-wsprnet-csv-to-clickhouse-csv     ${WSPRNET_CSV_SPOT_FILE}  ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
-        return ${ret_code}
-    fi
-    wd_logger 2 "Created spots with azi file ready for Clickhouse: ${WSPRNET_CSV_SPOT_AZI_FILE}" 
-
-    record_wsprnet_spots_in_clickhouse ${WSPRNET_CSV_SPOT_AZI_FILE}
-    ret_code=$? ; if (( ret_code )); then
-        wd_logger 1 "ERROR: 'record_wsprnet_spots_in_clickhouse ${WSPRNET_CSV_SPOT_AZI_FILE}' => ${ret_code}"
-    else
-        wd_logger 2 "Recorded spots into the Clickhouse database"
-    fi
-    return  ${ret_code}
-}
-
-function setup_clickhouse_wsprnet_tables()
-{
-    local rc
-
-     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="SELECT 1 FROM system.databases WHERE name = 'wspr'" | grep -q 1
-     rc=$? ; if (( rc )); then
-         wd_logger 1 "Creating the 'wspr' database"
-         clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query="CREATE DATABASE wspr"
-         rc=$? ; if (( rc )); then
-             wd_logger 1 "Failed to create missing 'wspr' database"
-             echo ${force_abort}
-         fi
-          wd_logger 1 "Created the missing 'wspr' database"
-     fi
-     clickhouse-client -u ${CLICKHOUSE_USER} --password ${CLICKHOUSE_PASSWORD} --host ${CLICKHOUSE_HOST} --query "
-CREATE TABLE IF NOT EXISTS wspr.rx (
-    id           UInt64                      CODEC(Delta(8), ZSTD(1)),
-    time         DateTime                    CODEC(Delta(4), ZSTD(1)),
-    band         Int16                       CODEC(T64, ZSTD(1)),
-    rx_sign      LowCardinality(String),
-    rx_lat       Float32                     CODEC(ZSTD(1)),
-    rx_lon       Float32                     CODEC(ZSTD(1)),
-    rx_loc       LowCardinality(String),
-    tx_sign      LowCardinality(String),
-    tx_lat       Float32                     CODEC(ZSTD(1)),
-    tx_lon       Float32                     CODEC(ZSTD(1)),
-    tx_loc       LowCardinality(String),
-    distance     UInt16                      CODEC(T64, ZSTD(1)),
-    azimuth      UInt16                      CODEC(T64, ZSTD(1)),
-    rx_azimuth   UInt16                      CODEC(T64, ZSTD(1)),
-    frequency    UInt32                      CODEC(T64, ZSTD(1)),
-    power        Int8                        CODEC(T64, ZSTD(1)),
-    snr          Int8                        CODEC(ZSTD(1)),
-    drift        Int8                        CODEC(ZSTD(1)),
-    version      LowCardinality(String),
-    code         Int8
-)
-ENGINE = MergeTree
-PARTITION BY toYYYYMM(time)
-ORDER BY (time, id)
-SETTINGS index_granularity = 8192;
-"
-     rc=$? ; if (( rc )); then
-         wd_logger 1 "ERROR: clickhouse-client ... 'CREATE TABLE IF NOT EXISTS' => ${rc}"
-     else
-         wd_logger 1 "clickhouse-client ... 'CREATE TABLE IF NOT EXISTS' was successful"
-     fi
-     return ${rc}
-}
+declare WSPRNET_SCRAPER_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wsprnet_scraper.py"
+declare WSPRNET_VENV_PATH="${WSPRDAEMON_ROOT_DIR}/venv"
+declare WSPRNET_SCRAPER_HOME_PATH="${WSPRDAEMON_ROOT_DIR}/scraper"                ### Store session.json, .log and .pid files here
+mkdir -p ${WSPRNET_SCRAPER_HOME_PATH}
+declare WSPRNET_SESSION_FILE_PATH="${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_session.json"
+declare WSPRNET_SCRAPER_LOG_FILE_PATH="${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_scrape_python_cmd.log"
+declare WSPRNET_SCRAPER_PID_FILE_PATH="${WSPRNET_SCRAPER_HOME_PATH}/wsprnet_scrape_python_cmd.pid"
 
 function wsprnet_scrape_daemon() {
-    local scraper_root_dir=$1
-
-    mkdir -p ${scraper_root_dir}
-    cd ${scraper_root_dir}
-
-    wd_logger 1 "Starting and scrapes will be attempted at second offsets: ${WSPRNET_OFFSET_SECS}"
+    wd_logger 1 "Starting in $PWD"
     setup_verbosity_traps
-    setup_clickhouse_wsprnet_tables
+
+    # Validate all required bash variables are defined
+    local required_vars=(
+        "WSPRNET_SCRAPER_PID_FILE_PATH"
+        "WSPRNET_SCRAPER_PYTHON_CMD"
+        "WSPRNET_SESSION_FILE_PATH"
+        "WSPRNET_VENV_PATH"
+        "CLICKHOUSE_DEFAULT_USER_PASSWORD"
+        "CLICKHOUSE_WSPRNET_ADMIN_USER"
+        "CLICKHOUSE_WSPRNET_ADMIN_PASSWORD"
+        "CLICKHOUSE_WSPRNET_USER"
+        "CLICKHOUSE_WSPRNET_USER_PASSWORD"
+        "WSPRNET_SCRAPER_LOG_FILE_PATH"
+    )
+
+    local missing_vars=()
+    for var in "${required_vars[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            missing_vars+=("$var")
+        fi
+    done
+
+    if [[ ${#missing_vars[@]} -gt 0 ]]; then
+        wd_logger 1 "ERROR: Required environment variables are not set:"
+        for var in "${missing_vars[@]}"; do
+            wd_logger 1 "  - $var"
+        done
+        return 1
+    fi
+
+    wd_logger 1 "All required environment variables are set"
+
+    # Setup and validate Python venv
+    local venv_python="${WSPRNET_VENV_PATH}/bin/python3"
+    local venv_pip="${WSPRNET_VENV_PATH}/bin/pip3"
+
+    if [[ ! -d "${WSPRNET_VENV_PATH}" ]]; then
+        wd_logger 1 "Python venv not found at ${WSPRNET_VENV_PATH}, creating..."
+
+        # Check if python3-venv is installed (Debian 13 requirement)
+        if ! dpkg -l python3-venv &>/dev/null; then
+            wd_logger 1 "ERROR: python3-venv package not installed"
+            wd_logger 1 "Install with: sudo apt install python3-venv"
+            return 1
+        fi
+
+        # Create venv
+        if ! python3 -m venv "${WSPRNET_VENV_PATH}"; then
+            wd_logger 1 "ERROR: Failed to create Python venv at ${WSPRNET_VENV_PATH}"
+            return 1
+        fi
+
+        wd_logger 1 "Created Python venv at ${WSPRNET_VENV_PATH}"
+    fi
+
+    # Verify venv Python exists
+    if [[ ! -x "${venv_python}" ]]; then
+        wd_logger 1 "ERROR: venv Python not found or not executable: ${venv_python}"
+        return 1
+    fi
+
+    # Check and install required Python packages
+    local required_packages=("clickhouse-connect" "numpy" "requests")
+    local packages_to_install=()
+
+    wd_logger 1 "Checking required Python packages..."
+    for package in "${required_packages[@]}"; do
+        local import_name="${package//-/_}"  # clickhouse-connect -> clickhouse_connect
+        if ! "${venv_python}" -c "import ${import_name}" 2>/dev/null; then
+            packages_to_install+=("${package}")
+            wd_logger 1 "  Package ${package} is missing"
+        else
+            wd_logger 1 "  Package ${package} is installed"
+        fi
+    done
+
+    # Install missing packages
+    if [[ ${#packages_to_install[@]} -gt 0 ]]; then
+        wd_logger 1 "Installing missing Python packages: ${packages_to_install[*]}"
+        if ! "${venv_pip}" install "${packages_to_install[@]}"; then
+            wd_logger 1 "ERROR: Failed to install Python packages"
+            return 1
+        fi
+        wd_logger 1 "Successfully installed missing packages"
+    fi
+
+    wd_logger 1 "Python venv validated successfully"
+
+    # Extract Python script path from command
+    local python_script="${WSPRNET_SCRAPER_PYTHON_CMD##* }"  # Get last argument
+
+    if [[ ! -f "${python_script}" ]]; then
+        wd_logger 1 "ERROR: Python script not found: ${python_script}"
+        return 1
+    fi
+
+    wd_logger 1 "Python script found: ${python_script}"
+
+    # Build the actual command using venv Python
+    local scraper_cmd="${venv_python} ${python_script}"
 
     while true; do
-        if ! scrape_wsprnet ; then
-	    wd_logger 1 "Scrape failed.  Sleep and try again later"
-	fi
-        wait_until_next_second_offset_in_wspr_cycle
+        wd_logger 2 "Checking that scraper is running"
+        local spawn_scraper="no"
+        if [[ ! -f ${WSPRNET_SCRAPER_PID_FILE_PATH} ]]; then
+            wd_logger 1 "PID file ${WSPRNET_SCRAPER_PID_FILE_PATH} doesn't exist, so spawn scraper daemon"
+            spawn_scraper="yes"
+        else
+            scraper_pid=$(<${WSPRNET_SCRAPER_PID_FILE_PATH})
+            kill -0 ${scraper_pid} 2>/dev/null
+            rc=$?
+            if (( rc )); then
+                wd_logger 1 "ERROR: PID ${scraper_pid} found in ${WSPRNET_SCRAPER_PID_FILE_PATH} is dead, so spawn scraper daemon"
+                rm -f ${WSPRNET_SCRAPER_PID_FILE_PATH}
+                spawn_scraper="yes"
+            else
+                wd_logger 1 "PID ${scraper_pid} found in ${WSPRNET_SCRAPER_PID_FILE_PATH} is active"
+            fi
+        fi
+        if [[ ${spawn_scraper} == "yes" ]]; then
+            wd_logger 1 "Spawning wsprnet_scraper"
+            ${scraper_cmd} \
+                --session-file           ${WSPRNET_SESSION_FILE_PATH} \
+                --setup-default-password ${CLICKHOUSE_DEFAULT_USER_PASSWORD} \
+                --clickhouse-user        ${CLICKHOUSE_WSPRNET_ADMIN_USER}  --clickhouse-password     ${CLICKHOUSE_WSPRNET_ADMIN_PASSWORD} \
+                --setup-readonly-user    ${CLICKHOUSE_WSPRNET_USER}        --setup-readonly-password ${CLICKHOUSE_WSPRNET_USER_PASSWORD} \
+                --log-file               ${WSPRNET_SCRAPER_LOG_FILE_PATH}  --log-max-mb              ${WSPRNET_SCRAPER_LOG_FILE_MAX_SIZE_MB:-10} \
+                --loop                   ${CLICKHOUSE_WSPRNET_SCRAPER_POLL_SECS:-20}  2>&1 &
+            scraper_pid=$!
+            echo ${scraper_pid} > ${WSPRNET_SCRAPER_PID_FILE_PATH}
+            wd_logger 1 "Spawned scraper command which has PID ${scraper_pid}"
+            sleep 1
+            if ! kill -0 ${scraper_pid} 2>/dev/null; then
+                wd_logger 1 "ERROR: Scraper PID ${scraper_pid} died immediately after spawn"
+                rm -f ${WSPRNET_SCRAPER_PID_FILE_PATH}
+            fi
+        fi
+        wd_sleep ${WSPRNET_SCRAPER_WATCHDOG_INTERVAL:-30}
     done
 }
 
