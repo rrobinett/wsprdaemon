@@ -22,8 +22,8 @@ DEFAULT_CONFIG = {
     'request_timeout': 120,
     'clickhouse_host': 'localhost',
     'clickhouse_port': 8123,
-    'clickhouse_user': 'wsprnet-admin',
-    'clickhouse_password': 'wnadmin',
+    'clickhouse_user': '',
+    'clickhouse_password': '',
     'clickhouse_database': 'wsprnet',
     'clickhouse_table': 'spots',
     'wsprnet_url': 'http://www.wsprnet.org/drupal/wsprnet/spots/json',
@@ -641,17 +641,123 @@ def verify_first_spot(spots: List[Dict], expected_spotnum: int) -> bool:
         log(f"Unexpected: first spot {first_spotnum} is less than expected {expected}", "ERROR")
         return False
 
+def setup_clickhouse_tables(admin_user: str, admin_password: str,
+                           readonly_user: str, readonly_password: str,
+                           default_password: str, config: Dict) -> bool:
+    """Setup ClickHouse users, database, and table"""
+    try:
+        # Connect as default user to create users
+        admin_client = clickhouse_connect.get_client(
+            host=config['clickhouse_host'],
+            port=config['clickhouse_port'],
+            username='default',
+            password=default_password
+        )
+
+        # Check/create admin user
+        result = admin_client.query(
+            f"SELECT count() FROM system.users WHERE name = '{admin_user}'"
+        )
+        if result.result_rows[0][0] == 1:
+            log(f"Admin user {admin_user} already exists")
+        else:
+            log(f"Creating admin user {admin_user}...")
+            admin_client.command(f"CREATE USER {admin_user} IDENTIFIED BY '{admin_password}'")
+            admin_client.command(f"GRANT CREATE DATABASE ON *.* TO {admin_user}")
+            admin_client.command(f"GRANT CREATE TABLE ON *.* TO {admin_user}")
+            admin_client.command(f"GRANT INSERT ON {config['clickhouse_database']}.* TO {admin_user}")
+            admin_client.command(f"GRANT SELECT ON {config['clickhouse_database']}.* TO {admin_user}")
+            log(f"Admin user {admin_user} created")
+
+        # Check/create read-only user
+        result = admin_client.query(
+            f"SELECT count() FROM system.users WHERE name = '{readonly_user}'"
+        )
+        if result.result_rows[0][0] == 1:
+            log(f"Read-only user {readonly_user} already exists")
+        else:
+            log(f"Creating read-only user {readonly_user}...")
+            admin_client.command(f"CREATE USER {readonly_user} IDENTIFIED BY '{readonly_password}'")
+            admin_client.command(f"GRANT SELECT ON {config['clickhouse_database']}.* TO {readonly_user}")
+            log(f"Read-only user {readonly_user} created")
+
+        # Connect as admin user to create database/table
+        admin_client = clickhouse_connect.get_client(
+            host=config['clickhouse_host'],
+            port=config['clickhouse_port'],
+            username=admin_user,
+            password=admin_password
+        )
+
+        # Create database if not exists
+        result = admin_client.query(
+            f"SELECT 1 FROM system.databases WHERE name = '{config['clickhouse_database']}'"
+        )
+        if not result.result_rows:
+            log(f"Creating database {config['clickhouse_database']}...")
+            admin_client.command(f"CREATE DATABASE {config['clickhouse_database']}")
+            log(f"Database {config['clickhouse_database']} created")
+        else:
+            log(f"Database {config['clickhouse_database']} already exists")
+
+        # Create table if not exists
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_table']}
+        (
+            Spotnum UInt64 CODEC(Delta(8), ZSTD(1)),
+            Date UInt32 CODEC(Delta(4), ZSTD(1)),
+            Reporter LowCardinality(String),
+            ReporterGrid LowCardinality(String),
+            dB Int16 CODEC(ZSTD(1)),
+            MHz Float64 CODEC(ZSTD(1)),
+            CallSign LowCardinality(String),
+            Grid LowCardinality(String),
+            Power Int8 CODEC(T64, ZSTD(1)),
+            Drift Int16 CODEC(ZSTD(1)),
+            distance UInt16 CODEC(T64, ZSTD(1)),
+            azimuth UInt16 CODEC(T64, ZSTD(1)),
+            Band Int8 CODEC(T64, ZSTD(1)),
+            version LowCardinality(Nullable(String)),
+            code Int8 CODEC(ZSTD(1)),
+            wd_date String,
+            wd_band Int16 CODEC(T64, ZSTD(1)),
+            wd_rx_az UInt16 CODEC(T64, ZSTD(1)),
+            wd_rx_lat Float32 CODEC(ZSTD(1)),
+            wd_rx_lon Float32 CODEC(ZSTD(1)),
+            wd_tx_lat Float32 CODEC(ZSTD(1)),
+            wd_tx_lon Float32 CODEC(ZSTD(1)),
+            inserted_at DateTime DEFAULT now() CODEC(Delta(4), ZSTD(1))
+        )
+        ENGINE = MergeTree()
+        PARTITION BY toYYYYMM(toDateTime(Date))
+        ORDER BY (Date, Spotnum)
+        SETTINGS index_granularity = 8192
+        """
+        admin_client.command(create_table_sql)
+        log(f"Table {config['clickhouse_database']}.{config['clickhouse_table']} created/verified")
+
+        return True
+
+    except Exception as e:
+        log(f"Setup failed: {e}", "ERROR")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description='WSPRNET Scraper')
     parser.add_argument('--session-file', required=True, help='Path to session file with sessid and session_name')
     parser.add_argument('--username', help='WSPRNET username (required if session file missing)')
     parser.add_argument('--password', help='WSPRNET password (required if session file missing)')
+    parser.add_argument('--clickhouse-user', required=True, help='ClickHouse admin username (required)')
+    parser.add_argument('--clickhouse-password', required=True, help='ClickHouse admin password (required)')
+    parser.add_argument('--setup-default-password', required=True, help='Default ClickHouse password (required)')
+    parser.add_argument('--setup-readonly-user', required=True, help='Read-only username (required)')
+    parser.add_argument('--setup-readonly-password', required=True, help='Read-only password (required)')
     parser.add_argument('--config', help='Path to config file (JSON)')
     parser.add_argument('--loop', type=int, metavar='SECONDS', help='Run continuously with SECONDS delay between downloads')
     parser.add_argument('--log-file', default=LOG_FILE, help='Path to log file (if not specified, log to console only)')
     parser.add_argument('--log-max-mb', type=int, default=10, help='Max log file size in MB before truncation')
     args = parser.parse_args()
-    
+
     if args.log_file:
         setup_logging(args.log_file, args.log_max_mb * 1024 * 1024)
     else:
@@ -662,7 +768,26 @@ def main():
     if args.config:
         with open(args.config) as f:
             config.update(json.load(f))
+
+    # Override with command line credentials
+    config['clickhouse_user'] = args.clickhouse_user
+    config['clickhouse_password'] = args.clickhouse_password
+
+    # Handle setup mode
+    # Always run setup to ensure users, database, and table exist
+    log("Running setup to ensure ClickHouse is configured...")
+    success = setup_clickhouse_tables(
+        admin_user=args.clickhouse_user,
+        admin_password=args.clickhouse_password,
+        readonly_user=args.setup_readonly_user,
+        readonly_password=args.setup_readonly_password,
+        default_password=args.setup_default_password,
+        config=config
+    )
     
+    if not success:
+        log("Setup failed - cannot continue", "ERROR")
+        sys.exit(1)
     session_file = Path(args.session_file)
     
     # Get session token (will login if needed)
