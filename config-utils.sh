@@ -706,6 +706,27 @@ function get_list_of_active_real_receivers()
    __return_real_receivers_in_use_var="${return_string}"
 }
 
+function get_ka9q_receivers()
+{
+    local -n _return_string=$1
+
+    local all_scheduled_receivers
+    get_list_of_active_real_receivers "all_scheduled_receivers"
+
+    local all_scheduled_receivers_list=( ${all_scheduled_receivers} )
+    local return_string_list=( $(printf '%s\n' "${all_scheduled_receivers_list[@]}" | grep "KA9Q" ) )    ### Removes the elements with 'KA9Q...'
+
+    if (( ${#return_string_list[@]} == 0 )); then
+        wd_logger 2 "Found no KA9Q receivers"
+        _return_string=""
+        return 0
+    fi
+
+    wd_logger 2 "Found ${#return_string_list[@]} KA9Q receivers: '${return_string_list[*]}'"
+    _return_string="${return_string_list[*]}" 
+    return 0
+}
+
 function get_non_ka9q_receivers()
 {
     local -n _return_string=$1
@@ -722,7 +743,6 @@ function get_non_ka9q_receivers()
         return 0
     fi
 
-    set +x
     wd_logger 2 "Found ${#return_string_list[@]} non-KA9Q receivers: '${return_string_list[*]}'"
     _return_string="${return_string_list[*]}" 
     return 0
