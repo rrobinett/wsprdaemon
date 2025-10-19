@@ -31,17 +31,34 @@ declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 declare KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS--p -c 1 -S 12000}"
 
 declare KA9Q_RADIO_PCMRECORD_CMD=""
-if [[ ${#HOSTNAME} -eq 3 && ${HOSTNAME} =~ WD[0-9] ]] || [[ ${#HOSTNAME} -eq 4 && ${HOSTNAME} == "WD00" ]] ; then
-    wd_logger 2 "Running on a server, so don't search for pcmrecord"
-else
-    ### We are not running on one of the WD servers, so we are running on a client and need to find Scott's version of pcmrecord in the ~/wsprdaemon.ka9q-radio/... file tree
+
+declare ka9q_receivers
+get_ka9q_receivers "ka9q_receivers"
+if [[ -z "${ka9q_receivers}" ]]; then
+    wd_logger 2 "There are no KA9Q receivers defined in wsprdaemon.conf, so there is no need to setup for them"
+    return 0
+fi
+
+wd_logger 2 "We are running on a server which will host and/or receeive streams from KA9Q SDRs"
+
+#### Defer defining this until after we build Scott's version during setup
+declare KA9Q_RADIO_PCMRECORD_CMD           ### Leave it undefined so bash will quit if we try to execute it before it is defined 
+
+function find-pcmrecord() 
+{
+    if [[ -n "${KA9Q_RADIO_PCMRECORD_CMD-}" && -x "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
+        wd_logger 1 "Found the pcmrecord command: ${KA9Q_RADIO_PCMRECORD_CMD}"
+        return 0
+    fi
+    wd_logger 1 "Find the pcmrecocrd program we will be running"
     KA9Q_RADIO_PCMRECORD_CMD=$(find ${KA9Q_RADIO_ROOT_DIR} -type f -name pcmrecord -executable)
     if [[ -z "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
         wd_logger 1 "ERROR: can't find 'pcmrecord'"
         exit 1
     fi
     wd_logger 2 "Found  KA9Q_RADIO_PCMRECORD_CMD='${KA9Q_RADIO_PCMRECORD_CMD}'"
-fi
+    return 0
+}
 
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
