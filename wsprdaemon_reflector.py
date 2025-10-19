@@ -16,6 +16,8 @@ from typing import Dict, List
 import logging
 from collections import defaultdict
 import glob
+import subprocess
+from pathlib import Path
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -380,12 +382,15 @@ class CleanupWorker(threading.Thread):
 
     def run(self):
         log("Cleanup worker thread started", "INFO")
+
         while not self.stop_event.is_set():
             try:
                 self.cleanup_distributed_files()
             except Exception as e:
                 log(f"Cleanup worker error: {e}", "ERROR")
+
             self.stop_event.wait(self.config['cleanup_interval'])
+
         log("Cleanup worker thread stopped", "INFO")
 
     def cleanup_distributed_files(self):
@@ -404,20 +409,27 @@ class CleanupWorker(threading.Thread):
 
         for filename in files_to_clean:
             deleted = False
+
             for home_dir in Path('/home').iterdir():
                 if home_dir.is_dir():
                     uploads_dir = home_dir / 'uploads'
                     source_file = uploads_dir / filename
+
                     if source_file.exists():
                         try:
+                            # Use Python's unlink - we're running as root
                             source_file.unlink()
                             deleted = True
                             log(f"Deleted source file: {source_file}", "INFO")
+                        except FileNotFoundError:
+                            # File was already deleted (race condition)
+                            log(f"File already deleted: {source_file}", "DEBUG")
+                            deleted = True
                         except Exception as e:
                             log(f"Error deleting {source_file}: {e}", "ERROR")
+
             if deleted:
                 self.state.remove_file(filename)
-
 
 def main():
     parser = argparse.ArgumentParser(description='WSPRDAEMON Reflector')
