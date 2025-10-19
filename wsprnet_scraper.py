@@ -467,25 +467,25 @@ def calculate_azimuth(frequency: float, tx_locator: str, rx_locator: str) -> Dic
         
         # Calculate band
         freq = int(10 * float(frequency))
-        band = FREQ_TO_BAND.get(freq, DEFAULT_BAND)
+        band_value = FREQ_TO_BAND.get(freq, DEFAULT_BAND)
         
         return {
-            'wd_band': band,
-            'wd_rx_az': int(round(rx_azi)),
-            'wd_rx_lat': round(rx_lat, 3),
-            'wd_rx_lon': round(rx_lon, 3),
-            'wd_tx_lat': round(tx_lat, 3),
-            'wd_tx_lon': round(tx_lon, 3)
+            'band': band_value,
+            'rx_az': int(round(rx_azi)),
+            'rx_lat': round(rx_lat, 3),
+            'rx_lon': round(rx_lon, 3),
+            'tx_lat': round(tx_lat, 3),
+            'tx_lon': round(tx_lon, 3)
         }
     except Exception as e:
         log(f"Azimuth calculation failed: {e}", "WARNING")
         return {
-            'wd_band': DEFAULT_BAND,
-            'wd_rx_az': 0,
-            'wd_rx_lat': 0.0,
-            'wd_rx_lon': 0.0,
-            'wd_tx_lat': 0.0,
-            'wd_tx_lon': 0.0
+            'band': DEFAULT_BAND,
+            'rx_az': 0,
+            'rx_lat': 0.0,
+            'rx_lon': 0.0,
+            'tx_lat': 0.0,
+            'tx_lon': 0.0
         }
 
 def detect_gaps(spots: List[Dict], last_spotnum: int) -> List[Tuple[int, int]]:
@@ -567,13 +567,12 @@ def process_spots(spots: List[Dict]) -> List[List]:
                 int(spot.get('Band', 0)),
                 spot.get('version', ''),
                 code,
-                time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_epoch)),  # wd_date
-                calc['wd_band'],
-                calc['wd_rx_az'],
-                calc['wd_rx_lat'],
-                calc['wd_rx_lon'],
-                calc['wd_tx_lat'],
-                calc['wd_tx_lon']
+                calc['band'],
+                calc['rx_az'],
+                calc['rx_lat'],
+                calc['rx_lon'],
+                calc['tx_lat'],
+                calc['tx_lon']
             ]
             processed.append(row)
         except Exception as e:
@@ -602,8 +601,8 @@ def insert_spots(client, spots: List[List], database: str, table: str) -> bool:
     column_names = [
         'Spotnum', 'Date', 'Reporter', 'ReporterGrid', 'dB', 'MHz',
         'CallSign', 'Grid', 'Power', 'Drift', 'distance', 'azimuth',
-        'Band', 'version', 'code', 'wd_date', 'wd_band',
-        'wd_rx_az', 'wd_rx_lat', 'wd_rx_lon', 'wd_tx_lat', 'wd_tx_lon'
+        'Band', 'version', 'code', 'band',
+        'rx_az', 'rx_lat', 'rx_lon', 'tx_lat', 'tx_lon'
     ]
 
     try:
@@ -704,33 +703,32 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_table']}
         (
-            Spotnum UInt64 CODEC(Delta(8), ZSTD(1)),
-            Date UInt32 CODEC(Delta(4), ZSTD(1)),
-            Reporter LowCardinality(String),
-            ReporterGrid LowCardinality(String),
-            dB Int16 CODEC(ZSTD(1)),
-            MHz Float64 CODEC(ZSTD(1)),
-            CallSign LowCardinality(String),
-            Grid LowCardinality(String),
-            Power Int8 CODEC(T64, ZSTD(1)),
-            Drift Int16 CODEC(ZSTD(1)),
-            distance UInt16 CODEC(T64, ZSTD(1)),
-            azimuth UInt16 CODEC(T64, ZSTD(1)),
-            Band Int8 CODEC(T64, ZSTD(1)),
-            version LowCardinality(Nullable(String)),
-            code Int8 CODEC(ZSTD(1)),
-            wd_date String,
-            wd_band Int16 CODEC(T64, ZSTD(1)),
-            wd_rx_az UInt16 CODEC(T64, ZSTD(1)),
-            wd_rx_lat Float32 CODEC(ZSTD(1)),
-            wd_rx_lon Float32 CODEC(ZSTD(1)),
-            wd_tx_lat Float32 CODEC(ZSTD(1)),
-            wd_tx_lon Float32 CODEC(ZSTD(1)),
-            inserted_at DateTime DEFAULT now() CODEC(Delta(4), ZSTD(1))
+            Spotnum         UInt64                          CODEC(Delta(8), ZSTD(1)),
+            Date            UInt32                          CODEC(Delta(4), ZSTD(1)),
+            Reporter        LowCardinality(String)          CODEC(LZ4),
+            ReporterGrid    LowCardinality(String)          CODEC(LZ4),
+            dB              Float32                         CODEC(Delta(4), ZSTD(3)),
+            MHz             Float32                         CODEC(Delta(4), ZSTD(3)),
+            CallSign        LowCardinality(String)          CODEC(LZ4),
+            Grid            LowCardinality(String)          CODEC(LZ4),
+            Power           UInt8                           CODEC(T64, ZSTD(1)),
+            Drift           Float32                         CODEC(Delta(4), ZSTD(3)),
+            distance        Int32                           CODEC(T64, ZSTD(1)),
+            azimuth         Float32                         CODEC(Delta(4), ZSTD(3)),
+            Band            Int16                           CODEC(T64, ZSTD(1)),
+            version         LowCardinality(Nullable(String)) CODEC(LZ4),
+            code            Int16                           CODEC(ZSTD(1)),
+            time            DateTime DEFAULT toDateTime(Date) CODEC(Delta(4), ZSTD(1)),
+            band            Int16                           CODEC(T64, ZSTD(1)),
+            rx_az           Float32                         CODEC(Delta(4), ZSTD(3)),
+            rx_lat          Float32                         CODEC(Delta(4), ZSTD(3)),
+            rx_lon          Float32                         CODEC(Delta(4), ZSTD(3)),
+            tx_lat          Float32                         CODEC(Delta(4), ZSTD(3)),
+            tx_lon          Float32                         CODEC(Delta(4), ZSTD(3))
         )
         ENGINE = MergeTree()
-        PARTITION BY toYYYYMM(toDateTime(Date))
-        ORDER BY (Date, Spotnum)
+        PARTITION BY toYYYYMM(time)
+        ORDER BY (time, Spotnum)
         SETTINGS index_granularity = 8192
         """
         admin_client.command(create_table_sql)
