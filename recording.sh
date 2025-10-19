@@ -356,6 +356,7 @@ function ka9q_recording_daemon()
             pcm_record_cmd_args="--max_length 60 --pad"
          else
              wd_logger 1 "Running Scott's pcmrecord"
+             find-pcmrecord      ### This will exit if it can define KA9Q_RADIO_PCMRECORD_CMD
              pcm_record_cmd="${KA9Q_RADIO_PCMRECORD_CMD}"
              pcm_record_cmd_args="-W -q pcmrecord-errors.log -L 60"
         fi
