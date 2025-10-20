@@ -471,7 +471,7 @@ def calculate_azimuth(frequency: float, tx_locator: str, rx_locator: str) -> Dic
         
         return {
             'band': band_value,
-            'rx_az': int(round(rx_azi)),
+            'rx_azimuth': int(round(rx_azi)),
             'rx_lat': round(rx_lat, 3),
             'rx_lon': round(rx_lon, 3),
             'tx_lat': round(tx_lat, 3),
@@ -481,7 +481,7 @@ def calculate_azimuth(frequency: float, tx_locator: str, rx_locator: str) -> Dic
         log(f"Azimuth calculation failed: {e}", "WARNING")
         return {
             'band': DEFAULT_BAND,
-            'rx_az': 0,
+            'rx_azimuth': 0,
             'rx_lat': 0.0,
             'rx_lon': 0.0,
             'tx_lat': 0.0,
@@ -523,7 +523,11 @@ def detect_gaps(spots: List[Dict], last_spotnum: int) -> List[Tuple[int, int]]:
     return gaps
 
 def process_spots(spots: List[Dict]) -> List[List]:
-    """Process spots and add calculated fields"""
+    """Process spots and add calculated fields
+    Returns data in new schema order:
+    id, time, band, rx_sign, rx_lat, rx_lon, rx_loc, tx_sign, tx_lat, tx_lon, tx_loc,
+    distance, azimuth, rx_azimuth, frequency, power, snr, drift, version, code
+    """
     processed = []
     validation_stats = {'valid': 0, 'corrected': 0, 'failed': 0}
 
@@ -544,35 +548,35 @@ def process_spots(spots: List[Dict]) -> List[List]:
                 date_epoch = corrected_epoch
 
             # Calculate azimuth fields
+            mhz = float(spot.get('MHz', 0))
             calc = calculate_azimuth(
-                frequency=float(spot.get('MHz', 0)),
+                frequency=mhz,
                 tx_locator=spot.get('Grid', ''),
                 rx_locator=spot.get('ReporterGrid', '')
             )
 
-            # Build row for ClickHouse
+            # Build row for ClickHouse in new schema order
             row = [
-                spotnum,
-                date_epoch,  # Use corrected epoch
-                spot.get('Reporter', ''),
-                spot.get('ReporterGrid', ''),
-                int(spot.get('dB', 0)),
-                float(spot.get('MHz', 0)),
-                spot.get('CallSign', ''),
-                spot.get('Grid', ''),
-                int(spot.get('Power', 0)),
-                int(spot.get('Drift', 0)),
-                int(spot.get('distance', 0)),
-                int(spot.get('azimuth', 0)),
-                int(spot.get('Band', 0)),
-                spot.get('version', ''),
-                code,
-                calc['band'],
-                calc['rx_az'],
-                calc['rx_lat'],
-                calc['rx_lon'],
-                calc['tx_lat'],
-                calc['tx_lon']
+                spotnum,                              # id (UInt64)
+                date_epoch,                           # time (DateTime - will be converted by ClickHouse)
+                calc['band'],                         # band (Int16)
+                spot.get('Reporter', ''),             # rx_sign (LowCardinality(String))
+                calc['rx_lat'],                       # rx_lat (Float32)
+                calc['rx_lon'],                       # rx_lon (Float32)
+                spot.get('ReporterGrid', ''),         # rx_loc (LowCardinality(String))
+                spot.get('CallSign', ''),             # tx_sign (LowCardinality(String))
+                calc['tx_lat'],                       # tx_lat (Float32)
+                calc['tx_lon'],                       # tx_lon (Float32)
+                spot.get('Grid', ''),                 # tx_loc (LowCardinality(String))
+                int(spot.get('distance', 0)),         # distance (UInt16)
+                int(spot.get('azimuth', 0)),          # azimuth (UInt16)
+                calc['rx_azimuth'],                   # rx_azimuth (UInt16)
+                int(mhz * 1000000),                   # frequency (UInt32 Hz)
+                int(spot.get('Power', 0)),            # power (Int8)
+                int(spot.get('dB', 0)),               # snr (Int8)
+                int(spot.get('Drift', 0)),            # drift (Int8)
+                spot.get('version', ''),              # version (LowCardinality(String))
+                code                                  # code (Int8)
             ]
             processed.append(row)
         except Exception as e:
@@ -584,25 +588,24 @@ def process_spots(spots: List[Dict]) -> List[List]:
     return processed
 
 def get_last_spotnum(client, database: str, table: str) -> int:
-    """Get the highest Spotnum from ClickHouse"""
+    """Get the highest id (was Spotnum) from ClickHouse"""
     try:
-        result = client.query(f"SELECT MAX(Spotnum) FROM {database}.{table}")
+        result = client.query(f"SELECT MAX(id) FROM {database}.{table}")
         if result.result_rows and result.result_rows[0][0]:
             return int(result.result_rows[0][0])
     except Exception as e:
-        log(f"Could not query last spotnum: {e}", "WARNING")
+        log(f"Could not query last id: {e}", "WARNING")
     return 0
 
 def insert_spots(client, spots: List[List], database: str, table: str) -> bool:
-    """Insert spots into ClickHouse"""
+    """Insert spots into ClickHouse using new schema"""
     if not spots:
         return True
 
     column_names = [
-        'Spotnum', 'Date', 'Reporter', 'ReporterGrid', 'dB', 'MHz',
-        'CallSign', 'Grid', 'Power', 'Drift', 'distance', 'azimuth',
-        'Band', 'version', 'code', 'band',
-        'rx_az', 'rx_lat', 'rx_lon', 'tx_lat', 'tx_lon'
+        'id', 'time', 'band', 'rx_sign', 'rx_lat', 'rx_lon', 'rx_loc',
+        'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth',
+        'rx_azimuth', 'frequency', 'power', 'snr', 'drift', 'version', 'code'
     ]
 
     try:
@@ -643,7 +646,7 @@ def verify_first_spot(spots: List[Dict], expected_spotnum: int) -> bool:
 def setup_clickhouse_tables(admin_user: str, admin_password: str,
                            readonly_user: str, readonly_password: str,
                            default_password: str, config: Dict) -> bool:
-    """Setup ClickHouse users, database, and table"""
+    """Setup ClickHouse users, database, and table with new schema"""
     try:
         # Connect as default user to create users
         admin_client = clickhouse_connect.get_client(
@@ -699,36 +702,48 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         else:
             log(f"Database {config['clickhouse_database']} already exists")
 
-        # Create table if not exists
+        # Create table if not exists with new schema
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_table']}
         (
-            Spotnum         UInt64                          CODEC(Delta(8), ZSTD(1)),
-            Date            UInt32                          CODEC(Delta(4), ZSTD(1)),
-            Reporter        LowCardinality(String)          CODEC(LZ4),
-            ReporterGrid    LowCardinality(String)          CODEC(LZ4),
-            dB              Float32                         CODEC(Delta(4), ZSTD(3)),
-            MHz             Float32                         CODEC(Delta(4), ZSTD(3)),
-            CallSign        LowCardinality(String)          CODEC(LZ4),
-            Grid            LowCardinality(String)          CODEC(LZ4),
-            Power           UInt8                           CODEC(T64, ZSTD(1)),
-            Drift           Float32                         CODEC(Delta(4), ZSTD(3)),
-            distance        Int32                           CODEC(T64, ZSTD(1)),
-            azimuth         Float32                         CODEC(Delta(4), ZSTD(3)),
-            Band            Int16                           CODEC(T64, ZSTD(1)),
-            version         LowCardinality(Nullable(String)) CODEC(LZ4),
-            code            Int16                           CODEC(ZSTD(1)),
-            time            DateTime DEFAULT toDateTime(Date) CODEC(Delta(4), ZSTD(1)),
-            band            Int16                           CODEC(T64, ZSTD(1)),
-            rx_az           Float32                         CODEC(Delta(4), ZSTD(3)),
-            rx_lat          Float32                         CODEC(Delta(4), ZSTD(3)),
-            rx_lon          Float32                         CODEC(Delta(4), ZSTD(3)),
-            tx_lat          Float32                         CODEC(Delta(4), ZSTD(3)),
-            tx_lon          Float32                         CODEC(Delta(4), ZSTD(3))
+            id           UInt64                      CODEC(Delta(8), ZSTD(1)),
+            time         DateTime                    CODEC(Delta(4), ZSTD(1)),
+            band         Int16                       CODEC(T64, ZSTD(1)),
+            rx_sign      LowCardinality(String),
+            rx_lat       Float32                     CODEC(ZSTD(1)),
+            rx_lon       Float32                     CODEC(ZSTD(1)),
+            rx_loc       LowCardinality(String),
+            tx_sign      LowCardinality(String),
+            tx_lat       Float32                     CODEC(ZSTD(1)),
+            tx_lon       Float32                     CODEC(ZSTD(1)),
+            tx_loc       LowCardinality(String),
+            distance     UInt16                      CODEC(T64, ZSTD(1)),
+            azimuth      UInt16                      CODEC(T64, ZSTD(1)),
+            rx_azimuth   UInt16                      CODEC(T64, ZSTD(1)),
+            frequency    UInt32                      CODEC(T64, ZSTD(1)),
+            power        Int8                        CODEC(T64, ZSTD(1)),
+            snr          Int8                        CODEC(ZSTD(1)),
+            drift        Int8                        CODEC(ZSTD(1)),
+            version      LowCardinality(String),
+            code         Int8,
+            
+            -- Aliases for backwards compatibility
+            Spotnum      UInt64 ALIAS id,
+            Date         UInt32 ALIAS toUnixTimestamp(time),
+            Reporter     String ALIAS rx_sign,
+            ReporterGrid String ALIAS rx_loc,
+            dB           Int8 ALIAS snr,
+            MHz          Float32 ALIAS frequency / 1000000.0,
+            CallSign     String ALIAS tx_sign,
+            Grid         String ALIAS tx_loc,
+            Power        Int8 ALIAS power,
+            Drift        Int8 ALIAS drift,
+            Band         Int16 ALIAS band,
+            rx_az        UInt16 ALIAS rx_azimuth
         )
-        ENGINE = MergeTree()
+        ENGINE = MergeTree
         PARTITION BY toYYYYMM(time)
-        ORDER BY (time, Spotnum)
+        ORDER BY (time, id)
         SETTINGS index_granularity = 8192
         """
         admin_client.command(create_table_sql)
@@ -815,7 +830,7 @@ def main():
     
     # Get starting spotnum
     last_spotnum = get_last_spotnum(client, config['clickhouse_database'], config['clickhouse_table'])
-    log(f"Starting from spotnum: {last_spotnum}")
+    log(f"Starting from id: {last_spotnum}")
     
     # Main loop
     loop_count = 0
@@ -861,7 +876,7 @@ def main():
             if processed:
                 if insert_spots(client, processed, config['clickhouse_database'], config['clickhouse_table']):
                     highest_spotnum = max(row[0] for row in processed)
-                    log(f"Processed {len(processed)} spots, highest spotnum: {highest_spotnum}")
+                    log(f"Processed {len(processed)} spots, highest id: {highest_spotnum}")
                     last_spotnum = highest_spotnum
         
         if not args.loop:
