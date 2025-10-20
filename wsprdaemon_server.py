@@ -218,7 +218,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             distance     Int32                   CODEC(T64, ZSTD(1)),
             azimuth      Int32                   CODEC(T64, ZSTD(1)),
             rx_azimuth   Int32                   CODEC(T64, ZSTD(1)),
-            freq         Float64                 CODEC(Delta(8), ZSTD(3)),
+            frequency    Float64                 CODEC(Delta(8), ZSTD(3)),
             power        Int8                    CODEC(T64, ZSTD(1)),
             snr          Int8                    CODEC(Delta(4), ZSTD(3)),
             drift        Int8                    CODEC(Delta(4), ZSTD(3)),
@@ -250,14 +250,15 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             Reporter     String ALIAS rx_sign,
             ReporterGrid String ALIAS rx_loc,
             dB           Int8 ALIAS snr,
-            MHz          Float64 ALIAS freq,
+            freq         Float64 ALIAS frequency,
+            MHz          Float64 ALIAS frequency,
             CallSign     String ALIAS tx_sign,
             Grid         String ALIAS tx_loc,
             Power        Int8 ALIAS power,
             Drift        Int8 ALIAS drift,
             Band         Int16 ALIAS band,
             rx_az        UInt16 ALIAS rx_azimuth,
-            frequency    UInt32 ALIAS toUInt32(freq * 1000000)
+            frequency_hz UInt32 ALIAS toUInt32(freq * 1000000)
         ) 
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(time)
@@ -589,7 +590,7 @@ def insert_spots(client, spots: List[List], database: str, table: str, batch_siz
         # Harmonized columns matching wsprnet.spots
         'id', 'time', 'band', 'rx_sign', 'rx_lat', 'rx_lon', 'rx_loc',
         'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth', 'rx_azimuth',
-        'freq', 'power', 'snr', 'drift', 'version', 'code',
+        'frequency', 'power', 'snr', 'drift', 'version', 'code',
         # Wsprdaemon-specific columns
         'rx_id', 'v_lat', 'v_lon', 'c2_noise', 'sync_quality', 'dt',
         'decode_cycles', 'jitter', 'rms_noise', 'blocksize', 'metric', 'osd_decode',
