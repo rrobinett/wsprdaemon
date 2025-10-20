@@ -199,30 +199,39 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         else:
             log(f"Database {config['clickhouse_database']} already exists", "INFO")
 
-        # Create spots table with field names aligned to wsprnet.spots
+        # Create spots table with ALL wsprnet.spots columns PLUS wsprdaemon extras
         create_spots_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_spots_table']}
         (
-            time           DateTime                CODEC(ZSTD(1)),
-            band           Int16                   CODEC(ZSTD(1)),
+            -- ALL columns from wsprnet.spots (EXACT same names and order)
+            Spotnum        Nullable(UInt64)        CODEC(Delta(8), ZSTD(1)),
+            Date           Nullable(UInt32)        CODEC(Delta(4), ZSTD(1)),
+            Reporter       LowCardinality(String)  CODEC(LZ4),
             ReporterGrid   LowCardinality(String)  CODEC(LZ4),
-            rx_id          LowCardinality(String)  CODEC(LZ4),
+            dB             Float32                 CODEC(Delta(4), ZSTD(3)),
+            MHz            Float64                 CODEC(Delta(8), ZSTD(3)),
             CallSign       LowCardinality(String)  CODEC(LZ4),
             Grid           LowCardinality(String)  CODEC(LZ4),
-            dB             Float32                 CODEC(Delta(4), ZSTD(3)),
-            c2_noise       Float32                 CODEC(Delta(4), ZSTD(3)),
+            Power          UInt8                   CODEC(T64, ZSTD(1)),
             Drift          Float32                 CODEC(Delta(4), ZSTD(3)),
-            MHz            Float32                 CODEC(Delta(4), ZSTD(3)),
             distance       Int32                   CODEC(T64, ZSTD(1)),
+            azimuth        Float32                 CODEC(Delta(4), ZSTD(3)),
+            Band           Nullable(Int16)         CODEC(T64, ZSTD(1)),
+            version        LowCardinality(Nullable(String)) CODEC(LZ4),
+            code           Int16                   CODEC(ZSTD(1)),
+            time           DateTime DEFAULT toDateTime(Date) CODEC(Delta(4), ZSTD(1)),
+            band           Int16                   CODEC(T64, ZSTD(1)),
             rx_az          Float32                 CODEC(Delta(4), ZSTD(3)),
             rx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
             rx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
-            azimuth        Float32                 CODEC(Delta(4), ZSTD(3)),
-            Power          UInt8                   CODEC(T64, ZSTD(1)),
             tx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
             tx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
+            
+            -- Wsprdaemon-specific additional fields (NOT in wsprnet.spots)
+            rx_id          LowCardinality(String)  CODEC(LZ4),
             v_lat          Float32                 CODEC(Delta(4), ZSTD(3)),
             v_lon          Float32                 CODEC(Delta(4), ZSTD(3)),
+            c2_noise       Float32                 CODEC(Delta(4), ZSTD(3)),
             sync_quality   UInt16                  CODEC(ZSTD(1)),
             dt             Float32                 CODEC(Delta(4), ZSTD(3)),
             decode_cycles  UInt32                  CODEC(T64, ZSTD(1)),
@@ -231,11 +240,9 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             blocksize      UInt16                  CODEC(T64, ZSTD(1)),
             metric         Int16                   CODEC(T64, ZSTD(1)),
             osd_decode     UInt8                   CODEC(T64, ZSTD(1)),
-            Reporter       LowCardinality(String)  CODEC(LZ4),
             nhardmin       UInt16                  CODEC(T64, ZSTD(1)),
             ipass          UInt8                   CODEC(T64, ZSTD(1)),
             proxy_upload   UInt8                   CODEC(T64, ZSTD(1)),
-            code           Int16                   CODEC(ZSTD(1)),
             ov_count       UInt32                  CODEC(T64, ZSTD(1)),
             rx_status      LowCardinality(String)  DEFAULT 'No Info' CODEC(LZ4)
         ) 
@@ -348,7 +355,7 @@ def get_receiver_name_from_path(file_path: Path) -> str:
 
 
 def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
-    """Parse a 34-field spot line into ClickHouse row format"""
+    """Parse a 34-field spot line into ClickHouse row format - HARMONIZED with wsprnet.spots"""
     fields = line.strip().split()
     
     if len(fields) < 34:
@@ -368,31 +375,43 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
         # Convert to datetime object
         clickhouse_time = datetime.strptime(f"20{yy}-{mm}-{dd} {hh}:{min_str}:00", "%Y-%m-%d %H:%M:%S")
         
+        # Calculate Date (Unix timestamp) for compatibility with wsprnet.spots
+        date_timestamp = int(clickhouse_time.timestamp())
+        
         # Extract receiver name from file path
         rx_id = get_receiver_name_from_path(file_path)
         
-        # Build row matching ClickHouse column order
+        # Build row matching ALL wsprnet.spots columns PLUS wsprdaemon extras
         row = [
-            clickhouse_time,           # time
-            int(fields[20]),           # band
+            # ALL wsprnet.spots columns (in exact same order)
+            None,                      # Spotnum (NULL for wsprdaemon data)
+            date_timestamp,            # Date (Unix timestamp)
+            fields[22],                # Reporter
             fields[21],                # ReporterGrid
-            rx_id,                     # rx_id
+            float(fields[3]),          # dB
+            float(fields[5]),          # MHz
             fields[6],                 # CallSign
             fields[7],                 # Grid
-            float(fields[3]),          # dB
-            float(fields[19]),         # c2_noise
+            int(fields[8]),            # Power
             float(fields[9]),          # Drift
-            float(fields[5]),          # MHz
             int(fields[23]),           # distance
+            float(fields[27]),         # azimuth
+            int(float(fields[5])),     # Band (uppercase - integer MHz from frequency)
+            None,                      # version (NULL for wsprdaemon data)
+            int(fields[17]),           # code
+            clickhouse_time,           # time
+            int(fields[20]),           # band (lowercase)
             float(fields[24]),         # rx_az
             float(fields[25]),         # rx_lat
             float(fields[26]),         # rx_lon
-            float(fields[27]),         # azimuth
-            int(fields[8]),            # Power
             float(fields[28]),         # tx_lat
             float(fields[29]),         # tx_lon
+            
+            # Wsprdaemon-specific additional fields
+            rx_id,                     # rx_id
             float(fields[30]),         # v_lat
             float(fields[31]),         # v_lon
+            float(fields[19]),         # c2_noise
             int(float(fields[2])),     # sync_quality
             float(fields[4]),          # dt
             int(fields[10]),           # decode_cycles
@@ -401,11 +420,9 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             int(fields[12]),           # blocksize
             int(fields[13]),           # metric
             int(fields[14]),           # osd_decode
-            fields[22],                # Reporter
             int(fields[16]),           # nhardmin
             int(fields[15]),           # ipass
             int(fields[33]),           # proxy_upload
-            int(fields[17]),           # code
             int(fields[32]),           # ov_count
             'No Info'                  # rx_status
         ]
@@ -547,17 +564,20 @@ def process_noise_files(extraction_dir: Path) -> List[List]:
 
 
 def insert_spots(client, spots: List[List], database: str, table: str, batch_size: int) -> bool:
-    """Insert spots into ClickHouse in batches"""
+    """Insert spots into ClickHouse in batches - ALL wsprnet.spots columns + extras"""
     if not spots:
         return True
 
+    # Column names: ALL from wsprnet.spots + wsprdaemon extras
     column_names = [
-        'time', 'band', 'ReporterGrid', 'rx_id', 'CallSign', 'Grid',
-        'dB', 'c2_noise', 'Drift', 'MHz', 'distance', 'rx_az', 'rx_lat', 'rx_lon',
-        'azimuth', 'Power', 'tx_lat', 'tx_lon', 'v_lat', 'v_lon',
-        'sync_quality', 'dt', 'decode_cycles', 'jitter', 'rms_noise',
-        'blocksize', 'metric', 'osd_decode', 'Reporter', 'nhardmin', 'ipass',
-        'proxy_upload', 'code', 'ov_count', 'rx_status'
+        # ALL wsprnet.spots columns
+        'Spotnum', 'Date', 'Reporter', 'ReporterGrid', 'dB', 'MHz', 'CallSign', 'Grid',
+        'Power', 'Drift', 'distance', 'azimuth', 'Band', 'version', 'code',
+        'time', 'band', 'rx_az', 'rx_lat', 'rx_lon', 'tx_lat', 'tx_lon',
+        # Wsprdaemon-specific additional columns
+        'rx_id', 'v_lat', 'v_lon', 'c2_noise', 'sync_quality', 'dt', 
+        'decode_cycles', 'jitter', 'rms_noise', 'blocksize', 'metric', 'osd_decode',
+        'nhardmin', 'ipass', 'proxy_upload', 'ov_count', 'rx_status'
     ]
 
     total_inserted = 0
