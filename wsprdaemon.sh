@@ -132,7 +132,6 @@ source ${WSPRDAEMON_ROOT_DIR}/wd-setup.sh
 source ${WSPRDAEMON_ROOT_DIR}/clickhouse.sh
 source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise-graphing.sh
-source ${WSPRDAEMON_ROOT_DIR}/wsprnet-scraper.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
 source ${WSPRDAEMON_ROOT_DIR}/ppm.sh
 source ${WSPRDAEMON_ROOT_DIR}/kiwi-utils.sh
@@ -140,7 +139,6 @@ source ${WSPRDAEMON_ROOT_DIR}/recording.sh
 source ${WSPRDAEMON_ROOT_DIR}/decoding.sh
 source ${WSPRDAEMON_ROOT_DIR}/posting.sh
 source ${WSPRDAEMON_ROOT_DIR}/upload-client-utils.sh
-source ${WSPRDAEMON_ROOT_DIR}/upload-server-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/job-management.sh
 source ${WSPRDAEMON_ROOT_DIR}/usage.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise-graphs-daemon.sh
@@ -150,16 +148,13 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
+while getopts :aAzZsg:hij:l:pvVw:dDr: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
             ;;
         r)
             spawn_wav_recording ${OPTARG//,/ }
-            ;;
-        U)
-            uploading_controls $OPTARG
             ;;
         A)
             if [[ ${WD_STARTUP_DELAY_SECS-0} -gt 0 ]]; then
@@ -195,9 +190,6 @@ while getopts :aAzZsg:hij:l:pvVw:dDu:U:r: opt ; do
             ;;
         h)
             usage
-            ;;
-        u)
-            upload_server_cmd $OPTARG
             ;;
         g)
             grape_menu -$OPTARG
