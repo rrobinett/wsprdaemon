@@ -1078,7 +1078,11 @@ function build_ka9q_radio() {
         fft_129_Msps="rof3240000"
     fi
 
-    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 -w ${KA9Q_RADIO_WISDOM_FILE_PATH} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
+    local ref_wisdom_file_arg=""
+    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]]; then
+        ref_wisdom_file_arg="-w ${KA9Q_RADIO_WISDOM_FILE_PATH}"
+    fi
+    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${ref_wisdom_file_arg} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
                                 rof1620000 cob162000 cob81000 cob40500 cob32400 \
                                 cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
                                 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
