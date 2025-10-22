@@ -30,7 +30,36 @@ declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
 # encoded RTP streams don't include the right bits to ID channel count and sample rate.
 declare KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS--p -c 1 -S 12000}"
 
-declare KA9Q_RADIO_PCMRECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/pcmrecord"
+declare KA9Q_RADIO_PCMRECORD_CMD=""
+
+declare ka9q_receivers
+get_ka9q_receivers "ka9q_receivers"
+if [[ -z "${ka9q_receivers}" ]]; then
+    wd_logger 2 "There are no KA9Q receivers defined in wsprdaemon.conf, so there is no need to setup for them"
+    return 0
+fi
+
+wd_logger 2 "We are running on a server which will host and/or receeive streams from KA9Q SDRs"
+
+#### Defer defining this until after we build Scott's version during setup
+declare KA9Q_RADIO_PCMRECORD_CMD           ### Leave it undefined so bash will quit if we try to execute it before it is defined 
+
+function find-pcmrecord() 
+{
+    if [[ -n "${KA9Q_RADIO_PCMRECORD_CMD-}" && -x "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
+        wd_logger 1 "Found the pcmrecord command: ${KA9Q_RADIO_PCMRECORD_CMD}"
+        return 0
+    fi
+    wd_logger 1 "Find the pcmrecocrd program we will be running"
+    KA9Q_RADIO_PCMRECORD_CMD=$(find ${KA9Q_RADIO_ROOT_DIR} -type f -name pcmrecord -executable)
+    if [[ -z "${KA9Q_RADIO_PCMRECORD_CMD}" ]]; then
+        wd_logger 1 "ERROR: can't find 'pcmrecord'"
+        exit 1
+    fi
+    wd_logger 2 "Found  KA9Q_RADIO_PCMRECORD_CMD='${KA9Q_RADIO_PCMRECORD_CMD}'"
+    return 0
+}
+
 declare KA9Q_RADIO_TUNE_CMD="${KA9Q_RADIO_ROOT_DIR}/tune"
 declare KA9Q_DEFAULT_CONF_NAME="rx888-wsprdaemon"
 declare KA9Q_RADIOD_CONF_DIR="/etc/radio"
@@ -41,10 +70,9 @@ declare KA9Q_RADIO_LIBS_NEEDED="curl rsync build-essential libusb-1.0-0-dev libu
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
              libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile"
 
-declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_RADIO_NWSIDOM="${KA9Q_RADIO_ROOT_DIR}/nwisdom"     ### This is created by running fft_wisdom during the KA9Q installation
-declare FFTW_DIR="/etc/fftw"                                    ### This is the directory where radiod looks for a wisdomf
-declare FFTW_WISDOMF="${FFTW_DIR}/wisdomf"                      ### This the wisdom file it looks for
+declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"     ### Where WD installs KA9Q-radio
+declare KA9Q_RADIO_WISDOM_FILE_PATH="/var/lib/ka9q-radio/wisdom"    ### This is the preferred wisdom file used by KA9Q-radio, and the file created and/or updated each time WD starts
+declare FFTW_SYSTEM_WISDOM_FILE_PATH="/etc/fftw/wisdomf"            ### The FFTW looko here too and WD ensures they are the some 
 
 declare GIT_LOG_OUTPUT_FILE="${WSPRDAEMON_TMP_DIR}/git_log.txt"
 
@@ -64,28 +92,52 @@ function pull_commit(){
     fi
 
     if [[ ${desired_git_sha} =~ main|master ]]; then
-        wd_logger 2 "Loading the most recent COMMIT for project ${git_project}"
-        rc=0
-        if [[ "$(cd ${git_directory}; git rev-parse HEAD)" == "$( cd ${git_directory}; git fetch origin && git rev-parse origin/${desired_git_sha})" ]]; then
-            wd_logger 2 "You have asked for and are on the latest commit of the main branch."
+        wd_logger 2 "Loading the most recent '${desired_git_sha}' COMMIT for project ${git_project}"
+        (
+        cd "${git_directory}" || exit 2
+
+        # Fetch from origin
+        if ! git fetch origin; then
+            exit 2
+        fi
+
+        # Check if update is needed
+        if [ "$(git rev-parse HEAD)" == "$(git rev-parse origin/${desired_git_sha})" ]; then
+            exit 0  # No changes needed
         else
-            wd_logger 1 "You have asked for but are not on the latest commit of the main branch, so update the local copy of the code."
-            ( cd ${git_directory}; git restore pcmrecord.c ; git fetch origin && git checkout origin/${desired_git_sha} ) >& git.log
-            rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: failed to update to latest commit:\n$(< git.log)"
+            # Changes needed - attempt update which cleans out all .o and other files and dirs which are not used in the new commit
+            if rm -f Makefile && git reset --hard "origin/${desired_git_sha}" && git clean -fdx ; then
+                exit 1  # Success with changes
             else
-                 wd_logger 1 "Updated to latest commit."
+                exit 2  # Error during update
             fi
         fi
+        ) >& git.log
+        rc=$? 
+        case ${rc} in
+            0)
+                wd_logger 2 "Git made no changes"
+                ;;
+            1)
+                wd_logger 2 "Git successfully updated this project"
+                ;;
+            *)
+                wd_logger 1 "ERROR: rc=${rc}, so failed to update to latest commit:\n$(< git.log)"
+                ;;
+        esac
         return ${rc}
     fi
 
     ### desired COMMIT SHA was specified
     local git_root="main"  ### Now github's default.  older projects like wsprdaemon have the root 'master'
+    if [[ ${git_project} == "ft8_lib" ]]; then
+         git_root="master"
+    fi
+
     local current_commit_sha
     get_current_commit_sha current_commit_sha ${git_directory}
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${git_director}' => ${rc}"
+        wd_logger 1 "ERROR: 'get_current_commit_sha current_commit_sha ${git_directory}' => ${rc}"
         return 3
     fi
     if [[ "${current_commit_sha}" == "${desired_git_sha}" ]]; then
@@ -93,20 +145,21 @@ function pull_commit(){
         return 0
     fi
     wd_logger 1 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
-    wd_logger 1 "First 'git checkout ${git_root}'"
-    ( cd ${git_directory}; git restore pcmrecord.c; git checkout ${git_root} ) >& git.log
+    wd_logger 2 "First 'git checkout ${git_root}'"
+    ( cd ${git_directory}; git restore . ; git checkout ${git_root} )  >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
+        exit
         return 4
     fi
-    wd_logger 1 "Then 'git pull' to be sure the code is current"
+    wd_logger 2 "Then 'git pull' to be sure the code is current"
     ( cd ${git_directory}; git pull ) >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git pull' => ${rc}. git.log:\n$(< git.log)"
         return 5
     fi
-    wd_logger 1 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
-    ( cd ${git_directory}; git checkout ${desired_git_sha} ) >& git.log
+    wd_logger 2 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
+    ( cd ${git_directory}; git clean -fdx; git checkout ${desired_git_sha} ) >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc} git.log:\n$(< git.log)"
         return 6
@@ -177,7 +230,10 @@ function wd_get_config_value() {
                     #local receiver_description=$( sed -n "/${receiver_name}.*${receiver_grid}/s/${receiver_name}.*${receiver_grid}//p"  ${WSPRDAEMON_CONFIG_FILE} )
                     local receiver_line=$( grep "\"${receiver_name} .*${receiver_grid}"  ${WSPRDAEMON_CONFIG_FILE} )
                     local antenna_description
-                    if [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
+                    if [[ -n "${ANTENNA_DESCRIPTION-}" ]]; then
+                         antenna_description="${ANTENNA_DESCRIPTION}"
+                         wd_logger 2 "Found the description ANTENNA_DESCRIPTION='${ANTENNA_DESCRIPTION}' in WD.conf"
+                    elif [[ "${receiver_line}" =~ \#.*ANTENNA: ]]; then
                         antenna_description="${receiver_line##*\#*ANTENNA:}"
                         shopt -s extglob
                         antenna_description="${antenna_description##+([[:space:]])}"    ### trim off leading white space
@@ -205,24 +261,54 @@ function wd_get_config_value() {
 function get_conf_section_variable() {
     local __return_variable_name=$1
     local conf_file_name=$2
-    local conf_section=$3
+    local conf_section=${3^^}  ### forces to UPPER CASE
     local conf_variable_name=$4
 
-    if [[ ! -f ${conf_file_name} ]] ; then
-        wd_logger 1 "ERROR: '' doesn't exist"
-        return 1
+    local conf_dir_name="${conf_file_name}.d"
+    if [[ -d ${conf_dir_name} ]]; then
+        wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"
+        local files_list=( $(find ${conf_dir_name} -maxdepth 1 -type f ! -name '*~' ) )
+        if (( ${#files_list[@]} == 0 )); then
+            wd_logger 1 "ERROR: can't find any files in ${conf_dir_name}"
+            echo ${force_abort}
+        fi
+        if [[ ${conf_section:0:3} == "FT8" ]]; then
+            wd_logger 2 "Perform special search for FT8 sections since there are multiple sections which start '[FT8-....]'"
+            conf_section="FT8.*"
+        fi
+        local files_with_section_list=( $(grep -i -l "^\[${conf_section}\]" ${files_list[@]} ) )
+        case ${#files_with_section_list[@]} in
+            0)
+                wd_logger 1 "ERROR: can't find a file with section '${conf_section}' in ${conf_dir_name}"
+                echo ${force_abort}
+                ;;
+            1)
+                conf_file_name=${files_with_section_list[0]}
+                wd_logger 2 "Found section '${conf_section}' in ${conf_file_name}"
+                ;;
+            *)
+                 wd_logger 1 "ERROR: found ${#files_with_section_list[@]} files with a section '${conf_section}': ${files_with_section_list[*]}"
+                echo ${force_abort}
+                ;;
+        esac
+        ### conf_file_name has been changed to that of the conf_file_name.d/NNN file which contans the desired section/variable
     fi
-    local section_lines=$( grep -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
+    if [[ ! -f ${conf_file_name} ]] ; then
+        wd_logger 1 "ERROR: config file '${conf_file_name}' doesn't exist"
+         echo ${force_abort}
+    fi
+    local section_lines=$( grep -i -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
     if [[ -z "${section_lines}" ]]; then
         wd_logger 1 "ERROR:  couldn't find section '\[${conf_section}\]' in  ${conf_file_name}"
-        return 2
+        echo ${force_abort}
     fi
     wd_logger 2 "Got section '\[.*${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
     local section_variable_value=$( echo "${section_lines}" | awk "/${conf_variable_name} *=/ { print \$3 }" )
     if [[ -z "${section_variable_value}" ]]; then
         wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
-        return 3
+        echo ${force_abort}
     fi
+        
     eval ${__return_variable_name}="\${section_variable_value}"
     wd_logger 2 "Returned the value '${section_variable_value}' of variable '${conf_variable_name}' in '${conf_section}' section of config file '${conf_file_name}' to variable '${__return_variable_name}'"
     return 0
@@ -237,16 +323,16 @@ function get_current_commit_sha() {
         wd_logger 1 "ERROR: directory '${git_directory}' doesn't exist"
         return 1
     fi
-    ( cd ${git_directory}; git log )  >& ${GIT_LOG_OUTPUT_FILE}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: directory ${git_directory} is not a git-created directory:\n$(< ${GIT_LOG_OUTPUT_FILE})"
-        return 2
+    wd_logger 2 "Getting git commit from  ${git_directory}"
+    ( cd ${git_directory}; git log >& ${GIT_LOG_OUTPUT_FILE} )
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'cd ${git_directory}; git log' => ${rc}:\n$(head ${GIT_LOG_OUTPUT_FILE})"
+        echo ${force_abort}
     fi
     local commit_sha=$( awk '/commit/{print $2; exit}' ${GIT_LOG_OUTPUT_FILE} )
     if [[ -z "${commit_sha}" ]]; then
         wd_logger 1 "ERROR: 'git log' output does not contain a line with 'commit' in it"
-        return 3
+        echo ${force_abort}
     fi
     wd_logger 2 "'git log' is returning the current commit COMMIT = ${commit_sha}"
     eval ${__return_commit_sha_variable}=\${commit_sha}
@@ -278,7 +364,7 @@ function ka9q-get-configured-radiod() {
         wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
 
         if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_nam} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
             exit 1
         fi
         wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
@@ -331,8 +417,8 @@ function ka9q_conf_file_bw_check() {
 
 ### Parses the data fields in the first line with the word 'STAT' in it into the global associative array ka9q_status_list()
 declare KA9Q_MIN_LINES_IN_USEFUL_STATUS=20
-declare KA9Q_GET_STATUS_TRIES=5
-declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-5}       ### low long to wait for a 'metadump...&' to complete
+declare KA9Q_GET_STATUS_TRIES=${KA9Q_GET_STATUS_TRIES-1}
+declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-15}       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
@@ -433,7 +519,7 @@ function ka9q_parse_metadump_file_to_status_file() {
 }
 
 function ka9q_parse_status_value() {
-    local ___return_var="$1"
+    declare -n ___return_var="$1"
     local status_file=$2
     local search_val="$3"
 
@@ -442,19 +528,27 @@ function ka9q_parse_status_value() {
     ### and replace command fields with ';' which isn't found in any of the current status lines
     if [[ ! -f  ${status_file} ]]; then
         wd_logger 1 "ERROR: can't find  ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 1
     fi
     local search_results
-    search_results=$( sed -n -e "s;^\[[0-9]*\] ${search_val};;p"  ${status_file} )
+    search_results=$( sed -n -e "s#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q" "${status_file}" 2> sed.stderr | xargs )
+    local rc=$? ; if (( rc )); then
+    wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}:\n$(<sed.stderr)"
+        ___return_var=""
+        return 1
+    fi
+    if [[ -s sed.stderr ]]; then
+        wd_logger 1 "ERROR: 'sed -n -e 's#^\[[0-9]*\] ${search_val}##; t print; b; :print; p; q' ${status_file}'=> ${rc}, but sed.stderr has:\n$(<sed.stderr)"
+    fi
 
     if [[ -z "${search_results}" ]]; then
         wd_logger 1 "ERROR: can't find '${search_val}' in ${status_file}"
-        eval ${___return_var}=\"""\"  ### ensures that return variable is initialized
+        ___return_var=""
         return 2
     fi
     wd_logger 2 "Found search string '${search_val}' in line and returning '${search_results}'"
-    eval ${___return_var}=\""${search_results}"\"
+    ___return_var="${search_results}"
     return 0
 }
 
@@ -463,7 +557,7 @@ declare KA9Q_METADUMP_CACHE_FILE_NAME="./ka9q_status.log"
 declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
 
 function ka9q_get_current_status_value() {
-    local __return_var="$1"
+    declare -n __return_var="$1"
     local receiver_ip_address=$2
     local receiver_freq_hz=$3
     local search_val="$4"
@@ -482,24 +576,22 @@ function ka9q_get_current_status_value() {
     else
         wd_logger 2 "Updating ${status_log_file}"
         ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if ((  rc )); then
             wd_logger 1 "ERROR: failed to update ${status_log_file}"
             return ${rc}
         fi
     fi
 
     local value_found
-    ka9q_parse_status_value  value_found  ${status_log_file} "${search_val}"
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    ka9q_parse_status_value "value_found"  ${status_log_file} "${search_val}"
+    rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: failed to get new status"
         return ${rc}
     fi
     
     wd_logger 2 "Returning '${value_found}'"
 
-    eval ${__return_var}=\""${value_found}"\"
+    __return_var="${value_found}"
     return 0
 }
 
@@ -560,7 +652,7 @@ function ka9q-get-conf-file-name() {
         return 2
     fi
     eval ${__return_conf_file_var_name}=\"\${ka9q_conf_file}\"
-    wd_logger 2 "Found pid =${ka9q_pid_value} and conf_file = '${ka9q_conf_file}'"
+    wd_logger 1 "Found pid =${ka9q_pid_value} and conf_file = '${ka9q_conf_file}'"
     return 0
 }
 
@@ -571,7 +663,7 @@ function ka9q-get-conf-file-name() {
 #exit
 
 function ka9q-get-status-dns() {
-    local ___return_status_dns_var_name=$1
+    declare -n ___return_status_dns_var_name=$1
 
     local ka9q_web_pid
     local ka9q_web_conf_file
@@ -581,17 +673,22 @@ function ka9q-get-status-dns() {
     get_config_file_variable "conf_web_dns" "KA9Q_WEB_DNS"
     if [[ -n "${conf_web_dns-}" ]]; then
         wd_logger 1 "Found KA9Q_WEB_DNS='$conf_web_dns' in WD.conf, so set KA9Q-web to display that"
-        eval ${___return_status_dns_var_name}=\"${conf_web_dns}\"
+        ___return_status_dns_var_name="${conf_web_dns}"
         return 0
     else
-        wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on tghe LAN using the avahi DNS service"
+        wd_logger 1 "Found no KA9Q_WEB_DNS='<DNS_URL>' in WD.conf, so lookup on the LAN using the avahi DNS service"
     fi
 
     ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"
-    rc=$? ; if (( rc )); then
+    rc=$? ; if (( rc == 0 )); then
+        wd_logger 1 "'ka9q-get-conf-file-name  "ka9q_web_pid"  "ka9q_web_conf_file"' => ${ka9q_web_conf_file}"
+    else
         wd_logger 1 "Can't get ka9q-get-conf-file-name, so no local radiod is running. See if radiod is running remotely"
         avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log
-        rc=$?
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'avahi-browse -t -r _ka9q-ctl._udp ' -> ${rc}"
+            return 1
+        fi
         wd_logger 2 "'avahi-browse -t -r _ka9q-ctl._udp 2> /dev/null | grep hf.*.local | sort -u  > avahi-browse.log' => $rc.  avahi-browse.log=>'$(<  avahi-browse.log)'"
         local status_dns_list=( $( sed -n 's/.*\[\(.*\)\].*/\1/p'  avahi-browse.log ) )
         wd_logger 1 "{#status_dns_list[@]} = ${#status_dns_list[@]}, status_dns_list[] = '${status_dns_list[*]}'"
@@ -601,8 +698,8 @@ function ka9q-get-status-dns() {
                  return 1
                  ;;
              1)
-                 wd_logger 1 "Found one radiod outputing ${status_dns}, so there must be an active radiod service running remotely"
-                 eval ${___return_status_dns_var_name}=\"${status_dns}\"
+                 wd_logger 1 "Found one radiod outputing '${status_dns_list[0]}', so there must be an active radiod service running remotely"
+                 ___return_status_dns_var_name="${status_dns_list[0]}"
                  return 0
                  ;;
              *)
@@ -612,19 +709,29 @@ function ka9q-get-status-dns() {
                  return 1
                  ;;
          esac
+
     fi
-    if [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
-        wd_logger 1 "Cant' find the conf file '${conf_file}' for radiod"
-        returm 2
+
+    local ka9q_web_conf_temp_file_path="/tmp/ka9q_web_conf.txt"
+    local ka9q_web_conf_dir="${ka9q_web_conf_file}.d"
+    if [[ -d ${ka9q_web_conf_dir} ]] ; then
+        wd_logger 1 "Getting conf lines from ${ka9q_web_conf_dir}/*"
+        cat ${ka9q_web_conf_dir}/* > ${ka9q_web_conf_temp_file_path}
+    elif [[ -z "${ka9q_web_conf_file}" || ! -f "${ka9q_web_conf_file}" ]]; then
+        wd_logger 1 "Can't find the conf file '${ka9q_web_conf_file}' for radiod"
+        echo ${force_abort}
+    else
+        cp -p ${ka9q_web_conf_file}  ${ka9q_web_conf_temp_file_path}
     fi
+
     local ka9q_radiod_dns
-    ka9q_radiod_dns=$( grep -A 20 "\[global\]" "${ka9q_web_conf_file}" |  awk '/^status =/{print $3}' )
+    ka9q_radiod_dns=$( grep -A 20 "\[global\]" "${ka9q_web_conf_temp_file_path}" |  awk '/^status =/{print $3}' )
     if [[ -z "${ka9q_radiod_dns}" ]]; then
-        wd_logger 1 "Can't find the 'status =' line in '${conf_file}'"
-        returm 3
+        wd_logger 1 "Can't find the 'status =' line in '${ka9q_web_conf_temp_file_path}'"
+        echo ${force_abort}
     fi
-    wd_logger 2 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
-    eval ${___return_status_dns_var_name}=\"${ka9q_radiod_dns}\"
+    wd_logger 1 "Found the radiod status DNS = '${ka9q_radiod_dns}'"
+    ___return_status_dns_var_name="${ka9q_radiod_dns}"
     return 0
 }
 
@@ -635,6 +742,15 @@ function ka9q-get-status-dns() {
 
 declare KA9Q_WEB_CMD="/usr/local/sbin/ka9q-web"
 
+declare KA9Q_WEB_TITLE="${KA9Q_WEB_TITLE-}"
+if [[ -z "${KA9Q_WEB_TITLE}" ]]; then
+    declare ANTENNA_DESCRIPTION="${ANTENNA_DESCRIPTION-<ANTENNA_NOT_DEFINED>}"
+    if [[ -n "${WSPRNET_REPORTER_ID-}" && -n "${REPORTER_GRID-}" ]]; then
+        KA9Q_WEB_TITLE="${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}"
+    else
+        KA9Q_WEB_TITLE="<REPORTER_AND_GRID_NOT_DEFINED>"
+    fi
+fi
 
 declare ka9q_service_daemons_list=(
     "hf1.local 8081 WW0WWV"
@@ -650,7 +766,7 @@ function ka9q_web_daemon() {
 
         local ka9q_radiod_status_dns=""
         while [[ -z "$ka9q_radiod_status_dns" ]]; do
-            ka9q-get-status-dns "ka9q_radiod_status_dns" >& /dev/null
+            ka9q-get-status-dns "ka9q_radiod_status_dns" #>& /dev/null
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: ka9q-get-status-dns()  => ${rc}"
             fi
@@ -660,7 +776,7 @@ function ka9q_web_daemon() {
             fi
         done
         ka9q_service_daemons_list=()
-        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-}"  ### This is hack to get this one service implementation working
+        ka9q_service_daemons_list[0]="${ka9q_radiod_status_dns} ${KA9Q_WEB_IP_PORT-8081} ${KA9Q_WEB_TITLE-NOT_DEFINED}"  ### This is hack to get this one service implementation working
 
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
@@ -729,18 +845,11 @@ function build_ka9q_radio() {
         return 2
     fi
     wd_logger 2 "Building ${project_subdir}"
-    (
-    cd  ${project_subdir}
-    if [[ ! -L  Makefile ]]; then
-        if [[ -f  Makefile ]]; then
-            wd_logger 1 "WARNING: Makefile exists but it isn't a symbolic link to Makefile.linux"
-            rm -f Makefile
-        fi
-        wd_logger 1 "Creating a symbolic link from Makefile.linux to Makefile"
-        ln -s Makefile.linux Makefile
+    local makefile_name="Makefile"
+    if [[ ${project_subdir} == "ka9q-radio" && -f "${project_subdir}/Makefile.linux" ]]; then
+        makefile_name="Makefile.linux"
     fi
-    make
-    ) >&  ${project_logfile}
+    ( cd  ${project_subdir} ; make -f ${makefile_name} ) >&  ${project_logfile}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
         return 3
@@ -757,8 +866,12 @@ function build_ka9q_radio() {
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
         1)
-            wd_logger 1 "New files were created, so run 'sudo make install"
-            ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
+            if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
+                wd_logger 1 "New files were created but WD is not configured to install and run ka9q-radio, so don't run 'sudo make install"
+            else
+                wd_logger 1 "New files were created and WD is configured to install and run ka9q-radio, so run 'sudo make install"
+                ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
+            fi
             ;;
         *)
             wd_logger 1 "ERROR: 'diff before_make.txt after_make.txt' => ${rc}:\n$(< diff.log)"
@@ -769,16 +882,29 @@ function build_ka9q_radio() {
     if ! [[ -f pcmrecord.c ]]; then
         wd_logger 2 "WD no longer stores Scott's version of pcmrecord.c, so Phil has integrated it"
     else
-        if diff -q pcmrecord.c  ${project_subdir}/pcmrecord.c > /dev/null ; then
-            wd_logger 2 "WD's pcmrecord matches the one in ka9q-radio/"
+        ### The directory structure of KA9Q-radio changed in 9/1/2025, so pcmrecord.c needs to be found
+        local pcmrecord_src_file_path=$(find ${PWD} -mindepth 2 -name pcmrecord.c)
+        if [[ -z "${pcmrecord_src_file_path}" ]]; then
+            wd_logger 1 "ERROR: couldn't 'find . -name pcmrecord.c'"
+            exit 1
+        fi
+        if diff -q pcmrecord.c ${pcmrecord_src_file_path}  > /dev/null ; then
+            wd_logger 2 "WD's pcmrecord.c matches the one in ${pcmrecord_src_file_path}"
         else
             wd_logger 1 "Installing Scott's version of pcmrecord.c"
-            cp pcmrecord.c  ${project_subdir}/pcmrecord.c
-            (cd ${project_subdir} ; make)
+            cp pcmrecord.c ${pcmrecord_src_file_path}         ## '-p' also updates the file's timestamp so make knows to rebuild it
+            ( cd ${pcmrecord_src_file_path%/*} ; make -f ${makefile_name} ) >& make.log
             rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c"
+                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c:\n$(< make.log)"
+                exit 1
             else
-                wd_logger 1 "Built Scott's version of pcmrecord.c"
+                local pcmrecord_cmd=${pcmrecord_src_file_path%.c}
+                if ! [[ -x ${pcmrecord_cmd} ]]; then 
+                    wd_logger 1 "ERROR: the expected executable ${pcmrecord_cmd} wasn't created"
+                    exit 1
+                fi
+                KA9Q_RADIO_PCMRECORD_CMD=${pcmrecord_cmd}
+                wd_logger 1 "Built Scott's version of pcmrecord '${KA9Q_RADIO_PCMRECORD_CMD}'"
             fi
         fi
     fi
@@ -805,6 +931,11 @@ function build_ka9q_radio() {
         exit 1
     fi
     if id -nG "${USER}" | grep -qw "radio" ; then
+        if ! touch ${KA9Q_RADIOD_CONF_DIR}/test_writing 2> /dev/null ; then
+            wd_logger 1 "You are a member of the group 'radio', but you need to log out of Linux and log in again in order to install KA9Q-radio files"
+            exit 1
+        fi
+        rm ${KA9Q_RADIOD_CONF_DIR}/test_writing
         wd_logger 2 "'${USER}' is a member of the group 'radio', so we can proceed to create and/or create the radiod@conf file needed to run radios"
     else
         sudo usermod -aG radio ${USER}
@@ -821,41 +952,101 @@ function build_ka9q_radio() {
     local ka9q_conf_name
     get_config_file_variable  "ka9q_conf_name" "KA9Q_CONF_NAME"
     if [[ -n "${ka9q_conf_name}" ]]; then
-        wd_logger 1 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
+        wd_logger 2 "KA9Q radiod is using configuration '${ka9q_conf_name}' found in the WD.conf file"
     else
         ka9q_conf_name="${KA9Q_DEFAULT_CONF_NAME}"
         wd_logger 2 "KA9Q radiod is using the default configuration '${ka9q_conf_name}'"
     fi
-    local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
-    local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
 
     local radio_restart_needed="no"
-    if [[ ! -f ${ka9q_conf_file_path} ]]; then
-        if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
-            wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
-            exit 1
-        else
-            wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
-            cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
-            radio_restart_needed="yes"
-        fi
+    local ka9q_conf_dir="${KA9Q_RADIOD_CONF_DIR}"
+    local ka9q_conf_file_name="radiod@${ka9q_conf_name}.conf"
+
+    ### Default is to find the config sections in the old style single ..conf file
+    local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
+    ### INI/CONF FILE        SECTION   VARIABLE  DESIRED VALUE
+    local init_file_section_variable_value_list=(
+            "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
+            "${ka9q_conf_file_path}  rx888   description 63"    ### avahi DNS names can be at most 63 characters and can't include '/' and other special chars, so error out if that isn't the case
+            "${ka9q_conf_file_path}  WSPR    agc          0"
+            "${ka9q_conf_file_path}  WSPR    gain         0"
+            "${ka9q_conf_file_path}  WSPR    low       1300"
+            "${ka9q_conf_file_path}  WSPR    high      1700"
+            "${ka9q_conf_file_path}  WSPR    encoding float"
+            "${ka9q_conf_file_path}  WWV-IQ  disable     no"
+            "${ka9q_conf_file_path}  WWV-IQ  agc          0"
+            "${ka9q_conf_file_path}  WWV-IQ  gain         0"
+            "${ka9q_conf_file_path}  WWV-IQ  encoding float"
+        )
+
+    if [[ "${RX888_64_MSPS-no}" ==  "yes" ]]; then
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate     64800000")
+    else
+        ### The default is to run the RX888 at 129.6 Msps
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate    129600000")
     fi
 
-    ### INI/CONF FILE        SECTION   VARIABLE  DESIRED VALUE
-     local init_file_section_variable_value_list=(
-    "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
-    "${ka9q_conf_file_path}  rx888   description 63"    ### avahi DNS names can be at most 63 characters and can't include '/' and other special chars, so error out if that isn't the case
-    "${ka9q_conf_file_path}  WSPR    agc          0"
-    "${ka9q_conf_file_path}  WSPR    gain         0"
-    "${ka9q_conf_file_path}  WSPR    low       1300"
-    "${ka9q_conf_file_path}  WSPR    high      1700"
-    "${ka9q_conf_file_path}  WSPR    encoding float"
-    "${ka9q_conf_file_path}  WWV-IQ  disable     no"
-    "${ka9q_conf_file_path}  WWV-IQ  agc          0"
-    "${ka9q_conf_file_path}  WWV-IQ  gain         0"
-    "${ka9q_conf_file_path}  WWV-IQ  encoding float"
-    )
-    local index
+    if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
+        wd_logger 2 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
+
+        if [[ ! -f ${ka9q_conf_file_path} ]]; then
+            if ! [[ -f ${KA9Q_TEMPLATE_FILE} ]]; then
+                wd_logger 1 "ERROR: the conf file '${ka9q_conf_file_path}' for configuration ${ka9q_conf_name} does not exist"
+                echo ${force-abort}
+            else
+                wd_logger 1 "Creating ${ka9q_conf_file_path} from template ${KA9Q_TEMPLATE_FILE}"
+                cp ${KA9Q_TEMPLATE_FILE} ${ka9q_conf_file_path}
+                radio_restart_needed="yes"
+            fi
+        fi
+        if grep -q "m[0-9]*k" ${ka9q_conf_file_path} ; then
+            ### 3/12/25 - RR   The template radiod@rx888-wsprdaemon.conf included in Ka9q-radio installations to date includes an invalid 17m FT4 band frequency specification "18m10k000"
+            ###           This section repairs that and any other similarly corrupted frequency specs
+            wd_logger 1 "Fixing corrupt frequency value(s) '$(grep -oE "m[0-9]*k" ${ka9q_conf_file_path})' found in  ${ka9q_conf_file_path}"
+            sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}' => $rc, so failed to correct corrupt freq line(s)"
+            else
+                wd_logger 1 "Fixed correct corrupt freq line(s), so restart radiod"
+                radio_restart_needed="yes"
+            fi
+        fi
+    else
+        ka9q_conf_dir="${ka9q_conf_file_path}.d"
+        wd_logger 2 "Checking KA9Q configurations in files in new style directory ${ka9q_conf_dir}"
+        if find ${ka9q_conf_dir} -mindepth 1 -type f -print -quit | grep -q .; then
+            wd_logger 2 "There are flat files in ${ka9q_conf_dir}"
+        else
+            wd_logger 1 "${ka9q_conf_dir} exists, but there are no files in it"
+            echo ${force_abort}
+        fi
+        local new_style_conf_file
+        local index
+        for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
+            local config_variable_info_list=( ${init_file_section_variable_value_list[index]} )
+            local target_section=${config_variable_info_list[1]}
+            local target_section_regex="^\[.*${target_section}\]"
+            local target_section_file_path_list=( $(grep -il "${target_section_regex}" $( find ${ka9q_conf_dir} -type f ! -name '*~') ) )   ## Ignore Phil's editor's ...~ files
+            if (( ${#target_section_file_path_list[@]} == 0 )); then
+                wd_logger 1 "ERROR: can't find a file in ${ka9q_conf_dir} which contains [${target_section}]"
+                echo ${force_abort}
+            elif  (( ${#target_section_file_path_list[@]} > 1 )); then
+                 wd_logger 1 "ERROR: found  ${#target_section_file_path_list[@]} which contain [${target_section}]: ${target_section_file_path_list[*]}"
+                echo ${force_abort}
+            else
+                wd_logger 2 "Found regex of [${target_section}] in ${target_section_file_path_list[0]}"
+
+                local section_config_file_path="${target_section_file_path_list[0]}"
+                local old_entry="${config_variable_info_list[*]}"
+                 config_variable_info_list[0]="${section_config_file_path}"
+                 init_file_section_variable_value_list[index]="${config_variable_info_list[*]}"
+                 wd_logger 2 "Changed file path in:\n'${old_entry}' to:\n'${init_file_section_variable_value_list[index]}'\n"
+            fi
+        done
+    fi
+    wd_logger 2 "Done setting up conf targets"
+
+   local index
     for (( index=0; index < ${#init_file_section_variable_value_list[@]}; ++index )); do
         wd_logger 2 "Checking .conf/.ini file variable with: 'update_ini_file_section_variable ${init_file_section_variable_value_list[index]}'"
         update_ini_file_section_variable ${init_file_section_variable_value_list[index]}
@@ -874,52 +1065,62 @@ function build_ka9q_radio() {
                  ;;
          esac
     done
-    if grep -q "m[0-9]*k" ${ka9q_conf_file_path} ; then
-        ### 3/12/25 - RR   The template radiod@rx888-wsprdaemon.conf included in Ka9q-radio installations to date includes an invalid 17m FT4 band frequency specification "18m10k000"
-        ###           This section repairs that and any other similarly corrupted frequency specs
-        wd_logger 1 "Fixing corrupt frequency value(s) '$(grep -oE "m[0-9]*k" ${ka9q_conf_file_path})' found in  ${ka9q_conf_file_path}"
-        sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}
-        rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: 'sed -i -E 's/(m[0-9]*)k/\1/g' ${ka9q_conf_file_path}' => $rc, so failed to correct corrupt freq line(s)"
-        else
-            wd_logger 1 "Fixed correct corrupt freq line(s), so restart radiod"
-            radio_restart_needed="yes"
-        fi
+
+    ### Make sure the wisdomf needed for effecient execution of radiod exists
+    wd_logger 2 "Creating or updating /etc/fftw/wisdom"
+    killall fftwf-wisdom 2> /dev/null
+
+    local fftwf_stdout_file_path=$(mktemp)
+    local tmp_wisdom_file_path="/tmp/wisdom"
+
+    local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
+    if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
+        fft_129_Msps="rof3240000"
     fi
 
-   ### Make sure the wisdomf needed for effecient execution of radiod exists
-    if [[ -f  ${KA9Q_RADIO_NWSIDOM} ]]; then
-        wd_logger 2 "Found ${KA9Q_RADIO_NWSIDOM} used by radio, so no need to create it"
+    local ref_wisdom_file_arg=""
+    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]]; then
+        ref_wisdom_file_arg="-w ${KA9Q_RADIO_WISDOM_FILE_PATH}"
+    fi
+    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${ref_wisdom_file_arg} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
+                                rof1620000 cob162000 cob81000 cob40500 cob32400 \
+                                cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
+                                cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
+                                >${fftwf_stdout_file_path} 2>&1 &
+    local fftwf_pid=$!
+    local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
+
+    ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
+    trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
+
+    if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
+        wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fftwf_stdout_file_path})\n"
     else
-        wd_logger 1 "Didn't find ${KA9Q_RADIO_NWSIDOM} by radiod, so need to create it.  This may take minutes or even hours..."
-        cd ${KA9Q_RADIO_ROOT_DIR}
-        time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof1620000 cob9600 cob4800 cob1920 cob1200 cob960 cob800 cob600 cob480 cob400 cob320 cob300 cob200 cob160 cob150
-        rc=$?
-        cd - > /dev/null
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to 'time fftwf-wisdom -v -T 1 -o nwisdom rof3240000 rof500000...'"
-            return 3
-        fi
-        if [[ ! -f ${KA9Q_RADIO_NWSIDOM} ]]; then
-            wd_logger 1 "ERROR: can't find expected '${KA9Q_RADIO_NWSIDOM}'"
-            return 3
-        fi
-        wd_logger 1 "${KA9Q_RADIO_NWSIDOM} has been created"
+        wd_logger 1 "Optimizing the FFT library.  Watching it progess, which may take hours..."
+        tail -f --pid=${fftwf_pid} ${fftwf_stdout_file_path}
     fi
+    trap - INT     ### Cancel the trap
 
-    if [[ ! -f ${FFTW_WISDOMF} || ${KA9Q_RADIO_NWSIDOM} -nt ${FFTW_WISDOMF} ]]; then
-        if [[ -f ${FFTW_WISDOMF} ]]; then
-            wd_logger 1 "Backing up the exisitng ${FFTW_WISDOMF} to ${FFTW_WISDOMF}.save before installing a new ${KA9Q_RADIO_NWSIDOM}"
-            sudo cp -p ${FFTW_WISDOMF} ${FFTW_WISDOMF}.save
+    ### Ensure that both /etc/fftw/wisdomf and /var/lib/ka9q-radio/wisdom are present and updated to the most complete FFT planning which was just created above
+    for wisdom_file in ${KA9Q_RADIO_WISDOM_FILE_PATH} ${FFTW_SYSTEM_WISDOM_FILE_PATH}; do
+        local current_wisdom_file_size=0
+        if [[ -f ${wisdom_file} ]]; then
+            current_wisdom_file_size=$(stat -c %s ${wisdom_file} );
         fi
-        wd_logger 1 "Copying ${KA9Q_RADIO_NWSIDOM} to ${FFTW_WISDOMF}"
-        sudo cp -p ${KA9Q_RADIO_NWSIDOM} ${FFTW_WISDOMF}
-        local dir_user_group=$(stat --printf "%U:%G" ${FFTW_DIR})
-        sudo chown ${dir_user_group} ${FFTW_WISDOMF}
-        wd_logger 1 "Changed ownership of ${FFTW_WISDOMF} to ${dir_user_group}"
-        radio_restart_needed="yes"
-    fi
-    wd_logger 2 "${FFTW_WISDOMF} is current"
+        local new_wisdom_file_size=0
+        if [[ -f ${tmp_wisdom_file_path} ]]; then
+            new_wisdom_file_size=$(stat -c %s ${tmp_wisdom_file_path});
+        fi
+        if (( new_wisdom_file_size <= current_wisdom_file_size )); then
+            wd_logger 2 "No need to update ${wisdom_file}"
+        else
+            wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${wisdom_file}, so install it"
+            sudo cp -p ${tmp_wisdom_file_path} ${wisdom_file}
+            sudo chmod 664 ${wisdom_file}
+            sudo chown --reference=${wisdom_file%/*} ${wisdom_file}
+        fi
+    done
+    rm ${fftwf_stdout_file_path}
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
     wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
@@ -928,7 +1129,7 @@ function build_ka9q_radio() {
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
-    if (( cpu_core_count < 6 )); then
+    if [[ -z "${RADIOD_CPU_CORES-}" ]] && (( cpu_core_count < 6 )); then
         wd_logger 2 "Found only ${cpu_core_count} cores, so don't restrict which cores it can run on"
     else
         local radiod_cores
@@ -937,7 +1138,7 @@ function build_ka9q_radio() {
              wd_logger 1 "RADIOD_CPU_CORES='$RADIOD_CPU_CORES' in WD.conf, so configure radiod to run in those cores"
          else
              radiod_cores="$(< /sys/devices/system/cpu/cpu0/topology/thread_siblings_list )"
-             wd_logger 1 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
+             wd_logger 2 "This CPU has ${cpu_core_count} cores, so restrict radiod to cores ${radiod_cores}"
         fi
         local radio_service_file_path="/etc/systemd/system/radiod@.service"
         update_ini_file_section_variable "$radio_service_file_path"  "Service" "CPUAffinity" "$radiod_cores"
@@ -951,7 +1152,7 @@ function build_ka9q_radio() {
                 sudo systemctl daemon-reload
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "'sudo systemctl daemon-reload' => $rc after change to  ${radio_service_file_path}"
-                    exit 1
+                    echo ${force_abort}
                 fi
                 radio_restart_needed="yes"
                 ;;
@@ -974,7 +1175,7 @@ function build_ka9q_radio() {
             wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
             return 0
         fi
-        wd_logger 1 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+        wd_logger 2 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
     else
         wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
     fi
@@ -995,208 +1196,245 @@ function build_ka9q_radio() {
 #test_get_conf_section_variable
 #printf "%s\n" ${test_value}
 #exit
-declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/run}"             ### The KA9q FT decoder puts its wav files in the /tmp/ftX/... trees and logs spots to /var/log/ftX.log
+declare KA9Q_FT_TMP_ROOT="${KA9Q_FT_TMP_ROOT-/var/lib/ka9q-radio}"             ### Configure the dameon with runspcmrecord to put its wav files here is subdirs under here
 
 declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked code which decodes both FT4 and FT8 
 declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
-function ka9q-ft-setup() {
+function ka9q-ft-setup() 
+{
+    local rc
+
     local ka9q_runs_only_remotely
     get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
     if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
-        wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
+        wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
         return 0
     fi
 
-    local ft_type=$1        ## can be 4 or 8
+    local ft_type=${1}        ## must be 'ft4' or 'ft8'
+
     local ka9q_ft_tmp_dir=${KA9Q_FT_TMP_ROOT}/${ft_type}       ### The ftX-decoded will create this directory and put the wav files it needs in it.  We don't need to create it.
 
+    ### Since May 2025 ka9q-radio decodes of each FT4/8 band is performed by a pair of systemctl daemons.
+    ### The ftX-decode dameon reads wav files created by the ftX-record daemon (which is an instance of pcmrecord).
+    ### It is created by a 'sudo make install' in the ka9q-radion directory and doesn't need any per-site customization
+
+    ### First stop and deactivate the legacy ftX-decodd.service
+    local legacy_ft_decoded_service_name="${ft_type}-decoded.service"
+    local legacy_ft_decoded_service_file_path="/etc/systemd/system/${legacy_ft_decoded_service_name}"
+    sudo systemctl list-unit-files | grep -q ${legacy_ft_decoded_service_name}
+    rc=$? ; if (( rc )); then
+        wd_logger 2 "Found no legacy ${legacy_ft_decoded_service_name} which would need to be disabled"
+    else
+        wd_logger 1 "Found a legacy ${legacy_ft_decoded_service_name} which needs to be stopped and disabled"
+        sudo systemctl stop    ${legacy_ft_decoded_service_name}
+        sudo systemctl disable ${legacy_ft_decoded_service_name}
+        sudo rm ${legacy_ft_decoded_service_file_path}
+        sudo systemctl daemon-reexec
+    fi
+
+    local service_restart_needed="no"
+    local ft_decode_service_file_name="${ft_type}-decode@.service"
+    local ft_decode_systemd_service_file_path="/etc/systemd/system/${ft_decode_service_file_name}"
+    if [[ -f ${ft_decode_systemd_service_file_path} ]]; then
+        wd_logger 2 "Found the expected service file '${ft_decode_systemd_service_file_path}'"
+    else
+        wd_logger 1 "Can't find the service file '${ft_decode_systemd_service_file_path}' because it is not automatically installed by ka9q-radio" 
+        local ka9q_template_ft_decode_service_file_path="${KA9Q_RADIO_DIR}/service/${ft_decode_service_file_name}"
+        if [[ ! -f ${ka9q_template_ft_decode_service_file_path} ]]; then
+            wd_logger 1 "ERROR: can't find the expected template file ${ka9q_template_ft_decode_service_file_path}, so force an abort"
+            echo ${force_abort}
+        fi
+        sudo cp -p ${ka9q_template_ft_decode_service_file_path} ${ft_decode_systemd_service_file_path}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_ft_decode_service_file_path} ${ft_decode_systemd_service_file_path}' => ${rc},  so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Copied the service file template ${ka9q_template_ft_decode_service_file_path} to ${ft_decode_systemd_service_file_path}"
+        service_restart_needed="yes"
+    fi
+    ### We have the ftX-decode@.service file 
+
+    ### To start it we need its conf file
+    local ft_decode_conf_file_name="${ft_type}-decode.conf"
+    local ka9q_ft_decode_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_decode_conf_file_name}"
+    if [[ ! -f ${ka9q_ft_decode_conf_file_path} ]]; then
+        wd_logger 1 "Can't find expected ${ka9q_ft_decode_conf_file_path}, so copy the template file to it"
+        local ka9q_template_ft_decode_conf_file_path="${KA9Q_RADIO_DIR}/config/${ft_decode_conf_file_name}"
+        if [[ ! -f ${ka9q_template_ft_decode_conf_file_path} ]]; then
+            wd_logger 1 "ERROR: can't file expected template file '${ka9q_template_ft_decode_conf_file_path}', so force an abort"
+            echo ${force_abort}
+        fi
+        sudo sed '/^[[:space:]]*$/d' ${ka9q_template_ft_decode_conf_file_path} > ${ka9q_ft_decode_conf_file_path}     ### remove the blank lines from the template file
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_ft_decode_conf_file_path} ${ka9q_ft_decode_conf_file_path}' => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Copied the conf file template ${ka9q_template_ft_decode_conf_file_path} to ${ka9q_ft_decode_conf_file_path}"
+        service_restart_needed="yes"
+    fi
+    ### We have its conf file
+
+    ### Start it up
+    local ft_service_file_instance_name=${ft_decode_service_file_name/@/@1}
+    if [[ ${service_restart_needed} == "no" ]] && sudo systemctl status ${ft_service_file_instance_name}  >& /dev/null; then
+        wd_logger 2 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
+    else
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
+        sudo systemctl daemon-reload
+        sudo systemctl restart ${ft_service_file_instance_name}  >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to restart ${ft_service_file_instance_name} => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 2 "Restarted service  ${ft_service_file_instance_name}"
+    fi
+
+    ### Ensure that it will run at startup
+    if sudo systemctl is-enabled ${ft_service_file_instance_name} >& /dev/null ; then
+        wd_logger 2 "${ft_service_file_instance_name} is enabled, so it doesn't need to be enabled"
+    else
+        wd_logger 1 "${ft_service_file_instance_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ft_service_file_instance_name} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to enable ${ft_service_file_instance_name} => ${rc}, so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Enabled service ${ft_service_file_instance_name}"
+    fi
+    ### The ftX-decode daemon is set up
+
+    ### Setup the ftX-record daemon
+    ### The wav files are created by the ftX-record daemon which listens to the multicast stream defined in /etc/radio/radiod@.....conf and outputs a series of wav files
+    ### Since sites with multiple RX88s will be sending to different MC addresses, the ftX-record dameon may need to be modified to listen on that MC address
+    service_restart_needed="no"
+    local ft_record_service_name="${ft_type}-record.service"           ### Unlike the new ftX-decode service above, the ftX-record service name and .service file name are the same
+    local ft_record_service_file_name="${ft_record_service_name}"       
+    local ft_record_systemd_service_file_path="/etc/systemd/system/${ft_record_service_file_name}"
+    if [[ -f ${ft_record_systemd_service_file_path} ]]; then
+        wd_logger 2 "Found the expected service file '${ft_record_systemd_service_file_path}'"
+    else
+        wd_logger 1 "Can't find the service file '${ft_record_systemd_service_file_path}' because it is not automatically installed by ka9q-radio" 
+        local ka9q_template_ft_record_service_file_path="${KA9Q_RADIO_DIR}/service/${ft_record_service_file_name}"
+        if [[ ! -f ${ka9q_template_ft_record_service_file_path} ]]; then
+            wd_logger 1 "ERROR: can't find the expected template file ${ka9q_template_ft_record_service_file_path}, so force an abort"
+            echo ${force_abort}
+        fi
+        sudo cp -p ${ka9q_template_ft_record_service_file_path} ${ft_record_systemd_service_file_path}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo cp -p ${ka9q_template_ft_record_service_file_path} ${ft_record_systemd_service_file_path}' => ${rc},  so force an abort"
+            echo ${force_abort}
+        fi
+        wd_logger 1 "Copied the service file template ${ka9q_template_ft_record_service_file_path} to ${ft_record_systemd_service_file_path}"
+        service_restart_needed="yes"
+    fi
+    ### We have the ftX-record.service file 
+
     wd_logger 2 "Find the ka9q conf file"
-    local rc
     local radiod_conf_file_name
     ka9q-get-configured-radiod "radiod_conf_file_name"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name'"
-        return ${rc}
+        wd_logger 1 "ERROR: can't find expected 'radiod_conf_file_name, so force an abort'"
+        echo ${force_abort}
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast DNS name of the stream"
+    wd_logger 2 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name'"
-        return ${rc}
+        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name, so force an abort'"
+        echo ${force_abort}
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
-    local decoded_conf_file_name="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-decode.conf"
+    local ft_record_conf_file_name="${ft_type}-decode.conf"     ### ftX-record.service file gets its MCAST from /etc/radio/ftX-decode.conf
+    local ft_record_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ft_record_conf_file_name}"
     local mcast_line="MCAST=${dns_name}"
     local directory_line="DIRECTORY=${ka9q_ft_tmp_dir}" 
 
     local needs_update="no"
 
-    if [[ ! -f ${decoded_conf_file_name} ]]; then
-        wd_logger 1 "File '${decoded_conf_file_name}' doesn't exist, so create it"
+    if [[ ! -f ${ft_record_conf_file_path} ]]; then
+        wd_logger 1 "File '${ft_record_conf_file_path}' doesn't exist, so create it"
+        touch ${ft_record_conf_file_path}
         needs_update="yes"
-    elif ! grep -q "${mcast_line}" ${decoded_conf_file_name} ; then
-         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
+    fi
+    if ! grep -q "${mcast_line}" ${ft_record_conf_file_path} ; then
+        wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected multicast line '${mcast_line}', so recreate the file"
         needs_update="yes"
-    elif ! grep -q "${directory_line}" ${decoded_conf_file_name} ; then
-         wd_logger 1 "File '${decoded_conf_file_name}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
+    fi
+    if ! grep -q "${directory_line}" ${ft_record_conf_file_path} ; then
+         wd_logger 1 "File '${ft_record_conf_file_path}' doesn't contain the expected directory line '${directory_line}', so recreate the file"
         needs_update="yes"
+    fi
+
+    if [[ ${needs_update} != "yes" ]]; then
+        wd_logger 2 "File '${ft_record_conf_file_path}' is correct, so no update is needed"
     else
-         wd_logger 2 "File '${decoded_conf_file_name}' is correct, so no update is needed"
+        echo "${mcast_line}"      >  ${ft_record_conf_file_path}
+        echo "${directory_line}"  >> ${ft_record_conf_file_path}
+        wd_logger 1 "Created ${ft_record_conf_file_path} which contains:\n$(<  ${ft_record_conf_file_path})"
+        service_restart_needed="yes"
     fi
 
-    if [[ ${needs_update} == "yes" ]]; then
-        echo "${mcast_line}"      >  ${decoded_conf_file_name}
-        echo "${directory_line}"  >> ${decoded_conf_file_name}
-        wd_logger 1 "Created ${decoded_conf_file_name} which contains:\n$(<  ${decoded_conf_file_name})"
-    fi
-
-    local rc
     getent group "radio" > /dev/null 2>&1
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist"
-        return ${rc}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: the expected group 'radio' created by ka9q-radio doesn't exist, so force an abort"
+        echo ${force_abort}
     fi
 
-    local group_owner=$( stat -c "%G" ${decoded_conf_file_name} )
+    local group_owner=$( stat -c "%G" ${ft_record_conf_file_path} )
     if [[ ${group_owner} != "radio" ]]; then
-        wd_logger 1 "'${decoded_conf_file_name}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
-        sudo chgrp "radio" ${decoded_conf_file_name}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 ""
-            return ${rc}
+        wd_logger 1 "'${ft_record_conf_file_path}' is owned by group '${group_owner}', not the required group 'radio', so change the ownership"
+        sudo chgrp "radio" ${ft_record_conf_file_path}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo chgrp "radio" ${ft_record_conf_file_path}' => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
+        service_restart_needed="yes"
     fi
 
-    local needs_restart="no"
-    local service_name="${ft_type}-decoded.service"
-
-    if [[ ${needs_update} == "yes" ]]; then
-        wd_logger 1 "We need to restart the '${service_name} because the conf file changed"
-        needs_restart="yes"
-    elif ! sudo systemctl status ${service_name}  >& /dev/null; then
-        wd_logger 1 "${service_name} is not running, so it needs to be started"
-        needs_restart="yes"
+    if [[ ${service_restart_needed} == "no" ]] && ! sudo systemctl status ${ft_record_service_name}  >& /dev/null; then
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
+        service_restart_needed="yes"
     else
-        wd_logger 2 "${service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
+        wd_logger 2 "${ft_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
     fi
-    if [[ ${needs_restart} == "yes" ]]; then
-        local rc
-        sudo systemctl restart ${service_name}  >& /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: failed to restart ${service_name} => ${rc}"
-            return ${rc}
+    if [[ ${service_restart_needed} == "yes" ]]; then
+        sudo systemctl restart ${ft_record_service_name}  >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to restart ${ft_record_service_name} => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service  ${service_name}"
+        wd_logger 2 "Restarted service ${ft_record_service_name}"
     fi
-
-    ### When WD is running KA9Q's FTx decode services it could be configured to decode the wav files with WSJT-x's 'jt9' decoder,
-    ### so create a bash script which can be run by ftX-decoded,
-    ### But since jt9 can't decode ft4 wav files, WD continues to use the 'decode-ft8' program normally used by ka9q-radio.
-    ### Since jt9 appears to be more sensitive than the FT4/8 decoder 'decode-ft8' specified by KA9Q-radio, create this script so that as some point in the future we can run jt9.
-    ### In order that the jt9 spot line format matches that of 'decode-ft8', create a bash shell script which accepts the same arguments, runs jt9 and pipes its output through an awk script
-    ### It is awkward to embed an awk script inline like this, but the alternative would be to add it to WD homne directory.  When we strt using jt9 we should put it there.
-
-    sudo mkdir -p ${ka9q_ft_tmp_dir}
-    sudo chmod 777 ${ka9q_ft_tmp_dir}
-    local ka9q_ft_jt9_decoder="${ka9q_ft_tmp_dir}/wsjtx-ft-decoder.sh"
-    wd_logger 2 "Creating ${ka9q_ft_jt9_decoder}  ft_type=${ft_type}"
-
-    # execlp( Modetab[Mode].decode, Modetab[Mode].decode, "-f", freq, sp->filename, (char *)NULL);
-    sudo rm -f ${ka9q_ft_jt9_decoder}
-    echo -n "${JT9_CMD} -${ft_type#ft} \$3 | awk -v base_freq_ghz=\$2 -v file_name=\${3##*/} "             > ${ka9q_ft_jt9_decoder}
-    echo    \''/^[0-9]/ {
-            printf "%s %3d %4s %'\''12.1f ~ %s %s %s %s\n", 20substr(file_name,1,2)"/"substr(file_name,3,2)"/"substr(file_name,5,2)" "substr(file_name,8,2)":"substr(file_name,10,2)":"substr(file_name,12,2), $2, $3,
-            ( (base_freq_ghz * 1e9) + $4), $6, $7, $8, $9}'\'           >>  ${ka9q_ft_jt9_decoder}
-    chmod +x ${ka9q_ft_jt9_decoder}
-
-    ### Create a service file for the psk uploader
-    declare SYSTEMD_DIR="/etc/systemd/system"
-    local ft_service_file_name="${SYSTEMD_DIR}/${ft_type}-decoded.service"
-    local ft_log_file_name="/var/log/${ft_type}.log"
-
-    local needs_new_service_file="no"
-    if [[ ! -f ${ft_service_file_name} ]]; then
-        wd_logger 1 "Can't find service file ${ft_service_file_name}"
-        needs_new_service_file="yes"
+    if sudo systemctl is-enabled ${ft_record_service_name} >& /dev/null ; then
+        wd_logger 2 "${ft_record_service_name} is enabled, so it doesn't need to be enabled"
     else
-        local stdout_line="StandardOutput=append:${ft_log_file_name}"
-        if ! grep -q "${stdout_line}" ${ft_service_file_name} ; then
-            wd_logger 1 "Can't find correct stdout line in ${ft_service_file_name}, so recreate it" 
-            needs_new_service_file="yes"
+        wd_logger 1 "${ft_record_service_name} is not enabled, so it needs to be enabled so it will start after a linux boot"
+        sudo systemctl enable ${ft_record_service_name} >& /dev/null
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to enable ${ft_record_service_name} => ${rc}, so force an abort"
+            echo ${force_abort}
         fi
-        if [[ ${ft_type} == "ft4" || ${ft_type} == "ft8" ]]; then
-            wd_logger 2 "${ft_type} packets are proceessed by the 'decode-ft' command from ka9q-radio, so the Exec:.. line in the template .service files need not be changed"
-            if [[ ! -x ${KA9Q_DECODE_FT_CMD} ]]; then
-                wd_logger 1 "Can't find ' ${KA9Q_DECODE_FT_CMD}' which is used to decode ${ft_type} spots"
-                ka9q-ft-install-decode-ft
-                rc=$?
-                if [[ ${rc} -ne 0 ]]; then
-                    wd_logger 1 "ERROR: 'ka9q-ft-install-decode-ft()' => ${rc}"
-                    return ${rc}
-                fi
-                needs_new_service_file="yes"
-                wd_logger 1 "Successfully installed ${KA9Q_DECODE_FT_CMD}"
-            fi
-        elif [[ ${KA9Q_JT9_DECODING-no} == "yes" ]]; then
-            if ! grep -q "${JT9_CMD}" ${ft_service_file_name}; then
-                wd_logger 1 "Can't find ${JT9_CMD} in ${ft_service_file_name}, so recreate it"
-                needs_new_service_file="yes"
-            fi
-        fi
-    fi
-
-    ### Earlier versons of WD put ft[48].log files in /dev/shm/wsprdaemon/...  Now that WD puts them in /var/log,
-    ### ensure that the service file instructs systemctl to append stdout of the FT4/8 decoder to a /var/log/ft[48].log file
-    if [[ ${needs_new_service_file} == "yes" ]]; then
-        wd_logger 1 "Creating new service file ${ft_service_file_name}"
-        local ka9q_service_template_dir="${KA9Q_RADIO_DIR}/service"
-        local ka9q_ft_service_template_file_name="${ka9q_service_template_dir}/${ft_type}-decoded.service"
-        local ka9q_ft_service_tmp_file_name="${KA9Q_FT_TMP_ROOT}/${ft_type}-decoded.service"
-
-        cp ${ka9q_ft_service_template_file_name}                                                                                         ${ka9q_ft_service_tmp_file_name}
-        sed -i "/User=/s/=.*/=${USER}/"                                                                                                  ${ka9q_ft_service_tmp_file_name}
-        local my_primary_group=$(id -gn)
-        sed -i "/GROUP=/s/=.*/=${my_primary_group}/"                                                                                     ${ka9q_ft_service_tmp_file_name}
-        sed -i "/StandardOutput=append:/s;:.*;:${ft_log_file_name};"                                                                     ${ka9q_ft_service_tmp_file_name}
-        #sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" -x \"${ka9q_ft_jt9_decoder}\"  \$MCAST;"  ${ka9q_ft_service_tmp_file_name}
-        sed -i "/ExecStart=/s;=.*;=/usr/local/bin/jt-decoded -${ft_type#ft} -d \"\$DIRECTORY\" \$MCAST;"                                 ${ka9q_ft_service_tmp_file_name}
-        
-        wd_logger 1 "Created a new service file ${ft_service_file_name} in  ${ka9q_ft_service_tmp_file_name}"
-        if [[ -f ${ft_service_file_name} ]]; then
-            sudo cp -p ${ft_service_file_name} ${ft_service_file_name}.old
-        fi
-        sudo cp  ${ka9q_ft_service_tmp_file_name} ${ft_service_file_name}
-        sudo systemctl daemon-reload
-        sudo systemctl restart ${ft_type}-decoded.service
-
-        wd_logger 1 "Created new ${ft_type}-decoded.service file, daemon-reload, and restarted it" 
-    else
-        if ! sudo systemctl status ${ft_type}-decoded.service > /dev/null ; then
-            wd_logger 2 "${ft_type}-decoded.service hasn't changed but it isn't running, so start it"
-            sudo systemctl restart ${ft_type}-decoded.service
-        else
-            wd_logger 2 "${ft_type}-decoded.service hasn't changed and it is running, so nothing to do"
-        fi
+        wd_logger 1 "Enabled service ${ft_record_service_name}"
     fi
 
     ### Ensure that the logrotate service is configured to archive the /var/log/ft[48].log files so they don't grow to an unbounded size
-    local logrotate_job_file_name="/etc/logrotate.d/${ft_type}.rotate"
+    local ft_log_file_name="/var/log/${ft_type}.log"
+    local logrotate_job_file_path="/etc/logrotate.d/${ft_type}.rotate"
     local create_job_file="no"
-    if [[ ! -f ${logrotate_job_file_name} ]]; then
-        wd_logger 1 "Found no '${logrotate_job_file_name}', so create it"
+    if [[ ! -f ${logrotate_job_file_path} ]]; then
+        wd_logger 1 "Found no '${logrotate_job_file_path}', so create it"
         create_job_file="yes"
-    elif ! grep -q 'maxsize'  ${logrotate_job_file_name}; then
-         wd_logger 1 "Job file '${logrotate_job_file_name}' is missing the 'maxsize 1M' line, so recreate the file"
+    elif ! grep -q 'maxsize'  ${logrotate_job_file_path}; then
+         wd_logger 1 "Job file '${logrotate_job_file_path}' is missing the 'maxsize 1M' line, so recreate the file"
         create_job_file="yes"
+    else
+         wd_logger 2 "Logrotate file exists"
     fi
     if [[ ${create_job_file} == "yes" ]]; then
         echo "${ft_log_file_name} {
@@ -1209,22 +1447,23 @@ function ka9q-ft-setup() {
         delaycompress
         copytruncate
 } " > /tmp/${ft_type}.rotate
-        sudo cp /tmp/${ft_type}.rotate ${logrotate_job_file_name}
-        sudo chmod 644  ${logrotate_job_file_name}
-        wd_logger 1 "Added new logrotate job '${logrotate_job_file_name}' to keep '${ft_log_file_name}' clean"
+        sudo cp /tmp/${ft_type}.rotate ${logrotate_job_file_path}
+        sudo chmod 644  ${logrotate_job_file_path}
+        wd_logger 1 "Added new logrotate job '${logrotate_job_file_path}' to keep '${ft_log_file_name}' clean"
     else
-        wd_logger 2 "Found '${logrotate_job_file_name}', so check it"
+        wd_logger 2 "Found '${logrotate_job_file_path}', so is configured properly so no need to change it"
     fi
 
-    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_name})
+    local target_file=$(sed -n 's;\(^/[^ ]*\).*;\1;p' ${logrotate_job_file_path})
     if [[ "${target_file}" == "${ft_log_file_name}" ]]; then
-        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${logrotate_job_file_name}', so no changes are needed"
+        wd_logger 2 "'${target_file}' is the required '${ft_log_file_name}' in '${logrotate_job_file_path}', so no changes are needed"
     else
-        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${logrotate_job_file_name}, so fix it'"
-        sudo sed -i "s;^/[^{]*;${ft_log_file_name} ;" ${logrotate_job_file_name}
+        wd_logger 1 "'${target_file}' is not the required '${ft_log_file_name}' in '${logrotate_job_file_path}, so fix it'"
+        sudo sed -i "s;^/[^{]*;${ft_log_file_name} ;" ${logrotate_job_file_path}
     fi
 
     wd_logger 2 "Setup complete"
+    return 0
 }
 
 function build_ka9q_ft8() {
@@ -1234,8 +1473,7 @@ function build_ka9q_ft8() {
 
     wd_logger 2 "Starting"
     ( cd ${project_subdir}; if make; then sudo make install ; fi ; exit $? ) >& ${project_logfile}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
+    rc=$? ; if (( rc )); then
         cd ${start_pwd} > /dev/null
         wd_logger 1 "ERROR: 'make' => ${rc}"
         return ${rc}
@@ -1245,8 +1483,7 @@ function build_ka9q_ft8() {
     local ft_type
     for ft_type in ft8 ft4 ; do
         ka9q-ft-setup ${ft_type}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: ka9q-jt-setup() ${ft_type} => ${rc}"
             save_rc=${rc}
         else
@@ -1266,89 +1503,139 @@ function build_psk_uploader() {
     local rc
     local psk_services_restart_needed="yes"
 
-    if ! python3 -c "import docopt" 2> /dev/null; then
-        rc=$?
-        wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So install it"
-        if ! pip3 -h >& /dev/null ; then
-            rc=$?
-            wd_logger 1 "pip3 -h => ${rc}.  So install pip"
-            sudo apt install python3-pip -y
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_loggger 1 "ERROR: sudo apt install python-pip -> ${rc}"
-                exit 1
+    wd_logger 2 "Start"
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
+        wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install psk_uploader"
+        return 0
+    fi
+
+    python3 -c "import docopt" 2> /dev/null
+    rc=$? ; if (( rc == 0 )) ; then
+        wd_logger 2 "python docopt can be imported, so all needed libraries are presemt"
+    else
+        wd_logger 1 " python3 -c 'import  docopt' => ${rc}.  So run 'apt' to install it"
+        sudo apt update
+        sudo apt install python3-docopt
+        rc=$? ; if (( rc == 0 )); then
+            ### On Linux Mint a sucessful apt install isn't necessarily enough, so test again
+            python3 -c "import docopt" #2> /dev/null
+            rc=$? ; if (( rc == 0 )) ; then
+                wd_logger 1 "'apt install python3-docopt' installed missing docopt"
+            else
+                wd_logger 1 "python3 -c import docopt' failed to install the docopt needed, so try pip install"
+                python3 -m pip install docopt 2>/dev/null
+                rc=$? ; if (( rc )) ; then
+                    wd_logger 1 "ERROR: 'python3 -m pip install docopt' => ${rc}, so can't run pskluploader"
+                    return 1
+                else
+                    wd_logger 1 " python3 -m pip install docopt was successful"
+                    python3 -c "import docopt" 2> /dev/null
+                    rc=$? ; if (( rc )) ; then
+                        wd_logger 1 "ERROR: But 'python3 -c import docopt'' still doesn't run"
+                        return 2
+                    else
+                        wd_logger 1 "And 'python3 -c import docopt'' now runs"
+                    fi
+                fi
             fi
-            wd_logger 1 "apt installed pip3"
+        else
+            pip3 -h >& /dev/null 
+            rc=$? ; if (( rc == 0 )); then
+                wd_logger 1 "pip3 is installed"
+            else
+                wd_logger 1 "pip3 -h => ${rc}.  So need to install pip3"
+                sudo apt install python3-pip -y
+                rc=$? ; if (( rc == 0 )); then
+                    wd_logger 1 "apt installed pip3"
+                else
+                    wd_loggger 1 "ERROR: sudo apt install python-pip -> ${rc}, so force abort"
+                    echo ${force_abort}
+                fi
+            fi
+            local pip3_extra_args=""
+            if [[ "${VERSION_ID}" == "24.04" || "${VERSION_ID}" == "12" ]]; then
+                pip3_extra_args="--break-system-package"
+                wd_logger 1 "Adding extra args to pip: ${pip3_extra_args}"
+            fi
+            pip3 install docopt ${pip3_extra_args}
+            rc=$? ; if (( rc == 0 )); then
+                wd_logger 1 "Successfully ran python3 -c 'import  docopt'"
+            else
+                wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}, so force abort"
+                echo ${force_abort}
+            fi
         fi
-        local pip3_extra_args=""
-        if [[ "${OS_RELEASE}" == "24.04" || "${OS_RELEASE}" == "12" ]]; then
-            pip3_extra_args="--break-system-package"
-        fi
-        pip3 install docopt ${pip3_extra_args}
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
-            wd_logger 1 "ERROR: 'pip3 install docopt' => ${rc}"
-            return 2
-        fi
-        wd_logger 1 "Successfully ran python3 -c 'import  docopt'"
     fi
 
-    local pskreporter_sender_file_name="${project_subdir}/pskreporter-sender"           ### This template file is part of the package
-    local pskreporter_sender_bin_file_name="/usr/local/bin/pskreporter-sender"
-    if [[ ! -x ${pskreporter_sender_bin_file_name} ]]; then
-        wd_logger 1 "Copying ${pskreporter_sender_file_name} to ${pskreporter_sender_bin_file_name}"
-        sudo cp ${pskreporter_sender_file_name} ${pskreporter_sender_bin_file_name}
-        sudo chmod a+x  ${pskreporter_sender_bin_file_name}
-    fi
-
-    local pskreporter_service_file_name="${project_subdir}/pskreporter@.service"                ### This template file is part of the package
-    local pskreporter_systemd_service_file_name="/etc/systemd/system/pskreporter@.service"      ### It should be copied to the /etc/systemd/system/ directory
+    ### Ensure that the two executables are in /usr/local/bin/
+    local psk_executable_list=( pskreporter-sender  pskreporter.py )
+    local executable_file
+    for executable_file in ${psk_executable_list[@]}; do
+        local template_file_path="$( realpath ${project_subdir}/${executable_file} )"
+        local execute_dest_file_path="/usr/local/bin/${executable_file}"
+        if [[ ! -f  ${execute_dest_file_path} ]]; then
+            wd_logger 2 "${execute_dest_file_path} differs from ${template_file_path}, so update it"
+            sudo cp -p ${template_file_path} ${execute_dest_file_path}
+        fi
+        if cmp ${template_file_path} ${execute_dest_file_path} ; then
+            wd_logger 2 "${execute_dest_file_path} is up to date"
+        else
+            wd_logger 2 "${execute_dest_file_path} differs from ${template_file_path}, so update it"
+            sudo cp -p ${template_file_path} ${execute_dest_file_path}
+        fi
+    done
+ 
+    local pskreporter_service_file_name="pskreporter@.service"                                              ### This template file is part of the package
+    local template_file_path="$(realpath ${project_subdir}/${pskreporter_service_file_name})"
+    local pskreporter_systemd_service_file_path="/etc/systemd/system/${pskreporter_service_file_name}"      ### It should be copied to the /etc/systemd/system/ directory
 
     local needs_systemctl_daemon_reload="no"  
     local needs_systemctl_restart="no"  
-    if [[ ! -f ${pskreporter_systemd_service_file_name} ]]; then
-        wd_logger 2 "Missing ${pskreporter_systemd_service_file_name}, so creating it from ${pskreporter_service_file_name}"
-        cp ${pskreporter_service_file_name} ${pskreporter_systemd_service_file_name}
+    if [[ -f ${pskreporter_systemd_service_file_path} ]]; then
+        wd_logger 2 "${pskreporter_systemd_service_file_path} exists.  Check to see if it needs to be updated"
+    else
+        local template_file_path="$(realpath ${project_subdir}/${pskreporter_service_file_name})"
+        wd_logger 1 "Missing ${pskreporter_systemd_service_file_path}, so creating it from ${template_file_path}"
+        sudo cp ${template_file_path} ${pskreporter_systemd_service_file_path}
         needs_systemctl_daemon_reload="yes"
     fi
-    wd_logger 2 "${pskreporter_systemd_service_file_name} exists.  Check to see if it needs to be updated"
 
-    ### Phil's repo expects the PSK command to be in /usr/local/bin, but WD runs it from under the WD hoem directory
-    sed "s;/usr/local/bin;${KA9Q_PSK_REPORTER_DIR};" ${pskreporter_systemd_service_file_name} > ${pskreporter_systemd_service_file_name}.tmp
-    if ! diff ${pskreporter_systemd_service_file_name} ${pskreporter_systemd_service_file_name}.tmp > /dev/null; then
-        wd_logger 2 "${pskreporter_systemd_service_file_name} has been changed not no longer run from /usr/local/bin"
-        mv ${pskreporter_systemd_service_file_name}.tmp ${pskreporter_systemd_service_file_name}
-        needs_systemctl_daemon_reload="yes"
-   fi
-   if ! grep -q "WorkingDirectory" ${pskreporter_systemd_service_file_name} ; then
-       sed -i "/ExecStart=/i\\
-WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}" ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "Added 'WorkingDirectory=${KA9Q_PSK_REPORTER_DIR}' to ${pskreporter_systemd_service_file_name}"
-        needs_systemctl_daemon_reload="yes"
+    ### Update the service file if needed
+    local tmp_service_file_path="/tmp/${pskreporter_systemd_service_file_path##*/}"
+    cp -p ${pskreporter_systemd_service_file_path} ${tmp_service_file_path}
+    if grep -q "User=recordings"  ${tmp_service_file_path} ; then
+        sed -i "s/User=recordings/User=${USER}/"  ${tmp_service_file_path}
+        wd_logger 1 "'Changed 'User=recordings' to 'User=${USER}' in  ${tmp_service_file_path}"
     fi
-    if grep -q "User=recordings"  ${pskreporter_systemd_service_file_name} ; then
-        sed -i "s/User=recordings/User=${USER}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "'Changed 'User=recordings' to 'User=${USER}' in  ${pskreporter_systemd_service_file_name}"
-        needs_systemctl_daemon_reload="yes"
-    fi
-    if grep -q "Group=radio"  ${pskreporter_systemd_service_file_name} ; then
+    if grep -q "Group=radio"  ${tmp_service_file_path} ; then
         local my_group=$(id -gn)
-        sed -i "s/Group=radio/Group=${my_group}/"  ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${pskreporter_systemd_service_file_name}"
-        needs_systemctl_daemon_reload="yes"
+        sed -i "s/Group=radio/Group=${my_group}/"  ${tmp_service_file_path}
+        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${tmp_service_file_path}"
     fi
-    if ! grep -q "Environment=" ${pskreporter_systemd_service_file_name} ; then
-       sed -i "/ExecStart=/i\\
-Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
-        wd_logger 2 "Added 'Environment=\"TZ=UTC\"' to ${pskreporter_systemd_service_file_name}"
+    if ! grep -q "Environment=" ${tmp_service_file_path} ; then
+        sed -i "/ExecStart=/i\\
+        Environment=\"TZ=UTC\"" ${tmp_service_file_path}
+        wd_logger 1 "Added 'Environment=\"TZ=UTC\"' to ${tmp_service_file_path}"
+    fi
+    ### add '--tcp' if it is missing
+    sed -i '/ExecStart=.*pskreporter-sender/ {/--tcp/! s/pskreporter-sender/pskreporter-sender --tcp/}'  ${tmp_service_file_path}
+
+    if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
+        wd_logger 2 "The service file has not beeen changed"
+    else
+        wd_logger 1 "The service file needs to be changed, so update ${pskreporter_systemd_service_file_path}"
+        sudo cp ${tmp_service_file_path} ${pskreporter_systemd_service_file_path}
         needs_systemctl_daemon_reload="yes"
     fi
     if [[ ${needs_systemctl_daemon_reload} == "yes" ]]; then
-        wd_logger 2 "Beacuse the .service file changed, need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
+        wd_logger 1 "Beacuse ${tmp_service_file_path} changed we need to execute a 'sudo systemctl daemon-reload'.  Later, after the conf files have been modified or created, will also need to do a 'sudo systemctl restart...'"
         sudo systemctl daemon-reload 
         needs_systemctl_restart="yes"
     fi
 
+    ### Phil's templates /etc/radio/ don't have group write, so make sure we can write to them if WD modifies them
+    sudo chmod g+w ${KA9Q_RADIOD_CONF_DIR}/*
+ 
     local ft_type 
     for ft_type in ft4 ft8 wspr; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
@@ -1369,10 +1656,12 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             needs_systemctl_restart="yes"
         fi
 
+        ### The decodes find the ftX.log and wspr.log files in /var/log
         local ft_type_tmp_root_dir="/var/log"
 
         local ft_type_log_file_name="${ft_type_tmp_root_dir}/${ft_type}.log"
         if [[ ! -f ${ft_type_log_file_name} ]]; then
+            sudo touch ${ft_type_log_file_name}
             wd_logger 1 "WARNING: can't find expected file '${ft_type_log_file_name}'"
         fi
 
@@ -1386,14 +1675,14 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
             needs_systemctl_restart="yes"
         fi
-        
+
         local config_variable
         for config_variable in CALLSIGN LOCATOR ANTENNA; do
             local config_value
             wd_get_config_value "config_value" ${config_variable}
             rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}"
-                return ${rc}
+                wd_logger 1 "ERROR: 'wd_get_config_value "config_value" ${config_variable}' => ${rc}, so force an abort"
+                echo ${force_abort}
             fi
             local variable_line="${config_variable}=${config_value}"
             if grep -wq "${variable_line}" ${psk_conf_file} ; then
@@ -1401,15 +1690,14 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
             else
                 grep -v "${config_variable}=" ${psk_conf_file} > ${psk_conf_file}.tmp
                 echo "${variable_line}" >> ${psk_conf_file}.tmp
-                wd_logger 2 "Added or replaced invalid '${config_variable}=' line in ${psk_conf_file} with '${variable_line}'"
+                wd_logger 1 "Added or replaced invalid '${config_variable}=' line in ${psk_conf_file} with '${variable_line}'"
                 mv  ${psk_conf_file}.tmp  ${psk_conf_file}
                 needs_systemctl_restart="yes"
             fi
         done
 
-        sudo systemctl status pskreporter@${ft_type} > /dev/null
-        rc=$?
-        if [[ ${rc} -ne 0 ]]; then
+        sudo systemctl status pskreporter@${ft_type} >& /dev/null
+        rc=$? ; if (( rc )); then
             wd_logger 2 "'sudo systemctl status pskreporter@${ft_type}' => ${rc}, so restart it"
             needs_systemctl_restart="yes"
         fi
@@ -1417,10 +1705,9 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
         if [[ ${needs_systemctl_restart} == "yes" || ${psk_services_restart_needed} == "yes" ]]; then
             wd_logger 2 "Executing a 'sudo systemctl restart "
             sudo systemctl restart pskreporter@${ft_type}
-            rc=$?
-            if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'sudo systemctl restart pskreporter@${ft_type}' => ${rc}"
-                return ${rc}
+            rc=$? ; if (( rc )); then
+                wd_logger 1 "ERROR: 'sudo systemctl restart pskreporter@${ft_type}' => ${rc}, so force an abort"
+                echo ${force_abort}
             fi
         fi
         wd_logger 2 "Done checking and updating  ${psk_conf_file}"
@@ -1430,7 +1717,7 @@ Environment=\"TZ=UTC\"" ${pskreporter_systemd_service_file_name}
 }
 
 declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
-if [[ ${OS_RELEASE} =~ 24.04 ]]; then
+if [[ ${VERSION_ID} =~ 24.04 ]]; then
     ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
 
@@ -1523,7 +1810,7 @@ function install_github_project() {
             local pull_commit_target=${project_sha}
             if [[ ${project_commit_check} != "yes" ]]; then
                  pull_commit_target=${project_commit_check}
-                 wd_logger 1 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
+                 wd_logger 2 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
             fi
             local project_real_path=$( realpath  ${project_subdir} )
             wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
@@ -1552,19 +1839,36 @@ function install_github_project() {
     return 1
 }
 
+### 7/3/25 - RR: Wayne is enhancing KA9Q-web for Glenn N6GN to add ITU noise level plots and other reference information to the spectrum display
+###              To enable insallation of that enhanced -web, add this one line to wsprdaemon.conf: 
+###   N6GN_WEB_MODE="yes"
+if [[ ${N6GN_WEB_MODE-no} == "yes" ]] ; then
+    KA9Q_RADIO_COMMIT_CHECK="main"
+    KA9Q_FT8_COMMIT_CHECK="master"
+    PSK_UPLOADER_COMMIT_CHECK="main"
+    ONION_COMMIT_CHECK="master"
+    KA9Q_WEB_PROJECT_NAME="ka9q-web1"
+    KA9Q_WEB_COMMIT_CHECK="main"
+    KA9Q_WEB_GIT_URL="https://github.com/wa2n-code/ka9q-web1"
+fi
+
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio        ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}      build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-41afcb61344b2622b95570bdb031a54d4d4851df}"
-    "ft8_lib           ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}      build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-66f0b5cd70d2435184b54b29459bb15214120a2c}"
-    "ftlib-pskreporter ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9e6128bb8882df27f52e9fd7ab28b3888920e9c4}"
-    "onion             ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "ka9q-web          ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-40d3dcdb16fa3c5e440a665ed9cbd21b80f4d346}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-89ec6e181c2f7bfd2836659013c6fbb4f83e0ec7}"
+    "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
+    "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-a612dce854f548133907f3c486f90db587515de6}"
+    "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-9af583e093d4be06854be6fcb22f3aaed92a1523}"
 )
-
 ###
 function ka9q-services-setup() {
     local rc
+
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        wd_logger 1 "Skipping KA9Q setup since KA9Q_RUNS_ONLY_REMOTELY='yes'"
+        return 0
+    fi
     wd_logger 2 "Starting in ${PWD} and checking on ${#GITHUB_PROJECTS_LIST[@]} github projects"
 
     local index
@@ -1590,6 +1894,22 @@ function ka9q-services-setup() {
 ###
 function ka9q-setup() {    
     wd_logger 2 "Starting in ${PWD}"
+    #
+    ### These services have been depricaded by KA9A, so even if no KA9Q receviers are currently defined stop and disable them
+    local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
+    local legacy_service
+    for legacy_service in ${legacy_ft_services_list[@]} ; do
+        local full_legacy_service="${legacy_service}.service"
+        if sudo systemctl is-active --quiet ${full_legacy_service} ; then
+            wd_logger 1 "Stopping the active legacy service ${full_legacy_service}"
+            sudo systemctl stop ${full_legacy_service}
+        fi
+        if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
+            wd_logger 1 "Disabling the legacy service ${full_legacy_service}"
+            sudo systemctl disable ${full_legacy_service}
+            sudo systemctl daemon-reload
+        fi
+    done
 
     local active_receivers
     get_list_of_active_real_receivers "active_receivers"
@@ -1599,6 +1919,7 @@ function ka9q-setup() {
    fi
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
+    sudo systemctl start set_lo_multicast
     ka9q-services-setup
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: ka9q-services-setup() => ${rc}"

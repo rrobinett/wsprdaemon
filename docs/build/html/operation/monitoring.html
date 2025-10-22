@@ -1,0 +1,566 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Monitoring &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Operating WD" href="../maintenance/operating.html" />
+    <link rel="prev" title="Service Management" href="service_management.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="service_management.html">Service Management</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">System Monitoring</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#real-time-monitoring">Real-Time Monitoring</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#system-status-dashboard">System Status Dashboard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#process-monitoring">Process Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-metrics">Performance Metrics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#decoding-performance">Decoding Performance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#upload-performance">Upload Performance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#system-resource-monitoring">System Resource Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#log-analysis-and-alerting">Log Analysis and Alerting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#automated-log-monitoring">Automated Log Monitoring</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#log-rotation-and-archival">Log Rotation and Archival</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#health-monitoring-dashboard">Health Monitoring Dashboard</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#custom-monitoring-script">Custom Monitoring Script</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#external-monitoring-integration">External Monitoring Integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prometheus-metrics-export">Prometheus Metrics Export</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mqtt-status-publishing">MQTT Status Publishing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#automated-monitoring-setup">Automated Monitoring Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cron-job-configuration">Cron Job Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#systemd-service-for-monitoring">Systemd Service for Monitoring</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">System Monitoring</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/operation/monitoring.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="system-monitoring">
+<h1>System Monitoring<a class="headerlink" href="#system-monitoring" title="Link to this heading"></a></h1>
+<p>This guide covers monitoring WsprDaemon performance, health, and data quality to ensure optimal operation.</p>
+<section id="real-time-monitoring">
+<h2>Real-Time Monitoring<a class="headerlink" href="#real-time-monitoring" title="Link to this heading"></a></h2>
+<section id="system-status-dashboard">
+<h3>System Status Dashboard<a class="headerlink" href="#system-status-dashboard" title="Link to this heading"></a></h3>
+<p><strong>Primary Status Command:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Comprehensive system overview</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># Continuous monitoring (updates every 30 seconds)</span>
+watch<span class="w"> </span>-n<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="s1">&#39;./wsprdaemon.sh -s&#39;</span>
+</pre></div>
+</div>
+<p><strong>Key Status Indicators:</strong></p>
+<ul class="simple">
+<li><p>Process health (running/stopped/failed)</p></li>
+<li><p>Recent decode activity</p></li>
+<li><p>Upload success rates</p></li>
+<li><p>System resource usage</p></li>
+<li><p>Error conditions</p></li>
+</ul>
+</section>
+<section id="process-monitoring">
+<h3>Process Monitoring<a class="headerlink" href="#process-monitoring" title="Link to this heading"></a></h3>
+<p><strong>Active Process Overview:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all WsprDaemon processes</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Process tree view</span>
+pstree<span class="w"> </span>-p<span class="w"> </span><span class="k">$(</span>pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon.sh<span class="k">)</span>
+
+<span class="c1"># Resource usage by process</span>
+top<span class="w"> </span>-p<span class="w"> </span><span class="k">$(</span>pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span><span class="s1">&#39;\n&#39;</span><span class="w"> </span><span class="s1">&#39;,&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s1">&#39;s/,$//&#39;</span><span class="k">)</span>
+</pre></div>
+</div>
+<p><strong>Job Status Monitoring:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Current job status</span>
+./wsprdaemon.sh<span class="w"> </span>-j<span class="w"> </span>s
+
+<span class="c1"># Detailed job information</span>
+./wsprdaemon.sh<span class="w"> </span>-j<span class="w"> </span>l
+
+<span class="c1"># Job restart history</span>
+./wsprdaemon.sh<span class="w"> </span>-j<span class="w"> </span>h
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-metrics">
+<h2>Performance Metrics<a class="headerlink" href="#performance-metrics" title="Link to this heading"></a></h2>
+<section id="decoding-performance">
+<h3>Decoding Performance<a class="headerlink" href="#decoding-performance" title="Link to this heading"></a></h3>
+<p><strong>Decode Success Rates:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Count successful decodes per band (last hour)</span>
+find<span class="w"> </span>/tmp/wsprdaemon/decoding.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-60<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;spots decoded&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print &quot;Total decodes:&quot;, sum}&#39;</span>
+
+<span class="c1"># Average decode time per band</span>
+grep<span class="w"> </span><span class="s2">&quot;decode completed&quot;</span><span class="w"> </span>/tmp/wsprdaemon/decoding.d/*/*/decoding.log<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span>-F<span class="s1">&#39;[: ]&#39;</span><span class="w"> </span><span class="s1">&#39;{band=$1; time=$NF; sum[band]+=time; count[band]++} </span>
+<span class="s1">  END {for(b in sum) printf &quot;%s: %.2fs avg\n&quot;, b, sum[b]/count[b]}&#39;</span>
+</pre></div>
+</div>
+<p><strong>Signal Quality Metrics:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SNR distribution analysis</span>
+grep<span class="w"> </span><span class="s2">&quot;SNR:&quot;</span><span class="w"> </span>/tmp/wsprdaemon/decoding.d/*/*/decoding.log<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;{print $NF}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-n<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;BEGIN{count=0; sum=0} {sum+=$1; count++; values[count]=$1} </span>
+<span class="s1">  END {print &quot;Count:&quot;, count, &quot;Mean:&quot;, sum/count, &quot;Median:&quot;, values[int(count/2)]}&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="upload-performance">
+<h3>Upload Performance<a class="headerlink" href="#upload-performance" title="Link to this heading"></a></h3>
+<p><strong>Upload Success Monitoring:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Recent upload success rate</span>
+find<span class="w"> </span>/tmp/wsprdaemon/uploads.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-60<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;(SUCCESS|FAILED)&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;/SUCCESS/{s++} /FAILED/{f++} END {print &quot;Success:&quot;, s, &quot;Failed:&quot;, f, &quot;Rate:&quot;, s/(s+f)*100&quot;%&quot;}&#39;</span>
+
+<span class="c1"># Upload queue status</span>
+find<span class="w"> </span>/tmp/wsprdaemon/uploads.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.txt&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Pending uploads: </span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon/uploads.d<span class="w"> </span>-name<span class="w"> </span><span class="s1">&#39;*.txt&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l<span class="k">)</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+<p><strong>Network Performance:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Monitor network connections to wsprnet.org</span>
+netstat<span class="w"> </span>-an<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>:14236
+
+<span class="c1"># Upload bandwidth usage</span>
+iftop<span class="w"> </span>-i<span class="w"> </span>eth0<span class="w"> </span>-f<span class="w"> </span><span class="s2">&quot;port 14236&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="system-resource-monitoring">
+<h3>System Resource Monitoring<a class="headerlink" href="#system-resource-monitoring" title="Link to this heading"></a></h3>
+<p><strong>CPU and Memory Usage:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># WsprDaemon-specific resource usage</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>wsprdaemon<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;{cpu+=$3; mem+=$4; vsz+=$5; rss+=$6} </span>
+<span class="s1">  END {printf &quot;CPU: %.1f%% Memory: %.1f%% VSZ: %dMB RSS: %dMB\n&quot;, cpu, mem, vsz/1024, rss/1024}&#39;</span>
+
+<span class="c1"># System load average</span>
+uptime
+
+<span class="c1"># Memory pressure indicators</span>
+free<span class="w"> </span>-h
+cat<span class="w"> </span>/proc/pressure/memory<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Memory pressure info not available&quot;</span>
+</pre></div>
+</div>
+<p><strong>Disk I/O and Storage:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Disk usage monitoring</span>
+df<span class="w"> </span>-h<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span>~/wsprdaemon
+
+<span class="c1"># I/O statistics for WsprDaemon directories</span>
+iostat<span class="w"> </span>-x<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">3</span>
+
+<span class="c1"># Directory size tracking</span>
+du<span class="w"> </span>-sh<span class="w"> </span>/tmp/wsprdaemon/*<span class="w"> </span>~/wsprdaemon/*<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-hr
+</pre></div>
+</div>
+</section>
+</section>
+<section id="log-analysis-and-alerting">
+<h2>Log Analysis and Alerting<a class="headerlink" href="#log-analysis-and-alerting" title="Link to this heading"></a></h2>
+<section id="automated-log-monitoring">
+<h3>Automated Log Monitoring<a class="headerlink" href="#automated-log-monitoring" title="Link to this heading"></a></h3>
+<p><strong>Error Detection Script:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># error_monitor.sh - Monitor for critical errors</span>
+
+<span class="nv">LOG_FILES</span><span class="o">=</span><span class="s2">&quot;/tmp/wsprdaemon/*.log&quot;</span>
+<span class="nv">ERROR_THRESHOLD</span><span class="o">=</span><span class="m">5</span>
+<span class="nv">ALERT_EMAIL</span><span class="o">=</span><span class="s2">&quot;admin@example.com&quot;</span>
+
+<span class="c1"># Count recent errors (last 10 minutes)</span>
+<span class="nv">ERROR_COUNT</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-10<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;ERROR\|CRITICAL\|FATAL&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print sum}&#39;</span><span class="k">)</span>
+
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="si">${</span><span class="nv">ERROR_COUNT</span><span class="k">:-</span><span class="nv">0</span><span class="si">}</span><span class="w"> </span>-gt<span class="w"> </span><span class="nv">$ERROR_THRESHOLD</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;High error rate detected: </span><span class="nv">$ERROR_COUNT</span><span class="s2"> errors in last 10 minutes&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>mail<span class="w"> </span>-s<span class="w"> </span><span class="s2">&quot;WsprDaemon Alert: High Error Rate&quot;</span><span class="w"> </span><span class="nv">$ALERT_EMAIL</span>
+<span class="k">fi</span>
+</pre></div>
+</div>
+<p><strong>Performance Degradation Detection:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># performance_monitor.sh - Detect performance issues</span>
+
+<span class="c1"># Check decode success rate (should be &gt;80% during active periods)</span>
+<span class="nv">DECODE_RATE</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon/decoding.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-30<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;spots decoded\|no spots&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;NR%2==1{decoded=$1} NR%2==0{total=decoded+$1; if(total&gt;0) rate=decoded/total*100; print rate}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1; count++} END {if(count&gt;0) print sum/count; else print 0}&#39;</span><span class="k">)</span>
+
+<span class="k">if</span><span class="w"> </span><span class="o">((</span><span class="w"> </span><span class="k">$(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DECODE_RATE</span><span class="s2"> &lt; 50&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>bc<span class="w"> </span>-l<span class="k">)</span><span class="w"> </span><span class="o">))</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Low decode rate: </span><span class="nv">$DECODE_RATE</span><span class="s2">%&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>mail<span class="w"> </span>-s<span class="w"> </span><span class="s2">&quot;WsprDaemon Alert: Low Decode Rate&quot;</span><span class="w"> </span>admin@example.com
+<span class="k">fi</span>
+</pre></div>
+</div>
+</section>
+<section id="log-rotation-and-archival">
+<h3>Log Rotation and Archival<a class="headerlink" href="#log-rotation-and-archival" title="Link to this heading"></a></h3>
+<p><strong>Automated Log Management:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># log_maintenance.sh - Automated log cleanup and archival</span>
+
+<span class="nv">LOG_DIR</span><span class="o">=</span><span class="s2">&quot;/tmp/wsprdaemon&quot;</span>
+<span class="nv">ARCHIVE_DIR</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/wsprdaemon/archives&quot;</span>
+<span class="nv">RETENTION_DAYS</span><span class="o">=</span><span class="m">30</span>
+
+<span class="c1"># Archive old logs</span>
+find<span class="w"> </span><span class="nv">$LOG_DIR</span><span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mtime<span class="w"> </span>+1<span class="w"> </span>-exec<span class="w"> </span>gzip<span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span>
+find<span class="w"> </span><span class="nv">$LOG_DIR</span><span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log.gz&quot;</span><span class="w"> </span>-mtime<span class="w"> </span>+7<span class="w"> </span>-exec<span class="w"> </span>mv<span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="nv">$ARCHIVE_DIR</span>/<span class="w"> </span><span class="se">\;</span>
+
+<span class="c1"># Clean up very old archives</span>
+find<span class="w"> </span><span class="nv">$ARCHIVE_DIR</span><span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log.gz&quot;</span><span class="w"> </span>-mtime<span class="w"> </span>+<span class="nv">$RETENTION_DAYS</span><span class="w"> </span>-delete
+
+<span class="c1"># Rotate large current logs</span>
+find<span class="w"> </span><span class="nv">$LOG_DIR</span><span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-size<span class="w"> </span>+10M<span class="w"> </span>-exec<span class="w"> </span>logrotate<span class="w"> </span>-f<span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="health-monitoring-dashboard">
+<h2>Health Monitoring Dashboard<a class="headerlink" href="#health-monitoring-dashboard" title="Link to this heading"></a></h2>
+<section id="custom-monitoring-script">
+<h3>Custom Monitoring Script<a class="headerlink" href="#custom-monitoring-script" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># wsprdaemon_dashboard.sh - Comprehensive health dashboard</span>
+
+clear
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;===============================================&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;        WsprDaemon Health Dashboard&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;        </span><span class="k">$(</span>date<span class="k">)</span><span class="s2">&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;===============================================&quot;</span>
+
+<span class="c1"># System Status</span>
+<span class="nb">echo</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== SYSTEM STATUS ===&quot;</span>
+<span class="k">if</span><span class="w"> </span>pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon.sh<span class="w"> </span>&gt;<span class="w"> </span>/dev/null<span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✓ WsprDaemon: RUNNING&quot;</span>
+<span class="w">    </span><span class="nv">PROCESS_COUNT</span><span class="o">=</span><span class="k">$(</span>pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon<span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l<span class="k">)</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  Active processes: </span><span class="nv">$PROCESS_COUNT</span><span class="s2">&quot;</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✗ WsprDaemon: STOPPED&quot;</span>
+<span class="k">fi</span>
+
+<span class="c1"># Resource Usage</span>
+<span class="nb">echo</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== RESOURCE USAGE ===&quot;</span>
+<span class="nv">LOAD</span><span class="o">=</span><span class="k">$(</span>uptime<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F<span class="s1">&#39;load average:&#39;</span><span class="w"> </span><span class="s1">&#39;{print $2}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{print $1}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s1">&#39;s/,//&#39;</span><span class="k">)</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;System load: </span><span class="nv">$LOAD</span><span class="s2">&quot;</span>
+
+<span class="nv">DISK_USAGE</span><span class="o">=</span><span class="k">$(</span>df<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-1<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{print $5}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s1">&#39;s/%//&#39;</span><span class="k">)</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DISK_USAGE</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$DISK_USAGE</span><span class="w"> </span>-lt<span class="w"> </span><span class="m">80</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">        </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✓ Disk usage: </span><span class="si">${</span><span class="nv">DISK_USAGE</span><span class="si">}</span><span class="s2">%&quot;</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="w">        </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;⚠ Disk usage: </span><span class="si">${</span><span class="nv">DISK_USAGE</span><span class="si">}</span><span class="s2">% (HIGH)&quot;</span>
+<span class="w">    </span><span class="k">fi</span>
+<span class="k">fi</span>
+
+<span class="c1"># Recent Activity</span>
+<span class="nb">echo</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== RECENT ACTIVITY (Last 30 minutes) ===&quot;</span>
+<span class="nv">RECENT_DECODES</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon/decoding.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-30<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;spots decoded&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print sum+0}&#39;</span><span class="k">)</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Successful decodes: </span><span class="nv">$RECENT_DECODES</span><span class="s2">&quot;</span>
+
+<span class="nv">RECENT_UPLOADS</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon/uploads.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-30<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SUCCESS&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print sum+0}&#39;</span><span class="k">)</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Successful uploads: </span><span class="nv">$RECENT_UPLOADS</span><span class="s2">&quot;</span>
+
+<span class="c1"># Error Summary</span>
+<span class="nb">echo</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== ERROR SUMMARY (Last hour) ===&quot;</span>
+<span class="nv">ERROR_COUNT</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-60<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;ERROR&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print sum+0}&#39;</span><span class="k">)</span>
+<span class="nv">WARNING_COUNT</span><span class="o">=</span><span class="k">$(</span>find<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-mmin<span class="w"> </span>-60<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;WARNING&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span><span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{sum+=$1} END {print sum+0}&#39;</span><span class="k">)</span>
+
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$ERROR_COUNT</span><span class="w"> </span>-eq<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✓ Errors: </span><span class="nv">$ERROR_COUNT</span><span class="s2">&quot;</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;⚠ Errors: </span><span class="nv">$ERROR_COUNT</span><span class="s2">&quot;</span>
+<span class="k">fi</span>
+
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$WARNING_COUNT</span><span class="w"> </span>-lt<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✓ Warnings: </span><span class="nv">$WARNING_COUNT</span><span class="s2">&quot;</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;⚠ Warnings: </span><span class="nv">$WARNING_COUNT</span><span class="s2">&quot;</span>
+<span class="k">fi</span>
+
+<span class="nb">echo</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;===============================================&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="external-monitoring-integration">
+<h2>External Monitoring Integration<a class="headerlink" href="#external-monitoring-integration" title="Link to this heading"></a></h2>
+<section id="prometheus-metrics-export">
+<h3>Prometheus Metrics Export<a class="headerlink" href="#prometheus-metrics-export" title="Link to this heading"></a></h3>
+<p><strong>Metrics Collection Script:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># prometheus_exporter.sh - Export WsprDaemon metrics</span>
+
+<span class="nv">METRICS_FILE</span><span class="o">=</span><span class="s2">&quot;/tmp/wsprdaemon_metrics.prom&quot;</span>
+
+cat<span class="w"> </span>&gt;<span class="w"> </span><span class="nv">$METRICS_FILE</span><span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s"># HELP wsprdaemon_processes_total Number of active WsprDaemon processes</span>
+<span class="s"># TYPE wsprdaemon_processes_total gauge</span>
+<span class="s">wsprdaemon_processes_total $(pgrep -f wsprdaemon | wc -l)</span>
+
+<span class="s"># HELP wsprdaemon_decodes_total Total successful decodes in last hour</span>
+<span class="s"># TYPE wsprdaemon_decodes_total counter</span>
+<span class="s">wsprdaemon_decodes_total $(find /tmp/wsprdaemon/decoding.d -name &quot;*.log&quot; -mmin -60 -exec grep -c &quot;spots decoded&quot; {} \; | awk &#39;{sum+=$1} END {print sum+0}&#39;)</span>
+
+<span class="s"># HELP wsprdaemon_uploads_total Total successful uploads in last hour</span>
+<span class="s"># TYPE wsprdaemon_uploads_total counter</span>
+<span class="s">wsprdaemon_uploads_total $(find /tmp/wsprdaemon/uploads.d -name &quot;*.log&quot; -mmin -60 -exec grep -c &quot;SUCCESS&quot; {} \; | awk &#39;{sum+=$1} END {print sum+0}&#39;)</span>
+
+<span class="s"># HELP wsprdaemon_errors_total Total errors in last hour</span>
+<span class="s"># TYPE wsprdaemon_errors_total counter</span>
+<span class="s">wsprdaemon_errors_total $(find /tmp/wsprdaemon -name &quot;*.log&quot; -mmin -60 -exec grep -c &quot;ERROR&quot; {} \; | awk &#39;{sum+=$1} END {print sum+0}&#39;)</span>
+<span class="s">EOF</span>
+
+<span class="c1"># Serve metrics on port 9090</span>
+python3<span class="w"> </span>-m<span class="w"> </span>http.server<span class="w"> </span><span class="m">9090</span><span class="w"> </span>--directory<span class="w"> </span><span class="k">$(</span>dirname<span class="w"> </span><span class="nv">$METRICS_FILE</span><span class="k">)</span><span class="w"> </span><span class="p">&amp;</span>
+</pre></div>
+</div>
+</section>
+<section id="mqtt-status-publishing">
+<h3>MQTT Status Publishing<a class="headerlink" href="#mqtt-status-publishing" title="Link to this heading"></a></h3>
+<p><strong>MQTT Publisher Script:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="c1"># mqtt_publisher.sh - Publish status to MQTT broker</span>
+
+<span class="nv">MQTT_BROKER</span><span class="o">=</span><span class="s2">&quot;192.168.1.50&quot;</span>
+<span class="nv">MQTT_TOPIC</span><span class="o">=</span><span class="s2">&quot;wsprdaemon/status&quot;</span>
+
+<span class="c1"># Collect status data</span>
+<span class="nv">STATUS_JSON</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">{</span>
+<span class="s">  &quot;timestamp&quot;: &quot;$(date -Iseconds)&quot;,</span>
+<span class="s">  &quot;running&quot;: $(pgrep -f wsprdaemon.sh &gt; /dev/null &amp;&amp; echo &quot;true&quot; || echo &quot;false&quot;),</span>
+<span class="s">  &quot;processes&quot;: $(pgrep -f wsprdaemon | wc -l),</span>
+<span class="s">  &quot;recent_decodes&quot;: $(find /tmp/wsprdaemon/decoding.d -name &quot;*.log&quot; -mmin -10 -exec grep -c &quot;spots decoded&quot; {} \; | awk &#39;{sum+=$1} END {print sum+0}&#39;),</span>
+<span class="s">  &quot;recent_uploads&quot;: $(find /tmp/wsprdaemon/uploads.d -name &quot;*.log&quot; -mmin -10 -exec grep -c &quot;SUCCESS&quot; {} \; | awk &#39;{sum+=$1} END {print sum+0}&#39;),</span>
+<span class="s">  &quot;disk_usage&quot;: $(df /tmp/wsprdaemon 2&gt;/dev/null | tail -1 | awk &#39;{print $5}&#39; | sed &#39;s/%//&#39; || echo &quot;0&quot;)</span>
+<span class="s">}</span>
+<span class="s">EOF</span>
+<span class="k">)</span>
+
+<span class="c1"># Publish to MQTT</span>
+mosquitto_pub<span class="w"> </span>-h<span class="w"> </span><span class="nv">$MQTT_BROKER</span><span class="w"> </span>-t<span class="w"> </span><span class="nv">$MQTT_TOPIC</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STATUS_JSON</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="automated-monitoring-setup">
+<h2>Automated Monitoring Setup<a class="headerlink" href="#automated-monitoring-setup" title="Link to this heading"></a></h2>
+<section id="cron-job-configuration">
+<h3>Cron Job Configuration<a class="headerlink" href="#cron-job-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Add to crontab (crontab -e)</span>
+
+<span class="c1"># Health check every 5 minutes</span>
+*/5<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>/home/wsprdaemon/scripts/health_check.sh
+
+<span class="c1"># Performance monitoring every 15 minutes</span>
+*/15<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>/home/wsprdaemon/scripts/performance_monitor.sh
+
+<span class="c1"># Log maintenance daily at 2 AM</span>
+<span class="m">0</span><span class="w"> </span><span class="m">2</span><span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>/home/wsprdaemon/scripts/log_maintenance.sh
+
+<span class="c1"># Status dashboard update every minute</span>
+*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>/home/wsprdaemon/scripts/wsprdaemon_dashboard.sh<span class="w"> </span>&gt;<span class="w"> </span>/tmp/wsprdaemon_status.txt
+
+<span class="c1"># MQTT status publishing every 5 minutes</span>
+*/5<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>*<span class="w"> </span>/home/wsprdaemon/scripts/mqtt_publisher.sh
+</pre></div>
+</div>
+</section>
+<section id="systemd-service-for-monitoring">
+<h3>Systemd Service for Monitoring<a class="headerlink" href="#systemd-service-for-monitoring" title="Link to this heading"></a></h3>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="c1"># /etc/systemd/system/wsprdaemon-monitor.service</span>
+<span class="k">[Unit]</span>
+<span class="na">Description</span><span class="o">=</span><span class="s">WsprDaemon Monitoring Service</span>
+<span class="na">After</span><span class="o">=</span><span class="s">wsprdaemon.service</span>
+
+<span class="k">[Service]</span>
+<span class="na">Type</span><span class="o">=</span><span class="s">simple</span>
+<span class="na">User</span><span class="o">=</span><span class="s">wsprdaemon</span>
+<span class="na">ExecStart</span><span class="o">=</span><span class="s">/home/wsprdaemon/scripts/continuous_monitor.sh</span>
+<span class="na">Restart</span><span class="o">=</span><span class="s">always</span>
+<span class="na">RestartSec</span><span class="o">=</span><span class="s">30</span>
+
+<span class="k">[Install]</span>
+<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
+</pre></div>
+</div>
+<p>This comprehensive monitoring setup provides real-time visibility into WsprDaemon operation, automated alerting for issues, and integration with external monitoring systems.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="service_management.html" class="btn btn-neutral float-left" title="Service Management" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../maintenance/operating.html" class="btn btn-neutral float-right" title="Operating WD" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,613 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command Reference &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="External Links" href="../external_links.html" />
+    <link rel="prev" title="Remote Development Setup" href="../developers/remote_development.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Command Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#main-command-wsprdaemon-sh">Main Command: wsprdaemon.sh</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#options">Options</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#service-control">Service Control</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#status-and-information">Status and Information</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#job-management">Job Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#logging-and-debugging">Logging and Debugging</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#recording-and-playback">Recording and Playback</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#upload-management">Upload Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#advanced-features">Advanced Features</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-utilities">Configuration Utilities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-validation">Configuration Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#receiver-testing">Receiver Testing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#log-analysis-commands">Log Analysis Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#log-file-locations">Log File Locations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#log-analysis-examples">Log Analysis Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#system-integration-commands">System Integration Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#systemd-service-management">Systemd Service Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#process-management">Process Management</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#diagnostic-commands">Diagnostic Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#system-health-checks">System Health Checks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hardware-diagnostics">Hardware Diagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#performance-analysis">Performance Analysis</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#maintenance-commands">Maintenance Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#log-maintenance">Log Maintenance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-backup">Configuration Backup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#system-cleanup">System Cleanup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#environment-variables">Environment Variables</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-variables">Configuration Variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#runtime-variables">Runtime Variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#usage-examples">Usage Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#exit-codes">Exit Codes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#standard-exit-codes">Standard Exit Codes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#signal-handling">Signal Handling</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Command Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/appendices/command_reference.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="command-reference">
+<h1>Command Reference<a class="headerlink" href="#command-reference" title="Link to this heading"></a></h1>
+<p>Complete reference for all WsprDaemon command-line options and utilities.</p>
+<section id="main-command-wsprdaemon-sh">
+<h2>Main Command: wsprdaemon.sh<a class="headerlink" href="#main-command-wsprdaemon-sh" title="Link to this heading"></a></h2>
+<section id="synopsis">
+<h3>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./wsprdaemon.sh<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</section>
+<section id="options">
+<h3>Options<a class="headerlink" href="#options" title="Link to this heading"></a></h3>
+<section id="service-control">
+<h4>Service Control<a class="headerlink" href="#service-control" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-a</span></code></strong> - Start WsprDaemon services (interactive mode)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-A</span></code></strong> - Start WsprDaemon as daemon with optional startup delay</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-z</span></code></strong> - Stop WsprDaemon services gracefully</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-Z</span></code></strong> - Force stop all WsprDaemon processes immediately</p></li>
+</ul>
+</section>
+<section id="status-and-information">
+<h4>Status and Information<a class="headerlink" href="#status-and-information" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-s</span></code></strong> - Show comprehensive system status</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-V</span></code></strong> - Display version information</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-h</span></code></strong> - Show help message and usage information</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-i</span></code></strong> - List available receivers and audio devices</p></li>
+</ul>
+</section>
+<section id="job-management">
+<h4>Job Management<a class="headerlink" href="#job-management" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">COMMAND</span></code></strong> - Job management commands:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">s</span></code> - Show status of all jobs</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">l</span></code> - List jobs with detailed information</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">h</span></code> - Show job history</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">RECEIVER,BAND</span></code> - Restart specific receiver/band job</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="logging-and-debugging">
+<h4>Logging and Debugging<a class="headerlink" href="#logging-and-debugging" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-l</span> <span class="pre">OPTION</span></code></strong> - Log file operations:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">recent</span></code> - View recent log entries</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">error</span></code> - Search logs for error messages</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rotate</span></code> - Force log rotation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PATH</span></code> - View specific log file</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-v</span></code></strong> - Increase verbosity level (can be used multiple times)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-d</span></code></strong> - Increment debug verbosity</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-D</span></code></strong> - Decrement debug verbosity</p></li>
+</ul>
+</section>
+<section id="recording-and-playback">
+<h4>Recording and Playback<a class="headerlink" href="#recording-and-playback" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-r</span> <span class="pre">RECEIVER[,BAND]</span></code></strong> - Start WAV file recording for specified receiver/band</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-p</span></code></strong> - Generate noise plots from recorded data</p></li>
+</ul>
+</section>
+<section id="upload-management">
+<h4>Upload Management<a class="headerlink" href="#upload-management" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-U</span> <span class="pre">COMMAND</span></code></strong> - Upload control commands:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">start</span></code> - Start upload services</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stop</span></code> - Stop upload services</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status</span></code> - Show upload status</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">flush</span></code> - Force upload of queued data</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="advanced-features">
+<h4>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-g</span> <span class="pre">OPTION</span></code></strong> - GRAPE system commands:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">start</span></code> - Start GRAPE recording</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stop</span></code> - Stop GRAPE recording</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status</span></code> - Show GRAPE status</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-u</span> <span class="pre">COMMAND</span></code></strong> - Upload server commands (for server installations)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-w</span> <span class="pre">COMMAND</span></code></strong> - Watchdog commands:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">start</span></code> - Start watchdog process</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stop</span></code> - Stop watchdog process</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status</span></code> - Show watchdog status</p></li>
+</ul>
+</li>
+</ul>
+</section>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p><strong>Basic Operations:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start WsprDaemon</span>
+./wsprdaemon.sh<span class="w"> </span>-a
+
+<span class="c1"># Check status with verbose output</span>
+./wsprdaemon.sh<span class="w"> </span>-v<span class="w"> </span>-s
+
+<span class="c1"># Stop all services</span>
+./wsprdaemon.sh<span class="w"> </span>-z
+
+<span class="c1"># Force stop if graceful stop fails</span>
+./wsprdaemon.sh<span class="w"> </span>-Z
+</pre></div>
+</div>
+<p><strong>Debugging and Monitoring:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show detailed job information</span>
+./wsprdaemon.sh<span class="w"> </span>-j<span class="w"> </span>l
+
+<span class="c1"># View recent errors</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>error
+
+<span class="c1"># Increase verbosity and check status</span>
+./wsprdaemon.sh<span class="w"> </span>-v<span class="w"> </span>-v<span class="w"> </span>-s
+
+<span class="c1"># Restart specific receiver/band</span>
+./wsprdaemon.sh<span class="w"> </span>-j<span class="w"> </span>r<span class="w"> </span>kiwi1,40m
+</pre></div>
+</div>
+<p><strong>Recording and Analysis:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Record audio from specific receiver</span>
+./wsprdaemon.sh<span class="w"> </span>-r<span class="w"> </span>kiwi1,20m
+
+<span class="c1"># Generate noise plots</span>
+./wsprdaemon.sh<span class="w"> </span>-p
+
+<span class="c1"># Start GRAPE recording</span>
+./wsprdaemon.sh<span class="w"> </span>-g<span class="w"> </span>start
+</pre></div>
+</div>
+</section>
+</section>
+<section id="configuration-utilities">
+<h2>Configuration Utilities<a class="headerlink" href="#configuration-utilities" title="Link to this heading"></a></h2>
+<section id="configuration-validation">
+<h3>Configuration Validation<a class="headerlink" href="#configuration-validation" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check configuration file syntax</span>
+bash<span class="w"> </span>-n<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Validate configuration with WsprDaemon</span>
+./wsprdaemon.sh<span class="w"> </span>-s<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;(ERROR|WARNING)&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="receiver-testing">
+<h3>Receiver Testing<a class="headerlink" href="#receiver-testing" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test all configured receivers</span>
+./wsprdaemon.sh<span class="w"> </span>-i
+
+<span class="c1"># Test specific receiver connectivity</span>
+ping<span class="w"> </span>-c<span class="w"> </span><span class="m">3</span><span class="w"> </span>RECEIVER_IP
+telnet<span class="w"> </span>RECEIVER_IP<span class="w"> </span>PORT
+</pre></div>
+</div>
+</section>
+</section>
+<section id="log-analysis-commands">
+<h2>Log Analysis Commands<a class="headerlink" href="#log-analysis-commands" title="Link to this heading"></a></h2>
+<section id="log-file-locations">
+<h3>Log File Locations<a class="headerlink" href="#log-file-locations" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Main logs</span>
+/tmp/wsprdaemon/wsprdaemon.log<span class="w">          </span><span class="c1"># Primary daemon log</span>
+/tmp/wsprdaemon/watchdog.log<span class="w">            </span><span class="c1"># Watchdog process log</span>
+~/wsprdaemon/wsprdaemon.log<span class="w">             </span><span class="c1"># Persistent main log</span>
+
+<span class="c1"># Per-service logs</span>
+/tmp/wsprdaemon/recording.d/RX/BAND/<span class="w">    </span><span class="c1"># Recording daemon logs</span>
+/tmp/wsprdaemon/decoding.d/RX/BAND/<span class="w">     </span><span class="c1"># Decoding daemon logs</span>
+/tmp/wsprdaemon/posting.d/RX/BAND/<span class="w">      </span><span class="c1"># Posting daemon logs</span>
+/tmp/wsprdaemon/uploads.d/<span class="w">              </span><span class="c1"># Upload status logs</span>
+</pre></div>
+</div>
+</section>
+<section id="log-analysis-examples">
+<h3>Log Analysis Examples<a class="headerlink" href="#log-analysis-examples" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># View recent activity</span>
+tail<span class="w"> </span>-100<span class="w"> </span>/tmp/wsprdaemon/wsprdaemon.log
+
+<span class="c1"># Search for errors across all logs</span>
+grep<span class="w"> </span>-r<span class="w"> </span><span class="s2">&quot;ERROR&quot;</span><span class="w"> </span>/tmp/wsprdaemon/
+
+<span class="c1"># Monitor real-time log activity</span>
+tail<span class="w"> </span>-f<span class="w"> </span>/tmp/wsprdaemon/wsprdaemon.log
+
+<span class="c1"># Count successful uploads</span>
+find<span class="w"> </span>/tmp/wsprdaemon/uploads.d<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.log&quot;</span><span class="w"> </span>-exec<span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SUCCESS&quot;</span><span class="w"> </span><span class="o">{}</span><span class="w"> </span><span class="se">\;</span>
+
+<span class="c1"># Analyze decode performance</span>
+grep<span class="w"> </span><span class="s2">&quot;spots decoded&quot;</span><span class="w"> </span>/tmp/wsprdaemon/decoding.d/*/*/decoding.log<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>awk<span class="w"> </span><span class="s1">&#39;{print $1, $NF}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort
+</pre></div>
+</div>
+</section>
+</section>
+<section id="system-integration-commands">
+<h2>System Integration Commands<a class="headerlink" href="#system-integration-commands" title="Link to this heading"></a></h2>
+<section id="systemd-service-management">
+<h3>Systemd Service Management<a class="headerlink" href="#systemd-service-management" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Service control</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>wsprdaemon
+sudo<span class="w"> </span>systemctl<span class="w"> </span>stop<span class="w"> </span>wsprdaemon
+sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>wsprdaemon
+sudo<span class="w"> </span>systemctl<span class="w"> </span>status<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Enable/disable automatic startup</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>wsprdaemon
+sudo<span class="w"> </span>systemctl<span class="w"> </span>disable<span class="w"> </span>wsprdaemon
+
+<span class="c1"># View service logs</span>
+journalctl<span class="w"> </span>-u<span class="w"> </span>wsprdaemon<span class="w"> </span>-f
+journalctl<span class="w"> </span>-u<span class="w"> </span>wsprdaemon<span class="w"> </span>--since<span class="w"> </span><span class="s2">&quot;1 hour ago&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="process-management">
+<h3>Process Management<a class="headerlink" href="#process-management" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List WsprDaemon processes</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>wsprdaemon
+pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Process tree view</span>
+pstree<span class="w"> </span>-p<span class="w"> </span><span class="k">$(</span>pgrep<span class="w"> </span>-f<span class="w"> </span>wsprdaemon.sh<span class="k">)</span>
+
+<span class="c1"># Kill specific process</span>
+<span class="nb">kill</span><span class="w"> </span>-TERM<span class="w"> </span>PID
+<span class="nb">kill</span><span class="w"> </span>-KILL<span class="w"> </span>PID<span class="w">  </span><span class="c1"># Force kill if needed</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="diagnostic-commands">
+<h2>Diagnostic Commands<a class="headerlink" href="#diagnostic-commands" title="Link to this heading"></a></h2>
+<section id="system-health-checks">
+<h3>System Health Checks<a class="headerlink" href="#system-health-checks" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check system resources</span>
+free<span class="w"> </span>-h<span class="w">                    </span><span class="c1"># Memory usage</span>
+df<span class="w"> </span>-h<span class="w">                      </span><span class="c1"># Disk space</span>
+uptime<span class="w">                     </span><span class="c1"># System load</span>
+iostat<span class="w"> </span>-x<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">5</span><span class="w">             </span><span class="c1"># I/O statistics</span>
+
+<span class="c1"># Network connectivity</span>
+ping<span class="w"> </span>-c<span class="w"> </span><span class="m">3</span><span class="w"> </span>wsprnet.org
+curl<span class="w"> </span>-I<span class="w"> </span>http://wsprnet.org
+netstat<span class="w"> </span>-an<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>:14236<span class="w">  </span><span class="c1"># wsprnet.org connections</span>
+</pre></div>
+</div>
+</section>
+<section id="hardware-diagnostics">
+<h3>Hardware Diagnostics<a class="headerlink" href="#hardware-diagnostics" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># USB devices (for SDR hardware)</span>
+lsusb
+lsusb<span class="w"> </span>-t
+
+<span class="c1"># Audio devices</span>
+arecord<span class="w"> </span>-l
+aplay<span class="w"> </span>-l
+
+<span class="c1"># Network interfaces</span>
+ip<span class="w"> </span>addr<span class="w"> </span>show
+ip<span class="w"> </span>route<span class="w"> </span>show
+</pre></div>
+</div>
+</section>
+<section id="performance-analysis">
+<h3>Performance Analysis<a class="headerlink" href="#performance-analysis" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># CPU usage by WsprDaemon</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>wsprdaemon<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{cpu+=$3} END {print &quot;Total CPU:&quot;, cpu&quot;%&quot;}&#39;</span>
+
+<span class="c1"># Memory usage by WsprDaemon</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>wsprdaemon<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;{mem+=$4} END {print &quot;Total Memory:&quot;, mem&quot;%&quot;}&#39;</span>
+
+<span class="c1"># Disk I/O for WsprDaemon directories</span>
+iotop<span class="w"> </span>-a<span class="w"> </span>-o<span class="w"> </span>-d<span class="w"> </span><span class="m">1</span>
+
+<span class="c1"># Network traffic analysis</span>
+iftop<span class="w"> </span>-i<span class="w"> </span>eth0
+tcpdump<span class="w"> </span>-i<span class="w"> </span>eth0<span class="w"> </span>host<span class="w"> </span>wsprnet.org
+</pre></div>
+</div>
+</section>
+</section>
+<section id="maintenance-commands">
+<h2>Maintenance Commands<a class="headerlink" href="#maintenance-commands" title="Link to this heading"></a></h2>
+<section id="log-maintenance">
+<h3>Log Maintenance<a class="headerlink" href="#log-maintenance" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Rotate logs manually</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>rotate
+
+<span class="c1"># Clean old temporary files</span>
+find<span class="w"> </span>/tmp/wsprdaemon<span class="w"> </span>-type<span class="w"> </span>f<span class="w"> </span>-mtime<span class="w"> </span>+7<span class="w"> </span>-delete
+
+<span class="c1"># Archive old logs</span>
+tar<span class="w"> </span>-czf<span class="w"> </span>~/wsprdaemon/archives/logs_<span class="k">$(</span>date<span class="w"> </span>+%Y%m<span class="k">)</span>.tar.gz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>~/wsprdaemon/logs/*.log.old
+</pre></div>
+</div>
+</section>
+<section id="configuration-backup">
+<h3>Configuration Backup<a class="headerlink" href="#configuration-backup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Backup current configuration</span>
+cp<span class="w"> </span>wsprdaemon.conf<span class="w"> </span>wsprdaemon.conf.backup.<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>
+
+<span class="c1"># Create complete backup</span>
+tar<span class="w"> </span>-czf<span class="w"> </span>wsprdaemon_backup_<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>.tar.gz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>wsprdaemon.conf<span class="w"> </span>*.sh<span class="w"> </span>logs/<span class="w"> </span>archives/
+</pre></div>
+</div>
+</section>
+<section id="system-cleanup">
+<h3>System Cleanup<a class="headerlink" href="#system-cleanup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clean temporary files</span>
+rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/wsprdaemon/tmp.*
+rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/wsprdaemon/recording.d/*/tmp.*
+
+<span class="c1"># Reset to clean state (stops all processes)</span>
+./wsprdaemon.sh<span class="w"> </span>-Z
+rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/wsprdaemon/*
+./wsprdaemon.sh<span class="w"> </span>-a
+</pre></div>
+</div>
+</section>
+</section>
+<section id="environment-variables">
+<h2>Environment Variables<a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h2>
+<section id="configuration-variables">
+<h3>Configuration Variables<a class="headerlink" href="#configuration-variables" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WSPRDAEMON_ROOT_DIR</span></code></strong> - Installation directory path</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WSPRDAEMON_TMP_DIR</span></code></strong> - Temporary files directory (default: /tmp/wsprdaemon)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WSPRDAEMON_CONFIG_FILE</span></code></strong> - Configuration file path</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WD_LOGFILE</span></code></strong> - Log file path for current session</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WD_LOGFILE_SIZE_MAX</span></code></strong> - Maximum log file size (default: 1000000 bytes)</p></li>
+</ul>
+</section>
+<section id="runtime-variables">
+<h3>Runtime Variables<a class="headerlink" href="#runtime-variables" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">verbosity</span></code></strong> - Current verbosity level (0-4)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">WD_TIME_FMT</span></code></strong> - Time format for log entries</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">LC_ALL</span></code></strong> - Locale setting (set to “C” for consistent number formatting)</p></li>
+</ul>
+</section>
+<section id="usage-examples">
+<h3>Usage Examples<a class="headerlink" href="#usage-examples" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run with custom temporary directory</span>
+<span class="nv">WSPRDAEMON_TMP_DIR</span><span class="o">=</span>/mnt/ramdisk/wsprdaemon<span class="w"> </span>./wsprdaemon.sh<span class="w"> </span>-a
+
+<span class="c1"># Increase verbosity for debugging</span>
+<span class="nv">verbosity</span><span class="o">=</span><span class="m">3</span><span class="w"> </span>./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># Use custom configuration file</span>
+<span class="nv">WSPRDAEMON_CONFIG_FILE</span><span class="o">=</span>./test.conf<span class="w"> </span>./wsprdaemon.sh<span class="w"> </span>-s
+</pre></div>
+</div>
+</section>
+</section>
+<section id="exit-codes">
+<h2>Exit Codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
+<section id="standard-exit-codes">
+<h3>Standard Exit Codes<a class="headerlink" href="#standard-exit-codes" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>0</strong> - Success</p></li>
+<li><p><strong>1</strong> - General error</p></li>
+<li><p><strong>2</strong> - Configuration error</p></li>
+<li><p><strong>3</strong> - Hardware/connectivity error</p></li>
+<li><p><strong>4</strong> - Permission error</p></li>
+<li><p><strong>5</strong> - Resource unavailable (disk space, memory, etc.)</p></li>
+</ul>
+</section>
+<section id="signal-handling">
+<h3>Signal Handling<a class="headerlink" href="#signal-handling" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>SIGTERM (15)</strong> - Graceful shutdown</p></li>
+<li><p><strong>SIGINT (2)</strong> - Interrupt (Ctrl+C)</p></li>
+<li><p><strong>SIGHUP (1)</strong> - Reload configuration</p></li>
+<li><p><strong>SIGUSR1 (10)</strong> - Increase verbosity</p></li>
+<li><p><strong>SIGUSR2 (12)</strong> - Decrease verbosity</p></li>
+</ul>
+<p>This command reference provides comprehensive coverage of all WsprDaemon command-line options and related system commands for effective operation and troubleshooting.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../developers/remote_development.html" class="btn btn-neutral float-left" title="Remote Development Setup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../external_links.html" class="btn btn-neutral float-right" title="External Links" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

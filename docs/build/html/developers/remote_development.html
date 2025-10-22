@@ -1,0 +1,734 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote Development Setup &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Command Reference" href="../appendices/command_reference.html" />
+    <link rel="prev" title="Developer Getting Started Guide" href="getting_started.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Remote Development Setup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#key-requirements">Key Requirements</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#remote-access-architecture">Remote Access Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#remote-access-channel-rac-system">Remote Access Channel (RAC) System</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-rac-works">How RAC Works</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#local-machine">Local Machine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#remote-pi-host">Remote Pi Host</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#vs-code-configuration">VS Code Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#workspace-settings-vscode-settings-json">Workspace Settings (<code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recommended-extensions-vscode-extensions-json">Recommended Extensions (<code class="docutils literal notranslate"><span class="pre">.vscode/extensions.json</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#development-tasks-vscode-tasks-json">Development Tasks (<code class="docutils literal notranslate"><span class="pre">.vscode/tasks.json</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ssh-configuration">SSH Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#enhanced-ssh-config">Enhanced SSH Config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#connection-multiplexing-benefits">Connection Multiplexing Benefits</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#development-workflow">Development Workflow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connect-to-remote-host">1. Connect to Remote Host</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#set-up-tmux-development-environment">2. Set Up tmux Development Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vs-code-integration-with-tmux">3. VS Code Integration with tmux</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#common-development-tasks">4. Common Development Tasks</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#service-management">Service Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#code-editing">Code Editing</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#testing-changes">Testing Changes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hardware-specific-development">Hardware-Specific Development</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kiwisdr-development">KiwiSDR Development</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rx888-ka9q-radio-development">RX888/KA9Q Radio Development</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-band-testing">Multi-Band Testing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#debugging-remote-issues">Debugging Remote Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connection-problems">Connection Problems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#wsprdaemon-issues">WsprDaemon Issues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vs-code-remote-issues">VS Code Remote Issues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#network-connectivity-issues">Network Connectivity Issues</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-optimization">Performance Optimization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ssh-connection-optimization">SSH Connection Optimization</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tmux-configuration">tmux Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vs-code-remote-optimizations">VS Code Remote Optimizations</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Development Workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#code-quality">Code Quality</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#remote-performance">Remote Performance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#security-considerations">Security Considerations</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Remote Development Setup</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/developers/remote_development.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="remote-development-setup">
+<h1>Remote Development Setup<a class="headerlink" href="#remote-development-setup" title="Link to this heading"></a></h1>
+<p><em>Modern development tools and workflows for WsprDaemon contributors</em></p>
+<p>This guide describes how to set up VS Code and other development tools for remote WsprDaemon development on Raspberry Pi hosts with SDR hardware.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>WsprDaemon development requires access to actual hardware (KiwiSDRs, RX888 SDRs) that’s typically available only on remote Raspberry Pi systems. This setup provides developers with modern tools while maintaining the security and automation needed for non-technical end users.</p>
+<section id="key-requirements">
+<h3>Key Requirements<a class="headerlink" href="#key-requirements" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>End users have varying levels of Linux experience</p></li>
+<li><p>System must provide robust protection and automated maintenance</p></li>
+<li><p>Reliable data propagation from user machines to servers</p></li>
+<li><p>Developers need advanced debugging and development tools for remote systems</p></li>
+</ul>
+</section>
+</section>
+<section id="remote-access-architecture">
+<h2>Remote Access Architecture<a class="headerlink" href="#remote-access-architecture" title="Link to this heading"></a></h2>
+<p>WsprDaemon includes a sophisticated remote access system designed for secure developer access without exposing client systems to the internet.</p>
+<section id="remote-access-channel-rac-system">
+<h3>Remote Access Channel (RAC) System<a class="headerlink" href="#remote-access-channel-rac-system" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Secure developer access to WD installations without internet exposure</p></li>
+<li><p><strong>Security Model</strong>: FRP + WireGuard + Digital Ocean firewall</p></li>
+<li><p><strong>Port Mapping</strong>: RAC number maps to port 35800+RAC on wd0.wsprdaemon.org</p>
+<ul>
+<li><p>RAC 0 → port 35800</p></li>
+<li><p>RAC 1 → port 35801</p></li>
+<li><p>RAC 100 → port 35900</p></li>
+</ul>
+</li>
+<li><p><strong>Access Method</strong>: <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35XXX</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code></p></li>
+<li><p><strong>Network Security</strong>: Requires active WireGuard VPN session</p></li>
+</ul>
+</section>
+<section id="how-rac-works">
+<h3>How RAC Works<a class="headerlink" href="#how-rac-works" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Client Side</strong>: WD installations run <code class="docutils literal notranslate"><span class="pre">frpc</span></code> to connect to wd0.wsprdaemon.org</p></li>
+<li><p><strong>Server Side</strong>: Each RAC opens a private port (35800+RAC) that tunnels to client’s port 22</p></li>
+<li><p><strong>Security Layer</strong>: wd0 is a Digital Ocean droplet behind firewall</p></li>
+<li><p><strong>Access Control</strong>: Only accessible via WireGuard VPN</p></li>
+<li><p><strong>Developer Access</strong>: <code class="docutils literal notranslate"><span class="pre">ssh</span> <span class="pre">-p</span> <span class="pre">35XXX</span> <span class="pre">wsprdaemon&#64;wd0.wsprdaemon.org</span></code> (through VPN)</p></li>
+<li><p><strong>Multiple Networks</strong>: Support for both wsprdaemon.org and HAM Site group networks</p></li>
+</ol>
+</section>
+</section>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<section id="local-machine">
+<h3>Local Machine<a class="headerlink" href="#local-machine" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>VS Code with Remote-SSH extension installed</p></li>
+<li><p>SSH client (OpenSSH compatible)</p></li>
+<li><p>Internet access for extension downloads</p></li>
+<li><p>WireGuard VPN client (for RAC access)</p></li>
+</ul>
+</section>
+<section id="remote-pi-host">
+<h3>Remote Pi Host<a class="headerlink" href="#remote-pi-host" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Ubuntu/Debian Linux (Raspberry Pi OS)</p></li>
+<li><p>SSH server running</p></li>
+<li><p>WsprDaemon user account with sudo access</p></li>
+<li><p>At least 2GB RAM (recommended for development)</p></li>
+<li><p>SDR hardware connected and configured</p></li>
+</ul>
+</section>
+</section>
+<section id="vs-code-configuration">
+<h2>VS Code Configuration<a class="headerlink" href="#vs-code-configuration" title="Link to this heading"></a></h2>
+<section id="workspace-settings-vscode-settings-json">
+<h3>Workspace Settings (<code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code>)<a class="headerlink" href="#workspace-settings-vscode-settings-json" title="Link to this heading"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;files.associations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;*.sh&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shellscript&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;*.conf&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;properties&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;wsprdaemon.conf&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;properties&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;shellcheck.enable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;python.defaultInterpreterPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/usr/bin/python3&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;files.watcherExclude&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;**/logs/**&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/tmp/**&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/*.wav&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/*.log&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="recommended-extensions-vscode-extensions-json">
+<h3>Recommended Extensions (<code class="docutils literal notranslate"><span class="pre">.vscode/extensions.json</span></code>)<a class="headerlink" href="#recommended-extensions-vscode-extensions-json" title="Link to this heading"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;recommendations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="s2">&quot;ms-vscode-remote.remote-ssh&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">&quot;ms-python.python&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">&quot;timonwong.shellcheck&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">&quot;foxundermoon.shell-format&quot;</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="development-tasks-vscode-tasks-json">
+<h3>Development Tasks (<code class="docutils literal notranslate"><span class="pre">.vscode/tasks.json</span></code>)<a class="headerlink" href="#development-tasks-vscode-tasks-json" title="Link to this heading"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.0.0&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;tasks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WD: Start Service&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shell&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./wsprdaemon.sh -a&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;presentation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;echo&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;reveal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;always&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;focus&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;panel&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shared&quot;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WD: Show Status&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shell&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./wsprdaemon.sh -s&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;test&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WD: Stop Service&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shell&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./wsprdaemon.sh -z&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WD: View Error Logs&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shell&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./wsprdaemon.sh -l e&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;test&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ShellCheck: All Scripts&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shell&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;find . -name &#39;*.sh&#39; -exec shellcheck {} \\;&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;test&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="ssh-configuration">
+<h2>SSH Configuration<a class="headerlink" href="#ssh-configuration" title="Link to this heading"></a></h2>
+<section id="enhanced-ssh-config">
+<h3>Enhanced SSH Config<a class="headerlink" href="#enhanced-ssh-config" title="Link to this heading"></a></h3>
+<p>Add to your <code class="docutils literal notranslate"><span class="pre">~/.ssh/config</span></code>:</p>
+<div class="highlight-ssh notranslate"><div class="highlight"><pre><span></span># WsprDaemon Development Hosts
+Host wd-pi-*
+    User wsprdaemon
+    ForwardAgent yes
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    # Connection multiplexing for faster development
+    ControlMaster auto
+    ControlPath ~/.ssh/control-%r@%h:%p
+    ControlPersist 10m
+    # Port forwarding for web interfaces
+    LocalForward 8081 localhost:8081  # KA9Q-web
+    LocalForward 8080 localhost:8080  # Alternative web interface
+    LocalForward 8073 localhost:8073  # KiwiSDR web interface
+
+# RAC-based connections
+Host wd-rac-*
+    Hostname wd0.wsprdaemon.org
+    User wsprdaemon
+    ForwardAgent yes
+    ServerAliveInterval 30
+    ServerAliveCountMax 10
+    # Optimized for high-latency connections
+    TCPKeepAlive yes
+    Compression yes
+</pre></div>
+</div>
+</section>
+<section id="connection-multiplexing-benefits">
+<h3>Connection Multiplexing Benefits<a class="headerlink" href="#connection-multiplexing-benefits" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Faster subsequent connections</p></li>
+<li><p>Reduced authentication overhead</p></li>
+<li><p>Persistent connections survive temporary network issues</p></li>
+<li><p>Shared connections for multiple VS Code windows</p></li>
+</ul>
+</section>
+</section>
+<section id="development-workflow">
+<h2>Development Workflow<a class="headerlink" href="#development-workflow" title="Link to this heading"></a></h2>
+<section id="connect-to-remote-host">
+<h3>1. Connect to Remote Host<a class="headerlink" href="#connect-to-remote-host" title="Link to this heading"></a></h3>
+<p><strong>Direct Connection:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SSH to WsprDaemon host (if direct access available)</span>
+ssh<span class="w"> </span>wsprdaemon@&lt;host&gt;
+</pre></div>
+</div>
+<p><strong>RAC Connection:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Connect via RAC system (requires WireGuard VPN)</span>
+ssh<span class="w"> </span>-p<span class="w"> </span><span class="m">35923</span><span class="w"> </span>wsprdaemon@wd0.wsprdaemon.org<span class="w">  </span><span class="c1"># RAC 123 example</span>
+</pre></div>
+</div>
+<p><strong>VS Code Remote-SSH:</strong></p>
+<ul class="simple">
+<li><p>Cmd+Shift+P → “Remote-SSH: Connect to Host”</p></li>
+<li><p>Select configured host or enter connection details</p></li>
+</ul>
+</section>
+<section id="set-up-tmux-development-environment">
+<h3>2. Set Up tmux Development Environment<a class="headerlink" href="#set-up-tmux-development-environment" title="Link to this heading"></a></h3>
+<p>tmux is essential for persistent sessions, especially for unreliable connections like Antarctica satellite internet:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start or attach to tmux session</span>
+tmux<span class="w"> </span>new-session<span class="w"> </span>-d<span class="w"> </span>-s<span class="w"> </span>wd-dev
+tmux<span class="w"> </span>attach-session<span class="w"> </span>-t<span class="w"> </span>wd-dev
+
+<span class="c1"># Create multiple panes for different tasks</span>
+tmux<span class="w"> </span>split-window<span class="w"> </span>-h<span class="w">    </span><span class="c1"># Split horizontally</span>
+tmux<span class="w"> </span>split-window<span class="w"> </span>-v<span class="w">    </span><span class="c1"># Split vertically</span>
+
+<span class="c1"># Common tmux workflow:</span>
+<span class="c1"># Pane 1: Code editing and git operations</span>
+<span class="c1"># Pane 2: WsprDaemon monitoring (./wsprdaemon.sh -s)  </span>
+<span class="c1"># Pane 3: Live log monitoring (./wsprdaemon.sh -l e)</span>
+<span class="c1"># Pane 4: Service control and testing</span>
+</pre></div>
+</div>
+</section>
+<section id="vs-code-integration-with-tmux">
+<h3>3. VS Code Integration with tmux<a class="headerlink" href="#vs-code-integration-with-tmux" title="Link to this heading"></a></h3>
+<p><strong>Option 1: VS Code Remote-SSH with integrated terminal</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># The tmux sessions will be available in VS Code&#39;s terminal</span>
+<span class="c1"># Use Ctrl+` to open integrated terminal</span>
+<span class="c1"># Run: tmux attach-session -t wd-dev</span>
+</pre></div>
+</div>
+<p><strong>Option 2: Traditional terminal + VS Code remote editing</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Keep tmux in separate terminal window</span>
+<span class="c1"># Use VS Code for file editing and project management</span>
+<span class="c1"># Switch between terminal and VS Code as needed</span>
+</pre></div>
+</div>
+</section>
+<section id="common-development-tasks">
+<h3>4. Common Development Tasks<a class="headerlink" href="#common-development-tasks" title="Link to this heading"></a></h3>
+<section id="service-management">
+<h4>Service Management<a class="headerlink" href="#service-management" title="Link to this heading"></a></h4>
+<p>Use VS Code tasks (Cmd+Shift+P → “Tasks: Run Task”):</p>
+<ul class="simple">
+<li><p><strong>WD: Start Service</strong> - Start WsprDaemon service</p></li>
+<li><p><strong>WD: Show Status</strong> - Check status and logs</p></li>
+<li><p><strong>WD: Stop Service</strong> - Stop service for development</p></li>
+<li><p><strong>WD: View Error Logs</strong> - Monitor error logs</p></li>
+</ul>
+</section>
+<section id="code-editing">
+<h4>Code Editing<a class="headerlink" href="#code-editing" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Shell scripts get automatic ShellCheck linting</p></li>
+<li><p>Python scripts use remote Python interpreter</p></li>
+<li><p>Git operations work seamlessly</p></li>
+<li><p>File watching optimized for remote development</p></li>
+</ul>
+</section>
+<section id="testing-changes">
+<h4>Testing Changes<a class="headerlink" href="#testing-changes" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Copy config template and customize</span>
+cp<span class="w"> </span>wd_template.conf<span class="w"> </span>wsprdaemon.conf
+<span class="c1"># Edit configuration for your hardware</span>
+code<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Test configuration</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># View logs in real-time</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>e
+
+<span class="c1"># Monitor specific log types</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>n<span class="w">  </span><span class="c1"># wsprnet uploads</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>d<span class="w">  </span><span class="c1"># daemon logs</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<section id="hardware-specific-development">
+<h2>Hardware-Specific Development<a class="headerlink" href="#hardware-specific-development" title="Link to this heading"></a></h2>
+<section id="kiwisdr-development">
+<h3>KiwiSDR Development<a class="headerlink" href="#kiwisdr-development" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># KiwiSDR web interface access</span>
+<span class="c1"># Port 8073 automatically forwarded via SSH config</span>
+curl<span class="w"> </span>http://localhost:8073<span class="w">  </span><span class="c1"># Test connectivity</span>
+
+<span class="c1"># KiwiSDR configuration in wsprdaemon.conf</span>
+<span class="nv">KIWI_0_HOST</span><span class="o">=</span><span class="s2">&quot;your-kiwi-hostname&quot;</span>
+<span class="nv">KIWI_0_PORT</span><span class="o">=</span><span class="s2">&quot;8073&quot;</span>
+<span class="nv">KIWI_0_PASSWORD</span><span class="o">=</span><span class="s2">&quot;your-password&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="rx888-ka9q-radio-development">
+<h3>RX888/KA9Q Radio Development<a class="headerlink" href="#rx888-ka9q-radio-development" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># KA9Q-web interface access</span>
+curl<span class="w"> </span>http://localhost:8081<span class="w">  </span><span class="c1"># Test KA9Q-web</span>
+
+<span class="c1"># Radio control via multicast streams</span>
+<span class="c1"># Requires specific radiod.conf configuration</span>
+<span class="c1"># Check multicast groups</span>
+ip<span class="w"> </span>maddr<span class="w"> </span>show
+</pre></div>
+</div>
+</section>
+<section id="multi-band-testing">
+<h3>Multi-Band Testing<a class="headerlink" href="#multi-band-testing" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configure WSPR_SCHEDULE arrays for test scenarios</span>
+<span class="nv">WSPR_SCHEDULE_0</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;00:00 KA9Q_0,20,W2:F2:F5 KIWI_0,40,W2:F2:F5&quot;</span>
+<span class="w">    </span><span class="s2">&quot;00:02 KA9Q_0,40,W2:F2:F5 KIWI_0,20,W2:F2:F5&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Use MERG_* receivers for development without double-posting</span>
+<span class="nv">MERG_0_CALL_SIGN</span><span class="o">=</span><span class="s2">&quot;TEST&quot;</span>
+<span class="nv">MERG_0_GRID_SQUARE</span><span class="o">=</span><span class="s2">&quot;AA00&quot;</span>
+
+<span class="c1"># Monitor uploads</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>n<span class="w">  </span><span class="c1"># wsprnet uploads</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="debugging-remote-issues">
+<h2>Debugging Remote Issues<a class="headerlink" href="#debugging-remote-issues" title="Link to this heading"></a></h2>
+<section id="connection-problems">
+<h3>Connection Problems<a class="headerlink" href="#connection-problems" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test SSH connection with verbose output</span>
+ssh<span class="w"> </span>-vvv<span class="w"> </span>wd-pi-dev
+
+<span class="c1"># Test RAC connection</span>
+ssh<span class="w"> </span>-vvv<span class="w"> </span>-p<span class="w"> </span><span class="m">35923</span><span class="w"> </span>wd0.wsprdaemon.org
+
+<span class="c1"># Check SSH service on remote</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>status<span class="w"> </span>ssh
+
+<span class="c1"># Verify port forwarding</span>
+curl<span class="w"> </span>http://localhost:8081<span class="w">  </span><span class="c1"># Should reach KA9Q-web if running</span>
+curl<span class="w"> </span>http://localhost:8073<span class="w">  </span><span class="c1"># Should reach KiwiSDR if configured</span>
+</pre></div>
+</div>
+</section>
+<section id="wsprdaemon-issues">
+<h3>WsprDaemon Issues<a class="headerlink" href="#wsprdaemon-issues" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check service status</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># View live error logs</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>e
+
+<span class="c1"># Check systemd service (if installed)</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>status<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Validate configuration</span>
+bash<span class="w"> </span>-n<span class="w"> </span>wsprdaemon.conf
+</pre></div>
+</div>
+</section>
+<section id="vs-code-remote-issues">
+<h3>VS Code Remote Issues<a class="headerlink" href="#vs-code-remote-issues" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Reset VS Code server on remote host</span>
+rm<span class="w"> </span>-rf<span class="w"> </span>~/.vscode-server
+
+<span class="c1"># Check remote extension installation</span>
+ls<span class="w"> </span>~/.vscode-server/extensions/
+
+<span class="c1"># Check VS Code server logs</span>
+cat<span class="w"> </span>~/.vscode-server/.*.log
+</pre></div>
+</div>
+</section>
+<section id="network-connectivity-issues">
+<h3>Network Connectivity Issues<a class="headerlink" href="#network-connectivity-issues" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test internet connectivity</span>
+ping<span class="w"> </span>-c<span class="w"> </span><span class="m">3</span><span class="w"> </span>wsprnet.org
+curl<span class="w"> </span>-I<span class="w"> </span>http://wsprnet.org
+
+<span class="c1"># Check local network</span>
+ip<span class="w"> </span>addr<span class="w"> </span>show
+ip<span class="w"> </span>route<span class="w"> </span>show
+
+<span class="c1"># Test SDR connectivity</span>
+ping<span class="w"> </span>-c<span class="w"> </span><span class="m">3</span><span class="w"> </span>your-kiwi-hostname
+telnet<span class="w"> </span>your-kiwi-hostname<span class="w"> </span><span class="m">8073</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-optimization">
+<h2>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h2>
+<section id="ssh-connection-optimization">
+<h3>SSH Connection Optimization<a class="headerlink" href="#ssh-connection-optimization" title="Link to this heading"></a></h3>
+<div class="highlight-ssh notranslate"><div class="highlight"><pre><span></span># ~/.ssh/config optimizations for high-latency connections
+Host wd-*
+    # Compression for slow connections
+    Compression yes
+    
+    # Keep connections alive
+    ServerAliveInterval 30
+    ServerAliveCountMax 10
+    TCPKeepAlive yes
+    
+    # Connection multiplexing
+    ControlMaster auto
+    ControlPath ~/.ssh/control-%r@%h:%p
+    ControlPersist 10m
+    
+    # Cipher optimization for performance
+    Ciphers aes128-gcm@openssh.com,aes128-ctr
+</pre></div>
+</div>
+</section>
+<section id="tmux-configuration">
+<h3>tmux Configuration<a class="headerlink" href="#tmux-configuration" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># ~/.tmux.conf optimizations</span>
+<span class="c1"># Increase scrollback buffer</span>
+set-option<span class="w"> </span>-g<span class="w"> </span>history-limit<span class="w"> </span><span class="m">10000</span>
+
+<span class="c1"># Reduce escape time for better responsiveness</span>
+<span class="nb">set</span><span class="w"> </span>-sg<span class="w"> </span>escape-time<span class="w"> </span><span class="m">1</span>
+
+<span class="c1"># Enable mouse support</span>
+<span class="nb">set</span><span class="w"> </span>-g<span class="w"> </span>mouse<span class="w"> </span>on
+
+<span class="c1"># Better session management</span>
+bind-key<span class="w"> </span>S<span class="w"> </span>choose-session
+</pre></div>
+</div>
+</section>
+<section id="vs-code-remote-optimizations">
+<h3>VS Code Remote Optimizations<a class="headerlink" href="#vs-code-remote-optimizations" title="Link to this heading"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// settings.json for remote development</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;remote.SSH.connectTimeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;remote.SSH.keepAlive&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;files.watcherExclude&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;**/logs/**&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/tmp/**&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/*.wav&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/*.log&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;**/node_modules/**&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<section id="id1">
+<h3>Development Workflow<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Always test configuration</strong> with <code class="docutils literal notranslate"><span class="pre">./wsprdaemon.sh</span> <span class="pre">-s</span></code> before starting</p></li>
+<li><p><strong>Use separate config files</strong> for development vs production</p></li>
+<li><p><strong>Monitor logs continuously</strong> during testing</p></li>
+<li><p><strong>Keep backup configurations</strong> for known-good setups</p></li>
+<li><p><strong>Document hardware-specific assumptions</strong> in code comments</p></li>
+</ol>
+</section>
+<section id="code-quality">
+<h3>Code Quality<a class="headerlink" href="#code-quality" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Run ShellCheck on all shell scripts before committing</p></li>
+<li><p>Test Python scripts with multiple Python versions when possible</p></li>
+<li><p>Validate configuration files before deployment</p></li>
+<li><p>Use consistent coding style and patterns</p></li>
+<li><p>Add meaningful commit messages with hardware context</p></li>
+</ul>
+</section>
+<section id="remote-performance">
+<h3>Remote Performance<a class="headerlink" href="#remote-performance" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Use connection multiplexing for faster SSH connections</p></li>
+<li><p>Minimize file watchers on remote filesystem</p></li>
+<li><p>Cache dependencies locally when possible</p></li>
+<li><p>Use tmux/screen for long-running processes</p></li>
+<li><p>Optimize VS Code settings for remote development</p></li>
+</ul>
+</section>
+<section id="security-considerations">
+<h3>Security Considerations<a class="headerlink" href="#security-considerations" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Use SSH keys instead of passwords</p></li>
+<li><p>Keep RAC access time-limited and documented</p></li>
+<li><p>Respect user privacy and system security</p></li>
+<li><p>Follow principle of least privilege</p></li>
+<li><p>Maintain audit trail of development activities</p></li>
+</ul>
+<p>This setup provides a professional development environment that matches the complexity and hardware requirements of WsprDaemon while maintaining security and performance for remote development scenarios.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="getting_started.html" class="btn btn-neutral float-left" title="Developer Getting Started Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../appendices/command_reference.html" class="btn btn-neutral float-right" title="Command Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

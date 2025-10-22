@@ -109,7 +109,7 @@ function ka9q_rx_channel_is_configured()
                 fi
             done
         done
-        (( return_value == 0 )) && wd_logger 1 "No KA9Q channels are found in the MERG.. receivers on this WD server"
+        (( return_value == 0 )) && wd_logger 2 "No KA9Q channels are found in the MERG.. receivers on this WD server"
     fi
     wd_logger 2 "Returning $return_value from a search"
     eval $__return_var_name=\$return_value
@@ -121,7 +121,7 @@ ka9q_rx_channel_is_configured "ka9q_rx_is_active"
 if (( $ka9q_rx_is_active != 1)); then
     wd_logger 2 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
 else
-    wd_logger 1 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
+    wd_logger 2 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
     watchdog_daemon_list+=( "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}" )
 fi
 

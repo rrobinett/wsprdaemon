@@ -1,3 +1,9 @@
+" Prevent multiple sourcing
+if exists("g:vimrc_loaded")
+  finish
+endif
+let g:vimrc_loaded = 1
+
 colorscheme industry
 if has ("autocmd")
     filetype plugin indent on
@@ -43,3 +49,4 @@ nnoremap <S-F4> :vertical resize +5<CR> " Shift+F4 for vertical resizing
 " F5: Move between splits
 nnoremap <F5> <C-w>w
 
+source ~/wsprdaemon/.vimrc

@@ -194,7 +194,7 @@ def process_json_input(json_file):
         # ensure we drop any unknown keys and values
         filtered_spot = {key: value for (key, value) in original_spot.items() if key in column_names}
         # add the wd_time that wsprnet-scraper.sh seems to be creating
-        filtered_spot["wd_time"] = datetime.datetime.fromtimestamp(int(original_spot['Date']), tz=datetime.timezone.utc).strftime("%Y-%m-%d:%H:%M")
+        filtered_spot["wd_time"] = datetime.datetime.fromtimestamp(int(original_spot['Date']), tz=datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         (band, rx_azi, rx_lat, rx_lon, tx_azi, tx_lat, tx_lon, v_lat, v_lon) = calculate_azimuth(frequency=original_spot["MHz"], tx_locator=original_spot["Grid"], rx_locator=original_spot["ReporterGrid"])
         additional_values = {
             "wd_band": band,

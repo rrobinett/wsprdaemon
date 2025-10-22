@@ -6,19 +6,22 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>History &mdash; wsprdaemon 3.3.1 documentation</title>
+  <title>History &mdash; wsprdaemon 3.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=9ac01507"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" /> 
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Validity of Data Path and Results" href="validity.html" />
+    <link rel="prev" title="How wsprdaemon Works" href="how_it_works.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -40,56 +43,76 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Description</span></p>
-<ul>
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how_it_works.html">How wsprdaemon Works</a></li>
-<li class="toctree-l1"><a class="reference internal" href="validity.html">Validity of data path and results</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">History</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#wsprdaemon-development-timeline">WsprDaemon Development Timeline</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#origins-2018">Origins (2018)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#major-version-history">Major Version History</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#key-milestones">Key Milestones</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#community-impact">Community Impact</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#technical-evolution">Technical Evolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#acknowledgments">Acknowledgments</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Requirements</span></p>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Software Installation</span></p>
-<ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Software Configuration</span></p>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Working Results</span></p>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Maintenance &amp; Updates</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Troubleshooting</span></p>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">FAQ</span></p>
-<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">External Links</span></p>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Contributors</span></p>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
 </ul>
 
@@ -119,12 +142,116 @@
              
   <section id="history">
 <h1>History<a class="headerlink" href="#history" title="Link to this heading"></a></h1>
+<section id="wsprdaemon-development-timeline">
+<h2>WsprDaemon Development Timeline<a class="headerlink" href="#wsprdaemon-development-timeline" title="Link to this heading"></a></h2>
+<section id="origins-2018">
+<h3>Origins (2018)<a class="headerlink" href="#origins-2018" title="Link to this heading"></a></h3>
+<p>WsprDaemon was originally developed by Rob Robinett AI6VN in July 2018, starting as a Mac OSX project before being ported to Raspberry Pi 3b+. The initial goal was to improve upon the built-in autowspr mode of KiwiSDR receivers by:</p>
+<ul class="simple">
+<li><p>Processing uncompressed audio through the latest ‘wsprd’ utility from WSJT-x</p></li>
+<li><p>Implementing deep search mode (<code class="docutils literal notranslate"><span class="pre">wsprd</span> <span class="pre">-d</span></code>) for 10% more signal detection</p></li>
+<li><p>Leveraging more powerful CPUs for better performance on busy bands</p></li>
+</ul>
+</section>
+<section id="major-version-history">
+<h3>Major Version History<a class="headerlink" href="#major-version-history" title="Link to this heading"></a></h3>
+<p><strong>Version 1.x (2018-2019)</strong></p>
+<ul class="simple">
+<li><p>Initial release supporting KiwiSDR receivers</p></li>
+<li><p>Basic WSPR decoding and reporting to wsprnet.org</p></li>
+<li><p>Raspberry Pi 3b+ support with up to 12 simultaneous sessions</p></li>
+</ul>
+<p><strong>Version 2.x (2019-2020)</strong></p>
+<ul class="simple">
+<li><p>Enhanced multi-receiver support</p></li>
+<li><p>Spot merging capabilities</p></li>
+<li><p>Background noise level recording</p></li>
+<li><p>Improved reliability and error recovery</p></li>
+</ul>
+<p><strong>Version 3.0.x (2020-2021)</strong></p>
+<ul class="simple">
+<li><p>Major architecture refactoring</p></li>
+<li><p>Added support for multiple SDR types</p></li>
+<li><p>Enhanced scheduling capabilities</p></li>
+<li><p>Improved logging and monitoring</p></li>
+</ul>
+<p><strong>Version 3.1.x (2021-2022)</strong></p>
+<ul class="simple">
+<li><p>KA9Q-radio integration</p></li>
+<li><p>RX888 SDR support</p></li>
+<li><p>WSPR-2 spectral spreading reports</p></li>
+<li><p>GRAPE system integration for ionospheric research</p></li>
+<li><p>Fixed AGC level support for KA9Q receivers</p></li>
+</ul>
+<p><strong>Version 3.2.x (2023-2024)</strong></p>
+<ul class="simple">
+<li><p>Universal binary support (all wsprd and jt9 binaries included)</p></li>
+<li><p>Raspberry Pi 5 compatibility</p></li>
+<li><p>KA9Q-web interface</p></li>
+<li><p>FT4/8 reporting capabilities</p></li>
+<li><p>Enhanced performance optimizations</p></li>
+</ul>
+<p><strong>Version 3.3.x (2024-Present)</strong></p>
+<ul class="simple">
+<li><p>Current stable release</p></li>
+<li><p>Improved reliability and performance</p></li>
+<li><p>Enhanced documentation</p></li>
+<li><p>Broader hardware compatibility</p></li>
+</ul>
+</section>
+<section id="key-milestones">
+<h3>Key Milestones<a class="headerlink" href="#key-milestones" title="Link to this heading"></a></h3>
+<p><strong>2018</strong>: First deployment on Raspberry Pi systems
+<strong>2019</strong>: Integration with major WSPR monitoring networks
+<strong>2020</strong>: Adoption by top-spotting sites (20+ sites using WD)
+<strong>2021</strong>: KA9Q-radio integration expanding SDR support
+<strong>2022</strong>: GRAPE system integration for scientific research
+<strong>2023</strong>: Multi-platform binary distribution
+<strong>2024</strong>: Enhanced web interfaces and monitoring</p>
+</section>
+<section id="community-impact">
+<h3>Community Impact<a class="headerlink" href="#community-impact" title="Link to this heading"></a></h3>
+<p>WsprDaemon has become a cornerstone of the WSPR monitoring community:</p>
+<ul class="simple">
+<li><p><strong>Network Contribution</strong>: WD-powered sites report approximately 33% of the 7+ million daily spots recorded at wsprnet.org</p></li>
+<li><p><strong>Top Spotters</strong>: Most of the 20+ “top spotting” sites listed at wspr.rocks/topspotters/ run WsprDaemon</p></li>
+<li><p><strong>Scientific Research</strong>: Integration with HamSCI GRAPE system enables ionospheric research</p></li>
+<li><p><strong>Global Coverage</strong>: Installations worldwide provide comprehensive propagation monitoring</p></li>
+</ul>
+</section>
+<section id="technical-evolution">
+<h3>Technical Evolution<a class="headerlink" href="#technical-evolution" title="Link to this heading"></a></h3>
+<p>The project has evolved from a simple KiwiSDR enhancement to a comprehensive WSPR monitoring platform:</p>
+<ul class="simple">
+<li><p><strong>Hardware Support</strong>: Expanded from KiwiSDR-only to supporting RX888, RTL-SDR, AirSpy, and other SDRs</p></li>
+<li><p><strong>Processing Power</strong>: Optimized for everything from Raspberry Pi to high-end x86 systems</p></li>
+<li><p><strong>Data Collection</strong>: Beyond basic spots to include noise measurements, Doppler shift, and propagation metrics</p></li>
+<li><p><strong>Reliability</strong>: “Home appliance” reliability with automatic recovery from outages</p></li>
+<li><p><strong>Integration</strong>: APIs and interfaces for external monitoring and research systems</p></li>
+</ul>
+</section>
+<section id="acknowledgments">
+<h3>Acknowledgments<a class="headerlink" href="#acknowledgments" title="Link to this heading"></a></h3>
+<p>WsprDaemon builds upon the foundational work of:</p>
+<ul class="simple">
+<li><p><strong>Joe Taylor K1JT</strong> and the WSJT-x development team for the wsprd decoder</p></li>
+<li><p><strong>John Seamons</strong> for the KiwiSDR and kiwirecorder.py utility</p></li>
+<li><p><strong>Phil Karn KA9Q</strong> for the KA9Q-radio software suite</p></li>
+<li><p><strong>The WSPR community</strong> for testing, feedback, and contributions</p></li>
+<li><p><strong>HamSCI</strong> for scientific collaboration and GRAPE integration</p></li>
+</ul>
+<p>The project continues to evolve with contributions from the amateur radio and scientific communities, maintaining its position as a leading platform for WSPR monitoring and propagation research.</p>
+</section>
+</section>
 </section>
 
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="how_it_works.html" class="btn btn-neutral float-left" title="How wsprdaemon Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="validity.html" class="btn btn-neutral float-right" title="Validity of Data Path and Results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
