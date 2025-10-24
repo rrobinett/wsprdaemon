@@ -109,7 +109,7 @@ function ka9q_rx_channel_is_configured()
                 fi
             done
         done
-        (( return_value == 0 )) && wd_logger 1 "No KA9Q channels are found in the MERG.. receivers on this WD server"
+        (( return_value == 0 )) && wd_logger 2 "No KA9Q channels are found in the MERG.. receivers on this WD server"
     fi
     wd_logger 2 "Returning $return_value from a search"
     eval $__return_var_name=\$return_value

@@ -1,0 +1,40 @@
+[Unit]
+Description=WSPRDAEMON Server (%i)
+After=network-online.target clickhouse-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wsprdaemon
+Group=wsprdaemon
+WorkingDirectory=/home/wsprdaemon/wsprdaemon
+
+# The %i is replaced by the instance name (e.g., "wsprdaemon")
+# So this becomes: /usr/local/bin/wsprdaemon_server.sh /etc/wsprdaemon/wsprdaemon.conf
+ExecStart=/usr/local/bin/wsprdaemon_server.sh /etc/wsprdaemon/%i.conf
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/wsprdaemon
+ReadWritePaths=/var/log/wsprdaemon
+ReadWritePaths=/var/spool/wsprdaemon
+ReadWritePaths=/tmp/wsprdaemon
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=75%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wsprdaemon-server-%i
+
+[Install]
+WantedBy=multi-user.target

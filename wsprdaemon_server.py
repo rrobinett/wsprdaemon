@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     'clickhouse_spots_table': 'spots',
     'clickhouse_noise_table': 'noise',
     'incoming_tbz_dirs': ['/var/spool/wsprdaemon/from-wd0', '/var/spool/wsprdaemon/from-wd00'],
-    'extraction_dir': f'/run/user/{os.getuid()}/wsprdaemon',
+    'extraction_dir': '/var/lib/wsprdaemon/extraction',
     'processed_tbz_file': '/var/lib/wsprdaemon/wsprdaemon/processed_tbz_list.txt',
     'max_processed_file_size': 1000000,
     'max_spots_per_insert': 50000,
@@ -199,45 +199,66 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         else:
             log(f"Database {config['clickhouse_database']} already exists", "INFO")
 
-        # Create spots table with field names aligned to wsprnet.spots
+        # Create spots table - HARMONIZED with wsprnet.spots schema
         create_spots_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_spots_table']}
         (
-            time           DateTime                CODEC(ZSTD(1)),
-            band           Int16                   CODEC(ZSTD(1)),
-            ReporterGrid   LowCardinality(String)  CODEC(LZ4),
-            rx_id          LowCardinality(String)  CODEC(LZ4),
-            CallSign       LowCardinality(String)  CODEC(LZ4),
-            Grid           LowCardinality(String)  CODEC(LZ4),
-            dB             Float32                 CODEC(Delta(4), ZSTD(3)),
-            c2_noise       Float32                 CODEC(Delta(4), ZSTD(3)),
-            Drift          Float32                 CODEC(Delta(4), ZSTD(3)),
-            MHz            Float32                 CODEC(Delta(4), ZSTD(3)),
-            distance       Int32                   CODEC(T64, ZSTD(1)),
-            rx_az          Float32                 CODEC(Delta(4), ZSTD(3)),
-            rx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
-            rx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
-            azimuth        Float32                 CODEC(Delta(4), ZSTD(3)),
-            Power          UInt8                   CODEC(T64, ZSTD(1)),
-            tx_lat         Float32                 CODEC(Delta(4), ZSTD(3)),
-            tx_lon         Float32                 CODEC(Delta(4), ZSTD(3)),
-            v_lat          Float32                 CODEC(Delta(4), ZSTD(3)),
-            v_lon          Float32                 CODEC(Delta(4), ZSTD(3)),
-            sync_quality   UInt16                  CODEC(ZSTD(1)),
-            dt             Float32                 CODEC(Delta(4), ZSTD(3)),
-            decode_cycles  UInt32                  CODEC(T64, ZSTD(1)),
-            jitter         Int16                   CODEC(T64, ZSTD(1)),
-            rms_noise      Float32                 CODEC(Delta(4), ZSTD(3)),
-            blocksize      UInt16                  CODEC(T64, ZSTD(1)),
-            metric         Int16                   CODEC(T64, ZSTD(1)),
-            osd_decode     UInt8                   CODEC(T64, ZSTD(1)),
-            Reporter       LowCardinality(String)  CODEC(LZ4),
-            nhardmin       UInt16                  CODEC(T64, ZSTD(1)),
-            ipass          UInt8                   CODEC(T64, ZSTD(1)),
-            proxy_upload   UInt8                   CODEC(T64, ZSTD(1)),
-            code           Int16                   CODEC(ZSTD(1)),
-            ov_count       UInt32                  CODEC(T64, ZSTD(1)),
-            rx_status      LowCardinality(String)  DEFAULT 'No Info' CODEC(LZ4)
+            -- Harmonized columns matching wsprnet.spots schema (with aliases for old names)
+            id           Nullable(UInt64)        CODEC(Delta(8), ZSTD(1)),
+            time         DateTime                CODEC(Delta(4), ZSTD(1)),
+            band         Int16                   CODEC(T64, ZSTD(1)),
+            rx_sign      LowCardinality(String)  CODEC(LZ4),
+            rx_lat       Float32                 CODEC(Delta(4), ZSTD(3)),
+            rx_lon       Float32                 CODEC(Delta(4), ZSTD(3)),
+            rx_loc       LowCardinality(String)  CODEC(LZ4),
+            tx_sign      LowCardinality(String)  CODEC(LZ4),
+            tx_lat       Float32                 CODEC(Delta(4), ZSTD(3)),
+            tx_lon       Float32                 CODEC(Delta(4), ZSTD(3)),
+            tx_loc       LowCardinality(String)  CODEC(LZ4),
+            distance     Int32                   CODEC(T64, ZSTD(1)),
+            azimuth      Int32                   CODEC(T64, ZSTD(1)),
+            rx_azimuth   Int32                   CODEC(T64, ZSTD(1)),
+            frequency    Float64                 CODEC(Delta(8), ZSTD(3)),
+            power        Int8                    CODEC(T64, ZSTD(1)),
+            snr          Int8                    CODEC(Delta(4), ZSTD(3)),
+            drift        Int8                    CODEC(Delta(4), ZSTD(3)),
+            version      LowCardinality(Nullable(String)) CODEC(LZ4),
+            code         Int8                    CODEC(ZSTD(1)),
+            
+            -- Wsprdaemon-specific additional fields
+            rx_id        LowCardinality(String)  CODEC(LZ4),
+            v_lat        Float32                 CODEC(Delta(4), ZSTD(3)),
+            v_lon        Float32                 CODEC(Delta(4), ZSTD(3)),
+            c2_noise     Float32                 CODEC(Delta(4), ZSTD(3)),
+            sync_quality UInt16                  CODEC(ZSTD(1)),
+            dt           Float32                 CODEC(Delta(4), ZSTD(3)),
+            decode_cycles UInt32                 CODEC(T64, ZSTD(1)),
+            jitter       Int16                   CODEC(T64, ZSTD(1)),
+            rms_noise    Float32                 CODEC(Delta(4), ZSTD(3)),
+            blocksize    UInt16                  CODEC(T64, ZSTD(1)),
+            metric       Int16                   CODEC(T64, ZSTD(1)),
+            osd_decode   UInt8                   CODEC(T64, ZSTD(1)),
+            nhardmin     UInt16                  CODEC(T64, ZSTD(1)),
+            ipass        UInt8                   CODEC(T64, ZSTD(1)),
+            proxy_upload UInt8                   CODEC(T64, ZSTD(1)),
+            ov_count     UInt32                  CODEC(T64, ZSTD(1)),
+            rx_status    LowCardinality(String)  DEFAULT 'No Info' CODEC(LZ4),
+            
+            -- Aliases for backwards compatibility with old column names
+            Spotnum      UInt64 ALIAS id,
+            Date         UInt32 ALIAS toUnixTimestamp(time),
+            Reporter     String ALIAS rx_sign,
+            ReporterGrid String ALIAS rx_loc,
+            dB           Int8 ALIAS snr,
+            freq         Float64 ALIAS frequency,
+            MHz          Float64 ALIAS frequency,
+            CallSign     String ALIAS tx_sign,
+            Grid         String ALIAS tx_loc,
+            Power        Int8 ALIAS power,
+            Drift        Int8 ALIAS drift,
+            Band         Int16 ALIAS band,
+            rx_az        UInt16 ALIAS rx_azimuth,
+            frequency_hz UInt32 ALIAS toUInt32(freq * 1000000)
         ) 
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(time)
@@ -247,7 +268,8 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         admin_client.command(create_spots_table_sql)
         log(f"Table {config['clickhouse_database']}.{config['clickhouse_spots_table']} created/verified", "INFO")
 
-        # Create noise table
+        # Create noise table with seqnum
+        # Create noise table with correct column order
         create_noise_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_noise_table']}
         (
@@ -258,7 +280,12 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             band       LowCardinality(String),
             rms_level  Float32                      CODEC(ZSTD(1)),
             c2_level   Float32                      CODEC(ZSTD(1)),
-            ov         Nullable(Int32)
+            ov         Nullable(Int32),
+            seqnum     Int64                        CODEC(Delta(8), ZSTD(1)),
+
+            -- Aliases for alternate names
+            rx_sign    String ALIAS site,
+            rx_id      String ALIAS receiver
         )
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(time)
@@ -348,7 +375,7 @@ def get_receiver_name_from_path(file_path: Path) -> str:
 
 
 def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
-    """Parse a 34-field spot line into ClickHouse row format"""
+    """Parse a 34-field spot line into ClickHouse row format - NEW HARMONIZED SCHEMA"""
     fields = line.strip().split()
     
     if len(fields) < 34:
@@ -371,28 +398,35 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
         # Extract receiver name from file path
         rx_id = get_receiver_name_from_path(file_path)
         
-        # Build row matching ClickHouse column order
+        # Build row using NEW SCHEMA column order
         row = [
-            clickhouse_time,           # time
-            int(fields[20]),           # band
-            fields[21],                # ReporterGrid
-            rx_id,                     # rx_id
-            fields[6],                 # CallSign
-            fields[7],                 # Grid
-            float(fields[3]),          # dB
-            float(fields[19]),         # c2_noise
-            float(fields[9]),          # Drift
-            float(fields[5]),          # MHz
-            int(fields[23]),           # distance
-            float(fields[24]),         # rx_az
+            # New harmonized columns (matching wsprnet.spots order)
+            None,                      # id (NULL for wsprdaemon data - no Spotnum)
+            clickhouse_time,           # time (DateTime)
+            int(fields[20]),           # band (lowercase - meters)
+            fields[22],                # rx_sign (was Reporter)
             float(fields[25]),         # rx_lat
             float(fields[26]),         # rx_lon
-            float(fields[27]),         # azimuth
-            int(fields[8]),            # Power
+            fields[21],                # rx_loc (was ReporterGrid)
+            fields[6],                 # tx_sign (was CallSign)
             float(fields[28]),         # tx_lat
             float(fields[29]),         # tx_lon
+            fields[7],                 # tx_loc (was Grid)
+            int(fields[23]),           # distance
+            int(float(fields[27])),    # azimuth
+            int(float(fields[24])),    # rx_azimuth (was rx_az)
+            float(fields[5]),          # freq (MHz as Float64, NOT Hz)
+            int(fields[8]),            # power
+            int(float(fields[3])),     # snr (was dB)
+            int(float(fields[9])),     # drift
+            None,                      # version (NULL for wsprdaemon data)
+            int(fields[17]),           # code
+            
+            # Wsprdaemon-specific additional fields
+            rx_id,                     # rx_id
             float(fields[30]),         # v_lat
             float(fields[31]),         # v_lon
+            float(fields[19]),         # c2_noise
             int(float(fields[2])),     # sync_quality
             float(fields[4]),          # dt
             int(fields[10]),           # decode_cycles
@@ -401,11 +435,9 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             int(fields[12]),           # blocksize
             int(fields[13]),           # metric
             int(fields[14]),           # osd_decode
-            fields[22],                # Reporter
             int(fields[16]),           # nhardmin
             int(fields[15]),           # ipass
             int(fields[33]),           # proxy_upload
-            int(fields[17]),           # code
             int(fields[32]),           # ov_count
             'No Info'                  # rx_status
         ]
@@ -452,7 +484,7 @@ def process_spot_files(extraction_dir: Path) -> List[List]:
 
 
 def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
-    """Parse a 15-field noise line into ClickHouse row format"""
+    """Parse a 15-field noise line into ClickHouse row format - NEW SCHEMA"""
     fields = line.strip().split()
     
     if len(fields) != 15:
@@ -480,11 +512,11 @@ def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
         # Extract site and grid from path (e.g., "KJ6MKI_CM88oi")
         call_grid = parts[-4]
         site_parts = call_grid.split('_')
-        site = site_parts[0].replace('=', '/')  # Handle callsigns with / encoded as =
+        rx_sign = site_parts[0].replace('=', '/')  # Handle callsigns with / encoded as =
         rx_loc = site_parts[1] if len(site_parts) > 1 else ''
         
         # Extract receiver (e.g., "KA9Q_0")
-        receiver = parts[-3]
+        rx_id = parts[-3]
         
         # Extract band (e.g., "20")
         band = parts[-2]
@@ -494,10 +526,12 @@ def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
         c2_level = float(fields[13])
         ov = int(float(fields[14]))
         
+        # New schema order: time, rx_sign, rx_id, rx_loc, band, rms_level, c2_level, ov
+        # (seqnum is auto-generated)
         row = [
             clickhouse_time,
-            site,
-            receiver,
+            rx_sign,
+            rx_id,
             rx_loc,
             band,
             rms_level,
@@ -547,17 +581,20 @@ def process_noise_files(extraction_dir: Path) -> List[List]:
 
 
 def insert_spots(client, spots: List[List], database: str, table: str, batch_size: int) -> bool:
-    """Insert spots into ClickHouse in batches"""
+    """Insert spots into ClickHouse in batches - NEW HARMONIZED SCHEMA"""
     if not spots:
         return True
 
+    # New harmonized column names
     column_names = [
-        'time', 'band', 'ReporterGrid', 'rx_id', 'CallSign', 'Grid',
-        'dB', 'c2_noise', 'Drift', 'MHz', 'distance', 'rx_az', 'rx_lat', 'rx_lon',
-        'azimuth', 'Power', 'tx_lat', 'tx_lon', 'v_lat', 'v_lon',
-        'sync_quality', 'dt', 'decode_cycles', 'jitter', 'rms_noise',
-        'blocksize', 'metric', 'osd_decode', 'Reporter', 'nhardmin', 'ipass',
-        'proxy_upload', 'code', 'ov_count', 'rx_status'
+        # Harmonized columns matching wsprnet.spots
+        'id', 'time', 'band', 'rx_sign', 'rx_lat', 'rx_lon', 'rx_loc',
+        'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth', 'rx_azimuth',
+        'frequency', 'power', 'snr', 'drift', 'version', 'code',
+        # Wsprdaemon-specific columns
+        'rx_id', 'v_lat', 'v_lon', 'c2_noise', 'sync_quality', 'dt',
+        'decode_cycles', 'jitter', 'rms_noise', 'blocksize', 'metric', 'osd_decode',
+        'nhardmin', 'ipass', 'proxy_upload', 'ov_count', 'rx_status'
     ]
 
     total_inserted = 0
@@ -574,28 +611,39 @@ def insert_spots(client, spots: List[List], database: str, table: str, batch_siz
     log(f"Inserted {total_inserted} spots into ClickHouse", "INFO")
     return True
 
-
 def insert_noise(client, noise_records: List[List], database: str, table: str, batch_size: int) -> bool:
-    """Insert noise records into ClickHouse in batches"""
+    """Insert noise records into ClickHouse in batches with auto-incrementing seqnum"""
     if not noise_records:
         return True
 
-    column_names = ['time', 'site', 'receiver', 'rx_loc', 'band', 'rms_level', 'c2_level', 'ov']
+    # Get current max seqnum
+    try:
+        result = client.query(f"SELECT COALESCE(MAX(seqnum), -1) FROM {database}.{table}")
+        next_seqnum = int(result.result_rows[0][0]) + 1
+    except Exception as e:
+        log(f"Could not query max seqnum, starting from 0: {e}", "WARNING")
+        next_seqnum = 0
+
+    # Add seqnum to each row
+    noise_with_seqnum = []
+    for i, row in enumerate(noise_records):
+        noise_with_seqnum.append(row + [next_seqnum + i])
+
+    column_names = ['time', 'site', 'receiver', 'rx_loc', 'band', 'rms_level', 'c2_level', 'ov', 'seqnum']
 
     total_inserted = 0
-    for i in range(0, len(noise_records), batch_size):
-        batch = noise_records[i:i + batch_size]
+    for i in range(0, len(noise_with_seqnum), batch_size):
+        batch = noise_with_seqnum[i:i + batch_size]
         try:
             client.insert(f"{database}.{table}", batch, column_names=column_names)
             total_inserted += len(batch)
-            log(f"Inserted batch of {len(batch)} noise records (total: {total_inserted}/{len(noise_records)})", "DEBUG")
+            log(f"Inserted batch of {len(batch)} noise records (total: {total_inserted}/{len(noise_with_seqnum)})", "DEBUG")
         except Exception as e:
             log(f"Failed to insert noise batch: {e}", "ERROR")
             return False
 
     log(f"Inserted {total_inserted} noise records into ClickHouse", "INFO")
     return True
-
 
 def main():
     parser = argparse.ArgumentParser(description='WSPRDAEMON Server')

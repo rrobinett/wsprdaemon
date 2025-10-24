@@ -38,3 +38,6 @@ ka9q-web1/
 onion/
 *.pid
 
+reflector.conf
+*.backup
+test.txt

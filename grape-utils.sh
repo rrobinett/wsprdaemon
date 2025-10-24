@@ -299,15 +299,38 @@ function grape_test_auto_login() {
     wd_logger 2 "Checking to see if we can open a sftp connection to ${PSWS_SERVER_URL}"
     sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
+        wd_logger 2 "ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
         wd_logger 2 "Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return $rc
 }
 
+function get-or-create-ssh-public-key() {
+    local -n _return_var_name=$1
+
+    if [[ ! -d ~/.ssh ]]; then
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        wd_logger 1 "Created missing ~/.ssh directory"
+    fi
+    if [[ -f ~/.ssh/id_ed25519.pub ]]; then
+        _return_var_name="$( realpath ~/.ssh/id_ed25519.pub )"
+        wd_logger 2 "Found existing public key file '${_return_var_name}'"
+    elif [[ -f ~/.ssh/id_rsa.pub ]]; then
+        _return_var_name="$( realpath ~/.ssh/id_rsa.pub )"
+        wd_logger 2 "Found existing public key file '${_return_var_name}'"
+    else
+        public_key_file_path="$( realpath ~/.ssh/id_ed25519.pub )"
+        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path} -N ""
+        _return_var_name="${public_key_file_path}"
+        wd_logger 1 "Created a missing public key file '${_return_var_name}'"
+    fi
+    return 0
+}
+
 ######  '-p'   upload public key to PSWS server
-function grape_upload_public_key() {
+function grape_check_auto_upload() {
     local rc
 
     wd_logger 2 "Starting"
@@ -317,21 +340,18 @@ function grape_upload_public_key() {
         return 1
     fi
 
+    local public_key_file_path
+    get-or-create-ssh-public-key "public_key_file_path"
+    wd_logger 2 "ssh public key file path is ${public_key_file_path}"
+
     local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
     grape_test_auto_login $station_id
     rc=$? ; if (( rc == 0 )); then
         wd_logger 2 "Autologin for site ${station_id} is already setup"
         return 0
     fi
-    wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
-
-    ssh-copy-id -o ConnectTimeout=5 -f ${station_id}@${PSWS_SERVER_URL}
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
-        return $rc
-    fi
-    wd_logger 1 "Auto login has been successfully set up"
-    return 0
+    wd_logger 1 "Autologin to the GRAPE PSWS server has failed for this GRAPE SITE_ID='${station_id}'. So enter this server's public key, or email it to the PSWS administrator that:\nPSWS station '${station_id}' needs this ssh public key added to its account:\n$( < ${public_key_file_path} )"
+    return 1
 }
 
 ###### '-S'
@@ -794,7 +814,7 @@ function grape_menu() {
             grape_repair_date_wvs ${2-h}
             ;;
         -p)
-            grape_upload_public_key
+            grape_check_auto_upload
             ;;
         -P)
             grape_purge_all_empty_date_trees
@@ -875,17 +895,12 @@ function grape_init() {
     fi
 
     ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
-    grape_upload_public_key
+    grape_check_auto_upload
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+        wd_logger 2 "ERROR: ftp auto-login which is needed for our sftp uploads doesn't work"
     fi
     return $rc
 }
 
-grape_init
-rc=$?
-if (( rc )); then
-    wd_logger 1 "ERROR: grape_init => $rc"
-fi
-return $rc
-
+grape_init || true   ### Suppress error message if any
+return 0

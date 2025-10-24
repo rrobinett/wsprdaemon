@@ -11,6 +11,7 @@ New to WsprDaemon? Start here for a quick overview and rapid deployment.
 :maxdepth: 2
 :caption: Getting Started
 
+description/overview.md
 getting_started/quick_start.md
 description/how_it_works.md
 description/history.md

@@ -831,7 +831,7 @@ function get_status_of_daemon() {
 
     wd_logger 2 "Start"
     if [[ ! -f ${daemon_pid_file_path} ]]; then
-        wd_logger 1 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
+        wd_logger 2 "$(printf "Daemon '%30s' is not running since it has no pid file '%s'" ${daemon_function_name} ${daemon_pid_file_path})"
         return 2
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
@@ -1094,7 +1094,6 @@ function update_ini_file_section_variable() {
     else
        ### The variable is defined.  See if it needs to be changed
         cp -p  "$file" "$temp_file"   ## Default to no changes
-
         if [[ "$new_value" == "#" ]]; then
             wd_logger 1 "Remarking out one or more active '$variable_esc = ' lines in section [$section]"
             sed "${section_start_line_number},${section_end_line_number}s|^\(\s*$variable_esc\s*=\s*.*\)|# \1|" "$file" > "$temp_file"
