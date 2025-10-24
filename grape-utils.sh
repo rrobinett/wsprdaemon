@@ -289,7 +289,7 @@ function grape_test_auto_login() {
     local station_id=$1
     local rc
 
-    wd_logger 2 "Checking if there is a connection to the ssh port of the PSWS server"
+    wd_logger 2 "Checking if there is a connection to the ssh port by this StationID ${station_id} to its user account on the ${PSWS_SERVER_URL} PSWS server"
     local psws_timeout=${PSWS_NC_TIMEOUT-2}    ### Default is to wait up to 2 seconds to make a tcp connection to the ssh port of the PSWS server
     nc -vz -w ${psws_timeout} ${PSWS_SERVER_URL} 22 >& /dev/null
     rc=$? ; if (( rc )); then
