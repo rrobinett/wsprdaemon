@@ -1,88 +1,79 @@
 #!/bin/bash
+# WSPRNET Scraper Wrapper Script
+# Loads configuration and starts the Python scraper
+
 set -e
 
-# This script is called by systemd with a config file path as the first argument
-# Usage: wsprnet_scraper.sh /etc/wsprdaemon/wsprnet.conf
+# Configuration file paths
+WSPRNET_CONF="/etc/wsprdaemon/wsprnet.conf"
+CLICKHOUSE_CONF="/etc/wsprdaemon/clickhouse.conf"
 
-CONFIG_FILE="$1"
-
-if [[ -z "${CONFIG_FILE}" ]]; then
-    echo "ERROR: No configuration file specified" >&2
-    echo "Usage: $0 /etc/wsprdaemon/config.conf" >&2
+# Load configurations
+if [[ -f "$WSPRNET_CONF" ]]; then
+    echo "Loading configuration from: $WSPRNET_CONF"
+    source "$WSPRNET_CONF"
+else
+    echo "ERROR: Configuration file not found: $WSPRNET_CONF" >&2
     exit 1
 fi
 
-if [[ ! -f "${CONFIG_FILE}" ]]; then
-    echo "ERROR: Configuration file not found: ${CONFIG_FILE}" >&2
+if [[ -f "$CLICKHOUSE_CONF" ]]; then
+    echo "Loading ClickHouse credentials from: $CLICKHOUSE_CONF"
+    source "$CLICKHOUSE_CONF"
+else
+    echo "ERROR: ClickHouse configuration file not found: $CLICKHOUSE_CONF" >&2
     exit 1
 fi
 
-# Parse the configuration file by sourcing it
-# This reads all the variable definitions from the config file
-echo "Loading configuration from: ${CONFIG_FILE}"
-# shellcheck source=/dev/null
-source "${CONFIG_FILE}"
-
-# Validate required variables are now set
+# Validate required variables
 REQUIRED_VARS=(
-    "WSPRNET_USERNAME"
-    "WSPRNET_PASSWORD"
-    "CLICKHOUSE_DEFAULT_PASSWORD"
+    "WSPRNET_SESSION_FILE"
+    "WSPRNET_LOG_FILE"
+    "WSPRNET_VENV_PYTHON"
+    "WSPRNET_SCRAPER_SCRIPT"
+    "WSPRNET_LOOP_INTERVAL"
+    "WSPRNET_READONLY_USER"
+    "WSPRNET_READONLY_PASSWORD"
+    "CLICKHOUSE_HOST"
+    "CLICKHOUSE_PORT"
     "CLICKHOUSE_ADMIN_USER"
     "CLICKHOUSE_ADMIN_PASSWORD"
-    "CLICKHOUSE_READONLY_USER"
-    "CLICKHOUSE_READONLY_PASSWORD"
-    "SESSION_FILE"
-    "LOG_FILE"
-    "VENV_PYTHON"
-    "SCRAPER_SCRIPT"
-    "LOOP_INTERVAL"
 )
 
 MISSING_VARS=()
 for var in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!var}" ]]; then
-        MISSING_VARS+=("${var}")
+        MISSING_VARS+=("  $var")
     fi
 done
 
 if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
-    echo "ERROR: Missing required configuration variables in ${CONFIG_FILE}:" >&2
-    printf '  %s\n' "${MISSING_VARS[@]}" >&2
+    echo "ERROR: Missing required configuration variables:" >&2
+    printf '%s\n' "${MISSING_VARS[@]}" >&2
     exit 1
 fi
 
-# Validate files exist
-if [[ ! -x "${VENV_PYTHON}" ]]; then
-    echo "ERROR: Python executable not found or not executable: ${VENV_PYTHON}" >&2
-    exit 1
+# Build command arguments
+CMD_ARGS=(
+    "--session-file" "$WSPRNET_SESSION_FILE"
+    "--clickhouse-user" "$CLICKHOUSE_ADMIN_USER"
+    "--clickhouse-password" "$CLICKHOUSE_ADMIN_PASSWORD"
+    "--setup-readonly-user" "$WSPRNET_READONLY_USER"
+    "--setup-readonly-password" "$WSPRNET_READONLY_PASSWORD"
+    "--log-file" "$WSPRNET_LOG_FILE"
+    "--log-max-mb" "${WSPRNET_LOG_MAX_MB:-10}"
+    "--loop" "$WSPRNET_LOOP_INTERVAL"
+)
+
+# Add optional username/password if provided
+if [[ -n "$WSPRNET_USERNAME" ]]; then
+    CMD_ARGS+=("--username" "$WSPRNET_USERNAME")
 fi
 
-if [[ ! -f "${SCRAPER_SCRIPT}" ]]; then
-    echo "ERROR: Scraper script not found: ${SCRAPER_SCRIPT}" >&2
-    exit 1
+if [[ -n "$WSPRNET_PASSWORD" ]]; then
+    CMD_ARGS+=("--password" "$WSPRNET_PASSWORD")
 fi
 
-# Create directories if needed
-mkdir -p "$(dirname "${SESSION_FILE}")"
-mkdir -p "$(dirname "${LOG_FILE}")"
-
-# Build and execute the command with variables parsed from config
-echo "Starting WSPRNET scraper with config: ${CONFIG_FILE}"
-echo "Python: ${VENV_PYTHON}"
-echo "Script: ${SCRAPER_SCRIPT}"
-echo "Log: ${LOG_FILE}"
-echo "Loop interval: ${LOOP_INTERVAL} seconds"
-
-exec "${VENV_PYTHON}" "${SCRAPER_SCRIPT}" \
-    --session-file "${SESSION_FILE}" \
-    --username "${WSPRNET_USERNAME}" \
-    --password "${WSPRNET_PASSWORD}" \
-    --clickhouse-user "${CLICKHOUSE_ADMIN_USER}" \
-    --clickhouse-password "${CLICKHOUSE_ADMIN_PASSWORD}" \
-    --setup-default-password "${CLICKHOUSE_DEFAULT_PASSWORD}" \
-    --setup-readonly-user "${CLICKHOUSE_READONLY_USER}" \
-    --setup-readonly-password "${CLICKHOUSE_READONLY_PASSWORD}" \
-    --log-file "${LOG_FILE}" \
-    --log-max-mb "${LOG_MAX_MB:-10}" \
-    --loop "${LOOP_INTERVAL}"
+# Execute the Python scraper
+echo "Starting WSPRNET scraper..."
+exec "$WSPRNET_VENV_PYTHON" "$WSPRNET_SCRAPER_SCRIPT" "${CMD_ARGS[@]}"
