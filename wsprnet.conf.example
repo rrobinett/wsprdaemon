@@ -1,0 +1,31 @@
+#!/bin/bash
+# WSPRNET Scraper Configuration
+# Copy this file to /etc/wsprdaemon/wsprnet.conf and edit as needed
+
+# WSPRNET credentials (optional - leave empty to use session file only)
+# If you need to login, provide username and password here
+WSPRNET_USERNAME=""
+WSPRNET_PASSWORD=""
+
+# WSPRNET readonly user (will be created automatically by wsprnet_scraper.py)
+WSPRNET_READONLY_USER="wsprnet-reader"
+WSPRNET_READONLY_PASSWORD="wsprnet"
+
+# Path to store WSPRNET session file
+WSPRNET_SESSION_FILE="/var/lib/wsprdaemon/wsprnet_session.json"
+
+# Path to WSPRNET scraper log file
+WSPRNET_LOG_FILE="/var/log/wsprdaemon/wsprnet_scraper.log"
+
+# Python executable (use the venv created by install script)
+WSPRNET_VENV_PYTHON="/home/wsprdaemon/wsprdaemon/venv/bin/python3"
+
+# Path to the WSPRNET scraper script
+WSPRNET_SCRAPER_SCRIPT="/usr/local/bin/wsprnet_scraper.py"
+
+# Loop interval in seconds (how often to check for new spots)
+# 20 seconds is recommended
+WSPRNET_LOOP_INTERVAL="20"
+
+# Log file max size in MB
+WSPRNET_LOG_MAX_MB="10"
