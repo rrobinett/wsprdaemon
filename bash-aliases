@@ -1,5 +1,8 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
+#
+alias chc='clickhouse-client'
+alias ch=chc
 
 ### TBD: This function should be used by assign_fft_cores()
 function show_hyperthread_pairs()
