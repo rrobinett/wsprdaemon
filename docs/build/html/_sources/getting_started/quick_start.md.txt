@@ -5,7 +5,7 @@ Get WsprDaemon running in 15 minutes with this streamlined setup guide for exper
 ## Prerequisites Check
 
 Before starting, ensure you have:
-- Ubuntu 24.04 LTS, 22.04 LTS, Linux Mint, or Debian system
+- Ubuntu 24.04 LTS, 22.04 LTS, Linux Mint, or Debian 12+ system
 - Sudo privileges configured
 - SDR hardware (KiwiSDR, RX888, RTL-SDR, etc.) connected and accessible
 - Antenna system with appropriate filtering
