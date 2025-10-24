@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Installing WSPRDAEMON Scrapers as systemd template services..."
+echo "Installing WSPRDAEMON Servers as systemd template services..."
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
