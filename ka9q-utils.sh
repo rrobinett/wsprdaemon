@@ -947,9 +947,16 @@ function build_ka9q_radio() {
 
     ### Default is to find the config sections in the old style single ..conf file
     local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
+
+    local rx888_rf_gain="#"
+    if [[ -n "${RX888_RF_AGC_FIXED_GAIN-}" ]]; then
+        wd_logger 1 "We are configured to set the RX888's RF AGC to the fixed value '${RX888_RF_AGC_FIXED_GAIN}'"
+        rx888_rf_gain=${RX888_RF_AGC_FIXED_GAIN}   ## This must be a signed INT and shoud be in the range of -5 to 34"
+    fi
+
     ### INI/CONF FILE        SECTION   VARIABLE  DESIRED VALUE
     local init_file_section_variable_value_list=(
-            "${ka9q_conf_file_path}  rx888   gain         #"    ### Remark out any active gain = <INTEGER> lines so that RF AGC will be enabled
+            "${ka9q_conf_file_path}  rx888   gain       ${rx888_rf_gain}"    ### Default is to remark out any active gain = <INTEGER> lines so that RF AGC will be enabled, but that can be overridden
             "${ka9q_conf_file_path}  rx888   description 63"    ### avahi DNS names can be at most 63 characters and can't include '/' and other special chars, so error out if that isn't the case
             "${ka9q_conf_file_path}  WSPR    agc          0"
             "${ka9q_conf_file_path}  WSPR    gain         0"
