@@ -205,8 +205,8 @@ function wd_run_in_cgroup() {
         return 0
     fi
 
-    if [[ "${OS_RELEASE}" =~ 20.04 ]]; then
-        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on '${OS_CODENAME}' version = '${OS_RELEASE}'"
+    if grep -q  "Ubuntu 20.04" /etc/os-release ; then
+        wd_logger 2 "Skipping CPUAffinity setup which isn't supported on 'Ubuntu 20.0'"
         return 0
     fi
 
