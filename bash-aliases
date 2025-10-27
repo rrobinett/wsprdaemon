@@ -1883,6 +1883,11 @@ function wd-wav-archive-fix(){
 }
 
 function wd-sftp-psws(){
+    local rc
+    local start_epoch 
+    local end_epoch
+    local runtime_seconds
+
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
         echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
@@ -1893,9 +1898,24 @@ function wd-sftp-psws(){
         return 0
     fi
     local psws_url="${PSWS_URL-pswsnetwork.eng.ua.edu}"
-    echo "Executing: 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+
+    local nc_timeout=${PSWS_NC_TIMEOPUT_SECONDS-2}
+    echo "Testing Internnet connectivity to the PSWS server by running 'nc -vz -w ${nc_timeout} ${psws_url} 22'"
+    start_epoch=${EPOCHSECONDS}
+    nc -vz -w ${nc_timeout} ${psws_url} 22
+    rc=$?
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc )); then
+        printf "After %2d seconds, Failed to run 'nc -vz -w ${psws_url} 22' => ${rc}\n" "${runtime_seconds}"
+        return 1
+    fi
+    printf "After %2d seconds, Successfully ran 'nc -vz ${psws_url} 22'\n" "${runtime_seconds}"
+
+    local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
+    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
     local start_epoch=${EPOCHSECONDS}
-    sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}
+    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}
     local rc=$? 
     local end_epoch=${EPOCHSECONDS}
     local runtime_seconds=$(( end_epoch - start_epoch ))
