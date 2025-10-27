@@ -288,20 +288,34 @@ function upload_24hour_wavs_to_grape_drf_server() {
 function grape_test_auto_login() {
     local station_id=$1
     local rc
+    local start_epoch
+    local end_epoch
+    local runtime_seconds
 
-    wd_logger 2 "Checking if there is a connection to the ssh port by this StationID ${station_id} to its user account on the ${PSWS_SERVER_URL} PSWS server"
-    local psws_timeout=${PSWS_NC_TIMEOUT-2}    ### Default is to wait up to 2 seconds to make a tcp connection to the ssh port of the PSWS server
-    nc -vz -w ${psws_timeout} ${PSWS_SERVER_URL} 22 >& /dev/null
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "WARNING: timeout after waiting ${psws_timeout} seconds to see if the ssh port of ${PSWS_SERVER_URL} is active"
+    local nc_timeout=${PSWS_NC_TIMEOUT-2}    ### Default is to wait up to 2 seconds to make a tcp connection to the ssh port of the PSWS server
+    wd_logger 2 "Checking the Internet connection to the ssh port 22 of the PSWS server ${PSWS_SERVER_URL}"
+    start_epoch=${EPOCHSECONDS}
+    nc -vz -w ${nc_timeout} ${PSWS_SERVER_URL} 22 >& /dev/null
+    rc=$?
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc )); then
+        wd_logger 1 "WARNING: There is no Internet connectio to the PSWS server, since it timeout after ${runtime_seconds} seconds running 'nc -vz -w ${nc_timeout} ${PSWS_SERVER_URL} 22' => ${rc}"
         return 1
     fi
-    wd_logger 2 "Checking to see if we can open a sftp connection to ${PSWS_SERVER_URL}"
+    wd_logger 2 "It took ${runtime_seconds} to verify the Internet connection to the sftp/ssh port 22 at the PSWS server at ${PSWS_SERVER_URL}"
+
+    local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
+    wd_logger 1 "Waiting ${psws_timeout} up to seconds to see if we can open a sftp connection to the PSWS GRAPE server at ${PSWS_SERVER_URL}"
+    start_epoch=${EPOCHSECONDS}
     sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
+    rc=$?
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc )); then
+        wd_logger 1 "After ${runtime_seconds} seconds: ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
-        wd_logger 2 "Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
+        wd_logger 1 "After ${runtime_seconds} seconds: Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return ${rc}
 }

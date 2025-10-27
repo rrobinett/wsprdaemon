@@ -1882,7 +1882,12 @@ function wd-wav-archive-fix(){
     done
 }
 
-function wd-ssh-psws(){
+function wd-sftp-psws(){
+    local rc
+    local start_epoch 
+    local end_epoch
+    local runtime_seconds
+
     source ~/wsprdaemon/wsprdaemon.conf
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
         echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
@@ -1892,17 +1897,56 @@ function wd-ssh-psws(){
         echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
         return 0
     fi
+    local tmpfile=$(mktemp)
+    trap "rm -f '$tmpfile'" RETURN  # cleanup 
+
     local psws_url="${PSWS_URL-pswsnetwork.eng.ua.edu}"
-    wd_logger 1 "Executing: 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
-    sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}
-    local rc=$? ; if (( rc )); then
-        wd_logger 1 "Failed to run 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
-    else
-        wd_logger 1 "Successfully ran 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+
+    local nc_timeout=${PSWS_NC_TIMEOPUT_SECONDS-2}
+    echo "Testing Internnet connectivity to the PSWS server by running 'nc -vz -w ${nc_timeout} ${psws_url} 22'"
+    start_epoch=${EPOCHSECONDS}
+    nc -vz -w ${nc_timeout} ${psws_url} 22 >& ${tmpfile}
+    rc=$?
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc )); then
+        printf "After %2d seconds, Failed to run 'nc -vz -w ${psws_url} 22' => ${rc}:\n$(< ${tmpfile} )\n" "${runtime_seconds}" 
+        rm -f ${tmpfile}
+        return 1
     fi
+    printf "After %2d seconds, Successfully ran 'nc -vz ${psws_url} 22'\n" "${runtime_seconds}"
+
+    if [[ ! -d ~/.ssh ]]; then
+        printf "The ~/.ssh directory which contains ssh keys doesn't exist.  Run 'ssh-keygen -t 25519 -N '' to create them"
+        rm -f ${tmpfile}
+        return 1
+    fi
+    local public_key_file_path_list=( $( find ~/.ssh -name '*.pub') )
+    if (( ${#public_key_file_path_list[@]} == 0 )); then
+        printf "This station ${GRAPE_PSWS_ID%_*} has no ssh public key.  Run 'ssh-keygen -t 25519 -N \"\"' to create it\n"
+        rm -f ${tmpfile}
+        return 1
+    fi
+    local public_key_file_path="${public_key_file_path_list[0]}"
+    (( ${verbosity-0} )) && printf "This station ${GRAPE_PSWS_ID%_*}'s public key is:\n $(< ${public_key_file_path})\n" 
+
+    local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
+    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    local start_epoch=${EPOCHSECONDS}
+    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
+    rc=$? 
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc == 0 )); then
+        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'\n" "${runtime_seconds}"
+    else
+        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}' => ${rc}:\n$(< ${tmpfile} )\n"
+        printf "Verify that this station '${GRAPE_PSWS_ID%_*}'s public key has been registered with the PSWS server:\n $(< ${public_key_file_path})\n"
+    fi
+    rm -f ${tmpfile}
     return 0
 }
-alias wdssp=wd-ssh-psws
+alias wdssp=wd-sftp-psws
 
 function wd-overloads()
 {
