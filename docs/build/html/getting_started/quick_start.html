@@ -1,0 +1,457 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick Start Guide &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How wsprdaemon Works" href="../description/how_it_works.html" />
+    <link rel="prev" title="wsprdaemon Overview" href="../description/overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../description/overview.html">wsprdaemon Overview</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites-check">Prerequisites Check</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#system-preparation-2-minutes">1. System Preparation (2 minutes)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#download-and-install-5-minutes">2. Download and Install (5 minutes)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#basic-configuration-5-minutes">3. Basic Configuration (5 minutes)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#create-configuration-file">Create Configuration File</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#essential-configuration-settings">Essential Configuration Settings</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#start-wsprdaemon-1-minute">4. Start WsprDaemon (1 minute)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#verify-operation-2-minutes">5. Verify Operation (2 minutes)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#check-system-status">Check System Status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#verify-spot-upload">Verify Spot Upload</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#common-quick-configurations">Common Quick Configurations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#single-kiwisdr-multiple-bands">Single KiwiSDR, Multiple Bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rx888-with-multiple-bands">RX888 with Multiple Bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multiple-receivers-with-spot-merging">Multiple Receivers with Spot Merging</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#essential-commands">Essential Commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-troubleshooting">Quick Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#wsprdaemon-won-t-start">WsprDaemon Won’t Start</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#no-spots-being-uploaded">No Spots Being Uploaded</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#poor-decoding-performance">Poor Decoding Performance</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-optimization">Performance Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#getting-help">Getting Help</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quick Start Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/getting_started/quick_start.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="quick-start-guide">
+<h1>Quick Start Guide<a class="headerlink" href="#quick-start-guide" title="Link to this heading"></a></h1>
+<p>Get WsprDaemon running in 15 minutes with this streamlined setup guide for experienced users.</p>
+<section id="prerequisites-check">
+<h2>Prerequisites Check<a class="headerlink" href="#prerequisites-check" title="Link to this heading"></a></h2>
+<p>Before starting, ensure you have:</p>
+<ul class="simple">
+<li><p>Ubuntu 24.04 LTS, 22.04 LTS, Linux Mint, or Debian 12+ system</p></li>
+<li><p>Sudo privileges configured</p></li>
+<li><p>SDR hardware (KiwiSDR, RX888, RTL-SDR, etc.) connected and accessible</p></li>
+<li><p>Antenna system with appropriate filtering</p></li>
+<li><p>Stable internet connection</p></li>
+</ul>
+</section>
+<section id="system-preparation-2-minutes">
+<h2>1. System Preparation (2 minutes)<a class="headerlink" href="#system-preparation-2-minutes" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Update system packages</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>upgrade<span class="w"> </span>-y
+
+<span class="c1"># Install essential dependencies</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>git<span class="w"> </span>build-essential<span class="w"> </span>cmake<span class="w"> </span>gcc<span class="w"> </span>libfftw3-dev<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>libusb-1.0-0-dev<span class="w"> </span>portaudio19-dev<span class="w"> </span>sox<span class="w"> </span>libsox-fmt-all<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>rsync<span class="w"> </span>tmux<span class="w"> </span>vim<span class="w"> </span>net-tools
+
+<span class="c1"># Create wsprdaemon user (recommended)</span>
+sudo<span class="w"> </span>adduser<span class="w"> </span>wsprdaemon
+sudo<span class="w"> </span>usermod<span class="w"> </span>-a<span class="w"> </span>-G<span class="w"> </span>sudo,plugdev<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Switch to wsprdaemon user</span>
+sudo<span class="w"> </span>su<span class="w"> </span>-<span class="w"> </span>wsprdaemon
+</pre></div>
+</div>
+</section>
+<section id="download-and-install-5-minutes">
+<h2>2. Download and Install (5 minutes)<a class="headerlink" href="#download-and-install-5-minutes" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clone the repository</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/rrobinett/wsprdaemon.git
+<span class="nb">cd</span><span class="w"> </span>wsprdaemon
+
+<span class="c1"># Run initial setup (installs dependencies and compiles components)</span>
+./wsprdaemon.sh<span class="w"> </span>-h
+</pre></div>
+</div>
+<p>The setup script will automatically:</p>
+<ul class="simple">
+<li><p>Install ka9q-radio and other dependencies</p></li>
+<li><p>Compile necessary components</p></li>
+<li><p>Set up directory structure</p></li>
+<li><p>Configure system services</p></li>
+</ul>
+</section>
+<section id="basic-configuration-5-minutes">
+<h2>3. Basic Configuration (5 minutes)<a class="headerlink" href="#basic-configuration-5-minutes" title="Link to this heading"></a></h2>
+<section id="create-configuration-file">
+<h3>Create Configuration File<a class="headerlink" href="#create-configuration-file" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Copy template configuration</span>
+cp<span class="w"> </span>wd_template.conf<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Edit configuration (use your preferred editor)</span>
+vim<span class="w"> </span>wsprdaemon.conf
+</pre></div>
+</div>
+</section>
+<section id="essential-configuration-settings">
+<h3>Essential Configuration Settings<a class="headerlink" href="#essential-configuration-settings" title="Link to this heading"></a></h3>
+<p><strong>Minimum required configuration:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Your station information</span>
+<span class="nv">WSPR_CALL</span><span class="o">=</span><span class="s2">&quot;YOUR_CALL&quot;</span>
+<span class="nv">WSPR_GRID</span><span class="o">=</span><span class="s2">&quot;YOUR_GRID&quot;</span>
+
+<span class="c1"># Define at least one receiver</span>
+<span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx1,IP_ADDRESS:PORT&quot;</span>
+<span class="o">)</span>
+
+<span class="c1"># Define a basic schedule</span>
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx1,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx1,20m,WSPR,06:00,18:00&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+<p><strong>For KiwiSDR:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+<p><strong>For RX888 with ka9q-radio:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888,239.1.2.3:5004&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="start-wsprdaemon-1-minute">
+<h2>4. Start WsprDaemon (1 minute)<a class="headerlink" href="#start-wsprdaemon-1-minute" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start WsprDaemon</span>
+./wsprdaemon.sh<span class="w"> </span>-a
+
+<span class="c1"># Check status</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+</pre></div>
+</div>
+</section>
+<section id="verify-operation-2-minutes">
+<h2>5. Verify Operation (2 minutes)<a class="headerlink" href="#verify-operation-2-minutes" title="Link to this heading"></a></h2>
+<section id="check-system-status">
+<h3>Check System Status<a class="headerlink" href="#check-system-status" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># View running processes</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># Monitor logs</span>
+tail<span class="w"> </span>-f<span class="w"> </span>/tmp/wsprdaemon/wsprdaemon.log
+</pre></div>
+</div>
+</section>
+<section id="verify-spot-upload">
+<h3>Verify Spot Upload<a class="headerlink" href="#verify-spot-upload" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Check your callsign appears on <a class="reference external" href="http://wsprnet.org">wsprnet.org</a></p></li>
+<li><p>Look for “SUCCESS” messages in upload logs</p></li>
+<li><p>Monitor <code class="docutils literal notranslate"><span class="pre">/tmp/wsprdaemon/uploads.d/</span></code> directory</p></li>
+</ul>
+</section>
+</section>
+<section id="common-quick-configurations">
+<h2>Common Quick Configurations<a class="headerlink" href="#common-quick-configurations" title="Link to this heading"></a></h2>
+<section id="single-kiwisdr-multiple-bands">
+<h3>Single KiwiSDR, Multiple Bands<a class="headerlink" href="#single-kiwisdr-multiple-bands" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,192.168.1.100:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,160m,WSPR,00:00,06:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,80m,WSPR,06:00,12:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,40m,WSPR,12:00,18:00&quot;</span>
+<span class="w">    </span><span class="s2">&quot;kiwi1,20m,WSPR,18:00,24:00&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+<section id="rx888-with-multiple-bands">
+<h3>RX888 with Multiple Bands<a class="headerlink" href="#rx888-with-multiple-bands" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888,239.1.2.3:5004&quot;</span>
+<span class="o">)</span>
+
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;rx888,160m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888,80m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888,40m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888,20m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888,15m,WSPR,00:00,23:59&quot;</span>
+<span class="w">    </span><span class="s2">&quot;rx888,10m,WSPR,00:00,23:59&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+<section id="multiple-receivers-with-spot-merging">
+<h3>Multiple Receivers with Spot Merging<a class="headerlink" href="#multiple-receivers-with-spot-merging" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">RECEIVER_LIST</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;vertical,192.168.1.100:8073&quot;</span>
+<span class="w">    </span><span class="s2">&quot;beverage,192.168.1.101:8073&quot;</span>
+<span class="o">)</span>
+
+<span class="nv">WSPR_SCHEDULE</span><span class="o">=(</span>
+<span class="w">    </span><span class="s2">&quot;MERGED_RX,40m,WSPR,00:00,23:59,vertical+beverage&quot;</span>
+<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="essential-commands">
+<h2>Essential Commands<a class="headerlink" href="#essential-commands" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start WsprDaemon</span>
+./wsprdaemon.sh<span class="w"> </span>-a
+
+<span class="c1"># Stop WsprDaemon  </span>
+./wsprdaemon.sh<span class="w"> </span>-z
+
+<span class="c1"># Check status</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># View version</span>
+./wsprdaemon.sh<span class="w"> </span>-V
+
+<span class="c1"># Increase verbosity (for debugging)</span>
+./wsprdaemon.sh<span class="w"> </span>-v<span class="w"> </span>-s
+
+<span class="c1"># View help</span>
+./wsprdaemon.sh<span class="w"> </span>-h
+</pre></div>
+</div>
+</section>
+<section id="quick-troubleshooting">
+<h2>Quick Troubleshooting<a class="headerlink" href="#quick-troubleshooting" title="Link to this heading"></a></h2>
+<section id="wsprdaemon-won-t-start">
+<h3>WsprDaemon Won’t Start<a class="headerlink" href="#wsprdaemon-won-t-start" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Check configuration: <code class="docutils literal notranslate"><span class="pre">./wsprdaemon.sh</span> <span class="pre">-s</span></code></p></li>
+<li><p>Verify receiver connectivity: <code class="docutils literal notranslate"><span class="pre">ping</span> <span class="pre">RECEIVER_IP</span></code></p></li>
+<li><p>Check permissions: <code class="docutils literal notranslate"><span class="pre">ls</span> <span class="pre">-la</span> <span class="pre">wsprdaemon.conf</span></code></p></li>
+<li><p>Review logs: <code class="docutils literal notranslate"><span class="pre">tail</span> <span class="pre">-f</span> <span class="pre">/tmp/wsprdaemon/wsprdaemon.log</span></code></p></li>
+</ol>
+</section>
+<section id="no-spots-being-uploaded">
+<h3>No Spots Being Uploaded<a class="headerlink" href="#no-spots-being-uploaded" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Check internet connectivity</p></li>
+<li><p>Verify wsprnet.org is accessible</p></li>
+<li><p>Check upload logs: <code class="docutils literal notranslate"><span class="pre">ls</span> <span class="pre">-la</span> <span class="pre">/tmp/wsprdaemon/uploads.d/</span></code></p></li>
+<li><p>Confirm callsign and grid are set correctly</p></li>
+</ol>
+</section>
+<section id="poor-decoding-performance">
+<h3>Poor Decoding Performance<a class="headerlink" href="#poor-decoding-performance" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Check audio levels and clipping</p></li>
+<li><p>Verify time synchronization: <code class="docutils literal notranslate"><span class="pre">timedatectl</span> <span class="pre">status</span></code></p></li>
+<li><p>Monitor CPU usage: <code class="docutils literal notranslate"><span class="pre">top</span></code></p></li>
+<li><p>Check for interference sources</p></li>
+</ol>
+</section>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>Once basic operation is confirmed:</p>
+<ol class="arabic simple">
+<li><p><strong><a class="reference internal" href="../installation/preparation.html"><span class="std std-doc">Complete Installation Guide</span></a></strong> - Detailed setup instructions</p></li>
+<li><p><strong><a class="reference internal" href="../configuration/wd_conf.html"><span class="std std-doc">Configuration Reference</span></a></strong> - Advanced configuration options</p></li>
+<li><p><strong><a class="reference internal" href="../operation/service_management.html"><span class="std std-doc">Operation Guide</span></a></strong> - Day-to-day operation</p></li>
+<li><p><strong><a class="reference internal" href="../troubleshooting/overview.html"><span class="std std-doc">Troubleshooting</span></a></strong> - Detailed problem resolution</p></li>
+</ol>
+</section>
+<section id="performance-optimization">
+<h2>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h2>
+<p>For high-performance installations:</p>
+<ul class="simple">
+<li><p>Use tmpfs for <code class="docutils literal notranslate"><span class="pre">/tmp/wsprdaemon/</span></code></p></li>
+<li><p>Ensure adequate cooling</p></li>
+<li><p>Monitor system resources</p></li>
+<li><p>Consider dedicated network interface for multicast</p></li>
+</ul>
+</section>
+<section id="getting-help">
+<h2>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading"></a></h2>
+<p>If you encounter issues:</p>
+<ul class="simple">
+<li><p>Check the <a class="reference internal" href="../FAQ.html"><span class="std std-doc">FAQ</span></a></p></li>
+<li><p>Review <a class="reference internal" href="../troubleshooting/overview.html"><span class="std std-doc">troubleshooting guides</span></a></p></li>
+<li><p>Search GitHub issues</p></li>
+<li><p>Contact: rob&#64;robinett.us</p></li>
+</ul>
+<hr class="docutils" />
+<p><strong>Success Indicator</strong>: Within 15 minutes, you should see your callsign appearing on wsprnet.org with spots from your configured bands.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../description/overview.html" class="btn btn-neutral float-left" title="wsprdaemon Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../description/how_it_works.html" class="btn btn-neutral float-right" title="How wsprdaemon Works" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "scan_interval": 10,
+  "rsync_interval": 5,
+  "cleanup_interval": 60,
+  "rsync_bandwidth_limit": 20000,
+  "rsync_timeout": 300,
+  "max_retries": 3,
+  "state_file": "/var/lib/wsprdaemon/reflector/state.json",
+  "queue_base_dir": "/var/spool/wsprdaemon/reflector",
+  "destinations": [
+    {
+      "name": "WD1",
+      "user": "wsprdaemon",
+      "host": "WD1",
+      "path": "/var/spool/wsprdaemon/from-wd00"
+    },
+    {
+      "name": "WD2",
+      "user": "wsprdaemon",
+      "host": "WD2",
+      "path": "/var/spool/wsprdaemon/from-wd00"
+    }
+  ]
+}

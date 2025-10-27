@@ -1,0 +1,13 @@
+#!/bin/bash
+# ClickHouse Database Configuration
+# Copy this file to /etc/wsprdaemon/clickhouse.conf and edit as needed
+# WARNING: This file contains passwords - keep it secure!
+
+# ClickHouse server connection
+CLICKHOUSE_HOST="localhost"
+CLICKHOUSE_PORT="8123"
+
+# ClickHouse admin user (must already exist with full privileges)
+# This user will create the database, tables, and readonly user
+CLICKHOUSE_ADMIN_USER="chadmin"
+CLICKHOUSE_ADMIN_PASSWORD="chadmin"

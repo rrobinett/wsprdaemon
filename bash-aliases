@@ -1,5 +1,257 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
+#
+alias chc='clickhouse-client'
+alias ch=chc
+
+### TBD: This function should be used by assign_fft_cores()
+function show_hyperthread_pairs()
+{
+    local core_id=$1
+
+    # If a specific core is requested
+    if [[ -n $core_id ]]; then
+        if [[ -f /sys/devices/system/cpu/cpu${core_id}/topology/thread_siblings_list ]]; then
+            local siblings=$(cat /sys/devices/system/cpu/cpu${core_id}/topology/thread_siblings_list)
+            echo "CPU $core_id: siblings = $siblings"
+        else
+            echo "ERROR: CPU $core_id not found"
+            return 1
+        fi
+        return 0
+    fi
+
+    # Show all unique physical cores and their hyperthreads
+    declare -A seen
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        [[ -f $cpu/topology/thread_siblings_list ]] || continue
+
+        local core_num=$(basename $cpu | sed 's/cpu//')
+        local siblings=$(cat $cpu/topology/thread_siblings_list)
+
+        # Skip if we've already seen this sibling pair
+        [[ ${seen[$siblings]} ]] && continue
+        seen[$siblings]=1
+
+        echo "Physical core: $siblings"
+    done
+}
+
+### In ascending PID order restrict each fft thread to its own CPU core and restrict the fft's proc_888 thread and all 40+ the lin threads to 
+### the hyperthread pair of the FFT's core
+### TBD: find the hyperthread pair.  This code assumes it is CPU + 1
+function assign_fft_cores() {
+    local cores=(0 2 4 6)
+    local core_index=0
+    echo "Assigning FFT threads and their siblings to cores..."
+    echo "==================================================="
+
+    # Find all threads named 'fft', sort by PID
+    local fft_pids=$(ps -eLo tid,comm | grep '[[:space:]]fft$' | awk '{print $1}' | sort -n)
+
+    if [ -z "$fft_pids" ]; then
+        echo "No threads named 'fft' found."
+        return 1
+    fi
+
+    # Assign each thread to a core
+    for pid in $fft_pids; do
+        local core=${cores[$core_index]}
+        local other_core=$(( core + 1 ))
+
+        # Set CPU affinity of FFT thread using taskset
+        if sudo taskset -cp $core $pid > /dev/null 2>&1; then
+            echo "FFT  Thread $pid -> Core $core"
+        else
+            echo "FFT  Failed to assign thread $pid to core $core"
+        fi
+
+        # Get the thread group ID (main process ID) from /proc
+        local tgid=$(grep "^Tgid:" /proc/$pid/status 2>/dev/null | awk '{print $2}')
+
+        if [ -z "$tgid" ]; then
+            echo "Could not determine TGID for thread $pid"
+            core_index=$(( (core_index + 1) % ${#cores[@]} ))
+            continue
+        fi
+
+        # Assign ALL other threads in the same process to the adjacent core
+        local assigned_count=0
+        if [ -d "/proc/$tgid/task" ]; then
+            for task in /proc/$tgid/task/*; do
+                local task_tid=$(basename "$task")
+
+                # Skip the fft thread itself
+                if [ "$task_tid" = "$pid" ]; then
+                    continue
+                fi
+
+                # Assign this thread to the adjacent core
+                if sudo taskset -cp $other_core $task_tid > /dev/null 2>&1; then
+                    local task_name=$(cat "$task/comm" 2>/dev/null)
+                    echo "     Thread $task_tid ($task_name) -> Core $other_core"
+                    assigned_count=$(( assigned_count + 1 ))
+                fi
+            done
+        fi
+
+        echo "  Assigned $assigned_count sibling threads to core $other_core"
+        echo ""
+
+        # Move to next core pair, wrap around if needed
+        core_index=$(( (core_index + 1) % ${#cores[@]} ))
+    done
+
+    echo "Assignment complete."
+}
+
+function rx888-info() {
+    # The RX888 uses the Cypress FX3 which has vendor ID 04b4, so get a list of Cypress devices
+    lsusb -d 04b4: 2>/dev/null | while read -r line; do
+        # Extract bus and device numbers
+        bus=$(echo "$line" | awk '{print $2}')
+        device=$(echo "$line" | awk '{print $4}' | tr -d ':')
+        product=$(echo "$line" | cut -d' ' -f7-)
+
+        # Get detailed info including serial number
+        serial=$(lsusb -v -s "$bus:$device" 2>/dev/null | grep "iSerial" | awk '{$1=$2=""; print $0}' | sed 's/^[[:space:]]*//')
+
+        if [ -z "$serial" ]; then
+            echo "WARNING: Cypress FX3 at USB $bus:$device reports no 'iSerial' line, so it appears not to be a RX888"
+            serial="(none)"
+        fi
+        ### Find the/etc/radio/...*conf file which contains the line 'serial = $serial'
+        conf_file_path=$(grep  "^serial.*$serial" /etc/radio/*.conf)
+        if [[ -z "$conf_file_path" ]]; then
+            printf "Rx?: 'no .conf file found with 'serial = $serial'"
+        else
+            conf_file_path=${conf_file_path%%.conf}
+            local rx_number="${conf_file_path: -1}"
+            printf "Rx${rx_number}: $bus:$device $serial is specfied in '$conf_file_path'\n"
+        fi
+    done
+}
+
+function ka9qctl-usage()
+{
+    echo "usage:
+${FUNCNAME[1]} -[asz] [ rx#1, rx #2,...]
+    -a  - on all rx#: run 'systemctl start  on5kq-rxN'
+    -s  - on all rx#:run 'systemctl status on5kq-rxN'
+    -a  - on run 'systemctl stop   on5kq-rxN'
+    -r  - show USB information about all RX888s on the local USB bus
+This command ${FUNCNAME[1]} helps one monitor and manage WD sites which have multiple RX888s attached to the WD server
+    "
+}
+
+function ka9qctl() 
+{
+    local action=${1--h}
+    shift
+    local rx_id_list=(1 2 3 4)
+
+    if (( ${#@} )) ; then
+        rx_id_list=( $@ )
+        echo "Applying action '$action' to RXs: ${rx_id_list[*]}"
+    fi
+    case $action in
+        -h)  ka9qctl-usage; return 0 ;;
+        -a)  action="start";;
+        -z)  action="stop";;
+        -s)  action="is-active";;
+        -r)  rx888-info | sort ; return 0 ;;
+        *)   printf "ERROR: invalid argument '${action}'\nusage: ${FUNCNAME[0]} -[asz]\n"; return 0 ;;
+    esac
+
+    set +x
+    local index 
+    for index in ${rx_id_list[@]} ; do
+        printf "rx%d: " $index
+        local rc
+        sudo systemctl ${action} radiod@on5kq-rx${index} >& /tmp/${FUNCNAME[0]}.log
+        rc=$?
+        if [[ ${action} == "is-active" ]]; then
+            if (( rc )); then
+                echo "RX$index is not running"
+            else
+                echo "RX$index is     running"
+            fi
+        fi
+    done
+    set +x
+}
+
+
+#############################################
+function wd-rac-status()
+{
+    (cd ${HOME}/wsprdaemon/bin; ./frpc status)
+}
+
+function wd-rac-purge() 
+{
+    read -p "Are you *SURE* you want to purge any RAC connection?  If you are remotely logged on, you may not be able to re-access this server [yN] =>"
+    REPLY=${REPLY:=N} ; REPLY=${REPLY:0:1} ; REPLY=${REPLY^}
+    if [[ ${REPLY} != "Y" ]]; then
+        echo "Aborting this command"
+        return 0
+    fi
+    sudo systemctl stop wd-remote-access.service
+    sudo systemctl disable wd_remote_access.service
+    sudo systemctl disable wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd-remote-access.service
+    sudo rm -f /etc/systemd/system/wd_remote_access.service
+    sudo systemctl daemon-reload
+    ### Setup RAC again if it is defined in wsprdaemon.org
+    ${HOME}/wsprdaemon/wsprdaemon.sh -V
+}
+
+function wd-ws8 ()
+{
+    local ws8_usb_device="/dev/ttyACM0"
+    local attached_pids_list=($(sudo lsof ${ws8_usb_device} 2>&1 | awk '/^screen/{print $2}'))
+    if (( ${#attached_pids_list[@]} )); then
+        read -p "Found ${#attached_pids_list[@]} screen sessions attached to the WS8.  Kill those sessions and connect? => "
+        sudo kill ${attached_pids_list[@]}
+    fi
+    sudo screen ${ws8_usb_device}
+}
+
+function wd-usbreset() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: usbreset <bus-port | vendor:product>"
+        return 1
+    fi
+
+    # If user passed a device ID (like 04b4:00f1), find its bus-port
+    if [[ "$1" =~ : ]]; then
+        devpath=$(lsusb | grep "$1" | awk '{print $2"-"$4}' | sed 's/://')
+        if [[ -z "$devpath" ]]; then
+            echo "Device ID $1 not found"
+            return 1
+        fi
+    else
+        devpath="$1"
+    fi
+
+    echo "Resetting USB device at $devpath..."
+    echo -n "$devpath" | sudo tee /sys/bus/usb/drivers/usb/unbind
+    sleep 1
+    echo -n "$devpath" | sudo tee /sys/bus/usb/drivers/usb/bind
+}
+
+function wd-web-restart()
+{ 
+    local web_daemon_pid="$(< ~/wsprdaemon/ka9q_web_daemon.pid)"
+    if [[ -z "$web_daemon_pid" ]]; then
+        echo "Ka9q-web is not running"
+        return 0
+    fi
+    local web_pid=$(ps --ppid "$web_daemon_pid" -o pid=)
+    kill $web_pid
+}
+
 
 function wd-most-recent-log-error()
 {
@@ -231,6 +483,11 @@ function wd-commit-info()
     done
 }
 
+function wd-cpu-watch()
+{
+    watch -n 1 'bash -c '\''for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]* | sort -V); do cur=$(( $(< $cpu/cpufreq/scaling_cur_freq)/1000 )); min=$(( $(< $cpu/cpufreq/scaling_min_freq)/1000 )); max=$(( $(< $cpu/cpufreq/scaling_max_freq)/1000 )); scaled=$(( cur * 80 / max )); stars=$(printf "%*s" "$scaled" "" | tr " " "*"); printf "%-6s %-80s cur=%5d MHz  min=%5d MHz  max=%5d MHz\n" "$(basename $cpu)" "$stars" "$cur" "$min" "$max"; done'\'''
+}
+
 function wd-cpu-info() 
 {
     local sys_list=( $(ls -dv /sys/devices/system/cpu/cpu[0-9]*) )   ### Get numericallyt sorted list 
@@ -245,46 +502,86 @@ function wd-cpu-info()
     printf "Available CPU frequencies: $(< /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies)\n"
 }
 
+function wd-cpu-set-core-speeds() {
+    local speed01="$1"   # MHz for cores 0 and 1
+    local speedrest="$2" # MHz for all other cores
+
+    if [[ -z "$speed01" || -z "$speedrest" ]]; then
+        echo "Usage: set_core_speeds <speed-for-core0-1-MHz> <speed-for-rest-MHz>"
+        return 1
+    fi
+
+    # convert MHz → kHz
+    local s01=$((speed01 * 1000))
+    local srest=$((speedrest * 1000))
+
+    echo "🔧 Setting CPU0-1 to ${speed01} MHz, others to ${speedrest} MHz"
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}  # extract number after "cpu"
+        if (( n == 0 || n == 1 )); then
+            echo "$s01" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        else
+            echo "$srest" | sudo tee "$cpu/cpufreq/scaling_max_freq" > /dev/null
+        fi
+    done
+
+    # Disable turbo boost (CPB)
+    if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
+        echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost > /dev/null
+        echo "🚫 Turbo Boost disabled"
+    else
+        echo "⚠️ Could not disable Turbo Boost: /sys/devices/system/cpu/cpufreq/boost not found"
+    fi
+
+    # Print summary table
+    echo
+    printf "%-5s %-10s\n" "CPU" "MaxFreq(MHz)"
+    echo "-------------------"
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        n=${cpu##*cpu}
+        freq=$(<"$cpu/cpufreq/scaling_max_freq")
+        printf "%-5s %-10s\n" "$n" "$((freq / 1000))"
+    done
+}
+
 function wd-ka9q-controls() {
     local action="${1-is-active}"
 
     local radio_config_dir_path="/etc/radio"
-    local radiod_config_dir_path_list=( $(find ${radio_config_dir_path} -maxdepth 1 -name 'radiod@*.conf.d') )
+    
+    ### Thanks to chatGBT, get list of radiod@...conf and radiod@...conf.d/ files and dirs, giving preference to ...conf.d directories
+    local radio_conf_list=( $(find ${radio_config_dir_path} \( -type d -name 'radiod@*.conf.d' -printf '%f\tD\n' -o -type f -name 'radiod@*.conf' -printf '%f\tF\n' \) | awk -F'\t' '
+{
+  name=$1; typ=$2
+  key=name
+  sub(/\.conf\.d$/,"",key)
+  sub(/\.conf$/,"",key)
+  if (typ=="D") dir[key]=name
+  else if (typ=="F") file[key]=name
+}
+END {
+  for (k in dir) print dir[k]
+  for (k in file) if (!(k in dir)) print file[k]
+}
+' | sort) )
 
-    if (( ${#radiod_config_dir_path_list[@]} == 0 )); then
-        echo "ERROR: can't find any '${radio_config_dir_path}/radiod@*.conf.d/ directories'"
-        return 1
-    fi
-    if (( ${#radiod_config_dir_path_list[@]} > 1 )); then
-        local radiod_dir
-        for radiod_dir in  ${radiod_config_dir_path_list[@]}; do
-            set +x
-            if ps aux | grep -q ${radiod_dir##*/} ; then
-               echo "Found running ${radiod_dir##*/}"
-               radiod_config_dir_path_list=( "${radiod_dir}" )
-               break
-            fi
-        done
-        if (( ${#radiod_config_dir_path_list[@]} != 1 )); then
-            echo "ERROR: found ${#radiod_config_dir_path_list[@]} '${radio_config_dir_path}/radiod@*.conf.d/ directories': ${radiod_config_dir_path_list[*]}"
-        fi
-    fi
-
-    set +x
-    radiod_config_dir_path="${radiod_config_dir_path_list[0]}"
     local radiod_start_arg
-
-    if [[ -d ${radiod_config_dir_path} ]]; then
-       radiod_start_arg=${radiod_config_dir_path##*/}
-       radiod_start_arg=${radiod_start_arg%.conf.d}
-       set +x
-       (( ${verbosity-0} )) && echo "radiod_start_arg=${radiod_start_arg}"
-   else
-       set +x
-       echo "ERROR: Can't find a new-style radiod@...conf.d directory"
-       return 1
-   fi
-   
+    case ${#radio_conf_list[@]} in
+        0)
+            echo "Can't find any conf.. files"
+            return 0
+            ;;
+        1)
+            radiod_start_arg="${radio_conf_list[0]%.conf*}.service"
+            (( ${verbosity-0} )) && echo "Found one radiod@...conf. file/dir: ${radiod_start_arg}"
+            ;;
+        *)
+            echo "Found more than one radiod@...conf. file/dir: ${radio_conf_list[*]}"
+            return 0
+            ;;
+    esac
+  
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
@@ -730,8 +1027,10 @@ function wd-killall() {
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
         local full_legacy_service="${legacy_service}.service"
-        if sudo systemctl is-active --quiet ${full_legacy_service} ; then
-            echo "Stopping the active legacy service ${full_legacy_service}"
+        if ! sudo systemctl is-active --quiet ${full_legacy_service} ; then
+            (( verbosity )) && echo "The deprecaded legacy service ${full_legacy_service} is not active, so there is nothing to do"
+        else
+            echo "Stopping the active depecaded legacy service ${full_legacy_service}"
             sudo systemctl stop ${full_legacy_service}
         fi
         if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
@@ -741,23 +1040,26 @@ function wd-killall() {
         fi
     done
  
-    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "no" && -f ~/wsprdaemon/running.jobs ]] && grep -q KA9Q ~/wsprdaemon/running.jobs; then
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
+    else
         local base_name=$(wd-get_ka9q-conf_file-base_name)
         services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
-
-   else
-        echo "Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY=${KA9Q_RUNS_ONLY_REMOTELY-no} and/or there are no running KA9Q jobs"
     fi
 
     local service_name
     for   service_name in ${services_list[@]}; do 
-        (( verbosity > 1 )) && printf "Stopping service '${service_name}"
+        (( verbosity > 1 )) && echo "Stopping service '${service_name}"
         local service_clean=${service_name%.service}
-        sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
-        rc=$? ; if (( rc )); then
-            printf "'ERROR: systemctl stop ${service_clean} => $rc:\n$(</tmp/wd-killall.log)\n"
+        if ! sudo systemctl is-active --quiet  ${service_clean} ; then 
+            (( verbosity > 1 )) && echo "Service '${service_name}' is not active, so no need to stop it"
         else
-             (( verbosity > 0 )) && printf " systemctl stop ${service_clean} => $rc\n"
+            sudo systemctl stop ${service_clean} --no-pager >& /tmp/wd-killall.log
+            rc=$? ; if (( rc )); then
+                printf "'ERROR: systemctl stop ${service_clean} => $rc:\n$(</tmp/wd-killall.log)\n"
+            else
+                (( verbosity )) && echo "Successful systemctl stop ${service_clean} => $rc"
+            fi
         fi
     done
 
@@ -792,7 +1094,7 @@ function wd-killall() {
    fi
 
     #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    ps aux | grep 'wsprdaemon.sh\|pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    ps aux | grep 'wsprdaemon.sh\|\wsprdaemon\/ka9q-radio\/pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"
@@ -1244,18 +1546,27 @@ alias cdu='cd /dev/shm/wsprdaemon/uploads.d/'
 alias cdww='cd ~/wsprdaemon/wav-archive/'
 
 ### Start 'vi' using WD's .vimrc
-function vi() 
-{
-    local vim_rc_file=~/.vimrc
-    local wd_vim_rc_file=~/wsprdaemon/.vimrc
+function vi_fixup() {
+    local REPO_VIMRC="$HOME/wsprdaemon/.vimrc"
+    local USER_VIMRC="$HOME/.vimrc"
 
-    if [[ ! -f ${vim_rc_file} ]] || ! grep wsprdaemon ${vim_rc_file}  > /dev/null ; then
-        echo "Adding 'source ${wd_vim_rc_file}' to ${vim_rc_file}"
-        echo "source ${wd_vim_rc_file}" >> ${vim_rc_file}
+    # If ~/.vimrc exists and is not the correct symlink
+    if [ -e "$USER_VIMRC" ] && [ ! -L "$USER_VIMRC" ]; then
+        echo "Backing up existing .vimrc to .vimrc.backup"
+        mv "$USER_VIMRC" "$USER_VIMRC.backup"
     fi
-    vim $*
+
+    # Create symlink if it doesn't exist or points elsewhere
+    if [ ! -L "$USER_VIMRC" ] || [ "$(readlink "$USER_VIMRC")" != "$REPO_VIMRC" ]; then
+        ln -sf "$REPO_VIMRC" "$USER_VIMRC"
+        echo "Symlinked .vimrc -> $REPO_VIMRC"
+    fi
+
+    # Run the real vi with all arguments
+    /usr/bin/vi "$@"
 }
 
+alias vi=vi_fixup
 alias vib='vi ~/wsprdaemon/bash-aliases'
 alias vibb='vi ~/.bash_aliases'
 alias viw='vi ~/wsprdaemon/wsprdaemon.sh'
@@ -1581,8 +1892,15 @@ function wd-ssh-psws(){
         echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"
         return 0
     fi
-    wd_logger 1 "Executing: 'ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu'"
-    ssh ${GRAPE_PSWS_ID%_*}@pswsnetwork.caps.ua.edu
+    local psws_url="${PSWS_URL-pswsnetwork.eng.ua.edu}"
+    wd_logger 1 "Executing: 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}
+    local rc=$? ; if (( rc )); then
+        wd_logger 1 "Failed to run 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    else
+        wd_logger 1 "Successfully ran 'sftp -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    fi
+    return 0
 }
 alias wdssp=wd-ssh-psws
 
@@ -1925,13 +2243,13 @@ function wd-radiod-control()
         echo "Can't find the radiod configuration file '${radio_conf_file_name}'"
         return 1
     else
-        local wspr_section_data_url="$(grep -i -A 20 '^\[.*wspr' "${radio_conf_file_name}" | grep "^data" | head -1 | cut -d ' ' -f 3)"
-        if [[ -z "${wspr_section_data_url}" ]]; then
-            echo "Can't find [wspr] data = URL in '${radio_conf_file_name}'"
+        local global_section_status_url="$(grep -i -A 20 '^\[.*global' "${radio_conf_file_name}" | grep "^status" | head -1 | cut -d ' ' -f 3)"
+        if [[ -z "${global_section_status_url}" ]]; then
+            echo "Can't find [global] status = URL in '${radio_conf_file_name}'"
             return 2
         else
-            echo "Found [wspr] data = ${wspr_section_data_url} in '${radio_conf_file_name}'"
-            control -s ${tuning_freq} ${wspr_section_data_url}
+            echo "Found [global] status = ${global_section_status_url} in '${radio_conf_file_name}'"
+            control ${global_section_status_url} -s ${tuning_freq}
         fi
     fi
     return 0
@@ -2067,11 +2385,36 @@ function  wd-git-to-ssh(){
 alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
 
 alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
-function wd-watch-wavs() {
-    local band_freq=${1-14}
-    local band_dir=${PWD##*/}
+declare WSPR_BAND_TO_TUNING_FREQ=(   2200:136000  630:474200  160:1836600  80:3568600  80eu:3592600   60:5287200 60eu:5364700  40:7038600  30:10138700    22:13553900   20:14095600 \
+                                     17:18104600 15:21094600  12:24924600 10:28124600    8:40680000   6:50293000   4:70091000 2:144489000 70:432300000  23:1296500000  29:560308000)
+function wd-watch-wavs-scan() {
+    local band
+    for band in $(find -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -rV); do
+        (( ${verbosity-0} )) && read -p "Watch band ${band} => "
+        (cd $band; wd-watch-wavs )
+    done
+}
 
-    watch 'ls -lt ??????_????.wav *Z_* ../*Z_14*'
+function wd-watch-wavs() {
+    local band_dir=${PWD##*/}
+    local band_freq=""
+
+    local band_info=""
+    for band_info in ${WSPR_BAND_TO_TUNING_FREQ[@]}; do
+        local band_info_list=(${band_info/:/ } )
+        local band_meters=${band_info_list[0]}
+        local band_tuning_freq=${band_info_list[1]}
+        if [[ ${band_meters} == ${band_dir} ]]; then
+            band_freq=${band_tuning_freq}
+            break
+        fi
+    done
+    if [[ -z "${band_freq}" ]]; then
+        echo "Can't find a band which matches this PWD=${PWD}"
+        return 0
+    fi
+
+    watch "ls -lt *.wav ../*Z_${band_freq}*"
 }
 alias wdww='wd-watch-wavs'
 

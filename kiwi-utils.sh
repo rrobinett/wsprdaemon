@@ -413,7 +413,7 @@ function get_kiwirecorder_ov_count()
         wd_logger 1 "ERROR: couldn't extract 'adc_ov' from kiwi's status lines"
         return 3
     fi
-    wd_logger "Got current adc_ov = ${ov_value}"
+    wd_logger 1 "Got current adc_ov = ${ov_value}"
     eval ${__return_ov_count_var}=\${ov_value}
     return 0
 }

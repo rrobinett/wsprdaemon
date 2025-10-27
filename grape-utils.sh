@@ -61,8 +61,6 @@ declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
-declare -r PSWS_URL="pswsnetwork.caps.ua.edu"
-declare -r PSWS_NEW_URL="pswsnetwork.eng.ua.edu"
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
 declare -r          GRAPE_ERROR_RETURN_BASE=240
@@ -93,8 +91,7 @@ function grape_return_code_is_error() {
 
 #set -euo pipefail
 
-declare -r PSWS_SERVER_URL='pswsnetwork.caps.ua.edu'
-declare -r PSWS_SERVER_NEW_URL='pswsnetwork.eng.ua.edu'
+declare -r PSWS_SERVER_URL='pswsnetwork.eng.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
@@ -108,11 +105,13 @@ function grape_upload_all_local_wavs() {
         wd_logger 2 "Checking date_dir ${date_dir}"
         local site_dir_list=( $( find -L ${date_dir} -mindepth 1 -maxdepth 1 -type d  | sort) )
         local site_dir
-        local search_txt="NOT_DEFINED"
         for site_dir in ${site_dir_list[@]} ; do
-            wd_logger 1 "Checking site_dir ${site_dir} for NOT DEFINED"
+            wd_logger 2 "Checking site_dir ${site_dir}"
+            upload_24hour_wavs_to_grape_drf_server ${site_dir}
+: <<'TBD'
+            wd_logger 2 "Checking site_dir ${site_dir} for NOT DEFINED"
             if [[ "$site_dir" == "*$search_txt*" ]]; then
-                wd_logger 1 "Skipping ${site_dir} with NOT_DEFINED"
+                wd_logger 2 "Skipping ${site_dir} with NOT_DEFINED"
                 new_dir=${site_dir/NOT_DEFINED/${GRAPE_PSWS_ID}}
                 ### what we need to do:
                 # test for new_dir existing.  If not, rename site_dir to new_dir
@@ -122,6 +121,7 @@ function grape_upload_all_local_wavs() {
                 wd_logger 2 "Checking site_dir ${site_dir}"
                 upload_24hour_wavs_to_grape_drf_server ${site_dir}
             fi
+TBD
         done
     done
     wd_logger 2 "Completed"
@@ -133,7 +133,7 @@ function grape_upload_all_local_wavs() {
 
 function upload_24hour_wavs_to_grape_drf_server() {
     local reporter_wav_root_dir=$( realpath $1 )
-    wd_logger 1 "Upload bands for reporter ${reporter_wav_root_dir##*/}"
+    wd_logger 2 "Upload bands for reporter ${reporter_wav_root_dir##*/}"
 
     if [[ ! -d ${reporter_wav_root_dir} ]]; then
         wd_logger 1 "ERROR:  reporter_wav_root_dir='${reporter_wav_root_dir}' does not exist"
@@ -146,12 +146,12 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 2 "Skipping work on .wv files for today's date ${current_date}"
         return 0
     fi
-    wd_logger 1 "On date '${current_date}' checking for date '${reporter_wav_root_dir_date}' bands which need a wav file to be created and then convert them to DRF and upload to the GRAPE server"
+    wd_logger 2 "On date '${current_date}' checking for date '${reporter_wav_root_dir_date}' bands which need a wav file to be created and then convert them to DRF and upload to the GRAPE server"
 
     local reporter_upload_complete_file_name="${reporter_wav_root_dir}/${UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME}"
 
     if [[ -f ${reporter_upload_complete_file_name} ]]; then
-        wd_logger 1 "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
+        wd_logger 2 "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
         return 0
     fi
     wd_logger 1 "File ${reporter_upload_complete_file_name} does not exist, so create the wav files and upload the DRF files"
@@ -179,6 +179,10 @@ function upload_24hour_wavs_to_grape_drf_server() {
         local receiver_info="${receiver_dir##*/}"
         local receiver_name="${receiver_info%@*}"
         local pswsnetwork_info="${receiver_info#*@}"
+        local search_txt="NOT_DEFINED"
+        if [[ "$pswsnetwork_info" == "*$search_txt*" ]]; then
+            pswsnetwork_info=${GRAPE_PSWS_ID}
+        fi
         local psws_station_id="${pswsnetwork_info%_*}"
         local psws_instrument_id="${pswsnetwork_info#*_}"
 
@@ -262,7 +266,14 @@ function upload_24hour_wavs_to_grape_drf_server() {
         fi
 
         local sftp_stderr_file="${GRAPE_TMP_DIR}/sftp.out"
-        sftp -v -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        local sftp_bw_limit_kbps="${SFTP_BW_LIMIT_KBPS-0}"
+        if (( sftp_bw_limit_kbps == 0 )) && (( ${SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS-0} )) ; then
+            sftp_bw_limit_kbps=$(( SIGNAL_LEVEL_FTP_RATE_LIMIT_BPS / 1000 ))
+        fi
+        if (( sftp_bw_limit_kbps == 0 )); then
+            sftp_bw_limit_kbps=100
+        fi
+        sftp -v -l ${sftp_bw_limit_kbps} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if (( rc )); then
@@ -278,18 +289,48 @@ function grape_test_auto_login() {
     local station_id=$1
     local rc
 
-    wd_logger 2 "Starting by trying to execute a 'sftp..."
-    sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_URL} &>/dev/null
+    wd_logger 2 "Checking if there is a connection to the ssh port by this StationID ${station_id} to its user account on the ${PSWS_SERVER_URL} PSWS server"
+    local psws_timeout=${PSWS_NC_TIMEOUT-2}    ### Default is to wait up to 2 seconds to make a tcp connection to the ssh port of the PSWS server
+    nc -vz -w ${psws_timeout} ${PSWS_SERVER_URL} 22 >& /dev/null
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'sftp -o ConnectTimeout=${PSWS_SSH_TIMEOUT-10} -b /dev/null ${station_id}@${PSWS_URL}' => $rc  So can't autologin to account '${station_id}'"
+        wd_logger 1 "WARNING: timeout after waiting ${psws_timeout} seconds to see if the ssh port of ${PSWS_SERVER_URL} is active"
+        return 1
+    fi
+    wd_logger 2 "Checking to see if we can open a sftp connection to ${PSWS_SERVER_URL}"
+    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
-        wd_logger 2 "Autologin to account '${station_id}' was successful"
+        wd_logger 2 "Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return ${rc}
 }
 
+function get-or-create-ssh-public-key() {
+    local -n _return_var_name=$1
+
+    if [[ ! -d ~/.ssh ]]; then
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        wd_logger 1 "Created missing ~/.ssh directory"
+    fi
+    if [[ -f ~/.ssh/id_ed25519.pub ]]; then
+        _return_var_name="$( realpath ~/.ssh/id_ed25519.pub )"
+        wd_logger 2 "Found existing public key file '${_return_var_name}'"
+    elif [[ -f ~/.ssh/id_rsa.pub ]]; then
+        _return_var_name="$( realpath ~/.ssh/id_rsa.pub )"
+        wd_logger 2 "Found existing public key file '${_return_var_name}'"
+    else
+        public_key_file_path="$( realpath ~/.ssh/id_ed25519.pub )"
+        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path} -N ""
+        _return_var_name="${public_key_file_path}"
+        wd_logger 1 "Created a missing public key file '${_return_var_name}'"
+    fi
+    return 0
+}
+
 ######  '-p'   upload public key to PSWS server
-function grape_upload_public_key() {
+function grape_check_auto_upload() {
     local rc
 
     wd_logger 2 "Starting"
@@ -299,21 +340,18 @@ function grape_upload_public_key() {
         return 1
     fi
 
+    local public_key_file_path
+    get-or-create-ssh-public-key "public_key_file_path"
+    wd_logger 2 "ssh public key file path is ${public_key_file_path}"
+
     local station_id=${GRAPE_PSWS_ID%_*}   ### Chop off the _ID.. to get the PSWS site name
     grape_test_auto_login $station_id
     rc=$? ; if (( rc == 0 )); then
         wd_logger 2 "Autologin for site ${station_id} is already setup"
         return 0
     fi
-    wd_logger 1 "Setup autologin to the GRAPE server for this GRAPE SITE_ID='${station_id}' by entering when prompted the value of 'token' in the PSWS user's admim page"
-
-    ssh-copy-id -o ConnectTimeout=5 -f ${station_id}@${PSWS_URL}
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: Failed to setup auto login. 'ssh-copy-id  ${station_id}@${PSWS_URL}' => ${rc}"
-        return $rc
-    fi
-    wd_logger 1 "Auto login has been successfully set up"
-    return 0
+    wd_logger 1 "Autologin to the GRAPE PSWS server has failed for this GRAPE SITE_ID='${station_id}'. So enter this server's public key, or email it to the PSWS administrator that:\nPSWS station '${station_id}' needs this ssh public key added to its account:\n$( < ${public_key_file_path} )"
+    return 1
 }
 
 ###### '-S'
@@ -592,7 +630,7 @@ function grape_create_24_hour_wavs() {
     local current_date
     TZ=UTC printf -v current_date "%(%Y%m%d)T"
     if [[ ${archive_date} ==  ${current_date} ]] ; then
-        wd_logger 1 "Skipping create for current UTC day ${current_date}"
+        wd_logger 2 "Skipping create for current UTC day ${current_date}"
         return -1
     fi
 
@@ -605,9 +643,9 @@ function grape_create_24_hour_wavs() {
     local new_wav_count=0
     local return_code=0
     local band_dir_list=( $( find -L ${date_root_dir} -mindepth 3 -type d  -regex '.*/\(WWV\|CHU\|K_BEACON\).*' | awk -F_ '{print $(NF-1), $NF, $0}' | sort -k1,1r -k2,2n  | cut -d' ' -f3) )
-    wd_logger 1 "found ${#band_dir_list[@]} bands"
+    wd_logger 2 "found ${#band_dir_list[@]} bands"
     for band_dir in ${band_dir_list[@]} ; do
-        wd_logger 1 "create 24 hour wav file in ${band_dir}"
+        wd_logger 2 "create 24 hour wav file in ${band_dir}"
         local rc
         grape_create_wav_file ${band_dir}
         rc=$?
@@ -683,12 +721,14 @@ function grape_upload_service() {
 
 ### '-a' This function is called every odd 2 minutes by the watchdog daemon.
 function grape_uploader() {
+    local force_upload="${1-no}"
+
     if [[ -z "${GRAPE_PSWS_ID-}"  ]]; then
          wd_logger 2 "GRAPE uploads are not enabled, so do nothing"
          return 0
     fi
     local current_hhmm=$(TZ=UTC printf "%(%H%M)T")
-    if [[ ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
+    if [[ ${force_upload} == "no" && ${LAST_HHMM} == "0" || ${current_hhmm} != ${LAST_HHMM} && ${current_hhmm} == ${GRAPE_UPLOAD_START_HHMM} ]]; then
         wd_logger 1 "Skipping upload at current HHMM = ${current_hhmm}, LAST_HHMM = ${LAST_HHMM}"
         LAST_HHMM=${current_hhmm}
         return 0
@@ -712,7 +752,12 @@ function grape_uploader() {
     return ${rc}
 }
 
+### This is the number of minutes between checks for new files to upload. Default to 30 minutes
+### This should always be an even number of minutes
+declare GRAPE_UPLOAD_CHECK_RATE=${GRAPE_UPLOAD_CHECK_RATE-30}
+
 ### Spawned by watchdog daemon at startup and every odd minute it looks for wav files to compress and archive 
+
 function grape_upload_daemon() {
     local root_dir=$1
 
@@ -725,8 +770,10 @@ function grape_upload_daemon() {
     while true; do
         wd_logger 1 "Checking for new .wav files to upload"
         grape_uploader
+
         local sleep_seconds=$(seconds_until_next_odd_minute)
-        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at the next odd minute"
+        (( sleep_seconds += GRAPE_UPLOAD_CHECK_RATE * 60 ))
+        wd_logger 1 "Sleeping ${sleep_seconds} seconds in order to wake up at $(date -d "${sleep_seconds} seconds" +%T), the odd minute ${GRAPE_UPLOAD_CHECK_RATE} minutes from now"
         wd_sleep  ${sleep_seconds}
     done
 }
@@ -752,7 +799,7 @@ function grape_print_usage() {
 function grape_menu() {
     case ${1--h} in
         -a)
-            grape_uploader
+            grape_uploader "yes"        ### Force the upload to run
             ;;
         -c)
             grape_create_all_24_hour_wavs
@@ -767,7 +814,7 @@ function grape_menu() {
             grape_repair_date_wvs ${2-h}
             ;;
         -p)
-            grape_upload_public_key
+            grape_check_auto_upload
             ;;
         -P)
             grape_purge_all_empty_date_trees
@@ -848,17 +895,12 @@ function grape_init() {
     fi
 
     ### Verifies auto login is enabled OR prompts for the user to enter the token/passsword for this <SITE_ID>
-    grape_upload_public_key
+    grape_check_auto_upload
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't setup auto login which is needed for uploads"
+        wd_logger 2 "ERROR: ftp auto-login which is needed for our sftp uploads doesn't work"
     fi
     return $rc
 }
 
-grape_init
-rc=$?
-if (( rc )); then
-    wd_logger 1 "ERROR: grape_init => $rc"
-fi
-return $rc
-
+grape_init || true   ### Suppress error message if any
+return 0

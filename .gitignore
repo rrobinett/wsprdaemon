@@ -21,3 +21,23 @@ watchdog_daemon.pid
 wav-archive.d
 suntimes.txt
 
+after_make.txt
+before_make.txt
+*.log
+wav-archive/
+uploads/
+ft8_lib/
+bin/frpc
+bin/frpc.ini
+bin/frpc_wd.ini
+find.stderr
+ftlib-pskreporter/
+ka9q-radio/
+ka9q-web/
+ka9q-web1/
+onion/
+*.pid
+
+reflector.conf
+*.backup
+test.txt

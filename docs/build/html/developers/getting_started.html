@@ -1,0 +1,558 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Developer Getting Started Guide &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Remote Development Setup" href="remote_development.html" />
+    <link rel="prev" title="Network Security Architecture" href="../architecture/network_security.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../description/overview.html">wsprdaemon Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Developer Getting Started Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#project-overview">Project Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#key-statistics">Key Statistics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#core-architecture">Core Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#development-environment-setup">Development Environment Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#initial-setup">Initial Setup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#common-development-commands">Common Development Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#service-management">Service Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-management">Configuration Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#development-utilities">Development Utilities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#documentation">Documentation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#receiver-architecture">Receiver Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kiwisdr-kiwi">1. KiwiSDR (<code class="docutils literal notranslate"><span class="pre">KIWI_*</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ka9q-radio-ka9q">2. KA9Q Radio (<code class="docutils literal notranslate"><span class="pre">KA9Q_*</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#merged-receivers-merg">3. Merged Receivers (<code class="docutils literal notranslate"><span class="pre">MERG_*</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#schedule-format">Schedule Format</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#python-environment">Python Environment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#common-python-entry-points">Common Python Entry Points</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-dependencies">Python Dependencies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#testing-and-validation">Testing and Validation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#current-testing-approach">Current Testing Approach</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#development-testing-workflow">Development Testing Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#service-dependencies">Service Dependencies</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#critical-dependencies">Critical Dependencies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optional-dependencies">Optional Dependencies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-templates">Configuration Templates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-best-practices">Configuration Best Practices</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#error-recovery-and-reliability">Error Recovery and Reliability</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#debugging-common-issues">Debugging Common Issues</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#development-workflow">Development Workflow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#typical-development-session">Typical Development Session</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#code-quality-guidelines">Code Quality Guidelines</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#getting-help">Getting Help</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#documentation-resources">Documentation Resources</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#community-support">Community Support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#development-support">Development Support</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Developer Getting Started Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/developers/getting_started.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="developer-getting-started-guide">
+<h1>Developer Getting Started Guide<a class="headerlink" href="#developer-getting-started-guide" title="Link to this heading"></a></h1>
+<p><em>Essential information for WsprDaemon contributors and developers</em></p>
+<p>This guide provides the core information needed to start developing and contributing to WsprDaemon, based on the project’s architecture and development practices.</p>
+<section id="project-overview">
+<h2>Project Overview<a class="headerlink" href="#project-overview" title="Link to this heading"></a></h2>
+<p>WsprDaemon (WD) is a Linux service that decodes WSPR and FST4W signals from KiwiSDR and RX888 SDRs and posts them to wsprnet.org. It’s primarily written in Bash with Python utilities and runs as a 24/7 service with automatic recovery from outages.</p>
+<section id="key-statistics">
+<h3>Key Statistics<a class="headerlink" href="#key-statistics" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>20+ top spotting sites</strong> use this architecture</p></li>
+<li><p><strong>~33% of daily WSPR spots</strong> globally (7+ million/day)</p></li>
+<li><p><strong>Multi-continent deployment</strong> including extreme locations like Antarctica</p></li>
+<li><p><strong>Thousands of active installations</strong> worldwide</p></li>
+</ul>
+</section>
+</section>
+<section id="core-architecture">
+<h2>Core Architecture<a class="headerlink" href="#core-architecture" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Main Script</strong>: <code class="docutils literal notranslate"><span class="pre">wsprdaemon.sh</span></code> - Primary entry point and service orchestrator</p></li>
+<li><p><strong>Configuration</strong>: <code class="docutils literal notranslate"><span class="pre">wd_template.conf</span></code> - Main config template with receiver/schedule definitions</p></li>
+<li><p><strong>Modular Design</strong>: Core functionality split across sourced shell scripts:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">decoding.sh</span></code> - WSPR signal decoding logic</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">posting.sh</span></code> - Upload to wsprnet.org</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">job-management.sh</span></code> - Process lifecycle management</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">watchdog.sh</span></code> - Service monitoring and recovery</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">usage.sh</span></code> - Help system and command documentation</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="development-environment-setup">
+<h2>Development Environment Setup<a class="headerlink" href="#development-environment-setup" title="Link to this heading"></a></h2>
+<section id="prerequisites">
+<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Linux development environment (Ubuntu/Debian preferred)</p></li>
+<li><p>Access to SDR hardware (KiwiSDR, RX888, or test environment)</p></li>
+<li><p>Basic familiarity with Bash scripting and Python</p></li>
+<li><p>Git for version control</p></li>
+</ul>
+</section>
+<section id="initial-setup">
+<h3>Initial Setup<a class="headerlink" href="#initial-setup" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clone the repository</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/rrobinett/wsprdaemon.git
+<span class="nb">cd</span><span class="w"> </span>wsprdaemon
+
+<span class="c1"># Copy configuration template</span>
+cp<span class="w"> </span>wd_template.conf<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Review available options</span>
+./wsprdaemon.sh<span class="w"> </span>-h
+
+<span class="c1"># Check system compatibility</span>
+./wsprdaemon.sh<span class="w"> </span>-i
+</pre></div>
+</div>
+</section>
+</section>
+<section id="common-development-commands">
+<h2>Common Development Commands<a class="headerlink" href="#common-development-commands" title="Link to this heading"></a></h2>
+<section id="service-management">
+<h3>Service Management<a class="headerlink" href="#service-management" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start the watchdog daemon (primary command)</span>
+./wsprdaemon.sh<span class="w"> </span>-a
+
+<span class="c1"># Show status of all running jobs</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># Stop all services</span>
+./wsprdaemon.sh<span class="w"> </span>-z
+
+<span class="c1"># Install as Linux service</span>
+./wsprdaemon.sh<span class="w"> </span>-A
+
+<span class="c1"># View logs (errors, wsprnet uploads, wsprdaemon uploads)</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>e
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>n<span class="w">  </span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>d
+</pre></div>
+</div>
+</section>
+<section id="configuration-management">
+<h3>Configuration Management<a class="headerlink" href="#configuration-management" title="Link to this heading"></a></h3>
+<p>Key configuration elements in <code class="docutils literal notranslate"><span class="pre">wsprdaemon.conf</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">RECEIVER_LIST</span></code> array - Defines available receivers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">WSPR_SCHEDULE</span></code> arrays - Scheduling for different receiver types</p></li>
+<li><p>Supports KiwiSDR (<code class="docutils literal notranslate"><span class="pre">KIWI_*</span></code>), KA9Q radio (<code class="docutils literal notranslate"><span class="pre">KA9Q_*</span></code>), and merged receivers (<code class="docutils literal notranslate"><span class="pre">MERG_*</span></code>)</p></li>
+</ul>
+</section>
+<section id="development-utilities">
+<h3>Development Utilities<a class="headerlink" href="#development-utilities" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List audio/SDR devices</span>
+./wsprdaemon.sh<span class="w"> </span>-i
+
+<span class="c1"># Increase/decrease logging verbosity </span>
+./wsprdaemon.sh<span class="w"> </span>-d/-D
+
+<span class="c1"># Python utilities for data processing</span>
+python3<span class="w"> </span>ts_batch_upload.py<span class="w">     </span><span class="c1"># Batch upload historical data</span>
+python3<span class="w"> </span>wd-validate-wav-logs.py<span class="w"> </span><span class="c1"># Validate audio recordings</span>
+python3<span class="w"> </span>c2_noise.py<span class="w">            </span><span class="c1"># Noise analysis</span>
+</pre></div>
+</div>
+</section>
+<section id="documentation">
+<h3>Documentation<a class="headerlink" href="#documentation" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Build Sphinx documentation</span>
+<span class="nb">cd</span><span class="w"> </span>docs
+make<span class="w"> </span>html
+make<span class="w"> </span>clean
+</pre></div>
+</div>
+</section>
+</section>
+<section id="receiver-architecture">
+<h2>Receiver Architecture<a class="headerlink" href="#receiver-architecture" title="Link to this heading"></a></h2>
+<p>WsprDaemon supports three types of receivers:</p>
+<section id="kiwisdr-kiwi">
+<h3>1. KiwiSDR (<code class="docutils literal notranslate"><span class="pre">KIWI_*</span></code>)<a class="headerlink" href="#kiwisdr-kiwi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Network-attached SDRs accessed via kiwirecorder.py</p></li>
+<li><p>Web interface typically on port 8073</p></li>
+<li><p>Requires password authentication in many cases</p></li>
+</ul>
+</section>
+<section id="ka9q-radio-ka9q">
+<h3>2. KA9Q Radio (<code class="docutils literal notranslate"><span class="pre">KA9Q_*</span></code>)<a class="headerlink" href="#ka9q-radio-ka9q" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>High-performance multichannel SDRs</p></li>
+<li><p>Uses multicast streams for radio control</p></li>
+<li><p>Web interface on port 8081</p></li>
+<li><p>Requires specific <code class="docutils literal notranslate"><span class="pre">radiod.conf</span></code> configuration</p></li>
+</ul>
+</section>
+<section id="merged-receivers-merg">
+<h3>3. Merged Receivers (<code class="docutils literal notranslate"><span class="pre">MERG_*</span></code>)<a class="headerlink" href="#merged-receivers-merg" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Combines multiple receivers, posts best SNR</p></li>
+<li><p>Useful for development without double-posting</p></li>
+<li><p>Requires careful configuration to avoid conflicts</p></li>
+</ul>
+</section>
+<section id="schedule-format">
+<h3>Schedule Format<a class="headerlink" href="#schedule-format" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;HH:MM RECEIVER,BAND,MODES RECEIVER,BAND,MODES ...&quot;</span>
+</pre></div>
+</div>
+<p>Example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;00:00 KA9Q_0,20,W2:F2:F5 KIWI_0,40,W2:F2:F5&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="python-environment">
+<h2>Python Environment<a class="headerlink" href="#python-environment" title="Link to this heading"></a></h2>
+<p>Most Python scripts expect system Python3 with specific package requirements. Some scripts have hardcoded paths to virtual environments that may need updating for local development.</p>
+<section id="common-python-entry-points">
+<h3>Common Python Entry Points<a class="headerlink" href="#common-python-entry-points" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ts_batch_upload.py</span></code> - Batch operations for historical data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wwv_start.py</span></code> - WWV time signal processing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wav2grape.py</span></code> - Audio format conversion for GRAPE system</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wd-validate-wav-logs.py</span></code> - Validation utilities for audio files</p></li>
+</ul>
+</section>
+<section id="python-dependencies">
+<h3>Python Dependencies<a class="headerlink" href="#python-dependencies" title="Link to this heading"></a></h3>
+<p>While there’s no formal requirements.txt, common dependencies include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">numpy</span></code> - Numerical processing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> - Plotting and visualization</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">requests</span></code> - HTTP client for API calls</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">psutil</span></code> - System monitoring</p></li>
+</ul>
+</section>
+</section>
+<section id="testing-and-validation">
+<h2>Testing and Validation<a class="headerlink" href="#testing-and-validation" title="Link to this heading"></a></h2>
+<section id="current-testing-approach">
+<h3>Current Testing Approach<a class="headerlink" href="#current-testing-approach" title="Link to this heading"></a></h3>
+<p>No formal test suite exists. Validation typically done through:</p>
+<ol class="arabic simple">
+<li><p><strong>Configuration validation</strong>: <code class="docutils literal notranslate"><span class="pre">./wsprdaemon.sh</span> <span class="pre">-s</span></code></p></li>
+<li><p><strong>Log monitoring</strong>: <code class="docutils literal notranslate"><span class="pre">./wsprdaemon.sh</span> <span class="pre">-l</span> <span class="pre">e</span></code></p></li>
+<li><p><strong>Manual spot verification</strong>: Check wsprnet.org for uploaded spots</p></li>
+<li><p><strong>Audio file validation</strong>: <code class="docutils literal notranslate"><span class="pre">wd-validate-wav-logs.py</span></code></p></li>
+</ol>
+</section>
+<section id="development-testing-workflow">
+<h3>Development Testing Workflow<a class="headerlink" href="#development-testing-workflow" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Test configuration before starting</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># 2. Start with verbose logging</span>
+./wsprdaemon.sh<span class="w"> </span>-v<span class="w"> </span>-a
+
+<span class="c1"># 3. Monitor logs in real-time</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>e
+
+<span class="c1"># 4. Verify uploads to wsprnet.org</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>n
+
+<span class="c1"># 5. Check system resource usage</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>d
+</pre></div>
+</div>
+</section>
+</section>
+<section id="service-dependencies">
+<h2>Service Dependencies<a class="headerlink" href="#service-dependencies" title="Link to this heading"></a></h2>
+<section id="critical-dependencies">
+<h3>Critical Dependencies<a class="headerlink" href="#critical-dependencies" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>WSJT-x</strong>: Provides <code class="docutils literal notranslate"><span class="pre">wsprd</span></code> decoder binary (absolutely critical)</p></li>
+<li><p><strong>Python 3</strong>: For KiwiSDR interface and data processing</p></li>
+<li><p><strong>systemd</strong>: For Linux service integration</p></li>
+<li><p><strong>Network tools</strong>: curl, wget for uploads and API calls</p></li>
+</ul>
+</section>
+<section id="optional-dependencies">
+<h3>Optional Dependencies<a class="headerlink" href="#optional-dependencies" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>tmux/screen</strong>: For persistent sessions during development</p></li>
+<li><p><strong>git</strong>: For version control and configuration tracking</p></li>
+<li><p><strong>unattended-upgrades</strong>: For automatic security updates</p></li>
+</ul>
+</section>
+</section>
+<section id="configuration-templates">
+<h2>Configuration Templates<a class="headerlink" href="#configuration-templates" title="Link to this heading"></a></h2>
+<p>The project includes several configuration templates:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">wd_template.conf</span></code></strong> - Basic configuration with examples</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">wd_template_full.conf</span></code></strong> - Complete configuration with all options</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">radiod&#64;rx888-wsprdaemon-template.conf</span></code></strong> - KA9Q radio specific config</p></li>
+</ul>
+<section id="configuration-best-practices">
+<h3>Configuration Best Practices<a class="headerlink" href="#configuration-best-practices" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Always backup before changes</span>
+cp<span class="w"> </span>wsprdaemon.conf<span class="w"> </span>wsprdaemon.conf.backup.<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d-%H%M%S<span class="k">)</span>
+
+<span class="c1"># Validate configuration syntax</span>
+bash<span class="w"> </span>-n<span class="w"> </span>wsprdaemon.conf
+
+<span class="c1"># Test configuration before deployment</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+</pre></div>
+</div>
+</section>
+</section>
+<section id="error-recovery-and-reliability">
+<h2>Error Recovery and Reliability<a class="headerlink" href="#error-recovery-and-reliability" title="Link to this heading"></a></h2>
+<p>WsprDaemon is designed for unattended operation with automatic recovery from:</p>
+<ul class="simple">
+<li><p><strong>Power outages</strong>: systemd restart capability</p></li>
+<li><p><strong>Network interruptions</strong>: cached uploads until connectivity restored</p></li>
+<li><p><strong>SDR disconnections</strong>: automatic reconnection attempts</p></li>
+<li><p><strong>Decode failures</strong>: process restart and error logging</p></li>
+</ul>
+<section id="debugging-common-issues">
+<h3>Debugging Common Issues<a class="headerlink" href="#debugging-common-issues" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check service status</span>
+./wsprdaemon.sh<span class="w"> </span>-s
+
+<span class="c1"># View recent errors</span>
+./wsprdaemon.sh<span class="w"> </span>-l<span class="w"> </span>e<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-50
+
+<span class="c1"># Check system resources</span>
+free<span class="w"> </span>-h<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>df<span class="w"> </span>-h
+
+<span class="c1"># Verify network connectivity</span>
+ping<span class="w"> </span>-c<span class="w"> </span><span class="m">3</span><span class="w"> </span>wsprnet.org
+</pre></div>
+</div>
+</section>
+</section>
+<section id="development-workflow">
+<h2>Development Workflow<a class="headerlink" href="#development-workflow" title="Link to this heading"></a></h2>
+<section id="typical-development-session">
+<h3>Typical Development Session<a class="headerlink" href="#typical-development-session" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Connect to development system</strong> (often remote Pi with SDR hardware)</p></li>
+<li><p><strong>Start tmux session</strong> for persistence across connection drops</p></li>
+<li><p><strong>Monitor logs</strong> in one pane while developing in another</p></li>
+<li><p><strong>Test changes incrementally</strong> with status checks</p></li>
+<li><p><strong>Validate uploads</strong> to ensure no disruption to wsprnet.org</p></li>
+</ol>
+</section>
+<section id="code-quality-guidelines">
+<h3>Code Quality Guidelines<a class="headerlink" href="#code-quality-guidelines" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Use ShellCheck for bash script validation</p></li>
+<li><p>Follow existing code style and patterns</p></li>
+<li><p>Document any hardware-specific assumptions</p></li>
+<li><p>Test with multiple receiver types when possible</p></li>
+<li><p>Ensure changes don’t break existing installations</p></li>
+</ul>
+</section>
+</section>
+<section id="getting-help">
+<h2>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading"></a></h2>
+<section id="documentation-resources">
+<h3>Documentation Resources<a class="headerlink" href="#documentation-resources" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>ReadTheDocs</strong>: Comprehensive user and operator documentation</p></li>
+<li><p><strong>FAQ</strong>: Common questions and troubleshooting</p></li>
+<li><p><strong>Configuration examples</strong>: Real-world setup patterns</p></li>
+</ul>
+</section>
+<section id="community-support">
+<h3>Community Support<a class="headerlink" href="#community-support" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>GitHub Issues</strong>: Bug reports and feature requests</p></li>
+<li><p><strong>Amateur Radio Forums</strong>: Community discussions</p></li>
+<li><p><strong>Direct Contact</strong>: For complex technical issues</p></li>
+</ul>
+</section>
+<section id="development-support">
+<h3>Development Support<a class="headerlink" href="#development-support" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Code Review</strong>: Submit pull requests for review</p></li>
+<li><p><strong>Architecture Questions</strong>: Consult existing documentation</p></li>
+<li><p><strong>Hardware Testing</strong>: Coordinate with community for testing</p></li>
+</ul>
+<p>This guide provides the foundation for contributing to WsprDaemon. The project welcomes contributions that maintain its reliability and security while extending its capabilities for the amateur radio community.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../architecture/network_security.html" class="btn btn-neutral float-left" title="Network Security Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="remote_development.html" class="btn btn-neutral float-right" title="Remote Development Setup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
