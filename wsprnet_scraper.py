@@ -554,7 +554,7 @@ def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
     """
     normal_spots = []
     overflow_records = []
-    validation_stats = {'valid': 0, 'corrected': 0, 'failed': 0, 'overflow': 0}
+    validation_stats = {'valid': 0, 'corrected': 0, 'failed': 0}
     
     for spot in spots:
         try:
@@ -583,21 +583,8 @@ def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
             # Get band directly from JSON
             band = int(spot.get('Band', 0))
             
-            # Convert MHz to Hz and check for overflow
+            # Convert MHz to Hz (now stored in UInt64)
             frequency_hz = int(mhz * 1000000)
-            
-            if frequency_hz > UINT32_MAX:
-                # Frequency overflows UInt32
-                validation_stats['overflow'] += 1
-                log(f"Spot {spotnum}: Frequency {frequency_hz} Hz ({mhz} MHz) overflows UInt32, storing in overflow table", "WARNING")
-                
-                # Store in overflow table
-                overflow_records.append([spotnum, frequency_hz])
-                
-                # Use 0 in main table to indicate overflow
-                frequency_for_main = 0
-            else:
-                frequency_for_main = frequency_hz
             
             # Build row for ClickHouse in schema order
             row = [
@@ -615,7 +602,7 @@ def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
                 int(spot.get('distance', 0)),   # distance (UInt16)
                 int(spot.get('azimuth', 0)),    # azimuth (UInt16)
                 calc['rx_azimuth'],             # rx_azimuth (UInt16)
-                frequency_for_main,             # frequency (UInt32 Hz, 0 if overflow)
+                frequency_hz,                   # frequency (UInt64 Hz)
                 int(spot.get('Power', 0)),      # power (Int8)
                 int(spot.get('dB', 0)),         # snr (Int8)
                 int(spot.get('Drift', 0)),      # drift (Int8)
@@ -630,7 +617,7 @@ def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
             validation_stats['failed'] += 1
             continue
     
-    log(f"Spot validation: {validation_stats['valid']} valid, {validation_stats['corrected']} corrected, {validation_stats['overflow']} overflow, {validation_stats['failed']} failed")
+    log(f"Spot validation: {validation_stats['valid']} valid, {validation_stats['corrected']} corrected, {validation_stats['failed']} failed")
     
     return normal_spots, overflow_records
 
@@ -771,7 +758,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             distance UInt16 CODEC(T64, ZSTD(1)),
             azimuth UInt16 CODEC(T64, ZSTD(1)),
             rx_azimuth UInt16 CODEC(T64, ZSTD(1)),
-            frequency UInt32 CODEC(T64, ZSTD(1)),
+            frequency UInt64 CODEC(T64, ZSTD(1)),
             power Int8 CODEC(T64, ZSTD(1)),
             snr Int8 CODEC(ZSTD(1)),
             drift Int8 CODEC(ZSTD(1)),
