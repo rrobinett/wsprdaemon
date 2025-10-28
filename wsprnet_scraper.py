@@ -15,9 +15,6 @@ import numpy as np
 import logging
 import os
 
-# Maximum value for UInt32
-UINT32_MAX = 4294967295
-
 # Default configuration
 DEFAULT_CONFIG = {
     'max_bytes_per_second': 20000,
@@ -28,7 +25,6 @@ DEFAULT_CONFIG = {
     'clickhouse_password': '',
     'clickhouse_database': 'wsprnet',
     'clickhouse_table': 'spots',
-    'clickhouse_overflow_table': 'spots_frequency_overflow',
     'wsprnet_url': 'http://www.wsprnet.org/drupal/wsprnet/spots/json',
     'wsprnet_login_url': 'http://www.wsprnet.org/drupal/rest/user/login',
     'band': 'All',
@@ -545,15 +541,12 @@ def detect_gaps(spots: List[Dict], last_spotnum: int) -> List[Tuple[int, int]]:
     return gaps
 
 
-def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
-    """Process spots and split into normal and overflow records
+def process_spots(spots: List[Dict]) -> List[List]:
+    """Process spots and return data for insertion into ClickHouse
     
-    Returns: (normal_spots, overflow_records)
-    Normal spots: data for main table with frequency=0 if overflow
-    Overflow records: [id, frequency_original] for overflow table
+    Returns: List of rows for main table
     """
     normal_spots = []
-    overflow_records = []
     validation_stats = {'valid': 0, 'corrected': 0, 'failed': 0}
     
     for spot in spots:
@@ -619,7 +612,7 @@ def process_spots(spots: List[Dict]) -> Tuple[List[List], List[List]]:
     
     log(f"Spot validation: {validation_stats['valid']} valid, {validation_stats['corrected']} corrected, {validation_stats['failed']} failed")
     
-    return normal_spots, overflow_records
+    return normal_spots
 
 
 def get_last_spotnum(client, database: str, table: str) -> int:
@@ -651,22 +644,6 @@ def insert_spots(client, spots: List[List], database: str, table: str) -> bool:
         return True
     except Exception as e:
         log(f"Failed to insert spots: {e}", "ERROR")
-        return False
-
-
-def insert_overflow(client, overflow: List[List], database: str, table: str) -> bool:
-    """Insert overflow records into ClickHouse"""
-    if not overflow:
-        return True
-    
-    column_names = ['id', 'frequency_original']
-    
-    try:
-        client.insert(f"{database}.{table}", overflow, column_names=column_names)
-        log(f"Inserted {len(overflow)} overflow records")
-        return True
-    except Exception as e:
-        log(f"Failed to insert overflow: {e}", "ERROR")
         return False
 
 
@@ -788,22 +765,6 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         admin_client.command(create_table_sql)
         log(f"Table {config['clickhouse_database']}.{config['clickhouse_table']} created/verified")
         
-        # Create overflow table
-        create_overflow_sql = f"""
-        CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_overflow_table']}
-        (
-            id UInt64 CODEC(Delta(8), ZSTD(1)),
-            frequency_original UInt64 CODEC(Delta(8), ZSTD(1)),
-            inserted_at DateTime DEFAULT now() CODEC(Delta(4), ZSTD(1))
-        )
-        ENGINE = MergeTree
-        ORDER BY id
-        SETTINGS index_granularity = 8192
-        """
-        
-        admin_client.command(create_overflow_sql)
-        log(f"Table {config['clickhouse_database']}.{config['clickhouse_overflow_table']} created/verified")
-        
         return True
     
     except Exception as e:
@@ -812,7 +773,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='WSPRNET Scraper with Overflow Handling')
+    parser = argparse.ArgumentParser(description='WSPRNET Scraper')
     
     parser.add_argument('--session-file', required=True, help='Path to session file')
     parser.add_argument('--username', help='WSPRNET username (required if session file missing)')
@@ -932,18 +893,14 @@ def main():
             if gaps:
                 log(f"Total gaps found: {len(gaps)}", "WARNING")
             
-            # Process and split into normal and overflow
-            normal_spots, overflow_records = process_spots(spots)
+            # Process spots
+            normal_spots = process_spots(spots)
             
             if normal_spots:
                 if insert_spots(client, normal_spots, config['clickhouse_database'], config['clickhouse_table']):
                     highest_spotnum = max(row[0] for row in normal_spots)
                     log(f"Processed {len(normal_spots)} spots, highest id: {highest_spotnum}")
                     last_spotnum = highest_spotnum
-            
-            # Insert overflow records
-            if overflow_records:
-                insert_overflow(client, overflow_records, config['clickhouse_database'], config['clickhouse_overflow_table'])
         
         if not args.loop:
             break
