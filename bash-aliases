@@ -547,6 +547,7 @@ function wd-cpu-set-core-speeds() {
 
 function wd-ka9q-controls() {
     local action="${1-is-active}"
+    local config_base_name="${2-}"
 
     local radio_config_dir_path="/etc/radio"
     
@@ -566,22 +567,25 @@ END {
 }
 ' | sort) )
 
-    local radiod_start_arg
-    case ${#radio_conf_list[@]} in
-        0)
-            echo "Can't find any conf.. files"
-            return 0
-            ;;
-        1)
-            radiod_start_arg="${radio_conf_list[0]%.conf*}.service"
-            (( ${verbosity-0} )) && echo "Found one radiod@...conf. file/dir: ${radiod_start_arg}"
-            ;;
-        *)
-            echo "Found more than one radiod@...conf. file/dir: ${radio_conf_list[*]}"
-            return 0
-            ;;
-    esac
-  
+    local radiod_start_arg=""
+    if (( ${#radio_conf_list[@]} == 0 )); then
+        echo "Can't find any conf.. files"
+        return 0
+    fi
+    ## One or more conf files exist
+    local cfg
+    for cfg in "${radio_conf_list[@]}"; do
+        if [[ "${cfg}" == *"${config_base_name}"* ]]; then
+            radiod_start_arg="${cfg%.conf*}.service"
+            break
+        fi
+    done
+    if [[ -z "${radiod_start_arg}" ]]; then
+        echo "Can't find a conf file for the specified '${config_base_name}'"
+        return 1
+    fi
+    #echo "Found conf file, so arg is '${radiod_start_arg}'"
+ 
    local start_list=( 
        "${radiod_start_arg}"
        "ft4-record.service"
