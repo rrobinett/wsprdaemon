@@ -1023,7 +1023,7 @@ function wd-killall() {
     source ${WD_CONF_PATH}
     #
     ### These services have been depricaded, so stop and disable them
-    local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
+    local legacy_ft_services_list=( ft4-decoded ft8-decoded )
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
         local full_legacy_service="${legacy_service}.service"
