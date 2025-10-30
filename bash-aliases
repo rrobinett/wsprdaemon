@@ -1933,14 +1933,15 @@ function wd-sftp-psws(){
     local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
     echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
     local start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
+    sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
     rc=$? 
     end_epoch=${EPOCHSECONDS}
     runtime_seconds=$(( end_epoch - start_epoch ))
     if (( rc == 0 )); then
-        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'\n" "${runtime_seconds}"
+        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'\n" "${runtime_seconds}"
     else
-        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}' => ${rc}:\n$(< ${tmpfile} )\n"
+        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}' => ${rc}:\n$(< ${tmpfile} )\n"
         printf "Verify that this station '${GRAPE_PSWS_ID%_*}'s public key has been registered with the PSWS server:\n $(< ${public_key_file_path})\n"
     fi
     rm -f ${tmpfile}
