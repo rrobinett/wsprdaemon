@@ -336,7 +336,7 @@ function get-or-create-ssh-public-key() {
         wd_logger 2 "Found existing public key file '${_return_var_name}'"
     else
         public_key_file_path="$( realpath ~/.ssh/id_ed25519.pub )"
-        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path} -N ""
+        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path%.pub} -N ""
         _return_var_name="${public_key_file_path}"
         wd_logger 1 "Created a missing public key file '${_return_var_name}'"
     fi
