@@ -1935,9 +1935,9 @@ function wd-sftp-psws(){
     (( ${verbosity-0} )) && printf "This station ${GRAPE_PSWS_ID%_*}'s public key is:\n $(< ${public_key_file_path})\n" 
 
     local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
-    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
     local start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    sftp -o ConnectTimeout=${psws_timeout} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
     rc=$? 
     end_epoch=${EPOCHSECONDS}

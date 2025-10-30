@@ -307,16 +307,16 @@ function grape_test_auto_login() {
     wd_logger 2 "It took ${runtime_seconds} to verify the Internet connection to the sftp/ssh port 22 at the PSWS server at ${PSWS_SERVER_URL}"
 
     local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
-    wd_logger 1 "Waiting ${psws_timeout} up to seconds to see if we can open a sftp connection to the PSWS GRAPE server at ${PSWS_SERVER_URL}"
+    wd_logger 2 "Waiting ${psws_timeout} up to seconds to see if we can open a sftp connection to the PSWS GRAPE server at ${PSWS_SERVER_URL}"
     start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
+    sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
     rc=$?
     end_epoch=${EPOCHSECONDS}
     runtime_seconds=$(( end_epoch - start_epoch ))
     if (( rc )); then
-        wd_logger 1 "After ${runtime_seconds} seconds: ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
+        wd_logger 1 "After ${runtime_seconds} seconds: ERROR: 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
-        wd_logger 1 "After ${runtime_seconds} seconds: Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
+        wd_logger 2 "After ${runtime_seconds} seconds: Successfully ran 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return ${rc}
 }
