@@ -1885,6 +1885,8 @@ function ka9q-services-setup() {
         local project_enabled="${project_info_list[2]}"
         if [[ ${project_enabled} != "yes" ]]; then
             wd_logger 1 "Project '${project_info_list[0]}' is disabled, so don't install and start it"
+        elif [[ -n "${KA9Q_RUNS_ONLY_REMOTELY}" && "${project_info_list[0]}" -ne "ka9q-radio" ]]; then
+            wd_logger 1 "Skipping installation of the '${project_info}' service since KA9Q_RUNS_ONLY_REMOTELY='${KA9Q_RUNS_ONLY_REMOTELY}' is defined"   
         else
             wd_logger 2 "Setup project '${project_info}'"
             if ! install_github_project ${project_info} ; then
@@ -1902,8 +1904,8 @@ function ka9q-services-setup() {
 function ka9q-setup() {    
     wd_logger 2 "Starting in ${PWD}"
     #
-    ### These services have been depricaded by KA9A, so even if no KA9Q receviers are currently defined stop and disable them
-    local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
+    ### These services have been depricated by KA9A, so even if no KA9Q receviers are currently defined stop and disable them
+    local legacy_ft_services_list=( ft4-decoded ft8-decoded )
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
         local full_legacy_service="${legacy_service}.service"
