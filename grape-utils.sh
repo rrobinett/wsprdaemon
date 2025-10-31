@@ -49,7 +49,7 @@ declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive"     
 mkdir -p ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 declare -r LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
 if [[ -d ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ]]; then
-    wd_logger 1 "Transferring the lagacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
+    wd_logger 1 "Transferring the legacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
     wd_merge_file_trees ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 else
     wd_logger 2 "There is no legacy file tree '${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH}', so nothing to clean up"
