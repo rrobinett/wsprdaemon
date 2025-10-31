@@ -1026,7 +1026,7 @@ function wd-killall() {
 
     source ${WD_CONF_PATH}
     #
-    ### These services have been depricaded, so stop and disable them
+    ### These services have been depricated, so stop and disable them
     local legacy_ft_services_list=( ft4-decoded ft8-decoded )
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
@@ -1048,7 +1048,7 @@ function wd-killall() {
         echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
     else
         local base_name=$(wd-get_ka9q-conf_file-base_name)
-        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
+        services_list+=( radiod@${base_name}.service ft4-decode ft8-decode ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
     fi
 
     local service_name
