@@ -1228,7 +1228,7 @@ function ka9q-ft-setup()
     ### The ftX-decode dameon reads wav files created by the ftX-record daemon (which is an instance of pcmrecord).
     ### It is created by a 'sudo make install' in the ka9q-radion directory and doesn't need any per-site customization
 
-    ### First stop and deactivate the legacy ftX-decodd.service
+    ### First stop and deactivate the legacy ftX-decoded.service
     local legacy_ft_decoded_service_name="${ft_type}-decoded.service"
     local legacy_ft_decoded_service_file_path="/etc/systemd/system/${legacy_ft_decoded_service_name}"
     sudo systemctl list-unit-files | grep -q ${legacy_ft_decoded_service_name}
@@ -1243,7 +1243,7 @@ function ka9q-ft-setup()
     fi
 
     local service_restart_needed="no"
-    local ft_decode_service_file_name="${ft_type}-decode@.service"
+    local ft_decode_service_file_name="${ft_type}-decode.service"
     local ft_decode_systemd_service_file_path="/etc/systemd/system/${ft_decode_service_file_name}"
     if [[ -f ${ft_decode_systemd_service_file_path} ]]; then
         wd_logger 2 "Found the expected service file '${ft_decode_systemd_service_file_path}'"
@@ -1285,11 +1285,11 @@ function ka9q-ft-setup()
     ### We have its conf file
 
     ### Start it up
-    local ft_service_file_instance_name=${ft_decode_service_file_name/@/@1}
+    local ft_service_file_instance_name=${ft_decode_service_file_name}
     if [[ ${service_restart_needed} == "no" ]] && sudo systemctl status ${ft_service_file_instance_name}  >& /dev/null; then
-        wd_logger 2 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
+        wd_logger 1 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     else
-        wd_logger 2 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
+        wd_logger 1 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
         sudo systemctl daemon-reload
         sudo systemctl restart ${ft_service_file_instance_name}  >& /dev/null
         rc=$? ; if (( rc )); then
