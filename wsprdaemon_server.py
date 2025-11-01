@@ -18,7 +18,7 @@ import clickhouse_connect
 import logging
 
 # Version
-VERSION = "2.2.0"  # Added band_m column, created spots view matching wsprnet.spots, fixed band calculation
+VERSION = "2.7.0"  # Set distance/azimuth to -999 (not -1) when tx_loc is 'none' and can't be found
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     'clickhouse_user': '',
     'clickhouse_password': '',
     'clickhouse_database': 'wsprdaemon',
-    'clickhouse_spots_table': 'spots_extended',
+    'clickhouse_spots_table': 'spots_raw',
     'clickhouse_noise_table': 'noise',
     'incoming_tbz_dirs': ['/var/spool/wsprdaemon/from-wd0', '/var/spool/wsprdaemon/from-wd00'],
     'extraction_dir': '/var/lib/wsprdaemon/extraction',
@@ -364,6 +364,27 @@ def extract_tbz(tbz_file: Path, extraction_dir: Path) -> bool:
         return False
 
 
+def get_client_version(extraction_dir: Path) -> Optional[str]:
+    """Extract CLIENT_VERSION from uploads_config.txt in the tbz extraction"""
+    config_file = extraction_dir / "wsprdaemon" / "uploads_config.txt"
+    
+    if not config_file.exists():
+        log(f"uploads_config.txt not found at {config_file}", "DEBUG")
+        return None
+    
+    try:
+        with open(config_file, 'r') as f:
+            for line in f:
+                if line.startswith('CLIENT_VERSION='):
+                    version = line.strip().split('=', 1)[1]
+                    log(f"Found CLIENT_VERSION: {version}", "DEBUG")
+                    return f"WD_{version}"  # Prepend WD_ to version
+    except Exception as e:
+        log(f"Error reading uploads_config.txt: {e}", "WARNING")
+    
+    return None
+
+
 def get_receiver_name_from_path(file_path: Path) -> str:
     """Extract receiver name from file path (2 levels up from file)"""
     parts = file_path.parts
@@ -372,7 +393,163 @@ def get_receiver_name_from_path(file_path: Path) -> str:
     return "unknown"
 
 
-def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
+def maidenhead_to_latlon(grid: str) -> Tuple[float, float]:
+    """Convert Maidenhead grid square to latitude/longitude (center of square)
+    
+    Returns (lat, lon) with 3 decimal places precision
+    Handles 4-character (e.g., CM87) and 6-character (e.g., CM87wj) grids
+    Returns (-999, -999) if grid is invalid
+    """
+    if not grid or len(grid) < 4:
+        return (-999.0, -999.0)
+    
+    grid = grid.upper()
+    
+    try:
+        # Field (first 2 characters): 20° lon, 10° lat
+        lon = (ord(grid[0]) - ord('A')) * 20 - 180
+        lat = (ord(grid[1]) - ord('A')) * 10 - 90
+        
+        # Square (next 2 digits): 2° lon, 1° lat
+        lon += int(grid[2]) * 2
+        lat += int(grid[3]) * 1
+        
+        # Center of the square
+        lon += 1.0  # Add half of 2°
+        lat += 0.5  # Add half of 1°
+        
+        # Subsquare (optional next 2 characters): 5' lon, 2.5' lat
+        if len(grid) >= 6:
+            lon += (ord(grid[4]) - ord('A')) * (2.0/24.0)
+            lat += (ord(grid[5]) - ord('A')) * (1.0/24.0)
+            # Center of subsquare
+            lon += (1.0/24.0)  # Add half of 2/24°
+            lat += (0.5/24.0)  # Add half of 1/24°
+        
+        # Round to 3 decimal places
+        return (round(lat, 3), round(lon, 3))
+        
+    except (ValueError, IndexError):
+        return (-999.0, -999.0)
+
+
+def calculate_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+    """Calculate great circle distance in kilometers using Haversine formula
+    
+    Returns integer distance in km, or -999 if any coordinate is -999
+    """
+    import math
+    
+    if lat1 == -999.0 or lon1 == -999.0 or lat2 == -999.0 or lon2 == -999.0:
+        return -999
+    
+    # Convert to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    
+    # Earth radius in km
+    radius = 6371.0
+    
+    return int(round(radius * c))
+
+
+def calculate_azimuth(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+    """Calculate azimuth (bearing) from point 1 to point 2
+    
+    Returns integer azimuth in degrees (0-359), or -999 if any coordinate is -999
+    """
+    import math
+    
+    if lat1 == -999.0 or lon1 == -999.0 or lat2 == -999.0 or lon2 == -999.0:
+        return -999
+    
+    # Convert to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    # Calculate bearing
+    dlon = lon2_rad - lon1_rad
+    
+    x = math.sin(dlon) * math.cos(lat2_rad)
+    y = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(dlon)
+    
+    bearing_rad = math.atan2(x, y)
+    bearing_deg = math.degrees(bearing_rad)
+    
+    # Normalize to 0-359
+    azimuth = int(round(bearing_deg)) % 360
+    
+    return azimuth
+
+
+def lookup_tx_loc(client, database: str, table: str, tx_sign: str) -> Optional[str]:
+    """Look up the most recent valid tx_loc for a given tx_sign
+    
+    Returns the most recent tx_loc that is not 'none', or None if not found
+    """
+    try:
+        result = client.query(f"""
+            SELECT tx_loc 
+            FROM {database}.{table}
+            WHERE tx_sign = '{tx_sign}' 
+              AND tx_loc != 'none' 
+              AND tx_loc != ''
+              AND length(tx_loc) >= 4
+            ORDER BY time DESC
+            LIMIT 1
+        """)
+        
+        if result.result_rows:
+            tx_loc = result.result_rows[0][0]
+            log(f"Found previous tx_loc for {tx_sign}: {tx_loc}", "DEBUG")
+            return tx_loc
+    except Exception as e:
+        log(f"Error looking up tx_loc for {tx_sign}: {e}", "DEBUG")
+    
+    return None
+
+
+def map_wsprdaemon_code_to_wsprnet(wsprdaemon_code: int) -> int:
+    """Map wsprdaemon code values to wsprnet standard code values
+    
+    Wsprdaemon codes (from decode.sh):
+        2: WSPR-2
+        3: FST4W-120
+        5: FST4W-300
+        16: FST4W-900 / WSPR-15
+        30: FST4W-1800
+    
+    WSPRnet standard codes:
+        -1: Unknown
+        1: WSPR-2
+        2: FST4W-900 / WSPR-15
+        3: FST4W-120
+        4: FST4W-300
+        8: FST4W-1800
+    """
+    code_map = {
+        2: 1,   # WSPR-2
+        3: 3,   # FST4W-120
+        5: 4,   # FST4W-300
+        16: 2,  # FST4W-900 / WSPR-15
+        30: 8,  # FST4W-1800
+    }
+    return code_map.get(wsprdaemon_code, -1)  # Return -1 (Unknown) for unmapped codes
+
+
+def parse_spot_line(line: str, file_path: Path, version: Optional[str] = None, 
+                   client=None, database: str = None, table: str = None) -> Optional[List]:
     """Parse a 34-field spot line into ClickHouse row format - NEW HARMONIZED SCHEMA"""
     fields = line.strip().split()
     
@@ -406,6 +583,62 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
         else:
             band = frequency_hz // 1000000  # Integer division to get MHz
         
+        # Parse lat/lon with 3-decimal precision and grid fallback
+        rx_lat = round(float(fields[25]), 3)
+        rx_lon = round(float(fields[26]), 3)
+        rx_loc = fields[21]
+        
+        tx_lat = round(float(fields[28]), 3)
+        tx_lon = round(float(fields[29]), 3)
+        tx_loc = fields[7]
+        tx_sign = fields[6]
+        
+        # If tx_loc is 'none', look up most recent valid tx_loc for this tx_sign
+        if tx_loc.lower() == 'none' and client and database and table:
+            looked_up_loc = lookup_tx_loc(client, database, table, tx_sign)
+            if looked_up_loc:
+                tx_loc = looked_up_loc
+                log(f"Replaced tx_loc 'none' with {tx_loc} for {tx_sign}", "DEBUG")
+            else:
+                log(f"No previous tx_loc found for {tx_sign}, keeping 'none'", "DEBUG")
+        
+        # Track if we need to recalculate distance/azimuth
+        recalculate_geometry = False
+        
+        # If rx_lat/lon are -999, calculate from rx_loc grid
+        if rx_lat == -999.0 or rx_lon == -999.0:
+            grid_lat, grid_lon = maidenhead_to_latlon(rx_loc)
+            if grid_lat != -999.0:
+                rx_lat = grid_lat
+                rx_lon = grid_lon
+                recalculate_geometry = True
+        
+        # If tx_lat/lon are -999, calculate from tx_loc grid
+        if tx_lat == -999.0 or tx_lon == -999.0:
+            grid_lat, grid_lon = maidenhead_to_latlon(tx_loc)
+            if grid_lat != -999.0:
+                tx_lat = grid_lat
+                tx_lon = grid_lon
+                recalculate_geometry = True
+        
+        # Parse or calculate distance and azimuths
+        if recalculate_geometry:
+            # Recalculate from lat/lon coordinates
+            distance = calculate_distance_km(rx_lat, rx_lon, tx_lat, tx_lon)
+            azimuth = calculate_azimuth(rx_lat, rx_lon, tx_lat, tx_lon)
+            rx_azimuth = calculate_azimuth(tx_lat, tx_lon, rx_lat, rx_lon)
+        elif tx_loc.lower() == 'none' and (tx_lat == -999.0 or tx_lon == -999.0):
+            # tx_loc is 'none' and we couldn't look it up or calculate from it
+            # Set geometry to -999 instead of using potentially invalid data
+            distance = -999
+            azimuth = -999
+            rx_azimuth = -999
+        else:
+            # Use values from spot data
+            distance = int(fields[23])
+            azimuth = int(float(fields[27]))
+            rx_azimuth = int(float(fields[24]))
+        
         # Build row using NEW SCHEMA column order
         row = [
             # New harmonized columns (matching wsprnet.spots order)
@@ -413,22 +646,22 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             clickhouse_time,           # time (DateTime)
             band,                      # band (calculated from frequency)
             fields[22],                # rx_sign (was Reporter)
-            float(fields[25]),         # rx_lat
-            float(fields[26]),         # rx_lon
-            fields[21],                # rx_loc (was ReporterGrid)
-            fields[6],                 # tx_sign (was CallSign)
-            float(fields[28]),         # tx_lat
-            float(fields[29]),         # tx_lon
-            fields[7],                 # tx_loc (was Grid)
-            int(fields[23]),           # distance
-            int(float(fields[27])),    # azimuth
-            int(float(fields[24])),    # rx_azimuth (was rx_az)
+            rx_lat,                    # rx_lat (3 decimal places, calculated from grid if -999)
+            rx_lon,                    # rx_lon (3 decimal places, calculated from grid if -999)
+            rx_loc,                    # rx_loc (was ReporterGrid)
+            tx_sign,                   # tx_sign (was CallSign)
+            tx_lat,                    # tx_lat (3 decimal places, calculated from grid if -999)
+            tx_lon,                    # tx_lon (3 decimal places, calculated from grid if -999)
+            tx_loc,                    # tx_loc (looked up if was 'none')
+            distance,                  # distance (recalculated if lat/lon from grid)
+            azimuth,                   # azimuth (recalculated if lat/lon from grid)
+            rx_azimuth,                # rx_azimuth (recalculated if lat/lon from grid)
             frequency_hz,              # frequency (UInt64 Hz - rounded from MHz * 1000000)
             int(fields[8]),            # power
             int(float(fields[3])),     # snr (was dB)
             int(float(fields[9])),     # drift
-            None,                      # version (NULL for wsprdaemon data)
-            int(fields[17]),           # code
+            version,                   # version (from uploads_config.txt CLIENT_VERSION)
+            map_wsprdaemon_code_to_wsprnet(int(fields[17])),  # code (mapped to wsprnet standard)
             
             # Wsprdaemon-specific additional fields
             frequency_mhz,             # frequency_mhz (Float64 MHz - original precision)
@@ -459,7 +692,8 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
         return None
 
 
-def process_spot_files(extraction_dir: Path) -> List[List]:
+def process_spot_files(extraction_dir: Path, version: Optional[str] = None,
+                      client=None, database: str = None, table: str = None) -> List[List]:
     """Find and process all spot files"""
     spot_files = list(extraction_dir.rglob('*_spots.txt'))
     
@@ -480,7 +714,7 @@ def process_spot_files(extraction_dir: Path) -> List[List]:
         try:
             with open(spot_file, 'r') as f:
                 for line in f:
-                    row = parse_spot_line(line, spot_file)
+                    row = parse_spot_line(line, spot_file, version, client, database, table)
                     if row:
                         all_rows.append(row)
                         valid_count += 1
@@ -766,8 +1000,17 @@ def main():
                 log(f"Failed to extract {tbz_file.name}, skipping", "ERROR")
                 continue
 
+            # Get CLIENT_VERSION from uploads_config.txt
+            client_version = get_client_version(extraction_dir)
+            if client_version:
+                log(f"Using CLIENT_VERSION: {client_version}", "DEBUG")
+            else:
+                log("No CLIENT_VERSION found in uploads_config.txt", "DEBUG")
+
             # Process spots
-            spots = process_spot_files(extraction_dir)
+            spots = process_spot_files(extraction_dir, client_version, 
+                                      client, config['clickhouse_database'], 
+                                      config['clickhouse_spots_table'])
             if spots:
                 if insert_spots(client, spots, config['clickhouse_database'], 
                               config['clickhouse_spots_table'], config['max_spots_per_insert']):
