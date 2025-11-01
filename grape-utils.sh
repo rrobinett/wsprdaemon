@@ -49,7 +49,7 @@ declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive"     
 mkdir -p ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 declare -r LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
 if [[ -d ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ]]; then
-    wd_logger 1 "Transferring the lagacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
+    wd_logger 1 "Transferring the legacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
     wd_merge_file_trees ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 else
     wd_logger 2 "There is no legacy file tree '${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH}', so nothing to clean up"
@@ -273,7 +273,8 @@ function upload_24hour_wavs_to_grape_drf_server() {
         if (( sftp_bw_limit_kbps == 0 )); then
             sftp_bw_limit_kbps=100
         fi
-        sftp -v -l ${sftp_bw_limit_kbps} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
+        sftp -v  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 \
+            -l ${sftp_bw_limit_kbps} -b ${sftp_cmds_file} "${psws_station_id}@${PSWS_SERVER_URL}" >& ${sftp_stderr_file}
         rc=$?
         cd - > /dev/null
         if (( rc )); then
@@ -306,16 +307,16 @@ function grape_test_auto_login() {
     wd_logger 2 "It took ${runtime_seconds} to verify the Internet connection to the sftp/ssh port 22 at the PSWS server at ${PSWS_SERVER_URL}"
 
     local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
-    wd_logger 1 "Waiting ${psws_timeout} up to seconds to see if we can open a sftp connection to the PSWS GRAPE server at ${PSWS_SERVER_URL}"
+    wd_logger 2 "Waiting ${psws_timeout} up to seconds to see if we can open a sftp connection to the PSWS GRAPE server at ${PSWS_SERVER_URL}"
     start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
+    sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL} &>/dev/null
     rc=$?
     end_epoch=${EPOCHSECONDS}
     runtime_seconds=$(( end_epoch - start_epoch ))
     if (( rc )); then
-        wd_logger 1 "After ${runtime_seconds} seconds: ERROR: 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
+        wd_logger 1 "After ${runtime_seconds} seconds: ERROR: 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL}' => ${rc}"
     else
-        wd_logger 1 "After ${runtime_seconds} seconds: Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
+        wd_logger 2 "After ${runtime_seconds} seconds: Successfully ran 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${station_id}@${PSWS_SERVER_URL}'"
     fi
     return ${rc}
 }
@@ -336,7 +337,7 @@ function get-or-create-ssh-public-key() {
         wd_logger 2 "Found existing public key file '${_return_var_name}'"
     else
         public_key_file_path="$( realpath ~/.ssh/id_ed25519.pub )"
-        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path} -N ""
+        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ${public_key_file_path%.pub} -N ""
         _return_var_name="${public_key_file_path}"
         wd_logger 1 "Created a missing public key file '${_return_var_name}'"
     fi

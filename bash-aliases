@@ -545,8 +545,9 @@ function wd-cpu-set-core-speeds() {
     done
 }
 
-function wd-ka9q-controls() {
-    local action="${1-is-active}"
+function wd-ka9qctl() {
+    local action="${1-status}"
+    local config_base_name="${2-}"
 
     local radio_config_dir_path="/etc/radio"
     
@@ -566,28 +567,31 @@ END {
 }
 ' | sort) )
 
-    local radiod_start_arg
-    case ${#radio_conf_list[@]} in
-        0)
-            echo "Can't find any conf.. files"
-            return 0
-            ;;
-        1)
-            radiod_start_arg="${radio_conf_list[0]%.conf*}.service"
-            (( ${verbosity-0} )) && echo "Found one radiod@...conf. file/dir: ${radiod_start_arg}"
-            ;;
-        *)
-            echo "Found more than one radiod@...conf. file/dir: ${radio_conf_list[*]}"
-            return 0
-            ;;
-    esac
-  
+    local radiod_start_arg=""
+    if (( ${#radio_conf_list[@]} == 0 )); then
+        echo "Can't find any conf.. files"
+        return 0
+    fi
+    ## One or more conf files exist
+    local cfg
+    for cfg in "${radio_conf_list[@]}"; do
+        if [[ "${cfg}" == *"${config_base_name}"* ]]; then
+            radiod_start_arg="${cfg%.conf*}.service"
+            break
+        fi
+    done
+    if [[ -z "${radiod_start_arg}" ]]; then
+        echo "Can't find a conf file for the specified '${config_base_name}'"
+        return 1
+    fi
+    #echo "Found conf file, so arg is '${radiod_start_arg}'"
+    systemctl list-units --type=service | grep 'radiod'
+ 
    local start_list=( 
-       "${radiod_start_arg}"
        "ft4-record.service"
-       "ft4-decode@1.service"
+       "ft4-decode.service"
        "ft8-record.service"
-       "ft8-decode@1.service"
+       "ft8-decode.service"
        "hfdl.service"
        "pskreporter@ft4.service"
        "pskreporter@ft8.service"
@@ -1022,8 +1026,8 @@ function wd-killall() {
 
     source ${WD_CONF_PATH}
     #
-    ### These services have been depricaded, so stop and disable them
-    local legacy_ft_services_list=( ft4-decode ft8-decode ft4-decoded ft8-decoded )
+    ### These services have been depricated, so stop and disable them
+    local legacy_ft_services_list=( ft4-decoded ft8-decoded )
     local legacy_service
     for legacy_service in ${legacy_ft_services_list[@]} ; do
         local full_legacy_service="${legacy_service}.service"
@@ -1044,7 +1048,7 @@ function wd-killall() {
         echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
     else
         local base_name=$(wd-get_ka9q-conf_file-base_name)
-        services_list+=( radiod@${base_name}.service ft4-decode@1 ft8-decode@1 ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
+        services_list+=( radiod@${base_name}.service ft4-decode ft8-decode ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
     fi
 
     local service_name
@@ -1931,16 +1935,17 @@ function wd-sftp-psws(){
     (( ${verbosity-0} )) && printf "This station ${GRAPE_PSWS_ID%_*}'s public key is:\n $(< ${public_key_file_path})\n" 
 
     local psws_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the PSWS server
-    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
+    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'"
     local start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
+    sftp -o ConnectTimeout=${psws_timeout} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url} >& ${tmpfile}
     rc=$? 
     end_epoch=${EPOCHSECONDS}
     runtime_seconds=$(( end_epoch - start_epoch ))
     if (( rc == 0 )); then
-        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'\n" "${runtime_seconds}"
+        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}'\n" "${runtime_seconds}"
     else
-        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${psws_timeout} -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}' => ${rc}:\n$(< ${tmpfile} )\n"
+        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${psws_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${GRAPE_PSWS_ID%_*}@${psws_url}' => ${rc}:\n$(< ${tmpfile} )\n"
         printf "Verify that this station '${GRAPE_PSWS_ID%_*}'s public key has been registered with the PSWS server:\n $(< ${public_key_file_path})\n"
     fi
     rm -f ${tmpfile}
