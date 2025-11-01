@@ -15,6 +15,9 @@ import numpy as np
 import logging
 import os
 
+# Version
+VERSION = "2.0.0"  # Cleaned up overflow handling, frequency stored as UInt64
+
 # Default configuration
 DEFAULT_CONFIG = {
     'max_bytes_per_second': 20000,
@@ -568,6 +571,11 @@ def process_spots(spots: List[Dict]) -> List[List]:
             
             # Calculate azimuth fields
             mhz = float(spot.get('MHz', 0))
+            
+            # Check for zero frequency in JSON
+            if mhz == 0:
+                log(f"Spot {spotnum}: MHz=0 in JSON, Band={band}. Full JSON: {json.dumps(spot)}", "WARNING")
+            
             calc = calculate_azimuth(
                 tx_locator=spot.get('Grid', ''),
                 rx_locator=spot.get('ReporterGrid', '')
@@ -577,7 +585,11 @@ def process_spots(spots: List[Dict]) -> List[List]:
             band = int(spot.get('Band', 0))
             
             # Convert MHz to Hz (now stored in UInt64)
-            frequency_hz = int(mhz * 1000000)
+            # Use 1 MHz (1000000 Hz) as default if MHz is 0
+            if mhz == 0:
+                frequency_hz = 1000000
+            else:
+                frequency_hz = int(mhz * 1000000)
             
             # Build row for ClickHouse in schema order
             row = [
@@ -795,6 +807,9 @@ def main():
         setup_logging(args.log_file, args.log_max_mb * 1024 * 1024)
     else:
         setup_logging()  # Console only
+    
+    # Log version at startup
+    log(f"WSPRNET Scraper version {VERSION} starting...")
     
     # Load configuration
     config = DEFAULT_CONFIG.copy()
