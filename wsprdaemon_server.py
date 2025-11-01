@@ -17,6 +17,9 @@ from datetime import datetime
 import clickhouse_connect
 import logging
 
+# Version
+VERSION = "2.2.0"  # Added band_m column, created spots view matching wsprnet.spots, fixed band calculation
+
 # Default configuration
 DEFAULT_CONFIG = {
     'clickhouse_host': 'localhost',
@@ -24,7 +27,7 @@ DEFAULT_CONFIG = {
     'clickhouse_user': '',
     'clickhouse_password': '',
     'clickhouse_database': 'wsprdaemon',
-    'clickhouse_spots_table': 'spots',
+    'clickhouse_spots_table': 'spots_extended',
     'clickhouse_noise_table': 'noise',
     'incoming_tbz_dirs': ['/var/spool/wsprdaemon/from-wd0', '/var/spool/wsprdaemon/from-wd00'],
     'extraction_dir': '/var/lib/wsprdaemon/extraction',
@@ -140,47 +143,11 @@ def log(message: str, level: str = "INFO"):
 
 
 def setup_clickhouse_tables(admin_user: str, admin_password: str,
-                           readonly_user: str, readonly_password: str,
-                           default_password: str, config: Dict) -> bool:
-    """Setup ClickHouse users, database, and tables"""
+                           config: Dict) -> bool:
+    """Setup ClickHouse database and tables (assumes admin user already exists)"""
     try:
-        # Connect as default user to create users
-        admin_client = clickhouse_connect.get_client(
-            host=config['clickhouse_host'],
-            port=config['clickhouse_port'],
-            username='default',
-            password=default_password
-        )
-
-        # Check/create admin user
-        result = admin_client.query(
-            f"SELECT count() FROM system.users WHERE name = '{admin_user}'"
-        )
-        if result.result_rows[0][0] == 1:
-            log(f"Admin user {admin_user} already exists", "INFO")
-        else:
-            log(f"Creating admin user {admin_user}...", "INFO")
-            admin_client.command(f"CREATE USER `{admin_user}` IDENTIFIED BY '{admin_password}'")
-            admin_client.command(f"GRANT CREATE DATABASE ON *.* TO `{admin_user}`")
-            admin_client.command(f"GRANT CREATE TABLE ON *.* TO `{admin_user}`")
-            admin_client.command(f"GRANT INSERT ON {config['clickhouse_database']}.* TO `{admin_user}`")
-            admin_client.command(f"GRANT SELECT ON {config['clickhouse_database']}.* TO `{admin_user}`")
-            admin_client.command(f"GRANT DROP TABLE ON {config['clickhouse_database']}.* TO `{admin_user}`")
-            log(f"Admin user {admin_user} created", "INFO")
-
-        # Check/create read-only user
-        result = admin_client.query(
-            f"SELECT count() FROM system.users WHERE name = '{readonly_user}'"
-        )
-        if result.result_rows[0][0] == 1:
-            log(f"Read-only user {readonly_user} already exists", "INFO")
-        else:
-            log(f"Creating read-only user {readonly_user}...", "INFO")
-            admin_client.command(f"CREATE USER `{readonly_user}` IDENTIFIED BY '{readonly_password}'")
-            admin_client.command(f"GRANT SELECT ON {config['clickhouse_database']}.* TO `{readonly_user}`")
-            log(f"Read-only user {readonly_user} created", "INFO")
-
-        # Connect as admin user to create database/table
+        # Connect as admin user directly
+        log(f"Connecting to ClickHouse as {admin_user}...", "INFO")
         admin_client = clickhouse_connect.get_client(
             host=config['clickhouse_host'],
             port=config['clickhouse_port'],
@@ -218,7 +185,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             distance     Int32                   CODEC(T64, ZSTD(1)),
             azimuth      Int32                   CODEC(T64, ZSTD(1)),
             rx_azimuth   Int32                   CODEC(T64, ZSTD(1)),
-            frequency    Float64                 CODEC(Delta(8), ZSTD(3)),
+            frequency    UInt64                  CODEC(Delta(8), ZSTD(3)),
             power        Int8                    CODEC(T64, ZSTD(1)),
             snr          Int8                    CODEC(Delta(4), ZSTD(3)),
             drift        Int8                    CODEC(Delta(4), ZSTD(3)),
@@ -226,6 +193,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             code         Int8                    CODEC(ZSTD(1)),
             
             -- Wsprdaemon-specific additional fields
+            frequency_mhz Float64                CODEC(Delta(8), ZSTD(3)),
             rx_id        LowCardinality(String)  CODEC(LZ4),
             v_lat        Float32                 CODEC(Delta(4), ZSTD(3)),
             v_lon        Float32                 CODEC(Delta(4), ZSTD(3)),
@@ -243,6 +211,7 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             proxy_upload UInt8                   CODEC(T64, ZSTD(1)),
             ov_count     UInt32                  CODEC(T64, ZSTD(1)),
             rx_status    LowCardinality(String)  DEFAULT 'No Info' CODEC(LZ4),
+            band_m       Int16                   CODEC(T64, ZSTD(1)),  -- Original band in meters from source
             
             -- Aliases for backwards compatibility with old column names
             Spotnum      UInt64 ALIAS id,
@@ -250,15 +219,15 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             Reporter     String ALIAS rx_sign,
             ReporterGrid String ALIAS rx_loc,
             dB           Int8 ALIAS snr,
-            freq         Float64 ALIAS frequency,
-            MHz          Float64 ALIAS frequency,
+            freq         Float64 ALIAS frequency_mhz,
+            MHz          Float64 ALIAS frequency_mhz,
             CallSign     String ALIAS tx_sign,
             Grid         String ALIAS tx_loc,
             Power        Int8 ALIAS power,
             Drift        Int8 ALIAS drift,
             Band         Int16 ALIAS band,
             rx_az        UInt16 ALIAS rx_azimuth,
-            frequency_hz UInt32 ALIAS toUInt32(freq * 1000000)
+            frequency_hz UInt64 ALIAS frequency
         ) 
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(time)
@@ -267,6 +236,35 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         """
         admin_client.command(create_spots_table_sql)
         log(f"Table {config['clickhouse_database']}.{config['clickhouse_spots_table']} created/verified", "INFO")
+
+        # Create view that matches wsprnet.spots schema (harmonized columns only)
+        create_spots_view_sql = f"""
+        CREATE OR REPLACE VIEW {config['clickhouse_database']}.spots AS
+        SELECT
+            id,
+            time,
+            band,
+            rx_sign,
+            rx_lat,
+            rx_lon,
+            rx_loc,
+            tx_sign,
+            tx_lat,
+            tx_lon,
+            tx_loc,
+            distance,
+            azimuth,
+            rx_azimuth,
+            frequency,
+            power,
+            snr,
+            drift,
+            version,
+            code
+        FROM {config['clickhouse_database']}.{config['clickhouse_spots_table']}
+        """
+        admin_client.command(create_spots_view_sql)
+        log(f"View {config['clickhouse_database']}.spots created/verified", "INFO")
 
         # Create noise table with seqnum
         # Create noise table with correct column order
@@ -398,12 +396,22 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
         # Extract receiver name from file path
         rx_id = get_receiver_name_from_path(file_path)
         
+        # Parse frequency from MHz
+        frequency_mhz = float(fields[5])
+        frequency_hz = int(round(frequency_mhz * 1000000))
+        
+        # Calculate band from frequency
+        if frequency_hz < 200000:
+            band = -1
+        else:
+            band = frequency_hz // 1000000  # Integer division to get MHz
+        
         # Build row using NEW SCHEMA column order
         row = [
             # New harmonized columns (matching wsprnet.spots order)
             None,                      # id (NULL for wsprdaemon data - no Spotnum)
             clickhouse_time,           # time (DateTime)
-            int(fields[20]),           # band (lowercase - meters)
+            band,                      # band (calculated from frequency)
             fields[22],                # rx_sign (was Reporter)
             float(fields[25]),         # rx_lat
             float(fields[26]),         # rx_lon
@@ -415,7 +423,7 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             int(fields[23]),           # distance
             int(float(fields[27])),    # azimuth
             int(float(fields[24])),    # rx_azimuth (was rx_az)
-            float(fields[5]),          # freq (MHz as Float64, NOT Hz)
+            frequency_hz,              # frequency (UInt64 Hz - rounded from MHz * 1000000)
             int(fields[8]),            # power
             int(float(fields[3])),     # snr (was dB)
             int(float(fields[9])),     # drift
@@ -423,6 +431,7 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             int(fields[17]),           # code
             
             # Wsprdaemon-specific additional fields
+            frequency_mhz,             # frequency_mhz (Float64 MHz - original precision)
             rx_id,                     # rx_id
             float(fields[30]),         # v_lat
             float(fields[31]),         # v_lon
@@ -439,7 +448,8 @@ def parse_spot_line(line: str, file_path: Path) -> Optional[List]:
             int(fields[15]),           # ipass
             int(fields[33]),           # proxy_upload
             int(fields[32]),           # ov_count
-            'No Info'                  # rx_status
+            'No Info',                 # rx_status
+            int(fields[20])            # band_m (original band in meters from source)
         ]
         
         return row
@@ -592,9 +602,9 @@ def insert_spots(client, spots: List[List], database: str, table: str, batch_siz
         'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth', 'rx_azimuth',
         'frequency', 'power', 'snr', 'drift', 'version', 'code',
         # Wsprdaemon-specific columns
-        'rx_id', 'v_lat', 'v_lon', 'c2_noise', 'sync_quality', 'dt',
+        'frequency_mhz', 'rx_id', 'v_lat', 'v_lon', 'c2_noise', 'sync_quality', 'dt',
         'decode_cycles', 'jitter', 'rms_noise', 'blocksize', 'metric', 'osd_decode',
-        'nhardmin', 'ipass', 'proxy_upload', 'ov_count', 'rx_status'
+        'nhardmin', 'ipass', 'proxy_upload', 'ov_count', 'rx_status', 'band_m'
     ]
 
     total_inserted = 0
@@ -649,9 +659,6 @@ def main():
     parser = argparse.ArgumentParser(description='WSPRDAEMON Server')
     parser.add_argument('--clickhouse-user', required=True, help='ClickHouse admin username (required)')
     parser.add_argument('--clickhouse-password', required=True, help='ClickHouse admin password (required)')
-    parser.add_argument('--setup-default-password', required=True, help='Default ClickHouse password (required)')
-    parser.add_argument('--setup-readonly-user', required=True, help='Read-only username (required)')
-    parser.add_argument('--setup-readonly-password', required=True, help='Read-only password (required)')
     parser.add_argument('--config', help='Path to config file (JSON)')
     parser.add_argument('--loop', type=int, metavar='SECONDS', help='Run continuously with SECONDS delay between checks')
     parser.add_argument('--log-file', default=LOG_FILE, help='Path to log file (if not specified, log to console only)')
@@ -665,7 +672,8 @@ def main():
     else:
         setup_logging(verbosity=args.verbose)
 
-    # Force initial log entries
+    # Log version and startup info
+    log(f"WSPRDAEMON Server version {VERSION} starting...", "INFO")
     log("=== WSPRDAEMON Server Starting ===", "INFO")
     log(f"Verbosity level: {args.verbose}", "INFO")
 
@@ -681,14 +689,11 @@ def main():
 
     log(f"Incoming directories: {config['incoming_tbz_dirs']}", "INFO")
 
-    # Always run setup to ensure users, database, and tables exist
+    # Always run setup to ensure database and tables exist
     log("Running setup to ensure ClickHouse is configured...", "INFO")
     success = setup_clickhouse_tables(
         admin_user=args.clickhouse_user,
         admin_password=args.clickhouse_password,
-        readonly_user=args.setup_readonly_user,
-        readonly_password=args.setup_readonly_password,
-        default_password=args.setup_default_password,
         config=config
     )
 
