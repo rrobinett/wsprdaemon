@@ -592,11 +592,17 @@ END {
        "ft4-decode.service"
        "ft8-record.service"
        "ft8-decode.service"
-       "hfdl.service"
        "pskreporter@ft4.service"
        "pskreporter@ft8.service"
        "pskreporter@wspr.service"
    )
+
+   if sudo systemctl cat hdfl >& /dev/null ; then
+       ## So far, only systems managed by KA9Q at KFS, KPH, DP0 and VY0 have hfdl running
+       if sudo systemctl is-enabled >& /dev/null ; then
+           start_list+=( "hfdl.service" )
+       fi
+   fi
 
     local start_list_index
     for (( start_list_index=0; start_list_index < ${#start_list[@]}; ++start_list_index )); do
