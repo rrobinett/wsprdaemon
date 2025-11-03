@@ -9,6 +9,7 @@ import json
 import sys
 import time
 import os
+import re
 import tarfile
 import shutil
 from pathlib import Path
@@ -18,7 +19,7 @@ import clickhouse_connect
 import logging
 
 # Version
-VERSION = "2.7.0"  # Set distance/azimuth to -999 (not -1) when tx_loc is 'none' and can't be found
+VERSION = "2.9.0"  # Added running_jobs/receiver_descriptions to noise table ONLY with ZSTD compression
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -27,7 +28,7 @@ DEFAULT_CONFIG = {
     'clickhouse_user': '',
     'clickhouse_password': '',
     'clickhouse_database': 'wsprdaemon',
-    'clickhouse_spots_table': 'spots_raw',
+    'clickhouse_spots_table': 'spots_extended',
     'clickhouse_noise_table': 'noise',
     'incoming_tbz_dirs': ['/var/spool/wsprdaemon/from-wd0', '/var/spool/wsprdaemon/from-wd00'],
     'extraction_dir': '/var/lib/wsprdaemon/extraction',
@@ -272,14 +273,16 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_noise_table']}
         (
             time       DateTime                     CODEC(Delta(4), ZSTD(1)),
-            site       LowCardinality(String),
-            receiver   LowCardinality(String),
-            rx_loc     LowCardinality(String),
-            band       LowCardinality(String),
+            site       LowCardinality(String)       CODEC(LZ4),
+            receiver   LowCardinality(String)       CODEC(LZ4),
+            rx_loc     LowCardinality(String)       CODEC(LZ4),
+            band       LowCardinality(String)       CODEC(LZ4),
             rms_level  Float32                      CODEC(ZSTD(1)),
             c2_level   Float32                      CODEC(ZSTD(1)),
             ov         Nullable(Int32),
             seqnum     Int64                        CODEC(Delta(8), ZSTD(1)),
+            running_jobs Nullable(String)          CODEC(ZSTD(1)),
+            receiver_descriptions Nullable(String) CODEC(ZSTD(1)),
 
             -- Aliases for alternate names
             rx_sign    String ALIAS site,
@@ -364,25 +367,56 @@ def extract_tbz(tbz_file: Path, extraction_dir: Path) -> bool:
         return False
 
 
-def get_client_version(extraction_dir: Path) -> Optional[str]:
-    """Extract CLIENT_VERSION from uploads_config.txt in the tbz extraction"""
+def get_client_version(extraction_dir: Path) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Extract CLIENT_VERSION, RUNNING_JOBS, and RECEIVER_DESCRIPTIONS from uploads_config.txt
+    
+    Returns: (version, running_jobs, receiver_descriptions)
+    """
     config_file = extraction_dir / "wsprdaemon" / "uploads_config.txt"
     
     if not config_file.exists():
         log(f"uploads_config.txt not found at {config_file}", "DEBUG")
-        return None
+        return (None, None, None)
+    
+    version = None
+    running_jobs = None
+    receiver_descriptions = None
     
     try:
         with open(config_file, 'r') as f:
-            for line in f:
+            content = f.read()
+            
+            # Extract CLIENT_VERSION
+            for line in content.splitlines():
                 if line.startswith('CLIENT_VERSION='):
                     version = line.strip().split('=', 1)[1]
                     log(f"Found CLIENT_VERSION: {version}", "DEBUG")
-                    return f"WD_{version}"  # Prepend WD_ to version
+                    break
+            
+            # Extract RUNNING_JOBS array
+            # Format: declare RUNNING_JOBS=( item1 item2 item3 )
+            import re
+            running_jobs_match = re.search(r'declare\s+RUNNING_JOBS=\(\s*([^)]+)\s*\)', content)
+            if running_jobs_match:
+                # Extract elements and join with spaces
+                running_jobs = running_jobs_match.group(1).strip()
+                log(f"Found RUNNING_JOBS: {running_jobs[:100]}...", "DEBUG")
+            
+            # Extract RECEIVER_DESCRIPTIONS array
+            receiver_desc_match = re.search(r'declare\s+RECEIVER_DESCRIPTIONS=\(\s*([^)]+)\s*\)', content)
+            if receiver_desc_match:
+                # Extract elements and join with spaces
+                receiver_descriptions = receiver_desc_match.group(1).strip()
+                log(f"Found RECEIVER_DESCRIPTIONS: {receiver_descriptions[:100]}...", "DEBUG")
+                
     except Exception as e:
         log(f"Error reading uploads_config.txt: {e}", "WARNING")
     
-    return None
+    # Prepend WD_ to version if found
+    if version:
+        version = f"WD_{version}"
+    
+    return (version, running_jobs, receiver_descriptions)
 
 
 def get_receiver_name_from_path(file_path: Path) -> str:
@@ -727,7 +761,8 @@ def process_spot_files(extraction_dir: Path, version: Optional[str] = None,
     return all_rows
 
 
-def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
+def parse_noise_line(line: str, file_path: Path, 
+                    running_jobs: Optional[str] = None, receiver_descriptions: Optional[str] = None) -> Optional[List]:
     """Parse a 15-field noise line into ClickHouse row format - NEW SCHEMA"""
     fields = line.strip().split()
     
@@ -771,7 +806,7 @@ def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
         ov = int(float(fields[14]))
         
         # New schema order: time, rx_sign, rx_id, rx_loc, band, rms_level, c2_level, ov
-        # (seqnum is auto-generated)
+        # (seqnum is auto-generated, running_jobs and receiver_descriptions from config)
         row = [
             clickhouse_time,
             rx_sign,
@@ -780,7 +815,9 @@ def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
             band,
             rms_level,
             c2_level,
-            ov
+            ov,
+            running_jobs,
+            receiver_descriptions
         ]
         
         return row
@@ -790,7 +827,8 @@ def parse_noise_line(line: str, file_path: Path) -> Optional[List]:
         return None
 
 
-def process_noise_files(extraction_dir: Path) -> List[List]:
+def process_noise_files(extraction_dir: Path,
+                       running_jobs: Optional[str] = None, receiver_descriptions: Optional[str] = None) -> List[List]:
     """Find and process all noise files"""
     noise_files = list(extraction_dir.rglob('*_noise.txt'))
     
@@ -811,7 +849,7 @@ def process_noise_files(extraction_dir: Path) -> List[List]:
         try:
             with open(noise_file, 'r') as f:
                 for line in f:
-                    row = parse_noise_line(line, noise_file)
+                    row = parse_noise_line(line, noise_file, running_jobs, receiver_descriptions)
                     if row:
                         all_rows.append(row)
                         valid_count += 1
@@ -873,7 +911,8 @@ def insert_noise(client, noise_records: List[List], database: str, table: str, b
     for i, row in enumerate(noise_records):
         noise_with_seqnum.append(row + [next_seqnum + i])
 
-    column_names = ['time', 'site', 'receiver', 'rx_loc', 'band', 'rms_level', 'c2_level', 'ov', 'seqnum']
+    column_names = ['time', 'site', 'receiver', 'rx_loc', 'band', 'rms_level', 'c2_level', 'ov', 
+                    'running_jobs', 'receiver_descriptions', 'seqnum']
 
     total_inserted = 0
     for i in range(0, len(noise_with_seqnum), batch_size):
@@ -1000,8 +1039,8 @@ def main():
                 log(f"Failed to extract {tbz_file.name}, skipping", "ERROR")
                 continue
 
-            # Get CLIENT_VERSION from uploads_config.txt
-            client_version = get_client_version(extraction_dir)
+            # Get CLIENT_VERSION, RUNNING_JOBS, and RECEIVER_DESCRIPTIONS from uploads_config.txt
+            client_version, running_jobs, receiver_descriptions = get_client_version(extraction_dir)
             if client_version:
                 log(f"Using CLIENT_VERSION: {client_version}", "DEBUG")
             else:
@@ -1020,7 +1059,7 @@ def main():
                     continue
 
             # Process noise
-            noise_records = process_noise_files(extraction_dir)
+            noise_records = process_noise_files(extraction_dir, running_jobs, receiver_descriptions)
             if noise_records:
                 if insert_noise(client, noise_records, config['clickhouse_database'],
                               config['clickhouse_noise_table'], config['max_noise_per_insert']):
