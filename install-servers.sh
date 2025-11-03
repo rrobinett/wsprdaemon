@@ -1,133 +1,184 @@
 #!/bin/bash
-set -e
+#
+# install-servers.sh - Install WSPRDAEMON server services
+# Installs both wsprnet_scraper and wsprdaemon_server services
+#
+# Version: 1.0
+# Last updated: 2025-11-03
 
-echo "Installing WSPRDAEMON Servers as systemd template services..."
+set -e  # Exit on error
+
+echo "Installing WSPRDAEMON Server Services..."
 
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root (use sudo)" 
-   exit 1
+if [ "$EUID" -ne 0 ]; then 
+    echo "ERROR: This script must be run as root (use sudo)"
+    exit 1
 fi
 
-# Create configuration directory
-echo "Creating /etc/wsprdaemon..."
-mkdir -p /etc/wsprdaemon
+# Check if wsprdaemon user exists
+if ! id wsprdaemon &>/dev/null; then
+    echo "ERROR: User 'wsprdaemon' does not exist"
+    echo "Create it with: sudo useradd -r -s /bin/bash -d /home/wsprdaemon -m wsprdaemon"
+    exit 1
+fi
 
-# Create data directories
-echo "Creating data directories..."
-mkdir -p /var/lib/wsprdaemon/wsprnet
-mkdir -p /var/lib/wsprdaemon/wsprdaemon
+# Install system packages
+echo "Installing required system packages..."
+apt update
+apt install -y python3 python3-venv python3-pip
+
+# Create directory structure
+echo "Creating directory structure..."
 mkdir -p /var/log/wsprdaemon
-mkdir -p /var/spool/wsprdaemon/from-wd0
-mkdir -p /var/spool/wsprdaemon/from-wd00
+mkdir -p /var/lib/wsprdaemon
+mkdir -p /tmp/wsprdaemon
+mkdir -p /etc/wsprdaemon
+chown -R wsprdaemon:wsprdaemon /var/log/wsprdaemon /var/lib/wsprdaemon /tmp/wsprdaemon
 
-# Set ownership
-chown -R wsprdaemon:wsprdaemon /var/lib/wsprdaemon
-chown -R wsprdaemon:wsprdaemon /var/log/wsprdaemon
-chown -R wsprdaemon:wsprdaemon /var/spool/wsprdaemon
+# Setup Python virtual environment as wsprdaemon user
+echo "Setting up Python virtual environment..."
+WSPRDAEMON_HOME="/home/wsprdaemon"
+VENV_PATH="$WSPRDAEMON_HOME/wsprdaemon/venv"
+
+if [ -d "$VENV_PATH" ]; then
+    echo "Virtual environment already exists at $VENV_PATH"
+    read -p "Remove and recreate? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        sudo -u wsprdaemon rm -rf "$VENV_PATH"
+    else
+        echo "Skipping venv creation..."
+    fi
+fi
+
+if [ ! -d "$VENV_PATH" ]; then
+    echo "Creating virtual environment..."
+    cd "$WSPRDAEMON_HOME/wsprdaemon"
+    sudo -u wsprdaemon python3 -m venv venv
+    
+    echo "Installing Python packages..."
+    sudo -u wsprdaemon bash -c "source venv/bin/activate && pip install --upgrade pip"
+    sudo -u wsprdaemon bash -c "source venv/bin/activate && pip install clickhouse-connect requests numpy pandas"
+fi
+
+# Install Python scripts
+echo "Installing Python scripts..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ ! -f "$SCRIPT_DIR/wsprnet_scraper.py" ]; then
+    echo "ERROR: wsprnet_scraper.py not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+if [ ! -f "$SCRIPT_DIR/wsprdaemon_server.py" ]; then
+    echo "ERROR: wsprdaemon_server.py not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+cp "$SCRIPT_DIR/wsprnet_scraper.py" /usr/local/bin/wsprnet_scraper.py
+cp "$SCRIPT_DIR/wsprdaemon_server.py" /usr/local/bin/wsprdaemon_server.py
+chmod 755 /usr/local/bin/wsprnet_scraper.py
+chmod 755 /usr/local/bin/wsprdaemon_server.py
 
 # Install wrapper scripts
 echo "Installing wrapper scripts..."
-install -m 755 wsprnet_scraper.sh /usr/local/bin/
-install -m 755 wsprdaemon_server.sh /usr/local/bin/
+if [ ! -f "$SCRIPT_DIR/wsprnet_scraper.sh" ]; then
+    echo "ERROR: wsprnet_scraper.sh not found in $SCRIPT_DIR"
+    exit 1
+fi
 
-# Install service files
+if [ ! -f "$SCRIPT_DIR/wsprdaemon_server.sh" ]; then
+    echo "ERROR: wsprdaemon_server.sh not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+cp "$SCRIPT_DIR/wsprnet_scraper.sh" /usr/local/bin/wsprnet_scraper.sh
+cp "$SCRIPT_DIR/wsprdaemon_server.sh" /usr/local/bin/wsprdaemon_server.sh
+chmod 755 /usr/local/bin/wsprnet_scraper.sh
+chmod 755 /usr/local/bin/wsprdaemon_server.sh
+
+# Install systemd service files
 echo "Installing systemd service files..."
-install -m 644 wsprnet_scraper@.service /etc/systemd/system/
-install -m 644 wsprdaemon_server@.service /etc/systemd/system/
-
-# Create sample configuration files if they don't exist
-if [[ ! -f /etc/wsprdaemon/wsprnet.conf ]]; then
-    echo "Creating /etc/wsprdaemon/wsprnet.conf..."
-    cat > /etc/wsprdaemon/wsprnet.conf <<'EOF'
-#!/bin/bash
-# WSPRNET Scraper Configuration
-
-# WSPRNET.org credentials
-WSPRNET_USERNAME="CHANGEME"
-WSPRNET_PASSWORD="CHANGEME"
-
-# ClickHouse credentials
-CLICKHOUSE_HOST="localhost"
-CLICKHOUSE_PORT="8123"
-CLICKHOUSE_DEFAULT_PASSWORD="CHANGEME"
-CLICKHOUSE_ADMIN_USER="wsprnet-admin"
-CLICKHOUSE_ADMIN_PASSWORD="CHANGEME"
-CLICKHOUSE_READONLY_USER="wsprnet-reader"
-CLICKHOUSE_READONLY_PASSWORD="CHANGEME"
-
-# Paths
-SESSION_FILE="/var/lib/wsprdaemon/wsprnet/session.json"
-LOG_FILE="/var/log/wsprdaemon/wsprnet_scraper.log"
-LOG_MAX_MB="10"
-
-# Python environment
-VENV_PYTHON="/home/wsprdaemon/wsprdaemon/venv/bin/python3"
-SCRAPER_SCRIPT="/home/wsprdaemon/wsprdaemon/wsprnet_scraper.py"
-
-# Runtime settings
-LOOP_INTERVAL="120"
-EOF
-    chmod 640 /etc/wsprdaemon/wsprnet.conf
-    chown root:wsprdaemon /etc/wsprdaemon/wsprnet.conf
-    echo "WARNING: Edit /etc/wsprdaemon/wsprnet.conf and set your credentials!"
+if [ ! -f "$SCRIPT_DIR/wsprnet_scraper@.service" ]; then
+    echo "ERROR: wsprnet_scraper@.service not found in $SCRIPT_DIR"
+    exit 1
 fi
 
-if [[ ! -f /etc/wsprdaemon/wsprdaemon.conf ]]; then
-    echo "Creating /etc/wsprdaemon/wsprdaemon.conf..."
-    cat > /etc/wsprdaemon/wsprdaemon.conf <<'EOF'
-#!/bin/bash
-# WSPRDAEMON Server Configuration
-
-# ClickHouse credentials
-CLICKHOUSE_HOST="localhost"
-CLICKHOUSE_PORT="8123"
-CLICKHOUSE_DEFAULT_PASSWORD="CHANGEME"
-CLICKHOUSE_ADMIN_USER="wsprdaemon-admin"
-CLICKHOUSE_ADMIN_PASSWORD="CHANGEME"
-CLICKHOUSE_READONLY_USER="wsprdaemon-reader"
-CLICKHOUSE_READONLY_PASSWORD="CHANGEME"
-
-# Paths
-LOG_FILE="/var/log/wsprdaemon/wsprdaemon_server.log"
-LOG_MAX_MB="10"
-
-# Python environment
-VENV_PYTHON="/home/wsprdaemon/wsprdaemon/venv/bin/python3"
-SCRAPER_SCRIPT="/home/wsprdaemon/wsprdaemon/wsprdaemon_server.py"
-
-# Runtime settings
-LOOP_INTERVAL="10"
-EOF
-    chmod 640 /etc/wsprdaemon/wsprdaemon.conf
-    chown root:wsprdaemon /etc/wsprdaemon/wsprdaemon.conf
-    echo "WARNING: Edit /etc/wsprdaemon/wsprdaemon.conf and set your credentials!"
+if [ ! -f "$SCRIPT_DIR/wsprdaemon_server@.service" ]; then
+    echo "ERROR: wsprdaemon_server@.service not found in $SCRIPT_DIR"
+    exit 1
 fi
 
-# Reload systemd
-echo "Reloading systemd..."
+cp "$SCRIPT_DIR/wsprnet_scraper@.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/wsprdaemon_server@.service" /etc/systemd/system/
 systemctl daemon-reload
+
+# Create default configuration files if they don't exist
+if [ ! -f /etc/wsprdaemon/wsprnet.conf ]; then
+    echo "Creating /etc/wsprdaemon/wsprnet.conf..."
+    cat > /etc/wsprdaemon/wsprnet.conf << 'EOF'
+# WSPRNET Scraper Configuration
+WSPRNET_SESSION_FILE="/tmp/wsprdaemon/wsprnet_session"
+WSPRNET_LOG_FILE="/var/log/wsprdaemon/wsprnet_scraper.log"
+WSPRNET_VENV_PYTHON="/home/wsprdaemon/wsprdaemon/venv/bin/python3"
+WSPRNET_SCRAPER_SCRIPT="/usr/local/bin/wsprnet_scraper.py"
+WSPRNET_LOOP_INTERVAL=20
+EOF
+    chown wsprdaemon:wsprdaemon /etc/wsprdaemon/wsprnet.conf
+    chmod 640 /etc/wsprdaemon/wsprnet.conf
+fi
+
+if [ ! -f /etc/wsprdaemon/wsprdaemon.conf ]; then
+    echo "Creating /etc/wsprdaemon/wsprdaemon.conf..."
+    cat > /etc/wsprdaemon/wsprdaemon.conf << 'EOF'
+# WSPRDAEMON Server Configuration
+WSPRDAEMON_UPLOAD_DIR="/var/lib/wsprdaemon/uploads"
+WSPRDAEMON_LOG_FILE="/var/log/wsprdaemon/wsprdaemon_server.log"
+WSPRDAEMON_VENV_PYTHON="/home/wsprdaemon/wsprdaemon/venv/bin/python3"
+WSPRDAEMON_SERVER_SCRIPT="/usr/local/bin/wsprdaemon_server.py"
+WSPRDAEMON_LOOP_INTERVAL=60
+EOF
+    chown wsprdaemon:wsprdaemon /etc/wsprdaemon/wsprdaemon.conf
+    chmod 640 /etc/wsprdaemon/wsprdaemon.conf
+fi
+
+# Check for ClickHouse config
+if [ ! -f /etc/wsprdaemon/clickhouse.conf ]; then
+    echo ""
+    echo "WARNING: /etc/wsprdaemon/clickhouse.conf does not exist"
+    echo "Create it with your ClickHouse credentials:"
+    echo ""
+    echo "cat > /etc/wsprdaemon/clickhouse.conf << 'EOF'"
+    echo "CLICKHOUSE_HOST=\"localhost\""
+    echo "CLICKHOUSE_PORT=\"9000\""
+    echo "CLICKHOUSE_USER=\"chadmin\""
+    echo "CLICKHOUSE_PASSWORD=\"\""
+    echo "CLICKHOUSE_DATABASE=\"wsprnet\""
+    echo "EOF"
+    echo ""
+    echo "Then set permissions:"
+    echo "sudo chown wsprdaemon:wsprdaemon /etc/wsprdaemon/clickhouse.conf"
+    echo "sudo chmod 600 /etc/wsprdaemon/clickhouse.conf"
+    echo ""
+fi
 
 echo ""
 echo "Installation complete!"
 echo ""
-echo "Configuration files created in /etc/wsprdaemon/"
-echo "Wrapper scripts installed in /usr/local/bin/"
-echo "Service templates installed in /etc/systemd/system/"
-echo ""
 echo "Next steps:"
-echo "1. Edit /etc/wsprdaemon/wsprnet.conf and set credentials"
-echo "2. Edit /etc/wsprdaemon/wsprdaemon.conf and set credentials"
-echo "3. Enable services:"
-echo "     sudo systemctl enable wsprnet_scraper@wsprnet"
-echo "     sudo systemctl enable wsprdaemon_server@wsprdaemon"
-echo "4. Start services:"
-echo "     sudo systemctl start wsprnet_scraper@wsprnet"
-echo "     sudo systemctl start wsprdaemon_server@wsprdaemon"
-echo "5. Check status:"
-echo "     sudo systemctl status wsprnet_scraper@wsprnet"
-echo "     sudo systemctl status wsprdaemon_server@wsprdaemon"
+echo "1. Create /etc/wsprdaemon/clickhouse.conf with your ClickHouse credentials"
+echo "2. Enable and start the services:"
+echo "   sudo systemctl enable wsprnet_scraper@wsprnet.service"
+echo "   sudo systemctl enable wsprdaemon_server@wsprdaemon.service"
+echo "   sudo systemctl start wsprnet_scraper@wsprnet.service"
+echo "   sudo systemctl start wsprdaemon_server@wsprdaemon.service"
 echo ""
-echo "You can create additional instances with different configs:"
-echo "     cp /etc/wsprdaemon/wsprnet.conf /etc/wsprdaemon/wsprnet-backup.conf"
-echo "     systemctl start wsprnet_scraper@wsprnet-backup"
+echo "3. Check service status:"
+echo "   sudo systemctl status wsprnet_scraper@wsprnet.service"
+echo "   sudo systemctl status wsprdaemon_server@wsprdaemon.service"
+echo ""
+echo "4. View logs:"
+echo "   sudo journalctl -u wsprnet_scraper@wsprnet.service -f"
+echo "   sudo journalctl -u wsprdaemon_server@wsprdaemon.service -f"
+echo ""
