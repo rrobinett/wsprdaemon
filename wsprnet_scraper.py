@@ -800,6 +800,8 @@ def main():
     parser.add_argument('--loop', type=int, metavar='SECONDS', help='Run continuously with SECONDS delay')
     parser.add_argument('--log-file', default=LOG_FILE, help='Path to log file')
     parser.add_argument('--log-max-mb', type=int, default=10, help='Max log file size in MB')
+    parser.add_argument('--verbose', type=int, default=1, choices=[0, 1, 2], 
+                        help='Verbosity level: 0=errors only, 1=normal (default), 2=debug')
     
     args = parser.parse_args()
     
@@ -820,6 +822,7 @@ def main():
     # Override with command line credentials
     config['clickhouse_user'] = args.clickhouse_user
     config['clickhouse_password'] = args.clickhouse_password
+    config['verbosity'] = args.verbose
     
     # Always run setup
     log("Running setup to ensure ClickHouse is configured...")
