@@ -4,6 +4,71 @@
 alias chc='clickhouse-client'
 alias ch=chc
 
+function wd-sftp-wd-test()
+{
+    local rc
+    local start_epoch 
+    local end_epoch
+    local runtime_seconds
+
+    source ~/wsprdaemon/wsprdaemon.conf
+    
+    if [[ -z "${WD_SERVER_USER-}" ]]; then
+        wd_logger 1 "This WD client is not configured to sftp upload extended spots to its user account on the WD0 server"
+        return 0
+    fi
+    local tmpfile=$(mktemp)
+    trap "rm -f '$tmpfile'" RETURN  # cleanup 
+
+    local wdserver_url="${WD_SERVER_USER#*@}"
+
+    local nc_timeout=${WD_SERVER_NC_TIMEOPUT_SECONDS-2}
+    echo "Testing Internnet connectivity to the WD_SERVER server by running 'nc -vz -w ${nc_timeout} ${wdserver_url} 22'"
+    start_epoch=${EPOCHSECONDS}
+    nc -vz -w ${nc_timeout} ${wdserver_url} 22 >& ${tmpfile}
+    rc=$?
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc )); then
+        printf "After %2d seconds, Failed to run 'nc -vz -w ${wdserver_url} 22' => ${rc}:\n$(< ${tmpfile} )\n" "${runtime_seconds}" 
+        rm -f ${tmpfile}
+        return 1
+    fi
+    printf "After %2d seconds, Successfully ran 'nc -vz ${wdserver_url} 22'\n" "${runtime_seconds}"
+
+    if [[ ! -d ~/.ssh ]]; then
+        printf "The ~/.ssh directory which contains ssh keys doesn't exist.  Run 'ssh-keygen -t 25519 -N '' to create them"
+        rm -f ${tmpfile}
+        return 1
+    fi
+    local public_key_file_path_list=( $( find ~/.ssh -name '*.pub') )
+    if (( ${#public_key_file_path_list[@]} == 0 )); then
+        printf "This station ${WD_SERVER_USER%_*} has no ssh public key.  Run 'ssh-keygen -t 25519 -N \"\"' to create it\n"
+        rm -f ${tmpfile}
+        return 1
+    fi
+    local public_key_file_path="${public_key_file_path_list[0]}"
+    (( ${verbosity-0} )) && printf "This station ${WD_SERVER_USER%_*}'s public key is:\n $(< ${public_key_file_path})\n" 
+
+    local wdserver_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the WD_SERVER server
+    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER%_*}@${wdserver_url}'"
+    local start_epoch=${EPOCHSECONDS}
+    sftp -o ConnectTimeout=${wdserver_timeout} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -b /dev/null ${WD_SERVER_USER} >& ${tmpfile}
+    rc=$? 
+    end_epoch=${EPOCHSECONDS}
+    runtime_seconds=$(( end_epoch - start_epoch ))
+    if (( rc == 0 )); then
+        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER}'\n" "${runtime_seconds}"
+    else
+        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER}' => ${rc}:\n$(< ${tmpfile} )\n"
+        printf "Verify that this station '${WD_SERVER_USER%_*}'s public key has been registered with the WD_SERVER server:\n $(< ${public_key_file_path})\n"
+    fi
+    rm -f ${tmpfile}
+    return 0
+}
+
+
 ### TBD: This function should be used by assign_fft_cores()
 function show_hyperthread_pairs()
 {
@@ -1899,9 +1964,14 @@ function wd-sftp-psws(){
     local runtime_seconds
 
     source ~/wsprdaemon/wsprdaemon.conf
+    
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        echo "This server is not configured with a GRAPE_PSWS_ID in the wsprdaemon.conf file, so can't fix the directories"
-        return 0
+        if [[ -z "${PSWS_STATION_ID-}" || -z "${PSWS_DEVICE_ID-}" ]]; then
+            wd_logger 1 "This WD server is not configured to upload to the HamSCI GRAPE server"
+            return 0
+        fi
+        GRAPE_PSWS_ID="${PSWS_STATION_ID}_${PSWS_DEVICE_ID}"
+        wd_logger 1 "The GRAPE_PSWS_ID=${GRAPE_PSWS_ID} is being derived from PSWS_STATION_ID=${PSWS_STATION_ID} and PSWS_DEVICE_ID=${PSWS_DEVICE_ID}"
     fi
     if ! [[ ${GRAPE_PSWS_ID} =~ _ ]]; then
         echo "GRAPE_PSWS_ID='${GRAPE_PSWS_ID}' does not match the expected format 'Snnnn_nnn'"

@@ -873,8 +873,12 @@ function grape_menu() {
 function grape_init() {
     wd_logger 2 "Starting"
     if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
-        wd_logger 2 "This WD server is not configured to upload to the HamSCI GRAPE server"
-        return 0
+        if [[ -z "${PSWS_STATION_ID-}" || -z "${PSWS_DEVICE_ID-}" ]]; then
+            wd_logger 2 "This WD server is not configured to upload to the HamSCI GRAPE server"
+            return 0
+        fi
+        GRAPE_PSWS_ID="${PSWS_STATION_ID}_${PSWS_DEVICE_ID}"
+        wd_logger 1 "The GRAPE_PSWS_ID=${GRAPE_PSWS_ID} is being derived from PSWS_STATION_ID=${PSWS_STATION_ID} and PSWS_DEVICE_ID=${PSWS_DEVICE_ID}"
     fi
 
     local rc
