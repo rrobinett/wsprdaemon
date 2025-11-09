@@ -1,10 +1,11 @@
+```bash
 #!/bin/bash
 #
 # install-servers.sh - Install WSPRDAEMON server services
 # Installs both wsprnet_scraper and wsprdaemon_server services
 #
-# Version: 1.0
-# Last updated: 2025-11-03
+# Version: 1.1
+# Last updated: 2025-11-09
 
 set -e  # Exit on error
 
@@ -163,6 +164,113 @@ if [ ! -f /etc/wsprdaemon/clickhouse.conf ]; then
     echo ""
 fi
 
+# Function to check ClickHouse network configuration
+check_clickhouse_network_config() {
+    local config_file="/etc/clickhouse-server/config.d/network.xml"
+    
+    echo ""
+    echo ">>> Checking ClickHouse network configuration..."
+    
+    # Check if ClickHouse is installed
+    if ! command -v clickhouse-server &> /dev/null; then
+        echo "⚠️  ClickHouse not installed - skipping network check"
+        return 0
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        echo "✅ No custom network config - using ClickHouse defaults"
+        return 0
+    fi
+    
+    # Extract listen_host entries
+    local listen_hosts
+    listen_hosts=$(grep -oP '(?<=<listen_host>)[^<]+' "$config_file" 2>/dev/null || true)
+    
+    if [[ -z "$listen_hosts" ]]; then
+        echo "✅ No listen_host entries in network config"
+        return 0
+    fi
+    
+    # Check if any specific IPs are configured (not 0.0.0.0 or ::)
+    local has_specific_ips=false
+    local missing_ips=()
+    
+    while IFS= read -r ip; do
+        # Skip empty lines
+        [[ -z "$ip" ]] && continue
+        
+        # Skip wildcard addresses
+        if [[ "$ip" == "0.0.0.0" || "$ip" == "::" || "$ip" == "127.0.0.1" || "$ip" == "::1" ]]; then
+            continue
+        fi
+        
+        has_specific_ips=true
+        
+        # Check if IP exists on system
+        if ! ip addr show | grep -q "$ip"; then
+            missing_ips+=("$ip")
+        fi
+    done <<< "$listen_hosts"
+    
+    if [[ ${#missing_ips[@]} -gt 0 ]]; then
+        echo ""
+        echo "⚠️  WARNING: ClickHouse configured to bind to IPs not currently available:"
+        printf '    %s\n' "${missing_ips[@]}"
+        echo ""
+        echo "This will cause ClickHouse to fail at boot if these interfaces (VPN/WireGuard)"
+        echo "are not available yet. ClickHouse services will enter a restart loop until"
+        echo "the interfaces become available."
+        echo ""
+        echo "Recommendation: Use 0.0.0.0 to bind to all interfaces, which will work"
+        echo "regardless of which interfaces are up at boot time."
+        echo ""
+        echo "Suggested fix:"
+        echo ""
+        echo "sudo tee $config_file << 'EOF'"
+        echo "<clickhouse>"
+        echo "    <listen_host>0.0.0.0</listen_host>"
+        echo "</clickhouse>"
+        echo "EOF"
+        echo ""
+        read -p "Apply this fix now? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+            echo "Backed up to ${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+            tee "$config_file" > /dev/null << 'EOF'
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>
+EOF
+            echo "✅ Network config updated to use 0.0.0.0"
+            echo "   ClickHouse will now bind to all interfaces"
+            
+            # Restart ClickHouse if it's running
+            if systemctl is-active --quiet clickhouse-server; then
+                echo "   Restarting ClickHouse..."
+                systemctl restart clickhouse-server
+                sleep 2
+                if systemctl is-active --quiet clickhouse-server; then
+                    echo "   ✅ ClickHouse restarted successfully"
+                else
+                    echo "   ⚠️  ClickHouse failed to restart - check logs"
+                fi
+            fi
+        else
+            echo "Skipping fix - you can apply it manually later if needed"
+        fi
+    elif [[ "$has_specific_ips" == true ]]; then
+        echo "✅ All configured specific IPs are currently available on the system"
+        echo "   However, if these are VPN/WireGuard IPs, consider using 0.0.0.0"
+        echo "   to avoid boot-time failures when interfaces aren't ready yet"
+    else
+        echo "✅ Using wildcard addresses (0.0.0.0 or ::) - good for boot reliability"
+    fi
+}
+
+# Run the ClickHouse network check
+check_clickhouse_network_config
+
 echo ""
 echo "Installation complete!"
 echo ""
@@ -182,3 +290,16 @@ echo "4. View logs:"
 echo "   sudo journalctl -u wsprnet_scraper@wsprnet.service -f"
 echo "   sudo journalctl -u wsprdaemon_server@wsprdaemon.service -f"
 echo ""
+```
+
+The updated script now includes the `check_clickhouse_network_config()` function that:
+
+1. Checks if ClickHouse is installed
+2. Looks for custom network configuration
+3. Identifies specific IPs that aren't available on the system
+4. Warns about potential boot-time failures with VPN/WireGuard IPs
+5. Offers to automatically fix it by using `0.0.0.0`
+6. Backs up the old config before changing it
+7. Restarts ClickHouse if it's running
+
+This will catch the issue during installation and prevent the boot-time startup failures you experienced.
