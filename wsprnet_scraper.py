@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-WSPRNET Scraper - Download spots from wsprnet.org and store in ClickHouse
-Usage: wsprnet_scraper.py --session-file <path> --username <user> --password <pass> [options]
+WSPRNET Scraper - Simple Always-Cache Architecture
+- Download thread: Always saves JSON to cache
+- Insert thread: Processes cached files in order
+No complex gap logic, just save everything and process in order.
 """
 import argparse
 import json
@@ -14,9 +16,12 @@ import clickhouse_connect
 import numpy as np
 import logging
 import os
+from datetime import datetime
+import threading
+import glob
 
 # Version
-VERSION = "2.0.0"  # Cleaned up overflow handling, frequency stored as UInt64
+VERSION = "2.2.4"  # Fixed: spotnum_start should be last_spotnum, not last_spotnum + 1
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -32,20 +37,14 @@ DEFAULT_CONFIG = {
     'wsprnet_login_url': 'http://www.wsprnet.org/drupal/rest/user/login',
     'band': 'All',
     'exclude_special': 0,
-    'loop_interval': 120
+    'loop_interval': 120,
+    'cache_dir': '/var/lib/wsprnet/cache'
 }
-
-# Field mapping from wsprnet JSON
-WSPRNET_FIELDS = [
-    "Spotnum", "Date", "Reporter", "ReporterGrid", "dB", "MHz",
-    "CallSign", "Grid", "Power", "Drift", "distance", "azimuth",
-    "Band", "version", "code"
-]
 
 # Logging configuration
 LOG_FILE = 'wsprnet_scraper.log'
-LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
-LOG_KEEP_RATIO = 0.75  # Keep newest 75%
+LOG_MAX_BYTES = 10 * 1024 * 1024
+LOG_KEEP_RATIO = 0.75
 
 
 class TruncatingFileHandler(logging.FileHandler):
@@ -57,37 +56,29 @@ class TruncatingFileHandler(logging.FileHandler):
         super().__init__(filename, mode='a', encoding='utf-8')
     
     def emit(self, record):
-        """Emit a record, truncating file if needed"""
         super().emit(record)
         self.check_truncate()
     
     def check_truncate(self):
-        """Check file size and truncate if needed"""
         try:
             if os.path.exists(self.baseFilename):
                 current_size = os.path.getsize(self.baseFilename)
                 if current_size > self.max_bytes:
                     self.truncate_file()
         except Exception as e:
-            # Don't let truncation errors break logging
             print(f"Error checking log file size: {e}")
     
     def truncate_file(self):
-        """Keep only the newest 75% of the file"""
         try:
-            # Read the file
             with open(self.baseFilename, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
-            # Calculate how many lines to keep
             keep_count = int(len(lines) * self.keep_ratio)
             if keep_count < 1:
                 keep_count = 1
             
-            # Keep only the newest lines
             new_lines = lines[-keep_count:]
             
-            # Rewrite the file
             with open(self.baseFilename, 'w', encoding='utf-8') as f:
                 f.write(f"[Log truncated - kept newest {self.keep_ratio*100:.0f}% of {len(lines)} lines]\n")
                 f.writelines(new_lines)
@@ -100,22 +91,18 @@ class TruncatingFileHandler(logging.FileHandler):
 
 
 def setup_logging(log_file=None, max_bytes=LOG_MAX_BYTES, keep_ratio=LOG_KEEP_RATIO):
-    """Setup logging - either to file OR console, not both"""
+    """Setup logging"""
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    
-    # Clear any existing handlers
     logger.handlers.clear()
     
     if log_file:
-        # File handler with truncation (no console)
         file_handler = TruncatingFileHandler(log_file, max_bytes, keep_ratio)
         file_formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s',
                                           datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
     else:
-        # Console handler only (no file)
         console_handler = logging.StreamHandler()
         console_formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s',
                                              datefmt='%Y-%m-%d %H:%M:%S')
@@ -126,7 +113,7 @@ def setup_logging(log_file=None, max_bytes=LOG_MAX_BYTES, keep_ratio=LOG_KEEP_RA
 
 
 def log(message: str, level: str = "INFO"):
-    """Log a message at the specified level"""
+    """Log a message"""
     logger = logging.getLogger()
     level_map = {
         'DEBUG': logging.DEBUG,
@@ -138,8 +125,21 @@ def log(message: str, level: str = "INFO"):
     logger.log(level_map.get(level, logging.INFO), message)
 
 
+def ensure_cache_dir(cache_dir: str) -> bool:
+    """Ensure cache directory exists"""
+    try:
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        test_file = Path(cache_dir) / '.test_write'
+        test_file.touch()
+        test_file.unlink()
+        return True
+    except Exception as e:
+        log(f"Failed to create/access cache directory {cache_dir}: {e}", "ERROR")
+        return False
+
+
 def login_wsprnet(username: str, password: str, login_url: str, session_file: Path) -> Optional[Tuple[str, str]]:
-    """Login to wsprnet.org and save session"""
+    """Login to wsprnet.org"""
     log(f"Attempting to login as {username}...")
     
     login_data = {"name": username, "pass": password}
@@ -152,44 +152,36 @@ def login_wsprnet(username: str, password: str, login_url: str, session_file: Pa
             log(f"Login failed with status code {response.status_code}", "ERROR")
             return None
         
-        try:
-            data = response.json()
-            sessid = data.get('sessid', '')
-            session_name = data.get('session_name', '')
-            
-            if not sessid or not session_name:
-                log(f"Login response missing sessid or session_name: {response.text}", "ERROR")
-                return None
-            
-            # Save session to file
-            session_data = {
-                'sessid': sessid,
-                'session_name': session_name,
-                'username': username,
-                'login_time': time.time()
-            }
-            
-            session_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(session_file, 'w') as f:
-                json.dump(session_data, f, indent=2)
-            
-            log(f"Login successful, session saved to {session_file}")
-            return session_name, sessid
-            
-        except json.JSONDecodeError as e:
-            log(f"Failed to parse login response: {e}", "ERROR")
-            log(f"Response was: {response.text}", "ERROR")
+        data = response.json()
+        sessid = data.get('sessid', '')
+        session_name = data.get('session_name', '')
+        
+        if not sessid or not session_name:
+            log(f"Login response missing sessid or session_name", "ERROR")
             return None
-    
-    except requests.RequestException as e:
-        log(f"Login request failed: {e}", "ERROR")
+        
+        session_data = {
+            'sessid': sessid,
+            'session_name': session_name,
+            'username': username,
+            'login_time': time.time()
+        }
+        
+        session_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(session_file, 'w') as f:
+            json.dump(session_data, f, indent=2)
+        
+        log(f"Login successful")
+        return session_name, sessid
+        
+    except Exception as e:
+        log(f"Login failed: {e}", "ERROR")
         return None
 
 
 def read_session_file(session_file: Path) -> Optional[Tuple[str, str]]:
-    """Read session name and ID from session file"""
+    """Read session from file"""
     if not session_file.exists():
-        log(f"Session file {session_file} does not exist", "WARNING")
         return None
     
     try:
@@ -200,500 +192,395 @@ def read_session_file(session_file: Path) -> Optional[Tuple[str, str]]:
         session_name = data.get('session_name', '')
         
         if not sessid or not session_name:
-            log("Session file missing sessid or session_name", "WARNING")
             return None
         
         login_time = data.get('login_time', 0)
         age_hours = (time.time() - login_time) / 3600
-        log(f"Using session from {session_file} (age: {age_hours:.1f} hours)")
+        log(f"Using session (age: {age_hours:.1f} hours)")
         
         return session_name, sessid
-    
     except Exception as e:
-        log(f"Failed to read session file: {e}", "WARNING")
         return None
 
 
 def get_session_token(session_file: Path, username: str, password: str, login_url: str) -> Optional[str]:
-    """Get session token, logging in if necessary"""
-    # Try to read existing session
-    session = read_session_file(session_file)
+    """Get session token"""
+    session_data = read_session_file(session_file)
     
-    if session:
-        session_name, sessid = session
+    if session_data:
+        session_name, sessid = session_data
         return f"{session_name}={sessid}"
     
-    # Need to login
     if not username or not password:
-        log("No valid session and no credentials provided", "ERROR")
+        log("No session and no credentials provided", "ERROR")
         return None
     
-    session = login_wsprnet(username, password, login_url, session_file)
-    if session:
-        session_name, sessid = session
+    login_result = login_wsprnet(username, password, login_url, session_file)
+    if login_result:
+        session_name, sessid = login_result
         return f"{session_name}={sessid}"
     
     return None
 
 
-def validate_spot_timing(date_epoch: int, code: int, spotnum: int = 0) -> Tuple[bool, int, str]:
-    """Validate spot timing based on mode
-    
-    Returns: (is_valid, corrected_epoch, message)
-    """
-    spot_minute = ((date_epoch % 3600) // 60)
-    is_odd_minute = (spot_minute % 2) == 1
-    
-    # Valid minutes for each mode
-    valid_mode_1 = set(range(0, 60, 2))   # WSPR-2: even minutes
-    valid_mode_3 = set(range(0, 60, 2))   # FST4W-120: even minutes
-    valid_mode_2 = set(range(0, 60, 15))  # FST4W-900: 0,15,30,45
-    valid_mode_4 = set(range(0, 60, 5))   # FST4W-300: 0,5,10,15...
-    valid_mode_8 = set(range(0, 60, 30))  # FST4W-1800: 0,30
-    
-    mode_info = {
-        1: (2, valid_mode_1, "WSPR-2"),
-        3: (2, valid_mode_3, "FST4W-120"),
-        2: (15, valid_mode_2, "FST4W-900"),
-        4: (5, valid_mode_4, "FST4W-300"),
-        8: (30, valid_mode_8, "FST4W-1800")
-    }
-    
-    if code not in mode_info:
-        # Invalid mode - force to even minute if odd
-        if is_odd_minute:
-            corrected = date_epoch + 60
-            date_str = time.strftime('%Y-%m-%d %H:%M', time.gmtime(date_epoch))
-            msg = f"Spot {spotnum}: Invalid mode {code} at odd minute {spot_minute} ({date_str}), corrected to next even minute"
-            return False, corrected, msg
-        msg = f"Spot {spotnum}: Invalid mode {code} at even minute {spot_minute}, kept as-is"
-        return False, date_epoch, msg
-    
-    spot_length, valid_minutes, mode_name = mode_info[code]
-    
-    if spot_minute in valid_minutes:
-        return True, date_epoch, ""
-    
-    # Invalid minute for this mode
-    date_str = time.strftime('%Y-%m-%d %H:%M', time.gmtime(date_epoch))
-    if is_odd_minute:
-        corrected = date_epoch + 60
-        corrected_str = time.strftime('%Y-%m-%d %H:%M', time.gmtime(corrected))
-        msg = f"Spot {spotnum}: Mode {code} ({mode_name}, {spot_length} min) at invalid odd minute {spot_minute} ({date_str}), corrected to {corrected_str}"
-        return False, corrected, msg
-    else:
-        msg = f"Spot {spotnum}: Mode {code} ({mode_name}, {spot_length} min) at invalid even minute {spot_minute} ({date_str}), kept as-is"
-        return False, date_epoch, msg
-
-
-def summarize_spots_by_date(spots: List[Dict]):
-    """Print summary of spots grouped by Date epoch"""
-    from collections import defaultdict
-    
-    date_counts = defaultdict(int)
-    for spot in spots:
-        date_epoch = int(spot.get('Date', 0))
-        date_counts[date_epoch] += 1
-    
-    if not date_counts:
-        return
-    
-    sorted_dates = sorted(date_counts.keys())
-    log(f"Spot summary: {len(date_counts)} unique dates/times")
-    
-    for date_epoch in sorted_dates:
-        count = date_counts[date_epoch]
-        date_str = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(date_epoch))
-        log(f"  {date_str}: {count:4d} spots")
-    
-    if len(sorted_dates) > 1:
-        time_span_minutes = (sorted_dates[-1] - sorted_dates[0]) / 60
-        log(f"Time span: {time_span_minutes:.0f} minutes")
-
-
-def validate_json(json_text: str) -> Tuple[Optional[List[Dict]], str]:
-    """Validate JSON and return (spots, status)
-    
-    Status: 'valid', 'repaired', 'failed', 'auth_failed'
-    """
-    # Check for obviously bad responses
-    if not json_text or len(json_text) < 10:
-        return None, 'failed'
-    
-    if "You are not authorized" in json_text:
-        return None, 'auth_failed'
-    
-    # Try to parse as-is
+def get_last_spotnum_from_db(client, database: str, table: str) -> int:
+    """Get highest spotnum from database"""
     try:
-        spots = json.loads(json_text)
-        
-        if not isinstance(spots, list):
-            log(f"JSON is not a list: {type(spots)}", "ERROR")
-            return None, 'failed'
-        
-        if len(spots) == 0:
-            log("JSON is valid but empty", "WARNING")
-            return [], 'valid'
-        
-        # Validate first and last spot have required fields
-        required_fields = ['Spotnum', 'Date', 'Reporter', 'Grid', 'MHz']
-        for field in required_fields:
-            if field not in spots[0] or field not in spots[-1]:
-                log(f"Missing required field: {field}", "ERROR")
-                return None, 'failed'
-        
-        log(f"JSON is valid with {len(spots)} spots")
-        return spots, 'valid'
-        
-    except json.JSONDecodeError as e:
-        log(f"JSON parse error at position {e.pos}: {e.msg}", "WARNING")
-        
-        # Try to repair
-        spots = repair_json(json_text)
-        if spots:
-            return spots, 'repaired'
-        
-        return None, 'failed'
-
-
-def download_spots(session_token: str, spotnum_start: int, config: Dict) -> Tuple[Optional[List[Dict]], bool]:
-    """Download spots from wsprnet.org
-    
-    Returns: (spots_list, auth_failed)
-    """
-    post_data = {
-        "spotnum_start": str(spotnum_start),
-        "band": config["band"],
-        "callsign": "",
-        "reporter": "",
-        "exclude_special": str(config["exclude_special"])
-    }
-    
-    url = f'{config["wsprnet_url"]}?band={config["band"]}&spotnum_start={spotnum_start}&exclude_special={config["exclude_special"]}'
-    headers = {'Content-Type': 'application/json'}
-    
-    # Parse session token into cookies dictionary - FIXED
-    cookies = {}
-    try:
-        # Handle single or multiple cookie pairs
-        for item in session_token.split(";"):
-            item = item.strip()
-            if "=" in item:
-                key, value = item.split("=", 1)  # Split only on first =
-                cookies[key.strip()] = value.strip()
+        result = client.query(f"SELECT max(id) FROM {database}.{table}")
+        if result.result_rows and result.result_rows[0][0] is not None:
+            return int(result.result_rows[0][0])
+        return 0
     except Exception as e:
-        log(f"Failed to parse session token: {e}", "ERROR")
-        return None, False
+        log(f"Failed to get last spotnum: {e}", "WARNING")
+        return 0
+
+
+def download_and_cache_spots(session_token: str, last_spotnum: int, config: Dict, cache_dir: str) -> Tuple[bool, bool, int]:
+    """
+    Download spots and save to cache file
+    Returns: (success, auth_failed, highest_spotnum)
+    """
+    params = {
+        'band': config['band'],
+        'exclude_special': config['exclude_special'],
+        'spotnum_start': last_spotnum  # wsprnet API returns spots with ID > spotnum_start
+    }
     
-    if not cookies:
-        log("No valid cookies found in session token", "ERROR")
-        return None, False
-    
-    log(f"Downloading spots starting from {spotnum_start}...")
-    start_time = time.time()
+    headers = {'Cookie': session_token}
     
     try:
-        response = requests.post(
-            url,
-            json=post_data,
+        response = requests.get(
+            config['wsprnet_url'],
+            params=params,
             headers=headers,
-            cookies=cookies,
-            timeout=config['request_timeout'],
-            stream=True
+            timeout=config['request_timeout']
         )
         
-        download_time = time.time() - start_time
+        if response.status_code == 403:
+            log("Authentication expired", "WARNING")
+            return False, True, last_spotnum
         
         if response.status_code != 200:
-            log(f"Download failed with status code {response.status_code}", "ERROR")
-            return None, False
+            log(f"Download failed: {response.status_code}", "ERROR")
+            return False, False, last_spotnum
         
-        response_text = response.text
+        spots = response.json()
         
-        # Validate the JSON
-        spots, status = validate_json(response_text)
+        if not spots:
+            log("No new spots")
+            return True, False, last_spotnum
         
-        if status == 'auth_failed':
-            return None, True
-        
-        if status == 'failed':
-            log(f"JSON validation failed after {download_time:.1f}s", "ERROR")
-            return None, False
-        
-        if status == 'repaired':
-            log(f"Downloaded and repaired {len(spots)} spots in {download_time:.1f}s", "WARNING")
-        else:
-            log(f"Downloaded {len(spots)} spots in {download_time:.1f}s ({len(response_text)} bytes)")
-        
-        return spots, False
-    
-    except requests.Timeout:
-        log(f"Request timeout after {config['request_timeout']} seconds", "ERROR")
-        return None, False
-    except requests.RequestException as e:
-        log(f"Download failed: {e}", "ERROR")
-        return None, False
-
-
-def repair_json(json_text: str) -> Optional[List[Dict]]:
-    """Attempt to repair truncated JSON by finding last valid record"""
-    # Try to find the last complete record ending with }]
-    for i in range(len(json_text) - 1, -1, -1):
-        if json_text[i] == ']':
-            try:
-                test_json = json_text[:i+1]
-                data = json.loads(test_json)
-                if isinstance(data, list) and len(data) > 0:
-                    log(f"Repaired JSON - recovered {len(data)} spots", "WARNING")
-                    return data
-            except:
-                continue
-    
-    return None
-
-
-def loc_to_lat_lon(locator: str) -> Tuple[float, float]:
-    """Convert Maidenhead locator to lat/lon"""
-    locator = locator.strip()
-    
-    if len(locator) < 4:
-        return (0.0, 0.0)
-    
-    decomp = list(locator)
-    lat = (((ord(decomp[1])-65)*10)+(ord(decomp[3])-48)+(1/2)-90)
-    lon = (((ord(decomp[0])-65)*20)+((ord(decomp[2])-48)*2)+(1)-180)
-    
-    if len(locator) >= 6:
-        ascii_base = 96 if ord(decomp[4]) > 88 else 64
-        lat = lat-(1/2)+((ord(decomp[5])-ascii_base)/24)-(1/48)
-        lon = lon-(1)+((ord(decomp[4])-ascii_base)/12)-(1/24)
-    
-    return (lat, lon)
-
-
-def calculate_azimuth(tx_locator: str, rx_locator: str) -> Dict:
-    """Calculate azimuth and location data"""
-    try:
-        (tx_lat, tx_lon) = loc_to_lat_lon(tx_locator)
-        (rx_lat, rx_lon) = loc_to_lat_lon(rx_locator)
-        
-        phi_tx = np.radians(tx_lat)
-        lambda_tx = np.radians(tx_lon)
-        phi_rx = np.radians(rx_lat)
-        lambda_rx = np.radians(rx_lon)
-        
-        delta_lambda = lambda_tx - lambda_rx
-        
-        # RX azimuth
-        y = np.sin(delta_lambda) * np.cos(phi_tx)
-        x = np.cos(phi_rx)*np.sin(phi_tx) - np.sin(phi_rx)*np.cos(phi_tx)*np.cos(delta_lambda)
-        rx_azi = (np.degrees(np.arctan2(y, x))) % 360
-        
-        return {
-            'rx_azimuth': int(round(rx_azi)),
-            'rx_lat': round(rx_lat, 3),
-            'rx_lon': round(rx_lon, 3),
-            'tx_lat': round(tx_lat, 3),
-            'tx_lon': round(tx_lon, 3)
-        }
-    
-    except Exception as e:
-        log(f"Azimuth calculation failed: {e}", "WARNING")
-        return {
-            'rx_azimuth': 0,
-            'rx_lat': 0.0,
-            'rx_lon': 0.0,
-            'tx_lat': 0.0,
-            'tx_lon': 0.0
-        }
-
-
-def detect_gaps(spots: List[Dict], last_spotnum: int) -> List[Tuple[int, int]]:
-    """Detect gaps in spot numbers
-    
-    Returns: List of (first_missing, last_missing) tuples
-    """
-    if not spots:
-        return []
-    
-    gaps = []
-    sorted_spots = sorted(spots, key=lambda s: int(s.get('Spotnum', 0)))
-    
-    first_spotnum = int(sorted_spots[0].get('Spotnum', 0))
-    last_in_batch = int(sorted_spots[-1].get('Spotnum', 0))
-    
-    log(f"Current batch: {len(spots)} spots, range {first_spotnum} to {last_in_batch}")
-    log(f"Previous highest spotnum: {last_spotnum}")
-    
-    # Check gap before first spot
-    if last_spotnum > 0 and first_spotnum > last_spotnum + 1:
-        gap_size = first_spotnum - last_spotnum - 1
-        gaps.append((last_spotnum + 1, first_spotnum - 1))
-        log(f"GAP: Expected spotnum {last_spotnum + 1}, got {first_spotnum} (missing {gap_size} spots)", "WARNING")
-    
-    # Check gaps within this batch
-    for i in range(len(sorted_spots) - 1):
-        current = int(sorted_spots[i].get('Spotnum', 0))
-        next_spot = int(sorted_spots[i + 1].get('Spotnum', 0))
-        
-        if next_spot > current + 1:
-            gap_size = next_spot - current - 1
-            gaps.append((current + 1, next_spot - 1))
-            log(f"GAP within batch: after {current}, before {next_spot} ({gap_size} spots)", "WARNING")
-    
-    return gaps
-
-
-def process_spots(spots: List[Dict]) -> List[List]:
-    """Process spots and return data for insertion into ClickHouse
-    
-    Returns: List of rows for main table
-    """
-    normal_spots = []
-    validation_stats = {'valid': 0, 'corrected': 0, 'failed': 0}
-    
-    for spot in spots:
+        # Sort spots by ID (wsprnet sometimes returns them in reverse order)
         try:
-            date_epoch = int(spot.get('Date', 0))
-            code = int(spot.get('code', 1))
+            spots.sort(key=lambda x: int(x.get('Spotnum', 0)))
+        except (ValueError, TypeError) as e:
+            log(f"Warning: Could not sort spots by ID: {e}", "WARNING")
+        
+        # Get highest spotnum from this download
+        try:
+            highest_spotnum = int(spots[-1].get('Spotnum', 0))
+        except (ValueError, TypeError):
+            highest_spotnum = last_spotnum
+        
+        # Check for gap between last download and this download
+        if len(spots) > 0:
+            try:
+                first_id = int(spots[0].get('Spotnum', 0))
+                if last_spotnum > 0 and first_id > 0 and first_id != last_spotnum + 1:
+                    gap_size = first_id - last_spotnum - 1
+                    log(f"Gap between downloads: after spot {last_spotnum}, expected {last_spotnum + 1}, got {first_id} (gap of {gap_size})", "WARNING")
+            except (ValueError, TypeError):
+                pass
+        
+        # Check for gaps within downloaded data
+        if len(spots) > 1:
+            gaps_found = 0
+            for i in range(1, len(spots)):
+                try:
+                    prev_id = int(spots[i-1].get('Spotnum', 0))
+                    curr_id = int(spots[i].get('Spotnum', 0))
+                    
+                    if prev_id > 0 and curr_id > 0 and curr_id != prev_id + 1:
+                        gap_size = curr_id - prev_id - 1
+                        log(f"Gap in downloaded data: after spot {prev_id}, expected {prev_id + 1}, got {curr_id} (gap of {gap_size})", "WARNING")
+                        gaps_found += 1
+                except (ValueError, TypeError):
+                    # Skip spots with bad IDs
+                    continue
+            
+            if gaps_found > 0:
+                log(f"Total gaps in this download: {gaps_found}", "WARNING")
+        
+        # Always save to cache
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        cache_file = Path(cache_dir) / f'spots_{timestamp}.json'
+        
+        cache_data = {
+            'timestamp': timestamp,
+            'download_time': time.time(),
+            'spot_count': len(spots),
+            'first_spotnum': spots[0].get('Spotnum', 0) if spots else 0,
+            'last_spotnum': spots[-1].get('Spotnum', 0) if spots else 0,
+            'spots': spots
+        }
+        
+        with open(cache_file, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+        
+        log(f"Downloaded and cached {len(spots)} spots to {cache_file.name}")
+        return True, False, highest_spotnum
+        
+    except Exception as e:
+        log(f"Download error: {e}", "ERROR")
+        return False, False, last_spotnum
+
+
+def get_cached_files(cache_dir: str) -> List[Path]:
+    """Get sorted list of cached files"""
+    try:
+        cache_path = Path(cache_dir)
+        if not cache_path.exists():
+            return []
+        
+        files = sorted(cache_path.glob('spots_*.json'))
+        return files
+    except Exception as e:
+        log(f"Error reading cache: {e}", "ERROR")
+        return []
+
+
+def maidenhead_to_latlon(grid: str) -> Tuple[float, float]:
+    """Convert Maidenhead grid to lat/lon"""
+    if not grid or len(grid) < 2:
+        return 0.0, 0.0
+    
+    try:
+        grid = grid.upper()
+        
+        lon = (ord(grid[0]) - ord('A')) * 20 - 180
+        lat = (ord(grid[1]) - ord('A')) * 10 - 90
+        
+        if len(grid) >= 4:
+            lon += int(grid[2]) * 2
+            lat += int(grid[3])
+        
+        if len(grid) >= 6:
+            lon += (ord(grid[4]) - ord('A')) * (2/24)
+            lat += (ord(grid[5]) - ord('A')) * (1/24)
+        
+        lon += 1
+        lat += 0.5
+        
+        return round(lat, 6), round(lon, 6)
+    except:
+        return 0.0, 0.0
+
+
+def calculate_azimuth(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+    """Calculate azimuth"""
+    if lat1 == 0 and lon1 == 0:
+        return 0
+    if lat2 == 0 and lon2 == 0:
+        return 0
+    
+    try:
+        lat1_rad = np.radians(lat1)
+        lat2_rad = np.radians(lat2)
+        dlon_rad = np.radians(lon2 - lon1)
+        
+        x = np.sin(dlon_rad) * np.cos(lat2_rad)
+        y = np.cos(lat1_rad) * np.sin(lat2_rad) - np.sin(lat1_rad) * np.cos(lat2_rad) * np.cos(dlon_rad)
+        
+        azimuth = np.degrees(np.arctan2(x, y))
+        azimuth = (azimuth + 360) % 360
+        
+        return int(round(azimuth))
+    except:
+        return 0
+
+
+def process_spot(spot: Dict) -> Optional[tuple]:
+    """Process a single spot"""
+    try:
+        # Safe field extraction
+        try:
             spotnum = int(spot.get('Spotnum', 0))
+        except:
+            spotnum = 0
             
-            # Validate and possibly correct the timing
-            is_valid, corrected_epoch, msg = validate_spot_timing(date_epoch, code, spotnum)
+        if spotnum == 0:
+            return None
             
-            if is_valid:
-                validation_stats['valid'] += 1
-            else:
-                validation_stats['corrected'] += 1
-                if msg:
-                    log(msg, "WARNING")
-                date_epoch = corrected_epoch
+        try:
+            date = int(spot.get('Date', 0))
+        except:
+            date = 0
             
-            # Calculate azimuth fields
+        reporter = str(spot.get('Reporter', ''))
+        reporter_grid = str(spot.get('ReporterGrid', ''))
+        
+        try:
+            db = int(spot.get('dB', 0))
+        except:
+            db = 0
+            
+        try:
             mhz = float(spot.get('MHz', 0))
+        except:
+            mhz = 0.0
             
-            # Check for zero frequency in JSON
-            if mhz == 0:
-                log(f"Spot {spotnum}: MHz=0 in JSON, Band={band}. Full JSON: {json.dumps(spot)}", "WARNING")
+        callsign = str(spot.get('CallSign', ''))
+        grid = str(spot.get('Grid', ''))
+        
+        try:
+            power = int(spot.get('Power', 0))
+        except:
+            power = 0
             
-            calc = calculate_azimuth(
-                tx_locator=spot.get('Grid', ''),
-                rx_locator=spot.get('ReporterGrid', '')
-            )
+        try:
+            drift = int(spot.get('Drift', 0))
+        except:
+            drift = 0
             
-            # Get band directly from JSON
+        try:
+            distance = int(spot.get('distance', 0))
+        except:
+            distance = 0
+            
+        try:
+            azimuth = int(spot.get('azimuth', 0))
+        except:
+            azimuth = 0
+            
+        try:
             band = int(spot.get('Band', 0))
+        except:
+            band = 0
             
-            # Convert MHz to Hz (now stored in UInt64)
-            # Use 1 MHz (1000000 Hz) as default if MHz is 0
-            if mhz == 0:
-                frequency_hz = 1000000
+        version = str(spot.get('version', ''))
+        
+        try:
+            code = int(spot.get('code', 0))
+        except:
+            code = 0
+        
+        # Calculate positions
+        rx_lat, rx_lon = maidenhead_to_latlon(reporter_grid)
+        tx_lat, tx_lon = maidenhead_to_latlon(grid)
+        
+        # Calculate rx_azimuth
+        rx_azimuth = calculate_azimuth(tx_lat, tx_lon, rx_lat, rx_lon)
+        
+        # Convert frequency to Hz
+        try:
+            frequency_hz = int(mhz * 1_000_000)
+        except:
+            frequency_hz = 0
+        
+        row = (
+            spotnum, date, band, reporter, rx_lat, rx_lon, reporter_grid,
+            callsign, tx_lat, tx_lon, grid, distance, azimuth, rx_azimuth,
+            frequency_hz, power, db, drift, version, code
+        )
+        
+        return row
+        
+    except Exception as e:
+        log(f"Error processing spot {spot.get('Spotnum', '?')}: {e}", "WARNING")
+        return None
+
+
+def insert_cached_file(client, cache_file: Path, database: str, table: str) -> bool:
+    """Process and insert a cached file"""
+    try:
+        with open(cache_file, 'r') as f:
+            cache_data = json.load(f)
+        
+        spots = cache_data.get('spots', [])
+        
+        if not spots:
+            log(f"Cache file {cache_file.name} has no spots, deleting")
+            cache_file.unlink()
+            return True
+        
+        # Process all spots
+        rows = []
+        for spot in spots:
+            row = process_spot(spot)
+            if row:
+                rows.append(row)
+        
+        if not rows:
+            log(f"No valid spots in {cache_file.name}, deleting")
+            cache_file.unlink()
+            return True
+        
+        # Insert to ClickHouse
+        column_names = [
+            'id', 'time', 'band', 'rx_sign', 'rx_lat', 'rx_lon', 'rx_loc',
+            'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth',
+            'rx_azimuth', 'frequency', 'power', 'snr', 'drift', 'version', 'code'
+        ]
+        
+        client.insert(f"{database}.{table}", rows, column_names=column_names)
+        
+        # Get highest spotnum from inserted rows
+        highest_spotnum = max(row[0] for row in rows)
+        
+        log(f"Inserted {len(rows)} spots from {cache_file.name} (highest id: {highest_spotnum})")
+        
+        # Delete cache file after successful insert
+        cache_file.unlink()
+        
+        return True
+        
+    except Exception as e:
+        log(f"Failed to insert {cache_file.name}: {e}", "ERROR")
+        return False
+
+
+def insert_thread_worker(config: Dict, cache_dir: str, database: str, table: str, stop_event: threading.Event):
+    """Worker thread that processes cached files"""
+    log("Insert thread started")
+    
+    # Create separate ClickHouse client for this thread
+    try:
+        client = clickhouse_connect.get_client(
+            host=config['clickhouse_host'],
+            port=config['clickhouse_port'],
+            username=config['clickhouse_user'],
+            password=config['clickhouse_password']
+        )
+        log("Insert thread: Connected to ClickHouse")
+    except Exception as e:
+        log(f"Insert thread: Failed to connect to ClickHouse: {e}", "ERROR")
+        return
+    
+    while not stop_event.is_set():
+        try:
+            # Get oldest cached file
+            cached_files = get_cached_files(cache_dir)
+            
+            if cached_files:
+                oldest_file = cached_files[0]
+                # Insert the file
+                insert_cached_file(client, oldest_file, database, table)
             else:
-                frequency_hz = int(mhz * 1000000)
-            
-            # Build row for ClickHouse in schema order
-            row = [
-                spotnum,                        # id (UInt64)
-                date_epoch,                     # time (DateTime)
-                band,                           # band (Int16) - from JSON
-                spot.get('Reporter', ''),       # rx_sign (LowCardinality(String))
-                calc['rx_lat'],                 # rx_lat (Float32)
-                calc['rx_lon'],                 # rx_lon (Float32)
-                spot.get('ReporterGrid', ''),   # rx_loc (LowCardinality(String))
-                spot.get('CallSign', ''),       # tx_sign (LowCardinality(String))
-                calc['tx_lat'],                 # tx_lat (Float32)
-                calc['tx_lon'],                 # tx_lon (Float32)
-                spot.get('Grid', ''),           # tx_loc (LowCardinality(String))
-                int(spot.get('distance', 0)),   # distance (UInt16)
-                int(spot.get('azimuth', 0)),    # azimuth (UInt16)
-                calc['rx_azimuth'],             # rx_azimuth (UInt16)
-                frequency_hz,                   # frequency (UInt64 Hz)
-                int(spot.get('Power', 0)),      # power (Int8)
-                int(spot.get('dB', 0)),         # snr (Int8)
-                int(spot.get('Drift', 0)),      # drift (Int8)
-                spot.get('version', ''),        # version (LowCardinality(String))
-                code                            # code (Int8)
-            ]
-            
-            normal_spots.append(row)
-            
+                # No files, sleep briefly
+                time.sleep(1)
+                
         except Exception as e:
-            log(f"Failed to process spot {spot.get('Spotnum', '?')}: {e}", "WARNING")
-            validation_stats['failed'] += 1
-            continue
+            log(f"Insert thread error: {e}", "ERROR")
+            time.sleep(5)
     
-    log(f"Spot validation: {validation_stats['valid']} valid, {validation_stats['corrected']} corrected, {validation_stats['failed']} failed")
-    
-    return normal_spots
+    log("Insert thread stopped")
 
 
-def get_last_spotnum(client, database: str, table: str) -> int:
-    """Get the highest id (was Spotnum) from ClickHouse"""
+def setup_clickhouse_tables(admin_user: str, admin_password: str, 
+                            readonly_user: str, readonly_password: str,
+                            config: Dict) -> bool:
+    """Setup ClickHouse database and tables"""
     try:
-        result = client.query(f"SELECT MAX(id) FROM {database}.{table}")
-        if result.result_rows and result.result_rows[0][0]:
-            return int(result.result_rows[0][0])
-    except Exception as e:
-        log(f"Could not query last id: {e}", "WARNING")
-    
-    return 0
-
-
-def insert_spots(client, spots: List[List], database: str, table: str) -> bool:
-    """Insert spots into ClickHouse using new schema"""
-    if not spots:
-        return True
-    
-    column_names = [
-        'id', 'time', 'band', 'rx_sign', 'rx_lat', 'rx_lon', 'rx_loc',
-        'tx_sign', 'tx_lat', 'tx_lon', 'tx_loc', 'distance', 'azimuth',
-        'rx_azimuth', 'frequency', 'power', 'snr', 'drift', 'version', 'code'
-    ]
-    
-    try:
-        client.insert(f"{database}.{table}", spots, column_names=column_names)
-        log(f"Inserted {len(spots)} spots into ClickHouse")
-        return True
-    except Exception as e:
-        log(f"Failed to insert spots: {e}", "ERROR")
-        return False
-
-
-def verify_first_spot(spots: List[Dict], expected_spotnum: int) -> bool:
-    """Verify the first spot is the expected one"""
-    if not spots:
-        log("No spots received", "WARNING")
-        return True
-    
-    # Sort by Spotnum to find the actual first spot
-    sorted_spots = sorted(spots, key=lambda s: int(s.get('Spotnum', 0)))
-    first_spotnum = int(sorted_spots[0].get('Spotnum', 0))
-    
-    if expected_spotnum == 0:
-        log(f"First download: starting with spotnum {first_spotnum}")
-        return True
-    
-    expected = expected_spotnum + 1
-    
-    if first_spotnum == expected:
-        log(f"First spot {first_spotnum} matches expected {expected}")
-        return True
-    elif first_spotnum > expected:
-        gap_size = first_spotnum - expected
-        log(f"Gap before first spot: expected {expected}, got {first_spotnum} (missing {gap_size} spots)", "WARNING")
-        return True
-    else:
-        log(f"Unexpected: first spot {first_spotnum} is less than expected {expected}", "ERROR")
-        return False
-
-
-def setup_clickhouse_tables(admin_user: str, admin_password: str,
-                           readonly_user: str, readonly_password: str,
-                           config: Dict) -> bool:
-    """Setup ClickHouse database and tables (assumes admin user already exists)"""
-    try:
-        # Connect as admin user directly
-        log(f"Connecting to ClickHouse as {admin_user}...")
         admin_client = clickhouse_connect.get_client(
             host=config['clickhouse_host'],
             port=config['clickhouse_port'],
@@ -701,23 +588,22 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             password=admin_password
         )
         
-        # Check/create read-only user
+        log("Connected to ClickHouse with admin privileges")
+        
+        # Create readonly user if needed
         try:
-            result = admin_client.query(
-                f"SELECT count() FROM system.users WHERE name = '{readonly_user}'"
-            )
+            users = admin_client.query("SELECT name FROM system.users").result_rows
+            user_names = [user[0] for user in users]
             
-            if result.result_rows[0][0] == 1:
-                log(f"Read-only user {readonly_user} already exists")
-            else:
+            if readonly_user not in user_names:
                 log(f"Creating read-only user {readonly_user}...")
-                admin_client.command(f"CREATE USER {readonly_user} IDENTIFIED BY '{readonly_password}'")
+                admin_client.command(f"CREATE USER IF NOT EXISTS {readonly_user} IDENTIFIED BY '{readonly_password}'")
                 admin_client.command(f"GRANT SELECT ON {config['clickhouse_database']}.* TO {readonly_user}")
                 log(f"Read-only user {readonly_user} created")
         except Exception as e:
-            log(f"Could not check/create readonly user (may lack permissions): {e}", "WARNING")
+            log(f"Could not check/create readonly user: {e}", "WARNING")
         
-        # Create database if not exists
+        # Create database
         result = admin_client.query(
             f"SELECT 1 FROM system.databases WHERE name = '{config['clickhouse_database']}'"
         )
@@ -727,9 +613,9 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             admin_client.command(f"CREATE DATABASE {config['clickhouse_database']}")
             log(f"Database {config['clickhouse_database']} created")
         else:
-            log(f"Database {config['clickhouse_database']} already exists")
+            log(f"Database {config['clickhouse_database']} exists")
         
-        # Create main spots table
+        # Create table
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {config['clickhouse_database']}.{config['clickhouse_table']}
         (
@@ -754,7 +640,6 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
             version LowCardinality(String),
             code Int8,
             
-            -- Aliases for backwards compatibility
             Spotnum UInt64 ALIAS id,
             Date UInt32 ALIAS toUnixTimestamp(time),
             Reporter String ALIAS rx_sign,
@@ -785,47 +670,63 @@ def setup_clickhouse_tables(admin_user: str, admin_password: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='WSPRNET Scraper')
+    parser = argparse.ArgumentParser(description='WSPRNET Scraper - Simple Always-Cache')
     
-    parser.add_argument('--session-file', required=True, help='Path to session file')
-    parser.add_argument('--username', help='WSPRNET username (required if session file missing)')
-    parser.add_argument('--password', help='WSPRNET password (required if session file missing)')
+    parser.add_argument('--session-file', required=True, help='Session file path')
+    parser.add_argument('--username', help='WSPRNET username')
+    parser.add_argument('--password', help='WSPRNET password')
     
-    parser.add_argument('--clickhouse-user', required=True, help='ClickHouse admin username (required)')
-    parser.add_argument('--clickhouse-password', required=True, help='ClickHouse admin password (required)')
-    parser.add_argument('--setup-readonly-user', required=True, help='Read-only username (required)')
-    parser.add_argument('--setup-readonly-password', required=True, help='Read-only password (required)')
+    parser.add_argument('--clickhouse-user', required=True, help='ClickHouse admin user')
+    parser.add_argument('--clickhouse-password', required=True, help='ClickHouse admin password')
+    parser.add_argument('--setup-readonly-user', required=True, help='Read-only user')
+    parser.add_argument('--setup-readonly-password', required=True, help='Read-only password')
     
-    parser.add_argument('--config', help='Path to config file (JSON)')
-    parser.add_argument('--loop', type=int, metavar='SECONDS', help='Run continuously with SECONDS delay')
-    parser.add_argument('--log-file', default=LOG_FILE, help='Path to log file')
-    parser.add_argument('--log-max-mb', type=int, default=10, help='Max log file size in MB')
+    parser.add_argument('--config', help='Config file (JSON)')
+    parser.add_argument('--cache-dir', help='Cache directory')
+    parser.add_argument('--loop', type=int, metavar='SECONDS', help='Loop interval')
+    parser.add_argument('--log-file', default=LOG_FILE, help='Log file path')
+    parser.add_argument('--log-max-mb', type=int, default=10, help='Max log size MB')
     parser.add_argument('--verbose', type=int, default=1, choices=[0, 1, 2], 
-                        help='Verbosity level: 0=errors only, 1=normal (default), 2=debug')
+                        help='Verbosity level (ignored, for compatibility)')
     
     args = parser.parse_args()
     
     if args.log_file:
         setup_logging(args.log_file, args.log_max_mb * 1024 * 1024)
     else:
-        setup_logging()  # Console only
+        setup_logging()
     
-    # Log version at startup
+    # Log startup banner with version
+    log("")  # Blank line for separation
+    log("=" * 70)
     log(f"WSPRNET Scraper version {VERSION} starting...")
+    log("Architecture: Always-cache with separate insert thread")
+    log("=" * 70)
     
-    # Load configuration
+    # Load config
     config = DEFAULT_CONFIG.copy()
     if args.config:
         with open(args.config) as f:
             config.update(json.load(f))
     
-    # Override with command line credentials
+    if args.cache_dir:
+        config['cache_dir'] = args.cache_dir
+    
+    if args.loop:
+        config['loop_interval'] = args.loop
+    
+    # Ensure cache dir
+    if not ensure_cache_dir(config['cache_dir']):
+        log("Cannot create cache directory!", "ERROR")
+        sys.exit(1)
+    
+    log(f"Cache directory: {config['cache_dir']}")
+    
     config['clickhouse_user'] = args.clickhouse_user
     config['clickhouse_password'] = args.clickhouse_password
-    config['verbosity'] = args.verbose
     
-    # Always run setup
-    log("Running setup to ensure ClickHouse is configured...")
+    # Setup ClickHouse
+    log("Setting up ClickHouse...")
     success = setup_clickhouse_tables(
         admin_user=args.clickhouse_user,
         admin_password=args.clickhouse_password,
@@ -835,12 +736,12 @@ def main():
     )
     
     if not success:
-        log("Setup failed - cannot continue", "ERROR")
+        log("Setup failed", "ERROR")
         sys.exit(1)
     
     session_file = Path(args.session_file)
     
-    # Get session token
+    # Get session
     session_token = get_session_token(
         session_file,
         args.username or '',
@@ -849,7 +750,7 @@ def main():
     )
     
     if not session_token:
-        log("Failed to get session token", "ERROR")
+        log("Failed to get session", "ERROR")
         sys.exit(1)
     
     # Connect to ClickHouse
@@ -862,70 +763,83 @@ def main():
         )
         log("Connected to ClickHouse")
     except Exception as e:
-        log(f"Failed to connect to ClickHouse: {e}", "ERROR")
+        log(f"Failed to connect: {e}", "ERROR")
         sys.exit(1)
     
-    # Get starting spotnum
-    last_spotnum = get_last_spotnum(client, config['clickhouse_database'], config['clickhouse_table'])
-    log(f"Starting from id: {last_spotnum}")
+    # Get starting point
+    last_spotnum = get_last_spotnum_from_db(client, config['clickhouse_database'], config['clickhouse_table'])
+    log(f"Starting from spotnum: {last_spotnum}")
     
-    # Main loop
+    # Start insert thread
+    stop_event = threading.Event()
+    insert_thread = threading.Thread(
+        target=insert_thread_worker,
+        args=(config, config['cache_dir'], config['clickhouse_database'], config['clickhouse_table'], stop_event),
+        daemon=True
+    )
+    insert_thread.start()
+    
+    # Main download loop
     loop_count = 0
     
-    while True:
-        loop_count += 1
-        log(f"Download cycle {loop_count}")
-        
-        spots, auth_failed = download_spots(session_token, last_spotnum, config)
-        
-        # If auth failed, try to re-login
-        if auth_failed:
-            log("Re-authenticating...")
-            if session_file.exists():
-                session_file.unlink()
+    try:
+        while True:
+            loop_count += 1
+            log(f"Download cycle {loop_count}")
             
-            session_token = get_session_token(
-                session_file,
-                args.username or '',
-                args.password or '',
-                config['wsprnet_login_url']
+            success, auth_failed, new_spotnum = download_and_cache_spots(
+                session_token,
+                last_spotnum,
+                config,
+                config['cache_dir']
             )
             
-            if not session_token:
-                log("Re-authentication failed", "ERROR")
-                if not args.loop:
-                    sys.exit(1)
-                time.sleep(60)
-                continue
+            if auth_failed:
+                log("Re-authenticating...")
+                if session_file.exists():
+                    session_file.unlink()
+                
+                session_token = get_session_token(
+                    session_file,
+                    args.username or '',
+                    args.password or '',
+                    config['wsprnet_login_url']
+                )
+                
+                if not session_token:
+                    log("Re-auth failed", "ERROR")
+                    time.sleep(60)
+                    continue
+                
+                # Retry
+                success, auth_failed, new_spotnum = download_and_cache_spots(
+                    session_token,
+                    last_spotnum,
+                    config,
+                    config['cache_dir']
+                )
             
-            # Retry download with new session
-            spots, auth_failed = download_spots(session_token, last_spotnum, config)
-        
-        if spots:
-            if not verify_first_spot(spots, last_spotnum):
-                log("First spot verification failed", "ERROR")
+            # Update last_spotnum from download
+            if new_spotnum > last_spotnum:
+                last_spotnum = new_spotnum
             
-            summarize_spots_by_date(spots)
-            gaps = detect_gaps(spots, last_spotnum)
+            # Show cache status
+            cached_files = get_cached_files(config['cache_dir'])
+            if cached_files:
+                log(f"Cache status: {len(cached_files)} files pending")
             
-            if gaps:
-                log(f"Total gaps found: {len(gaps)}", "WARNING")
+            if not args.loop:
+                break
             
-            # Process spots
-            normal_spots = process_spots(spots)
-            
-            if normal_spots:
-                if insert_spots(client, normal_spots, config['clickhouse_database'], config['clickhouse_table']):
-                    highest_spotnum = max(row[0] for row in normal_spots)
-                    log(f"Processed {len(normal_spots)} spots, highest id: {highest_spotnum}")
-                    last_spotnum = highest_spotnum
-        
-        if not args.loop:
-            break
-        
-        sleep_time = args.loop
-        log(f"Sleeping {sleep_time} seconds...")
-        time.sleep(sleep_time)
+            log(f"Sleeping {config['loop_interval']} seconds...")
+            time.sleep(config['loop_interval'])
+    
+    except KeyboardInterrupt:
+        log("Shutting down...")
+        stop_event.set()
+        insert_thread.join(timeout=5)
+    
+    log("Stopped")
 
 
 if __name__ == '__main__':
