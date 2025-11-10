@@ -19,7 +19,7 @@ import clickhouse_connect
 import logging
 
 # Version
-VERSION = "2.9.0"  # Added running_jobs/receiver_descriptions to noise table ONLY with ZSTD compression
+VERSION = "2.10.0"  # Added retry logic with exponential backoff for ClickHouse insert failures
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -1046,26 +1046,56 @@ def main():
             else:
                 log("No CLIENT_VERSION found in uploads_config.txt", "DEBUG")
 
-            # Process spots
+            # Process spots with retry
             spots = process_spot_files(extraction_dir, client_version, 
                                       client, config['clickhouse_database'], 
                                       config['clickhouse_spots_table'])
             if spots:
-                if insert_spots(client, spots, config['clickhouse_database'], 
-                              config['clickhouse_spots_table'], config['max_spots_per_insert']):
-                    log(f"Successfully processed {len(spots)} spots from {tbz_file.name}", "INFO")
-                else:
-                    log(f"Failed to insert spots from {tbz_file.name}", "ERROR")
+                max_retries = 3
+                retry_delay = 2  # seconds
+                success = False
+                
+                for attempt in range(max_retries):
+                    if insert_spots(client, spots, config['clickhouse_database'], 
+                                  config['clickhouse_spots_table'], config['max_spots_per_insert']):
+                        log(f"Successfully processed {len(spots)} spots from {tbz_file.name}", "INFO")
+                        success = True
+                        break
+                    else:
+                        if attempt < max_retries - 1:
+                            log(f"Failed to insert spots from {tbz_file.name}, retrying in {retry_delay} seconds... (attempt {attempt+1}/{max_retries})", "WARNING")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            log(f"Failed to insert spots from {tbz_file.name} after {max_retries} attempts", "ERROR")
+                
+                if not success:
+                    log(f"Skipping {tbz_file.name} - will retry on next cycle", "WARNING")
                     continue
 
-            # Process noise
+            # Process noise with retry
             noise_records = process_noise_files(extraction_dir, running_jobs, receiver_descriptions)
             if noise_records:
-                if insert_noise(client, noise_records, config['clickhouse_database'],
-                              config['clickhouse_noise_table'], config['max_noise_per_insert']):
-                    log(f"Successfully processed {len(noise_records)} noise records from {tbz_file.name}", "INFO")
-                else:
-                    log(f"Failed to insert noise from {tbz_file.name}", "ERROR")
+                max_retries = 3
+                retry_delay = 2  # seconds
+                success = False
+                
+                for attempt in range(max_retries):
+                    if insert_noise(client, noise_records, config['clickhouse_database'],
+                                  config['clickhouse_noise_table'], config['max_noise_per_insert']):
+                        log(f"Successfully processed {len(noise_records)} noise records from {tbz_file.name}", "INFO")
+                        success = True
+                        break
+                    else:
+                        if attempt < max_retries - 1:
+                            log(f"Failed to insert noise from {tbz_file.name}, retrying in {retry_delay} seconds... (attempt {attempt+1}/{max_retries})", "WARNING")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            log(f"Failed to insert noise from {tbz_file.name} after {max_retries} attempts", "ERROR")
+                
+                if not success:
+                    log(f"Skipping {tbz_file.name} - will retry on next cycle", "WARNING")
                     continue
 
             # Mark as processed
