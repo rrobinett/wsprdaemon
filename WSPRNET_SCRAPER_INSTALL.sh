@@ -95,10 +95,15 @@ echo ""
 
 # Step 6: Verify Python syntax
 echo "Step 6: Verifying Python syntax..."
-if python3 -m py_compile "${INSTALL_PATH}"; then
+# Copy to temp location for syntax check (avoids permission issues)
+TEMP_CHECK=$(mktemp)
+cp "${INSTALL_PATH}" "${TEMP_CHECK}"
+if python3 -m py_compile "${TEMP_CHECK}" 2>/dev/null; then
     echo "✓ Syntax check passed"
+    rm -f "${TEMP_CHECK}"
 else
     echo "✗ Syntax error in Python file!"
+    rm -f "${TEMP_CHECK}"
     echo "Installation failed - restoring backup"
     if [[ -f "${BACKUP_PATH}" ]]; then
         $SUDO cp "${BACKUP_PATH}" "${INSTALL_PATH}"
