@@ -1,13 +1,19 @@
-```bash
 #!/bin/bash
 #
 # install-servers.sh - Install WSPRDAEMON server services
 # Installs both wsprnet_scraper and wsprdaemon_server services
 #
-# Version: 1.1
+# Version: 1.3
 # Last updated: 2025-11-09
 
 set -e  # Exit on error
+
+# Check if running interactively
+if [[ -t 0 ]]; then
+    INTERACTIVE=true
+else
+    INTERACTIVE=false
+fi
 
 echo "Installing WSPRDAEMON Server Services..."
 
@@ -29,13 +35,20 @@ echo "Installing required system packages..."
 apt update
 apt install -y python3 python3-venv python3-pip
 
-# Create directory structure
+# Create tmpfiles configuration for directory setup on boot
+echo "Creating tmpfiles.d configuration..."
+tee /etc/tmpfiles.d/wsprdaemon.conf > /dev/null << 'EOF'
+# Type Path                    Mode User       Group      Age Argument
+d      /var/log/wsprdaemon     0755 wsprdaemon wsprdaemon -   -
+d      /var/lib/wsprdaemon     0755 wsprdaemon wsprdaemon -   -
+d      /tmp/wsprdaemon         0755 wsprdaemon wsprdaemon -   -
+d      /var/spool/wsprdaemon   0755 wsprdaemon wsprdaemon -   -
+d      /etc/wsprdaemon         0755 wsprdaemon wsprdaemon -   -
+EOF
+
+# Create directories now
 echo "Creating directory structure..."
-mkdir -p /var/log/wsprdaemon
-mkdir -p /var/lib/wsprdaemon
-mkdir -p /tmp/wsprdaemon
-mkdir -p /etc/wsprdaemon
-chown -R wsprdaemon:wsprdaemon /var/log/wsprdaemon /var/lib/wsprdaemon /tmp/wsprdaemon
+systemd-tmpfiles --create /etc/tmpfiles.d/wsprdaemon.conf
 
 # Setup Python virtual environment as wsprdaemon user
 echo "Setting up Python virtual environment..."
@@ -44,12 +57,16 @@ VENV_PATH="$WSPRDAEMON_HOME/wsprdaemon/venv"
 
 if [ -d "$VENV_PATH" ]; then
     echo "Virtual environment already exists at $VENV_PATH"
-    read -p "Remove and recreate? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        sudo -u wsprdaemon rm -rf "$VENV_PATH"
+    if [[ "$INTERACTIVE" == true ]]; then
+        read -p "Remove and recreate? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            sudo -u wsprdaemon rm -rf "$VENV_PATH"
+        else
+            echo "Skipping venv creation..."
+        fi
     else
-        echo "Skipping venv creation..."
+        echo "Non-interactive mode: keeping existing venv"
     fi
 fi
 
@@ -101,18 +118,92 @@ chmod 755 /usr/local/bin/wsprdaemon_server.sh
 
 # Install systemd service files
 echo "Installing systemd service files..."
-if [ ! -f "$SCRIPT_DIR/wsprnet_scraper@.service" ]; then
-    echo "ERROR: wsprnet_scraper@.service not found in $SCRIPT_DIR"
-    exit 1
+
+# Install or use service files from script directory
+if [ -f "$SCRIPT_DIR/wsprnet_scraper@.service" ]; then
+    cp "$SCRIPT_DIR/wsprnet_scraper@.service" /etc/systemd/system/
+else
+    echo "Creating wsprnet_scraper@.service..."
+    tee /etc/systemd/system/wsprnet_scraper@.service > /dev/null << 'EOF'
+[Unit]
+Description=WSPRNET Scraper Service (%i)
+After=network.target clickhouse-server.service systemd-tmpfiles-setup.service
+Wants=clickhouse-server.service
+Requires=systemd-tmpfiles-setup.service
+
+[Service]
+Type=simple
+User=wsprdaemon
+Group=wsprdaemon
+
+ExecStart=/usr/local/bin/wsprnet_scraper.sh /etc/wsprdaemon/%i.conf
+
+Restart=on-failure
+RestartSec=60
+
+# Memory limits
+MemoryMax=1G
+MemoryHigh=768M
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/wsprdaemon /tmp/wsprdaemon
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wsprnet-scraper-%i
+
+[Install]
+WantedBy=multi-user.target
+EOF
 fi
 
-if [ ! -f "$SCRIPT_DIR/wsprdaemon_server@.service" ]; then
-    echo "ERROR: wsprdaemon_server@.service not found in $SCRIPT_DIR"
-    exit 1
+if [ -f "$SCRIPT_DIR/wsprdaemon_server@.service" ]; then
+    cp "$SCRIPT_DIR/wsprdaemon_server@.service" /etc/systemd/system/
+else
+    echo "Creating wsprdaemon_server@.service..."
+    tee /etc/systemd/system/wsprdaemon_server@.service > /dev/null << 'EOF'
+[Unit]
+Description=WSPRDAEMON Server (%i)
+After=network.target clickhouse-server.service systemd-tmpfiles-setup.service
+Wants=clickhouse-server.service
+Requires=systemd-tmpfiles-setup.service
+
+[Service]
+Type=simple
+User=wsprdaemon
+Group=wsprdaemon
+
+ExecStart=/usr/local/bin/wsprdaemon_server.sh /etc/wsprdaemon/%i.conf
+
+Restart=on-failure
+RestartSec=60
+
+# Memory limits
+MemoryMax=2G
+MemoryHigh=1.5G
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/wsprdaemon /var/lib/wsprdaemon /tmp/wsprdaemon /var/spool/wsprdaemon
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wsprdaemon-server-%i
+
+[Install]
+WantedBy=multi-user.target
+EOF
 fi
 
-cp "$SCRIPT_DIR/wsprnet_scraper@.service" /etc/systemd/system/
-cp "$SCRIPT_DIR/wsprdaemon_server@.service" /etc/systemd/system/
 systemctl daemon-reload
 
 # Create default configuration files if they don't exist
@@ -232,32 +323,38 @@ check_clickhouse_network_config() {
         echo "</clickhouse>"
         echo "EOF"
         echo ""
-        read -p "Apply this fix now? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
-            echo "Backed up to ${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
-            tee "$config_file" > /dev/null << 'EOF'
+        
+        if [[ "$INTERACTIVE" == true ]]; then
+            read -p "Apply this fix now? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+                echo "Backed up to ${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+                tee "$config_file" > /dev/null << 'EOF'
 <clickhouse>
     <listen_host>0.0.0.0</listen_host>
 </clickhouse>
 EOF
-            echo "✅ Network config updated to use 0.0.0.0"
-            echo "   ClickHouse will now bind to all interfaces"
-            
-            # Restart ClickHouse if it's running
-            if systemctl is-active --quiet clickhouse-server; then
-                echo "   Restarting ClickHouse..."
-                systemctl restart clickhouse-server
-                sleep 2
+                echo "✅ Network config updated to use 0.0.0.0"
+                echo "   ClickHouse will now bind to all interfaces"
+                
+                # Restart ClickHouse if it's running
                 if systemctl is-active --quiet clickhouse-server; then
-                    echo "   ✅ ClickHouse restarted successfully"
-                else
-                    echo "   ⚠️  ClickHouse failed to restart - check logs"
+                    echo "   Restarting ClickHouse..."
+                    systemctl restart clickhouse-server
+                    sleep 2
+                    if systemctl is-active --quiet clickhouse-server; then
+                        echo "   ✅ ClickHouse restarted successfully"
+                    else
+                        echo "   ⚠️  ClickHouse failed to restart - check logs"
+                    fi
                 fi
+            else
+                echo "Skipping fix - you can apply it manually later if needed"
             fi
         else
-            echo "Skipping fix - you can apply it manually later if needed"
+            echo "Non-interactive mode: skipping ClickHouse network fix"
+            echo "Apply the fix manually if needed"
         fi
     elif [[ "$has_specific_ips" == true ]]; then
         echo "✅ All configured specific IPs are currently available on the system"
@@ -268,15 +365,73 @@ EOF
     fi
 }
 
+# Function to restart services if needed
+restart_services_if_needed() {
+    local services_changed=false
+    local services_to_restart=()
+    
+    echo ""
+    echo ">>> Checking if services need restart..."
+    
+    # Check if services are running
+    if systemctl is-active --quiet wsprnet_scraper@wsprnet.service; then
+        services_to_restart+=("wsprnet_scraper@wsprnet.service")
+        services_changed=true
+    fi
+    
+    if systemctl is-active --quiet wsprdaemon_server@wsprdaemon.service; then
+        services_to_restart+=("wsprdaemon_server@wsprdaemon.service")
+        services_changed=true
+    fi
+    
+    if [[ "$services_changed" == false ]]; then
+        echo "No services currently running"
+        return 0
+    fi
+    
+    echo "Found running services:"
+    printf '  - %s\n' "${services_to_restart[@]}"
+    echo ""
+    echo "Scripts and/or service files have been updated."
+    
+    if [[ "$INTERACTIVE" == true ]]; then
+        read -p "Restart services to apply changes? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            for service in "${services_to_restart[@]}"; do
+                echo "Restarting $service..."
+                systemctl restart "$service"
+                sleep 1
+                if systemctl is-active --quiet "$service"; then
+                    echo "  ✅ $service restarted successfully"
+                else
+                    echo "  ⚠️  $service failed to restart - check logs"
+                fi
+            done
+        else
+            echo "⚠️  Services NOT restarted - changes will take effect on next restart"
+        fi
+    else
+        echo "Non-interactive mode: NOT restarting services automatically"
+        echo "⚠️  Manual restart required:"
+        for service in "${services_to_restart[@]}"; do
+            echo "   sudo systemctl restart $service"
+        done
+    fi
+}
+
 # Run the ClickHouse network check
 check_clickhouse_network_config
+
+# Check and restart services if needed
+restart_services_if_needed
 
 echo ""
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. Create /etc/wsprdaemon/clickhouse.conf with your ClickHouse credentials"
-echo "2. Enable and start the services:"
+echo "1. Create /etc/wsprdaemon/clickhouse.conf with your ClickHouse credentials (if not done)"
+echo "2. Enable and start the services (if not already running):"
 echo "   sudo systemctl enable wsprnet_scraper@wsprnet.service"
 echo "   sudo systemctl enable wsprdaemon_server@wsprdaemon.service"
 echo "   sudo systemctl start wsprnet_scraper@wsprnet.service"
@@ -290,16 +445,3 @@ echo "4. View logs:"
 echo "   sudo journalctl -u wsprnet_scraper@wsprnet.service -f"
 echo "   sudo journalctl -u wsprdaemon_server@wsprdaemon.service -f"
 echo ""
-```
-
-The updated script now includes the `check_clickhouse_network_config()` function that:
-
-1. Checks if ClickHouse is installed
-2. Looks for custom network configuration
-3. Identifies specific IPs that aren't available on the system
-4. Warns about potential boot-time failures with VPN/WireGuard IPs
-5. Offers to automatically fix it by using `0.0.0.0`
-6. Backs up the old config before changing it
-7. Restarts ClickHouse if it's running
-
-This will catch the issue during installation and prevent the boot-time startup failures you experienced.
