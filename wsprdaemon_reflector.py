@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-WSPRDAEMON Reflector - Distribute .tbz files from clients to multiple servers
-Usage: wsprdaemon_reflector.py --config /etc/wsprdaemon/reflector.conf [options]
+WSPRDAEMON Reflector - Distribute .tbz files using atomic copy and rsync
+Refined architecture:
+- Input thread: polls for new files, copies to all destination spools (atomic rename), deletes input
+- Output threads: one per destination, polls spool and rsyncs files
+- Optional: Can try hard links first if config allows (off by default)
+- No state tracking needed - filesystem manages everything
 """
 
 import argparse
@@ -11,32 +15,28 @@ import time
 import os
 import subprocess
 import threading
+import shutil
 from pathlib import Path
 from typing import Dict, List
 import logging
-from collections import defaultdict
 import glob
-import subprocess
-from pathlib import Path
 
 # Default configuration
 DEFAULT_CONFIG = {
     'incoming_pattern': '/home/*/uploads/*.tbz',
-    'queue_base_dir': '/var/spool/wsprdaemon/reflector',
-    'state_file': '/var/lib/wsprdaemon/reflector/state.json',
+    'spool_base_dir': '/var/spool/wsprdaemon/reflector',
     'destinations': [
         # {'name': 'WD1', 'user': 'wsprdaemon', 'host': 'WD1', 'path': '/var/spool/wsprdaemon/from-wd00'}
     ],
     'scan_interval': 10,
     'rsync_interval': 5,
-    'cleanup_interval': 60,
     'rsync_bandwidth_limit': 20000,  # KB/s
     'rsync_timeout': 300,
-    'max_retries': 3
+    'try_hardlinks': False,  # Set True only if protected_hardlinks=0 or same ownership
 }
 
 # Logging configuration
-LOG_FILE = 'wsprdaemon_reflector.log'
+LOG_FILE = '/var/log/wsprdaemon/reflector.log'
 LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_KEEP_RATIO = 0.75
 
@@ -94,6 +94,8 @@ def setup_logging(log_file=None, max_bytes=LOG_MAX_BYTES, keep_ratio=LOG_KEEP_RA
     logger.handlers.clear()
 
     if log_file:
+        # Ensure log directory exists
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         file_handler = TruncatingFileHandler(log_file, max_bytes, keep_ratio)
         file_formatter = logging.Formatter(
             '[%(asctime)s] %(levelname)s: %(message)s',
@@ -127,212 +129,149 @@ def log(message: str, level: str = "INFO"):
     for handler in logger.handlers:
         handler.flush()
 
-class ReflectorState:
-    """Track which files have been distributed to which destinations"""
-    # ... existing __init__, load, save, add_file, etc.
 
-    def needs_processing(self, filename: str) -> bool:
-        """Return True if the file is not yet tracked or any destination is pending"""
-        with self.lock:
-            if filename not in self.state:
-                return True
-            return any(dest_info['status'] != 'sent' for dest_info in self.state[filename].values())
+def check_hardlink_support():
+    """Check if system supports hard links across different file owners"""
+    try:
+        with open('/proc/sys/fs/protected_hardlinks', 'r') as f:
+            value = int(f.read().strip())
+            return value == 0
+    except (FileNotFoundError, ValueError, PermissionError):
+        # If we can't read it, assume protected
+        return False
 
-    def __init__(self, state_file: Path):
-        self.state_file = state_file
-        self.lock = threading.RLock()
-        # Format: {filename: {dest_name: {'status': 'pending'|'sent'|'failed', 'attempts': N, 'last_attempt': timestamp}}}
-        self.state = defaultdict(dict)
-        self.load()
-    
-    def load(self):
-        """Load state from disk"""
-        with self.lock:
-            if self.state_file.exists():
-                try:
-                    with open(self.state_file, 'r') as f:
-                        self.state = defaultdict(dict, json.load(f))
-                    log(f"Loaded state: {len(self.state)} files tracked", "INFO")
-                except Exception as e:
-                    log(f"Error loading state: {e}", "ERROR")
-    
-    def save(self):
-        """Save state to disk"""
-        with self.lock:
-            try:
-                self.state_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.state_file, 'w') as f:
-                    json.dump(dict(self.state), f, indent=2)
-            except Exception as e:
-                log(f"Error saving state: {e}", "ERROR")
-    
-    def add_file(self, filename: str, destinations: List[str]):
-        """Add a new file to track for all destinations"""
-        log(f"add_file called with filename={filename}, destinations={destinations}", "DEBUG") 
-        with self.lock:
-            log(f"Acquired lock, checking if {filename} in state", "DEBUG")  # ADD THIS
-            log(f"filename in self.state = {filename in self.state}", "DEBUG")  # ADD THIS
-            if filename not in self.state:
-                log(f"Creating state entry for {filename}", "DEBUG")
-                self.state[filename] = {}
-                log(f"About to loop through destinations", "DEBUG")
-                for dest in destinations:
-                    log(f"Processing destination: {dest}", "DEBUG")
-                    self.state[filename][dest] = {
-                        'status': 'pending',
-                        'attempts': 0,
-                        'last_attempt': 0
-                    }
-                log(f"About to call self.save()", "DEBUG")  
-                self.save()
-                log(f"After self.save(), about to log tracking message", "DEBUG")
-                log(f"Tracking new file: {filename} -> {destinations}", "DEBUG")
 
-    
-    def mark_sent(self, filename: str, destination: str):
-        with self.lock:
-            if filename in self.state and destination in self.state[filename]:
-                self.state[filename][destination]['status'] = 'sent'
-                self.state[filename][destination]['last_attempt'] = time.time()
-                self.save()
-                log(f"Marked {filename} as sent to {destination}", "DEBUG")
-    
-    def mark_failed(self, filename: str, destination: str):
-        with self.lock:
-            if filename in self.state and destination in self.state[filename]:
-                self.state[filename][destination]['status'] = 'failed'
-                self.state[filename][destination]['attempts'] += 1
-                self.state[filename][destination]['last_attempt'] = time.time()
-                self.save()
-    
-    def is_fully_distributed(self, filename: str) -> bool:
-        with self.lock:
-            if filename not in self.state:
-                return False
-            return all(dest['status'] == 'sent' for dest in self.state[filename].values())
-    
-    def get_pending_destinations(self, filename: str) -> List[str]:
-        with self.lock:
-            if filename not in self.state:
-                return []
-            return [dest for dest, info in self.state[filename].items() if info['status'] != 'sent']
-    
-    def remove_file(self, filename: str):
-        with self.lock:
-            if filename in self.state:
-                del self.state[filename]
-                self.save()
-                log(f"Removed {filename} from tracking", "DEBUG")
+class InputPoller(threading.Thread):
+    """Poll for incoming files, hard-link to all destination spools, delete input"""
 
-class FileScanner(threading.Thread):
-    """Scan for new .tbz files and queue them for distribution"""
-
-    def __init__(self, config: Dict, state: ReflectorState, stop_event: threading.Event):
-        super().__init__(name="Scanner", daemon=True)
+    def __init__(self, config: Dict, stop_event: threading.Event):
+        super().__init__(name="InputPoller", daemon=True)
         self.config = config
-        self.state = state
         self.stop_event = stop_event
-        self.dest_names = [d['name'] for d in config['destinations']]
+        self.spool_base = Path(config['spool_base_dir'])
+        self.destination_names = [d['name'] for d in config['destinations']]
 
     def run(self):
-        log("File scanner thread started", "INFO")
+        log("Input poller thread started", "INFO")
+        log(f"Polling pattern: {self.config['incoming_pattern']}", "INFO")
+        log(f"Destination spools: {self.destination_names}", "INFO")
+        log(f"Hard links: {'enabled' if self.config.get('try_hardlinks', False) else 'disabled (using copy mode)'}", "INFO")
 
         while not self.stop_event.is_set():
             try:
-                self.scan_and_queue()
+                self.poll_and_distribute()
             except Exception as e:
-                log(f"Scanner error: {e}", "ERROR")
-
+                log(f"Input poller error: {e}", "ERROR")
+            
             self.stop_event.wait(self.config['scan_interval'])
 
-        log("File scanner thread stopped", "INFO")
+        log("Input poller thread stopped", "INFO")
 
-    def scan_and_queue(self):
-        """Scan for new files and queue them for transfer"""
-        import glob
-        import shutil
-
-        pattern = self.config.get('incoming_pattern', '/home/*/uploads/*.tbz')
-        log(f"Scanning with pattern: {pattern}", "DEBUG")
-
-        files = glob.glob(pattern)
-        if not files:
-            log("No .tbz files found", "DEBUG")
+    def poll_and_distribute(self):
+        """Find new files, hard-link to destination spools, delete input"""
+        # Find all matching files
+        matching_files = glob.glob(self.config['incoming_pattern'])
+        
+        if not matching_files:
+            log("No new files found", "DEBUG")
             return
 
-        log(f"Found {len(files)} .tbz files", "DEBUG")
+        log(f"Found {len(matching_files)} files to distribute", "INFO")
 
-        for filepath in files:
-            filename = os.path.basename(filepath)
-            log(f"Processing file: {filename}", "DEBUG")
-            log(f"Checking needs_processing for {filename}", "DEBUG")
-            needs_proc = self.state.needs_processing(filename)  # ADD THIS LINE
-            log(f"needs_processing returned: {needs_proc}", "DEBUG")  # ADD THIS LINE
-            log(f"About to add file to state", "DEBUG")
-
-            # Check if file needs processing (filename only)
-            if not self.state.needs_processing(filename):
-                log(f"File {filename} already processed/being tracked", "DEBUG")
+        for source_path in matching_files:
+            source_file = Path(source_path)
+            if not source_file.exists():
+                log(f"File disappeared: {source_file}", "WARNING")
                 continue
 
-            # Add file to state with all destination names
-            dest_names = [d['name'] for d in self.config['destinations']]
-            self.state.add_file(filename, dest_names)
-            log(f"Added {filename} to state tracking for destinations: {dest_names}", "DEBUG")
+            filename = source_file.name
+            log(f"Processing: {filename}", "INFO")
 
-            # Queue the file for each destination
-            for dest_name in dest_names:
-                dest_queue = Path(self.config['queue_base_dir']) / dest_name
-                dest_queue.mkdir(parents=True, exist_ok=True)
-                queue_file = dest_queue / filename
+            # Hard-link to each destination spool
+            links_created = 0
+            for dest_name in self.destination_names:
+                dest_spool = self.spool_base / dest_name
+                dest_file = dest_spool / filename
 
-                if not queue_file.exists():
-                    try:
-                        os.link(filepath, queue_file)
-                        log(f"Queued {filename} for {dest_name} at {queue_file}", "INFO")
-                    except OSError:
+                try:
+                    dest_spool.mkdir(parents=True, exist_ok=True)
+                    
+                    # Try hard link first if enabled (most efficient when it works)
+                    if self.config.get('try_hardlinks', False):
                         try:
-                            shutil.copy2(filepath, queue_file)
-                            log(f"Copied {filename} to queue for {dest_name} at {queue_file}", "INFO")
-                        except Exception as e:
-                            log(f"Failed to queue {filename} for {dest_name}: {e}", "ERROR")
-                else:
-                    log(f"File {filename} already queued for {dest_name}", "DEBUG")
+                            os.link(str(source_file), str(dest_file))
+                            links_created += 1
+                            log(f"Hard-linked {filename} to {dest_name} spool", "DEBUG")
+                            continue  # Skip to next destination
+                        except OSError as e:
+                            # Hard link failed - fall back to copy
+                            log(f"Hard-link failed for {filename} to {dest_name} ({e}), falling back to copy", "DEBUG")
+                    
+                    # Copy with atomic rename to prevent rsync race condition
+                    temp_file = dest_spool / f"{filename}.tmp"
+                    shutil.copy2(source_file, temp_file)
+                    temp_file.rename(dest_file)  # Atomic operation
+                    links_created += 1
+                    log(f"Copied {filename} to {dest_name} spool", "DEBUG")
+                    
+                except FileExistsError:
+                    log(f"File already exists: {dest_file}", "DEBUG")
+                    links_created += 1  # Count as success
+                except Exception as e:
+                    log(f"Failed to distribute {filename} to {dest_name}: {e}", "ERROR")
 
-class RsyncWorker(threading.Thread):
-    """Worker thread that rsyncs files to a specific destination"""
+            # Delete the input file only if we successfully linked to all destinations
+            if links_created == len(self.destination_names):
+                try:
+                    source_file.unlink()
+                    log(f"Deleted input file: {source_file} (hard links remain)", "INFO")
+                except Exception as e:
+                    log(f"Failed to delete input file {source_file}: {e}", "ERROR")
+            else:
+                log(f"Only {links_created}/{len(self.destination_names)} links created for {filename}, keeping input file", "WARNING")
 
-    def __init__(self, destination: Dict, config: Dict, state: ReflectorState, stop_event: threading.Event):
-        super().__init__(name=f"Rsync-{destination['name']}", daemon=True)
+
+class OutputRsyncWorker(threading.Thread):
+    """Poll destination spool directory and rsync files to remote server"""
+
+    def __init__(self, destination: Dict, config: Dict, stop_event: threading.Event):
+        super().__init__(name=f"Output-{destination['name']}", daemon=True)
         self.destination = destination
         self.config = config
-        self.state = state
         self.stop_event = stop_event
-        self.queue_dir = Path(config['queue_base_dir']) / destination['name']
+        self.spool_dir = Path(config['spool_base_dir']) / destination['name']
 
     def run(self):
-        log(f"Rsync worker for {self.destination['name']} started", "INFO")
+        log(f"Output rsync worker for {self.destination['name']} started", "INFO")
+        log(f"Spool directory: {self.spool_dir}", "INFO")
+        log(f"Remote target: {self.destination['user']}@{self.destination['host']}:{self.destination['path']}", "INFO")
+
         while not self.stop_event.is_set():
             try:
                 self.sync_files()
             except Exception as e:
-                log(f"Rsync worker {self.destination['name']} error: {e}", "ERROR")
+                log(f"Output worker {self.destination['name']} error: {e}", "ERROR")
+            
             self.stop_event.wait(self.config['rsync_interval'])
-        log(f"Rsync worker for {self.destination['name']} stopped", "INFO")
+
+        log(f"Output rsync worker for {self.destination['name']} stopped", "INFO")
 
     def sync_files(self):
-        """Rsync queued files to destination"""
-        if not self.queue_dir.exists():
-            self.queue_dir.mkdir(parents=True, exist_ok=True)
-            log(f"Created missing queue directory: {self.queue_dir}", "DEBUG")
+        """Rsync all files from spool directory to remote destination"""
+        # Ensure spool directory exists
+        if not self.spool_dir.exists():
+            self.spool_dir.mkdir(parents=True, exist_ok=True)
+            log(f"Created spool directory: {self.spool_dir}", "DEBUG")
 
-        queued_files = list(self.queue_dir.glob('*.tbz'))
+        # Check for files to sync
+        queued_files = list(self.spool_dir.glob('*.tbz'))
         if not queued_files:
-            log(f"No files queued for {self.destination['name']}", "DEBUG")
+            log(f"No files in {self.destination['name']} spool", "DEBUG")
             return
 
-        log(f"Found {len(queued_files)} files to sync to {self.destination['name']}", "INFO")
+        log(f"Syncing {len(queued_files)} files from {self.destination['name']} spool", "INFO")
 
+        # Build rsync command
         remote_path = f"{self.destination['user']}@{self.destination['host']}:{self.destination['path']}/"
         ssh_cmd = 'ssh -i /home/wsprdaemon/.ssh/id_rsa -o StrictHostKeyChecking=no'
 
@@ -340,10 +279,12 @@ class RsyncWorker(threading.Thread):
             'rsync',
             '-a',
             '-e', ssh_cmd,
-            '--remove-source-files',
+            '--remove-source-files',  # Delete after successful transfer
+            '--delay-updates',  # Atomic rename on remote after transfer completes
+            '--exclude=*.tmp',  # Skip temp files still being copied locally
             f'--bwlimit={self.config["rsync_bandwidth_limit"]}',
             f'--timeout={self.config["rsync_timeout"]}',
-            str(self.queue_dir) + '/',
+            str(self.spool_dir) + '/',
             remote_path
         ]
 
@@ -355,106 +296,44 @@ class RsyncWorker(threading.Thread):
                 text=True,
                 timeout=self.config['rsync_timeout'] + 30
             )
+            
             if result.returncode == 0:
                 log(f"Successfully synced {len(queued_files)} files to {self.destination['name']}", "INFO")
-                for file in queued_files:
-                    self.state.mark_sent(file.name, self.destination['name'])
+                # rsync with --remove-source-files already deleted the hard links
+                # When all hard links are deleted, the file data is automatically freed by the filesystem
             else:
-                log(f"Rsync to {self.destination['name']} failed: {result.stderr}", "ERROR")
-                for file in queued_files:
-                    self.state.mark_failed(file.name, self.destination['name'])
+                log(f"Rsync to {self.destination['name']} failed (rc={result.returncode}): {result.stderr}", "ERROR")
+                
         except subprocess.TimeoutExpired:
             log(f"Rsync to {self.destination['name']} timed out", "ERROR")
-            for file in queued_files:
-                self.state.mark_failed(file.name, self.destination['name'])
         except Exception as e:
             log(f"Rsync to {self.destination['name']} error: {e}", "ERROR")
 
 
-class CleanupWorker(threading.Thread):
-    """Remove source files after successful distribution to all destinations"""
-
-    def __init__(self, config: Dict, state: ReflectorState, stop_event: threading.Event):
-        super().__init__(name="Cleanup", daemon=True)
-        self.config = config
-        self.state = state
-        self.stop_event = stop_event
-
-    def run(self):
-        log("Cleanup worker thread started", "INFO")
-
-        while not self.stop_event.is_set():
-            try:
-                self.cleanup_distributed_files()
-            except Exception as e:
-                log(f"Cleanup worker error: {e}", "ERROR")
-
-            self.stop_event.wait(self.config['cleanup_interval'])
-
-        log("Cleanup worker thread stopped", "INFO")
-
-    def cleanup_distributed_files(self):
-        """Delete source files that have been sent to all destinations"""
-        files_to_clean = []
-
-        for filename in list(self.state.state.keys()):
-            if self.state.is_fully_distributed(filename):
-                files_to_clean.append(filename)
-
-        if not files_to_clean:
-            log("No files ready for cleanup", "DEBUG")
-            return
-
-        log(f"Cleaning up {len(files_to_clean)} fully distributed files", "INFO")
-
-        for filename in files_to_clean:
-            deleted = False
-
-            for home_dir in Path('/home').iterdir():
-                if home_dir.is_dir():
-                    uploads_dir = home_dir / 'uploads'
-                    source_file = uploads_dir / filename
-
-                    if source_file.exists():
-                        try:
-                            # Use Python's unlink - we're running as root
-                            source_file.unlink()
-                            deleted = True
-                            log(f"Deleted source file: {source_file}", "INFO")
-                        except FileNotFoundError:
-                            # File was already deleted (race condition)
-                            log(f"File already deleted: {source_file}", "DEBUG")
-                            deleted = True
-                        except Exception as e:
-                            log(f"Error deleting {source_file}: {e}", "ERROR")
-
-            if deleted:
-                self.state.remove_file(filename)
-
 def main():
-    parser = argparse.ArgumentParser(description='WSPRDAEMON Reflector')
-    parser.add_argument('--config', help='Path to config file (JSON)')
+    parser = argparse.ArgumentParser(description='WSPRDAEMON Reflector - Hard-link based distribution')
+    parser.add_argument('--config', required=True, help='Path to config file (JSON)')
     parser.add_argument('--log-file', default=LOG_FILE, help='Path to log file')
     parser.add_argument('--log-max-mb', type=int, default=10, help='Max log file size in MB')
-    parser.add_argument('--verbose', type=int, default=0, choices=range(0, 10),
+    parser.add_argument('--verbose', type=int, default=1, choices=range(0, 10),
                         help='Verbosity level 0-9 (0=WARNING+ERROR, 1=INFO, 2+=DEBUG)')
     args = parser.parse_args()
 
     setup_logging(args.log_file, args.log_max_mb * 1024 * 1024, verbosity=args.verbose)
 
-    log("=== WSPRDAEMON Reflector Starting ===", "INFO")
+    log("=== WSPRDAEMON Reflector Starting (Copy Mode with Optional Hard Links) ===", "INFO")
     log(f"Verbosity level: {args.verbose}", "INFO")
 
+    # Load configuration
     config = DEFAULT_CONFIG.copy()
-    if args.config:
-        try:
-            with open(args.config, 'r', encoding='utf-8') as f:
-                loaded_config = json.load(f)
-                config.update(loaded_config)
-            log(f"Loaded configuration from {args.config}", "INFO")
-        except Exception as e:
-            log(f"Error loading config: {e}", "ERROR")
-            sys.exit(1)
+    try:
+        with open(args.config, 'r', encoding='utf-8') as f:
+            loaded_config = json.load(f)
+            config.update(loaded_config)
+        log(f"Loaded configuration from {args.config}", "INFO")
+    except Exception as e:
+        log(f"Error loading config: {e}", "ERROR")
+        sys.exit(1)
 
     if not config['destinations']:
         log("No destinations configured", "ERROR")
@@ -462,38 +341,59 @@ def main():
 
     log(f"Configured {len(config['destinations'])} destinations: {[d['name'] for d in config['destinations']]}", "INFO")
 
-    state_file = Path(config['state_file'])
-    state = ReflectorState(state_file)
+    # Check hardlink support and provide intelligent suggestions
+    system_supports_hardlinks = check_hardlink_support()
+    try_hardlinks_enabled = config.get('try_hardlinks', False)
+    
+    log(f"System protected_hardlinks: {'0 (hardlinks allowed)' if system_supports_hardlinks else '1 (hardlinks restricted)'}", "INFO")
+    log(f"Config try_hardlinks: {try_hardlinks_enabled}", "INFO")
+    
+    # Provide suggestions based on system capability vs config
+    if system_supports_hardlinks and not try_hardlinks_enabled:
+        log("SUGGESTION: System supports hard links across users (protected_hardlinks=0)", "WARNING")
+        log(f"SUGGESTION: Consider enabling hard links for better performance:", "WARNING")
+        log(f"SUGGESTION: Add '\"try_hardlinks\": true' to {args.config}", "WARNING")
+        log("SUGGESTION: This will eliminate file copy overhead (zero-copy distribution)", "WARNING")
+    elif not system_supports_hardlinks and try_hardlinks_enabled:
+        log("WARNING: Hard links enabled but system has protected_hardlinks=1", "WARNING")
+        log("WARNING: Hard link attempts will fail and fall back to copy mode", "WARNING")
+        log("WARNING: Consider setting '\"try_hardlinks\": false' for cleaner operation", "WARNING")
+
+    # Create spool base directory
+    spool_base = Path(config['spool_base_dir'])
+    spool_base.mkdir(parents=True, exist_ok=True)
+    log(f"Spool base directory: {spool_base}", "INFO")
+
+    # Ensure all destination spool directories exist
+    for dest in config['destinations']:
+        dest_spool = spool_base / dest['name']
+        dest_spool.mkdir(parents=True, exist_ok=True)
+        log(f"Destination spool: {dest_spool}", "DEBUG")
 
     stop_event = threading.Event()
-
-    # Ensure queue directories exist for all destinations
-    for dest in config['destinations']:
-        queue_dir = Path(config['queue_base_dir']) / dest['name']
-        queue_dir.mkdir(parents=True, exist_ok=True)
-        log(f"Ensured queue directory exists: {queue_dir}", "DEBUG")
-
     threads = []
 
-    scanner = FileScanner(config, state, stop_event)
-    scanner.start()
-    threads.append(scanner)
+    # Start input poller thread
+    input_poller = InputPoller(config, stop_event)
+    input_poller.start()
+    threads.append(input_poller)
 
+    # Start one output rsync worker per destination
     for dest in config['destinations']:
-        worker = RsyncWorker(dest, config, state, stop_event)
+        worker = OutputRsyncWorker(dest, config, stop_event)
         worker.start()
         threads.append(worker)
 
-    cleanup = CleanupWorker(config, state, stop_event)
-    cleanup.start()
-    threads.append(cleanup)
-
-    log(f"Started {len(threads)} worker threads", "INFO")
+    log(f"Started {len(threads)} worker threads (1 input + {len(config['destinations'])} output)", "INFO")
 
     try:
         while True:
-            time.sleep(10)
-            log(f"Status: {len(state.state)} files tracked", "DEBUG")
+            time.sleep(60)
+            # Count files in spools
+            total_files = sum(len(list((spool_base / d['name']).glob('*.tbz'))) 
+                            for d in config['destinations'])
+            if total_files > 0:
+                log(f"Status: {total_files} files queued across all spools", "INFO")
     except KeyboardInterrupt:
         log("Received shutdown signal", "INFO")
     finally:
