@@ -19,7 +19,9 @@
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
-    <link rel="search" title="Search" href="../../search.html" /> 
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Example radiod@rx888-wsprdaemon.conf" href="radiod%40rx888-wsprdaemon.conf.html" />
+    <link rel="prev" title="The ka9q-radio [hardware] section" href="hardware.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -58,11 +60,65 @@
 <li class="toctree-l1"><a class="reference internal" href="../../installation/security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/beelink.html">HamSCI – Beelink</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/psws_data_rep.html">Personal Space Weather Station Data Repository Access</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hardware.html">The ka9q-radio [hardware] section</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">The ka9q-radio [channels] section</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#phil-karn-s-comprehensive-documentation-of-this-section">Phil Karn’s comprehensive documentation of this section:</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#mode-pm-npm-fm-nfm-wfm-am-cam-ame-iq-cwu-cwl-usb-lsb-dsb-amsq-wspr-spectrum">mode = pm | npm | fm | nfm | wfm | am | cam | ame | iq | cwu | cwl | usb | lsb | dsb | amsq | wspr | spectrum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dns-no-yes-default-no">dns = no | yes (default no)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data">data =</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#parameters-in-modes-conf">Parameters in <em>modes.conf</em></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#demod-linear-fm-wfm">demod = linear | fm | wfm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#samprate">samprate =</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#channels-1-2">channels = 1 | 2</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stereo-y">stereo = y</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mono-y">mono = y</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kaiser-beta-11-0">kaiser-beta = 11.0</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#low-5000">low = -5000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#high-5000">high = +5000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#squelch-open-8">squelch-open = 8</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#squelch-close-7">squelch-close = 7</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#squelchtail-1">squelchtail = 1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#headroom-15">headroom = -15</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#shift-0">shift = 0</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#recovery-rate-20">recovery-rate = +20</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hang-time-1-1">hang-time = 1.1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#threshold-15">threshold = -15</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gain-50">gain = 50</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#envelope-on-off">envelope = on | off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pll-on-off">pll = on | off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#square-on-off">square = on | off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pll-bw-100">pll-bw = 100</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#agc-on-off">agc = on | off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deemph-tc-530-5">deemph-tc = 530.5</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deemph-gain-12">deemph-gain = +12</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#extend-threshold-extend-yes-no">extend | threshold-extend = yes | no</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tone-pl-ctcss-0">tone | pl | ctcss = 0</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pacing-on-off">pacing = on | off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#encoding-s16le-s16be-f16le-f32le-opus">encoding = s16le | s16be | f16le | f32le | opus</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bitrate-0">bitrate = 0</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#update-25">update = 25</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#buffer-0">buffer = 0</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#disable-yes-no">disable = yes | no</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#freq">freq =</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ssrc">ssrc =</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#filter2-0-4-default-0">filter2 = 0-4 (default 0)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#the-dynamic-template">The Dynamic Template</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
@@ -615,7 +671,10 @@ near future.</p>
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="hardware.html" class="btn btn-neutral float-left" title="The ka9q-radio [hardware] section" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="radiod%40rx888-wsprdaemon.conf.html" class="btn btn-neutral float-right" title="Example radiod@rx888-wsprdaemon.conf" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 

@@ -38,7 +38,7 @@ Running an RX888 and wsprdaemon 24x7 remotely poses some unique problems.  One a
 
 ### Operating system
 
-The current version of WD runs on [Ubuntu 24.04 LTS](https://ubuntu.com/download/server).  Ubuntu seems determined to push "snap" software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a [method to "de-snap"](http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd) a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative -- [Mint](https://www.linuxmint.com/download.php) -- which does not use snaps or their progenitor, [Debian](https://www.debian.org/distrib/).  
+The latest versions of WD are built and run on versions 12 and 13 of [Debian](https://www.debian.org/distrib), although [Ubuntu 24.04 LTS](https://ubuntu.com/download/server) will also work.  Ubuntu seems determined to push "snap" software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a [method to "de-snap"](http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd) a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative -- [Mint](https://www.linuxmint.com/download.php) -- which does not use snaps.   
 
 ### sudo access 
 

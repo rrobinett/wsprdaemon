@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Space Weather Station Data Repository Access &mdash; wsprdaemon 3.3.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ad389f6d"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuring wsprdaemon: wsprdaemon.conf" href="../configuration/wd_conf.html" />
+    <link rel="prev" title="HamSCI – Leo Bodnar GPSDO" href="lb_gpsdo.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            wsprdaemon
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../description/overview.html">wsprdaemon Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quick_start.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/how_it_works.html">How wsprdaemon Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/history.html">History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/preparation.html">Preparing for installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1"><a class="reference internal" href="beelink.html">HamSCI – Beelink</a></li>
+<li class="toctree-l1"><a class="reference internal" href="lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Personal Space Weather Station Data Repository Access</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#psws-account">PSWS Account</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#integrating-with-wsprdaemon">Integrating with wsprdaemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-automatic-login-to-upload-data">Setting up automatic login to upload data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-wwv-chu-channels-in-wsprdaemon-conf">Configuring WWV/CHU Channels in wsprdaemon.conf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-radiod-from-ka9q-radio-to-present-wwv-chu-rtp-streams">Configuring radiod (from ka9q-radio) to present WWV/CHU RTP streams</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/hardware.html">The ka9q-radio [hardware] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../operation/service_management.html">Service Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operation/monitoring.html">System Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/operating.html">Operating WD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/monitoring.html">Monitoring WD operation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../maintenance/aliases.html">Aliases for monitoring and interacting with WD</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features &amp; Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../results/wspr.html">WSPR spots</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/grape.html">HamSCI WWV/H and CHU Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results/psk.html">PSKReporter</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Troubleshooting &amp; Support</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/overview.html">Troubleshooting wsprdaemon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/typicals.html">Some typical problems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting/diagnostic_tools.html">Diagnostic Tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../FAQ.html">Frequently Asked Questions</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples &amp; Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/common_configurations.html">Common Configurations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/data_flow.html">Data Flow Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/network_security.html">Network Security Architecture</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer Documentation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developers/getting_started.html">Developer Getting Started Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/remote_development.html">Remote Development Setup</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference &amp; Resources</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../appendices/command_reference.html">Command Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../external_links.html">External Links</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">wsprdaemon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Personal Space Weather Station Data Repository Access</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/hamsci/psws_data_rep.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="personal-space-weather-station-data-repository-access">
+<h1>Personal Space Weather Station Data Repository Access<a class="headerlink" href="#personal-space-weather-station-data-repository-access" title="Link to this heading"></a></h1>
+<p>Revised instructions to activate the uploading of GRAPE data to the PSWS site. All prior instructions should be ignored since the PSWS site has moved to a new server, ssh access has been turned off and the site requires the use of SFTP, a public key and the newest WSPRDaemon code to support the upload. These instructions are specific to WSPRDaemon users that have RX888 receivers to record WWV for the GRAPE project.</p>
+<section id="psws-account">
+<h2>PSWS Account<a class="headerlink" href="#psws-account" title="Link to this heading"></a></h2>
+<p>To begin, you must have a Personal Space Weather Station account. Visit this link to see how to get started. Follow the link to register your station.</p>
+<p>https://pswsnetwork.eng.ua.edu/about/</p>
+<p>There’s an excellent document written by Bill Engelke, AB4EJ located at this link that is a good primer to read for the uninitiated. It shows how to set up the account.  It does not include WSPRDaemon configuration instructions, FYI.</p>
+<p>https://hamsci.org/sites/default/files/Grape/Getting%20Started%20with%20Data%20Reporting%20Using%20A%20Personal%20Space%20Weather%20Station_V7.2.pdf</p>
+<p>Once your PSWS account is set up and you add a device, you must make note of your Station ID and your device ID. The station ID can be found at the PSWS home page and clicking the “Stations” along the top bar and then clicking “View My Stations”. The station ID is under the column labeled ID. The ID is a link and when you click it, you’ll see more detail.</p>
+<p>Your station ID will be at the very top under Details of this station:</p>
+<p>ID: S000XXX where the XXX’s will be your number.</p>
+<p>The Device ID is located at the bottom of the page inside the outlined box. It is also labeled ID and will be a three digit number. You need both to enter into your wsprdaemon.conf file.</p>
+</section>
+<section id="integrating-with-wsprdaemon">
+<h2>Integrating with wsprdaemon<a class="headerlink" href="#integrating-with-wsprdaemon" title="Link to this heading"></a></h2>
+<p>If you haven’t updated your WSPDaemon code in a while, that should be your next step. At your linux command prompt, type cdw and press enter, which brings you to the wsprdaemon directory. Type wdz to stop wsprdaemon and other active programs like KA9Q radio. Type “git pull” and download new files to the system. Type wda to restart wsprdaemon. Type wds to check system status.</p>
+<p>Now, on the latest version, edit your wsprdaemon.conf file to include your two PSWS ID’s. See example below:</p>
+<p>PSWS_STATION_ID=”S000XXX”</p>
+<p>PSWS_DEVICE_ID=”1XX”</p>
+<p>Be sure to remove any leading #’s. If you have an older version of WSPRDaemon, your .conf file may have this entry, “GRAPE_PSWS_ID”, which has been deprecated and is no longer used. Remove it from your config file.</p>
+</section>
+<section id="setting-up-automatic-login-to-upload-data">
+<h2>Setting up automatic login to upload data<a class="headerlink" href="#setting-up-automatic-login-to-upload-data" title="Link to this heading"></a></h2>
+<p>Uploading to the PSWS site requires a public key generated on your computer which needs to be sent to Bill Engelke. His email is wdengelke&#64;retiree.ua.edu</p>
+<p>The best way to access that key is to run this command at the command prompt.  wd-sftp-psws</p>
+<p>Running this will test connectivity to the PSWS server. If your key has not been installed on the server yet, you will see a failure message, However, you will also see the key that needs to be emailed to Bill to be entered into the server, allowing your system to upload data. Copy that key and email it to Bill. It’s a very long string that looks like this…</p>
+<p>ssh-ed25519 AAAAC3XxXxXxXXxxxxxxxxxxxx+m2injVxdYXJFFF99mhp5E3qkYngFsCITj wsprdaemon&#64;XXXXX</p>
+<p>When Bill confirms this has been entered into the PSWS account, you can run wd-sftp-psws again and it should return a message that looks like this.</p>
+<p>The GRAPE_PSWS_ID=S000XXX_XXX is being derived from PSWS_STATION_ID=S000XXX and PSWS_DEVICE_ID=1XX
+Testing Internnet connectivity to the PSWS server by running ‘nc -vz -w 2 pswsnetwork.eng.ua.edu 22’
+After  0 seconds, Successfully ran ‘nc -vz pswsnetwork.eng.ua.edu 22’
+Testing sftp autologin with ‘sftp -o ConnectTimeout=20  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null S000XXX&#64;pswsnetwork.eng.ua.edu’
+After  1 seconds, Successfully ran ‘sftp -o ConnectTimeout=20  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null S000XXX&#64;pswsnetwork.eng.ua.edu’</p>
+<p>The steps above should get your wsprdaemon connected and able to upload to the PSWS site.</p>
+</section>
+<section id="configuring-wwv-chu-channels-in-wsprdaemon-conf">
+<h2>Configuring WWV/CHU Channels in wsprdaemon.conf<a class="headerlink" href="#configuring-wwv-chu-channels-in-wsprdaemon-conf" title="Link to this heading"></a></h2>
+<p>Next, you must be sure that your wsprdaemon.conf schedule is set to run the WWV recordings. This is detailed in the wd_template.conf and wd_template_full.conf files which are both located in the wsprdaemon directory. To verify they are in fact running, type wds for a status and you should see something that looks like this..</p>
+<p>KA9Q_0_WWV,CHU_14,I1:   KA9Q_0_WWV,CHU_14 posting     Pid = 19778
+KA9Q_0_WWV,CHU_14,I1:   KA9Q_0_WWV,CHU_14 decoding    Pid = 20132
+KA9Q_0_WWV,CHU_14,I1:   KA9Q_0_WWV,CHU_14 recording   Pid = 17918</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>  KA9Q_0_WWV,CHU_3,I1:   KA9Q_0_WWV,CHU_3 posting     Pid = 18908
+  KA9Q_0_WWV,CHU_3,I1:   KA9Q_0_WWV,CHU_3 decoding    Pid = 19294
+  KA9Q_0_WWV,CHU_3,I1:   KA9Q_0_WWV,CHU_3 recording   Pid = 17918
+
+  KA9Q_0_WWV,CHU_7,I1:   KA9Q_0_WWV,CHU_7 posting     Pid = 19367
+  KA9Q_0_WWV,CHU_7,I1:   KA9Q_0_WWV,CHU_7 decoding    Pid = 19688
+  KA9Q_0_WWV,CHU_7,I1:   KA9Q_0_WWV,CHU_7 recording   Pid = 17918
+
+ KA9Q_0_WWV,WWV_10,I1:   KA9Q_0_WWV,WWV_10 posting     Pid = 16117
+ KA9Q_0_WWV,WWV_10,I1:   KA9Q_0_WWV,WWV_10 decoding    Pid = 16884
+ KA9Q_0_WWV,WWV_10,I1:   KA9Q_0_WWV,WWV_10 recording   Pid = 17918
+
+ KA9Q_0_WWV,WWV_15,I1:   KA9Q_0_WWV,WWV_15 posting     Pid = 17046
+ KA9Q_0_WWV,WWV_15,I1:   KA9Q_0_WWV,WWV_15 decoding    Pid = 17661
+ KA9Q_0_WWV,WWV_15,I1:   KA9Q_0_WWV,WWV_15 recording   Pid = 17918
+
+ KA9Q_0_WWV,WWV_20,I1:   KA9Q_0_WWV,WWV_20 posting     Pid = 17891
+ KA9Q_0_WWV,WWV_20,I1:   KA9Q_0_WWV,WWV_20 decoding    Pid = 18530
+ KA9Q_0_WWV,WWV_20,I1:   KA9Q_0_WWV,WWV_20 recording   Pid = 17918
+
+ KA9Q_0_WWV,WWV_25,I1:   KA9Q_0_WWV,WWV_25 posting     Pid = 18508
+ KA9Q_0_WWV,WWV_25,I1:   KA9Q_0_WWV,WWV_25 decoding    Pid = 18880
+ KA9Q_0_WWV,WWV_25,I1:   KA9Q_0_WWV,WWV_25 recording   Pid = 17918
+
+KA9Q_0_WWV,WWV_2_5,I1:   KA9Q_0_WWV,WWV_2_5 posting     Pid = 14208
+KA9Q_0_WWV,WWV_2_5,I1:   KA9Q_0_WWV,WWV_2_5 decoding    Pid = 15066
+KA9Q_0_WWV,WWV_2_5,I1:   KA9Q_0_WWV,WWV_2_5 recording   Pid = 17918
+
+  KA9Q_0_WWV,WWV_5,I1:   KA9Q_0_WWV,WWV_5 posting     Pid = 15138
+  KA9Q_0_WWV,WWV_5,I1:   KA9Q_0_WWV,WWV_5 decoding    Pid = 16188
+  KA9Q_0_WWV,WWV_5,I1:   KA9Q_0_WWV,WWV_5 recording   Pid = 17918
+</pre></div>
+</div>
+</section>
+<section id="configuring-radiod-from-ka9q-radio-to-present-wwv-chu-rtp-streams">
+<h2>Configuring radiod (from ka9q-radio) to present WWV/CHU RTP streams<a class="headerlink" href="#configuring-radiod-from-ka9q-radio-to-present-wwv-chu-rtp-streams" title="Link to this heading"></a></h2>
+<p>In order for these files to be recorded, your radiod&#64;rx888-wsprdaemon.conf configuration should have the [WWV-IQ] “disable” variable set to no. See below. You can find the conf file in the /etc/radio directory.</p>
+<p>[WWV-IQ]</p>
+<p>encoding=float
+disable=no
+data = wwv-iq.local
+agc=0
+gain=0
+samprate = 16k
+mode = iq
+freq = “60k000 2500000 5000000 10000000 15000000 20000000 25000000 3330000 7850000 14670000” ### Added the three CHU frequencies</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="lb_gpsdo.html" class="btn btn-neutral float-left" title="HamSCI – Leo Bodnar GPSDO" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../configuration/wd_conf.html" class="btn btn-neutral float-right" title="Configuring wsprdaemon: wsprdaemon.conf" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rob Robinett.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>&lt;no title&gt; &mdash; wsprdaemon 3.3.2 documentation</title>
+  <title>HamSCI – Beelink &mdash; wsprdaemon 3.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
@@ -19,7 +19,9 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" /> 
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="HamSCI – Leo Bodnar GPSDO" href="lb_gpsdo.html" />
+    <link rel="prev" title="Download the software with GIT" href="../installation/git.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,7 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../description/validity.html">Validity of Data Path and Results</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Installation &amp; Setup</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../requirements/os.html">Operating Sytems</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/radios.html">Compatible Radios</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../requirements/network.html">Networking</a></li>
@@ -58,11 +60,27 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">HamSCI – Beelink</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#beelink-bios-preparation">Beelink BIOS preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#os-installation">OS installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#windows-product-key-retrieval-optional">Windows product key retrieval (optional)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#debian-install">Debian install</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#first-debian-boot">First Debian boot</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1"><a class="reference internal" href="psws_data_rep.html">Personal Space Weather Station Data Repository Access</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/hardware.html">The ka9q-radio [hardware] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
@@ -118,7 +136,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="breadcrumb-item active">HamSCI – Beelink</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/hamsci/beelink.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -128,11 +146,97 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
+  <section id="hamsci-beelink">
+<h1>HamSCI – Beelink<a class="headerlink" href="#hamsci-beelink" title="Link to this heading"></a></h1>
+<p>(Thanks to Frank O’Donnell)</p>
+<section id="beelink-bios-preparation">
+<h2>Beelink BIOS preparation<a class="headerlink" href="#beelink-bios-preparation" title="Link to this heading"></a></h2>
+<p>A keyboard and monitor are required for this step.</p>
+<p>Start Beelink while repeatedly pressing Delete key to enter BIOS.</p>
+<p>In Advanced &gt; Smart Fan Function, edit settings as follows:</p>
+<p>Smart CPU_Fan Mode</p>
+<p>Fan start temperature limit			45	-&gt;	40
+Fan Full Speed temperature limit		92	-&gt;	60
+PWM SLOPE SETTING			2 PWM  -&gt;	8 PWM</p>
+<p>Smart Sys_Fan Mode</p>
+<p>Fan start temperature limit			45	-&gt;	40
+Fan Full Speed temperature limit		70	-&gt;	60
+PWM SLOPE SETTING			2 PWM  -&gt;	8 PWM</p>
+<p>Press F4 to save and exit.</p>
+</section>
+<section id="os-installation">
+<h2>OS installation<a class="headerlink" href="#os-installation" title="Link to this heading"></a></h2>
+<section id="windows-product-key-retrieval-optional">
+<h3>Windows product key retrieval (optional)<a class="headerlink" href="#windows-product-key-retrieval-optional" title="Link to this heading"></a></h3>
+<p>If you wish to retrieve the product key for the copy of Windows 11 that ships with the Beelink for possible future use:</p>
+<p>A keyboard and monitor are required for this step, a mouse is also convenient.</p>
+<p>Allow Beelink to boot into Windows setup. If you don’t wish to associate it with a Microsoft account, you can set up as a local account and leave password blank.</p>
+<p>When setup is complete and the Windows desktop appears, press Windows Key + X and select Windows Terminal (Admin) or Command Prompt (Admin)</p>
+<p>Enter the following command:</p>
+<p>wmic path softwarelicensingservice get OA3xOriginalProductKey</p>
+<p>This will display the product key, which you can copy-paste to a text file on a USB flash drive, or take a picture of it.</p>
+</section>
+<section id="debian-install">
+<h3>Debian install<a class="headerlink" href="#debian-install" title="Link to this heading"></a></h3>
+<p>Download software: Visit debian.org to download an .iso file. Pick a mirror site close to your location. Select the top numbered version displayed (for example, 12.11 as of August 2025). For the Beelinks you will want the AMD64 version.</p>
+<p>Once you download the .iso file, you need to burn it to a USB flash drive using software such as balenaEtcher for Windows, Mac, or Linux. Rufus is also popular for Windows.</p>
+<p>Run installation: With the Beelink powered down, insert the flash drive into a USB port, then power on the Beelink pressing F7 repeatedly in order to enter the boot menu.</p>
+<p>Select the entry for the flash drive. If there is also another entry for a second partition on the flash drive, ignore it. Go with the main entry listed for the flash drive.</p>
+<p>The Debian install will then begin.</p>
+<p>When prompted, select “Install,” not “Graphical install.”</p>
+<p>Choose language, location, and keyboard as desired.</p>
+<p>For network, I had an Ethernet cable attached to the Beelink, and chose the wired network option (which will appear as something like “enp1s0 RTL8125 2.5GbE (wired)”). Wifi may also be possible, but since the Wsprdaemon servers generally use hard-wired Ethernet, I left wifi uninstalled.</p>
+<p>Choose and enter a hostname. For Wsprdaemon purposes, this will often be the callsign you want to have spots reported under, followed by “-WD” to identify it as a Wsprdaemon server.</p>
+<p>You will be asked for domain type. Unless you know another response is more appropriate, accept the default of “.lan”.</p>
+<p>Under user accounts, you will be asked to create a root password, then create a normal user account. I only created one account on my system, with username wsprdaemon, since the system will not be used for anything other than Wsprdaemon.</p>
+<p>Under partitioning, choose “Guided – use entire disk” and “All files in one partition”. When this is selected, it will actually create three partitions, which are normal:</p>
+<ul class="simple">
+<li><p>Partition 1: ESP</p></li>
+<li><p>Partition 2: ext4</p></li>
+<li><p>Partition 3: swap</p></li>
+</ul>
+<p>Confirm and write changes to disk.</p>
+<p>Software selection: At this screen, <em>unselect</em> everything, except for:</p>
+<p>[x] SSH server
+[x] standard system utilities</p>
+</section>
+<section id="first-debian-boot">
+<h3>First Debian boot<a class="headerlink" href="#first-debian-boot" title="Link to this heading"></a></h3>
+<p>Using the attached keyboard and monitor, log in at console as your user.</p>
+<p>Enter this command to switch to root:</p>
+<p>su -</p>
+<p>Install core utilities:</p>
+<p>apt update
+apt install sudo less vim nano man-db net-tools iputils-ping wget curl unzip</p>
+<p>Then add your user to the sudo and plugdev groups (the command lines below assume the username is wsprdaemon):</p>
+<p>sudo usermod -a -G sudo wsprdaemon
+sudo usermod -a -G plugdev wsprdaemon</p>
+<p>Log out (type “exit”), then log in again as your user in order to activate sudo group. Test sudo by using for a simple command such as:</p>
+<p>sudo ls -l</p>
+<p>You should get a prompt to enter password; after you do so, the command should succeed.</p>
+<p>I also chose to install some other utilities, but these may be optional or unnecessary:</p>
+<p>sudo apt install btop nmap git tmux vim net-tools iputils-ping avahi-daemon libnss-mdns mdns-scan avahi-utils avahi-discover build-essential make cmake gcc libavahi-client-dev libbsd-dev libfftw3-dev libiniparser-dev libncurses5-dev libopus-dev libusb-1.0-0-dev libusb-dev portaudio19-dev libasound2-dev uuid-dev rsync sox libsox-fmt-all opus-tools flac tcpdump wireshark libhdf5-dev libsamplerate-dev</p>
+<p>During wireshark install, you will probably be asked if it’s ok for non-superusers to capture packets. Select Yes.</p>
+<p>Check the Beelink’s IP address by entering this command:</p>
+<p>ip a</p>
+<p>It will return detailed network information. Look through it to find a value like ‘192.168.1.xxx’.</p>
+<p>At this point, you can remove the keyboard and monitor from the Beelink, and use ‘ssh’ to log in from another system on your local network using the IP address obtained above:</p>
+<p>ssh wsprdaemon&#64;192.168.1.xxx</p>
+<p>The first time you connect to the new server, your local system may say it’s not in your list of accessed systems, do you want to proceed? Answer yes.</p>
+<p>To transfer files to or from the server, secure copy (‘scp’) is convenient:</p>
+<p>scp sourcefile user&#64;hostname:/path/to/destination/
+scp user&#64;hostname:/path/to/file /local/destination/</p>
+</section>
+</section>
+</section>
+
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../installation/git.html" class="btn btn-neutral float-left" title="Download the software with GIT" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="lb_gpsdo.html" class="btn btn-neutral float-right" title="HamSCI – Leo Bodnar GPSDO" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 

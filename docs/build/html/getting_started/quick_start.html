@@ -92,11 +92,18 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation/security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/beelink.html">HamSCI – Beelink</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/psws_data_rep.html">Personal Space Weather Station Data Repository Access</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/hardware.html">The ka9q-radio [hardware] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
@@ -169,9 +176,10 @@
 <h2>Prerequisites Check<a class="headerlink" href="#prerequisites-check" title="Link to this heading"></a></h2>
 <p>Before starting, ensure you have:</p>
 <ul class="simple">
-<li><p>Ubuntu 24.04 LTS, 22.04 LTS, Linux Mint, or Debian 12+ system</p></li>
+<li><p>Debian 12+ (preferred), otherwise Ubuntu 24.04 LTS, 22.04 LTS, or Linux Mint.</p></li>
 <li><p>Sudo privileges configured</p></li>
 <li><p>SDR hardware (KiwiSDR, RX888, RTL-SDR, etc.) connected and accessible</p></li>
+<li><p>GPSDO (e.g., Leo Bodnar)</p></li>
 <li><p>Antenna system with appropriate filtering</p></li>
 <li><p>Stable internet connection</p></li>
 </ul>
@@ -192,6 +200,9 @@ sudo<span class="w"> </span>usermod<span class="w"> </span>-a<span class="w"> </
 
 <span class="c1"># Switch to wsprdaemon user</span>
 sudo<span class="w"> </span>su<span class="w"> </span>-<span class="w"> </span>wsprdaemon
+
+<span class="c1"># Ensure you have moved to the /home/wsprdaemon directory.</span>
+<span class="nb">cd</span><span class="w"> </span>~<span class="w"> </span>
 </pre></div>
 </div>
 </section>

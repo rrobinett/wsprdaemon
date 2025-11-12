@@ -32,6 +32,9 @@ requirements/network.md
 installation/preparation.md
 installation/security_considerations.md
 installation/git.md
+hamsci/beelink.md
+hamsci/lb_gpsdo.md
+hamsci/psws_data_rep.md
 ```
 
 ## Configuration Reference
@@ -44,6 +47,10 @@ Detailed configuration options and examples for all WsprDaemon features.
 
 configuration/wd_conf.md
 configuration/radiod_conf.md
+configuration/radiod@.conf/global.md
+configuration/radiod@.conf/hardware.md
+configuration/radiod@.conf/channels.md
+configuration/radiod@.conf/radiod@rx888-wsprdaemon.conf.md
 configuration/ka9q-web.md
 ```
 

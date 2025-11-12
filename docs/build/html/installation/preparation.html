@@ -73,11 +73,18 @@
 <li class="toctree-l1"><a class="reference internal" href="security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/beelink.html">HamSCI – Beelink</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hamsci/psws_data_rep.html">Personal Space Weather Station Data Repository Access</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/hardware.html">The ka9q-radio [hardware] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/radiod%40.conf/radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
@@ -181,7 +188,7 @@ However, you can run it under your own (or another’s) account.  In which case,
 </section>
 <section id="operating-system">
 <h3>Operating system<a class="headerlink" href="#operating-system" title="Link to this heading"></a></h3>
-<p>The current version of WD runs on <a class="reference external" href="https://ubuntu.com/download/server">Ubuntu 24.04 LTS</a>.  Ubuntu seems determined to push “snap” software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a <a class="reference external" href="http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd">method to “de-snap”</a> a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative – <a class="reference external" href="https://www.linuxmint.com/download.php">Mint</a> – which does not use snaps or their progenitor, <a class="reference external" href="https://www.debian.org/distrib/">Debian</a>.</p>
+<p>The latest versions of WD are built and run on versions 12 and 13 of <a class="reference external" href="https://www.debian.org/distrib">Debian</a>, although <a class="reference external" href="https://ubuntu.com/download/server">Ubuntu 24.04 LTS</a> will also work.  Ubuntu seems determined to push “snap” software which has sometimes broken WD through automatic updates that changed critical dependencies.  Clint Turner has developed a <a class="reference external" href="http://www.sdrutah.org/info/websdr_Ubuntu_2204_install_notes.html#snapd">method to “de-snap”</a> a system to avoid this problem.  Alternatively, you can install an Ubuntu-derivative – <a class="reference external" href="https://www.linuxmint.com/download.php">Mint</a> – which does not use snaps.</p>
 </section>
 <section id="sudo-access">
 <h3>sudo access<a class="headerlink" href="#sudo-access" title="Link to this heading"></a></h3>

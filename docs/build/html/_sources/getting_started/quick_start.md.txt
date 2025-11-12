@@ -5,9 +5,10 @@ Get WsprDaemon running in 15 minutes with this streamlined setup guide for exper
 ## Prerequisites Check
 
 Before starting, ensure you have:
-- Ubuntu 24.04 LTS, 22.04 LTS, Linux Mint, or Debian 12+ system
+- Debian 12+ (preferred), otherwise Ubuntu 24.04 LTS, 22.04 LTS, or Linux Mint.
 - Sudo privileges configured
 - SDR hardware (KiwiSDR, RX888, RTL-SDR, etc.) connected and accessible
+- GPSDO (e.g., Leo Bodnar)
 - Antenna system with appropriate filtering
 - Stable internet connection
 
@@ -28,6 +29,9 @@ sudo usermod -a -G sudo,plugdev wsprdaemon
 
 # Switch to wsprdaemon user
 sudo su - wsprdaemon
+
+# Ensure you have moved to the /home/wsprdaemon directory.
+cd ~ 
 ```
 
 ## 2. Download and Install (5 minutes)

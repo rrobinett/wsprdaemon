@@ -19,7 +19,9 @@
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
-    <link rel="search" title="Search" href="../../search.html" /> 
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="The ka9q-radio [channels] section" href="channels.html" />
+    <link rel="prev" title="The ka9q-radio [GLOBAL] section" href="global.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -58,11 +60,29 @@
 <li class="toctree-l1"><a class="reference internal" href="../../installation/security_considerations.html">Security Considerations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/git.html">Download the software with GIT</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation/git.html#to-install-ka9q-radio-independently">To install ka9q-radio independently:</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/beelink.html">HamSCI – Beelink</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/lb_gpsdo.html">HamSCI – Leo Bodnar GPSDO</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hamsci/psws_data_rep.html">Personal Space Weather Station Data Repository Access</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../wd_conf.html">Configuring wsprdaemon: wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../radiod_conf.html">Configuring ka9q-radio: radiod&#64;.conf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="global.html">The ka9q-radio [GLOBAL] section</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">The ka9q-radio [hardware] section</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#phil-karn-s-comprehensive-documentation-of-this-section">Phil Karn’s comprehensive documentation of this section:</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hardware-configuration">Hardware Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#supported-hardware">Supported Hardware</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#device-airspy-airspyhf-funcube-rx888-rtlsdr-sig-gen-no-default-required">device = {airspy|airspyhf|funcube|rx888|rtlsdr|sig_gen} (no default, required)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#description-no-default-optional-but-recommended">description = (no default, optional but recommended)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="channels.html">The ka9q-radio [channels] section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="radiod%40rx888-wsprdaemon.conf.html">Example radiod&#64;rx888-wsprdaemon.conf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../ka9q-web.html">ka9q-web</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Operation &amp; Monitoring</span></p>
@@ -269,7 +289,10 @@ on the circuit board. The actual benefit hasn’t been measured, but the CPU cos
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="global.html" class="btn btn-neutral float-left" title="The ka9q-radio [GLOBAL] section" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="channels.html" class="btn btn-neutral float-right" title="The ka9q-radio [channels] section" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
