@@ -129,7 +129,6 @@ source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all u
 source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/config-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-setup.sh
-source ${WSPRDAEMON_ROOT_DIR}/clickhouse.sh
 source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise-graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
