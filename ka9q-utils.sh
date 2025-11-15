@@ -1289,7 +1289,7 @@ function ka9q-ft-setup()
     if [[ ${service_restart_needed} == "no" ]] && sudo systemctl status ${ft_service_file_instance_name}  >& /dev/null; then
         wd_logger 2 "${ft_service_file_instance_name} is running and its conf file is never changed, so it doesn't need to be restarted"
     else
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' OR ${ft_service_file_instance_name} is not running, so it needs to be started"
         sudo systemctl daemon-reload
         sudo systemctl restart ${ft_service_file_instance_name}  >& /dev/null
         rc=$? ; if (( rc )); then
@@ -1405,7 +1405,7 @@ function ka9q-ft-setup()
     fi
 
     if [[ ${service_restart_needed} == "no" ]] && ! sudo systemctl status ${ft_record_service_name}  >& /dev/null; then
-        wd_logger 1 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
+        wd_logger 2 "service_restart_needed='${service_restart_needed}' but ${ft_record_service_name} is not running, so it needs to be started"
         service_restart_needed="yes"
     else
         wd_logger 2 "${ft_record_service_name} is running and its conf file hasn't changed, so it doesn't need to be restarted"
@@ -1416,7 +1416,7 @@ function ka9q-ft-setup()
             wd_logger 1 "ERROR: failed to restart ${ft_record_service_name} => ${rc}, so force an abort"
             echo ${force_abort}
         fi
-        wd_logger 1 "Restarted service ${ft_record_service_name}"
+        wd_logger 2 "Restarted service ${ft_record_service_name}"
     fi
     if sudo systemctl is-enabled ${ft_record_service_name} >& /dev/null ; then
         wd_logger 2 "${ft_record_service_name} is enabled, so it doesn't need to be enabled"
