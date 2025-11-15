@@ -521,38 +521,93 @@ function upload_to_wsprdaemon_daemon() {
         if [[ ${ret_code} -ne 0 ]]; then
             wd_logger 1 "ERROR: 'tar cfj ${tar_file_path} \${source_file_list[@]}' => ret_code ${ret_code}"
         else
-            wd_logger 1 "Starting curl upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files"
+            wd_logger 1 "Starting upload of '${tar_file_path}' of size $( ${GET_FILE_SIZE_CMD} ${tar_file_path} ) which contains $(cat ${source_file_list[@]} | wc -c)  bytes from ${#source_file_list[@]} spot and noise files"
             wd_logger 2 "Spots are:\n$(sort -k6,6n ${spot_file_list[*]})"
+            
+            ### Check for SFTP upload configuration (scalar or array)
+            local -a sftp_servers=()
             local wd_server_user=""
-            get_config_file_variable "wd_server_user" "WD_SERVER_USER"
-            if [[ -n "${wd_server_user}" ]]; then
-                wd_logger 1 "This client is configured to use sftp to upload '${tar_file_path}' to the account '${wd_server_user}'"
-                ### ChatGBT says running sftp in batch mode will ensure that if sftp encounters an error the return code will be non-zero
+            
+            # First check for WD_SERVER_USER_LIST array
+            if grep -q '^[[:space:]]*WD_SERVER_USER_LIST=' ${WSPRDAEMON_CONFIG_FILE} 2>/dev/null; then
+                wd_logger 1 "Found WD_SERVER_USER_LIST array in config"
+                # Source the config to get the array
+                eval "$(grep '^[[:space:]]*WD_SERVER_USER_LIST=' ${WSPRDAEMON_CONFIG_FILE})"
+                if [[ ${#WD_SERVER_USER_LIST[@]} -gt 0 ]]; then
+                    sftp_servers=("${WD_SERVER_USER_LIST[@]}")
+                    wd_logger 1 "Found ${#sftp_servers[@]} SFTP servers: ${sftp_servers[*]}"
+                fi
+            # Fall back to scalar WD_SERVER_USER if array not found
+            elif get_config_file_variable "wd_server_user" "WD_SERVER_USER" && [[ -n "${wd_server_user}" ]]; then
+                wd_logger 1 "Found scalar WD_SERVER_USER in config: ${wd_server_user}"
+                sftp_servers=("${wd_server_user}")
+            fi
+            
+            ### Try SFTP upload to configured servers
+            local sftp_success=0
+            if [[ ${#sftp_servers[@]} -gt 0 ]]; then
                 local tar_basename=${tar_file_path##*/}
-                timeout ${SFTP_XFER_TIMEOUT-90} \
-                        sftp -b - -oBatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} "${wd_server_user}" <<EOF
+                local server_index=0
+                
+                for server in "${sftp_servers[@]}"; do
+                    ((server_index++))
+                    wd_logger 1 "Attempting SFTP upload to server ${server_index}/${#sftp_servers[@]}: ${server}"
+                    
+                    # Use timeout and batch mode for non-interactive operation
+                    timeout ${SFTP_XFER_TIMEOUT-90} \
+                            sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} "${server}" <<EOF
 put ${tar_file_path} uploads/${tar_basename}.part
 rename uploads/${tar_basename}.part uploads/${tar_basename}
 EOF
-                rc=$? ; if (( rc )); then
-                    wd_logger 1 "ERROR: sftp failed to upload ${tar_file_path}"
-                else
-                    wd_logger 1 "sftp has uploaded ${tar_file_path}"
-                fi
-            fi
-            local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
-            local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
-            local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
-            local start_epoch=${EPOCHSECONDS}
-            curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}
-            local ret_code=$?
-            local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
-            if [[ ${ret_code} -eq  0 ]]; then
-                wd_logger 1 "After ${curl_exec_seconds} seconds, curl FTP upload was successful. Deleting the ${#source_file_list[@]} \${source_file_list[@]} files which were in the uploaded tar file"fter
-                wd_rm ${source_file_list[@]}
+                    local rc=$?
+                    
+                    if [[ ${rc} -eq 0 ]]; then
+                        wd_logger 1 "SUCCESS: SFTP upload to ${server} completed successfully"
+                        sftp_success=1
+                        # Delete source files on successful upload
+                        wd_logger 1 "Deleting the ${#source_file_list[@]} source files that were in the uploaded tar file"
+                        wd_rm ${source_file_list[@]}
+                        break
+                    else
+                        wd_logger 1 "WARNING: SFTP upload to ${server} failed with code ${rc}"
+                        if [[ ${server_index} -lt ${#sftp_servers[@]} ]]; then
+                            wd_logger 1 "Trying next server..."
+                        else
+                            wd_logger 1 "All SFTP servers failed, will try legacy FTP method"
+                        fi
+                    fi
+                done
             else
-                wd_logger 1 "ERROR: After ${curl_exec_seconds} seconds, 'curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}' faiiled => ${ret_code}, so leave spot and noise files and try again"
+                wd_logger 1 "No SFTP servers configured (WD_SERVER_USER or WD_SERVER_USER_LIST not found)"
             fi
+            
+            ### Fall back to legacy curl/FTP only if SFTP not configured or all SFTP attempts failed
+            if [[ ${sftp_success} -eq 0 ]]; then
+                if [[ ${#sftp_servers[@]} -gt 0 ]]; then
+                    wd_logger 1 "All SFTP upload attempts failed, falling back to legacy FTP method"
+                else
+                    wd_logger 1 "Using legacy FTP method (SFTP not configured)"
+                fi
+                
+                local upload_user=${SIGNAL_LEVEL_FTP_LOGIN-noisegraphs}
+                local upload_password=${SIGNAL_LEVEL_FTP_PASSWORD-xahFie6g}    ## Hopefully this default password never needs to change
+                local upload_url=${SIGNAL_LEVEL_FTP_URL-graphs.wsprdaemon.org/upload}/${tar_file_name}
+                local start_epoch=${EPOCHSECONDS}
+                curl -s --limit-rate ${UPLOADS_FTP_MODE_MAX_BPS} -T ${tar_file_path} --user ${upload_user}:${upload_password} ftp://${upload_url}
+                local ret_code=$?
+                local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
+                
+                if [[ ${ret_code} -eq 0 ]]; then
+                    wd_logger 1 "After ${curl_exec_seconds} seconds, curl FTP upload was successful. Deleting the ${#source_file_list[@]} source files which were in the uploaded tar file"
+                    wd_rm ${source_file_list[@]}
+                else
+                    wd_logger 1 "ERROR: After ${curl_exec_seconds} seconds, curl FTP upload failed with code ${ret_code}, so leaving spot and noise files to try again"
+                fi
+            else
+                wd_logger 1 "SFTP upload succeeded, skipping legacy FTP method"
+            fi
+            
+            # Clean up the tar file
             wd_rm ${tar_file_path} 
         fi
         wd_logger 1 "sleeping for ${UPLOADS_FTP_MODE_SECONDS} seconds"
@@ -585,4 +640,3 @@ function get_status_upload_daemons()
     wd_logger 2 "Get status on the ${#client_upload_daemon_list[@]} daemons in client_upload_daemon_list[]"
     daemons_list_action  s client_upload_daemon_list
 }
-
