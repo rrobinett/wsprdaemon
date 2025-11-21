@@ -1859,7 +1859,7 @@ function decoding_daemon() {
         if [[ ${receiver_name} =~ ^KA9Q ]]; then
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
 
-            ka9q_get_current_status_value "adc_overloads_count" ${receiver_ip_address} ${receiver_freq_hz} "A/D overrange:"
+            ka9q_get_current_status_value "adc_overloads_count" ${receiver_ip_address} ${receiver_freq_khz} "A/D overrange:"
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR:  ka9q_get_status_value() => ${rc}"
                 adc_overloads_count=0   ## Make sure this is an integer
@@ -1874,7 +1874,7 @@ function decoding_daemon() {
             fi
 
             local channel_rf_gain_value
-            ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "rf gain"   ### There is also a 'rf gain cal' value in the status file
+            ka9q_get_current_status_value "channel_rf_gain_value" ${receiver_ip_address} ${receiver_freq_khz} "rf gain"   ### There is also a 'rf gain cal' value in the status file
             rc=$? ; if (( rc )); then
                 channel_rf_gain_value="-99.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error rf_gain='${channel_rf_gain_value}'"
@@ -1884,7 +1884,7 @@ function decoding_daemon() {
             wd_logger 2 "ka9q_get_current_status_value() => channel_rf_gain_value='${channel_rf_gain_value}' => ka9q_rf_gain_float='${ka9q_rf_gain_float}'"
 
             local channel_adc_dbfs_value
-            ka9q_get_current_status_value "channel_adc_dbfs_value" ${receiver_ip_address} ${receiver_freq_hz} "IF pwr"
+            ka9q_get_current_status_value "channel_adc_dbfs_value" ${receiver_ip_address} ${receiver_freq_khz} "IF pwr"
             rc=$? ; if (( rc )); then
                 channel_adc_dbfs_value="-99.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error adc_dbfs='${channel_adc_dbfs_value}'"
@@ -1894,7 +1894,7 @@ function decoding_daemon() {
             wd_logger 2 "ka9q_get_current_status_value() => channel_adc_dbfs_value='${channel_adc_dbfs_value}' => ka9q_adc_dbfs_float='${ka9q_adc_dbfs_float}'"
 
             local channel_n0_value
-            ka9q_get_current_status_value "channel_n0_value" ${receiver_ip_address} ${receiver_freq_hz} "N0"
+            ka9q_get_current_status_value "channel_n0_value" ${receiver_ip_address} ${receiver_freq_khz} "N0"
             rc=$? ; if (( rc )); then
                 channel_n0_value="-999.9"
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report error N0='${channel_n0_value}'"
@@ -1904,7 +1904,7 @@ function decoding_daemon() {
             wd_logger 2 "ka9q_get_current_status_value() => channel_n0_value='${channel_n0_value}' => ka9q_n0_float='${ka9q_n0_float}'"
 
             local channel_gain_value
-            ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_hz} "gain"
+            ka9q_get_current_status_value "channel_gain_value" ${receiver_ip_address} ${receiver_freq_khz} "gain"
             rc=$? ; if (( rc )); then
                 channel_gain_value="60" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_gain_value}'"
@@ -1914,7 +1914,7 @@ function decoding_daemon() {
             wd_logger 1 "ka9q_get_current_status_value() => channel_gain_value='${channel_gain_value}' which we parse into ka9q_channel_gain_float='${ka9q_channel_gain_float}'"
 
             local channel_output_level_value    ### Report of The output level to the pcm stream and thus ot the wav files.
-            ka9q_get_current_status_value "channel_output_level_value" ${receiver_ip_address} ${receiver_freq_hz} "output level"
+            ka9q_get_current_status_value "channel_output_level_value" ${receiver_ip_address} ${receiver_freq_khz} "output level"
             rc=$? ; if (( rc )); then
                 channel_output_level_value="60 dB" ### The default in the radiod.conf file
                 wd_logger 1 "ERROR:  ka9q_get_current_status_value() => ${rc}, so report default gain='${channel_output_level_value}'"
@@ -1951,7 +1951,7 @@ function decoding_daemon() {
             fi
  
             local ka9q_status_ip=""
-            ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_hz} "status dest"
+            ka9q_get_current_status_value "ka9q_status_ip" ${receiver_ip_address} ${receiver_freq_khz} "status dest"
             rc=$?
             ka9q_status_ip="${ka9q_status_ip// /}"     ### Removes any leading or trailing spaces present in the status message
             if (( rc )); then
