@@ -424,17 +424,17 @@ declare -A ka9q_status_list=()
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
 function ka9q_get_metadump() {
     local receiver_ip_address=$1
-    local receiver_freq_hz=$2
+    local receiver_freq_khz=$2
     local status_log_file=$3
 
     local got_status="no"
     local timeout=${KA9Q_GET_STATUS_TRIES}
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 2 "Spawning 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
+        wd_logger 2 "Spawning 'metadump --newline --count 2 --ssrc ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file} &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
 
         local metadump_pid
-        metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address}  > metadump.log &
+        metadump --newline --count 2 --ssrc ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file} &
         metadump_pid=$!
 
         local i
@@ -452,17 +452,15 @@ function ka9q_get_metadump() {
         if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
             wd_logger 2 "'metadump..&' finished after ${i} seconds of waiting"
         else
-            wd_logger 2 "ERROR: timing out after ${i} seconds of waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}:\n$(< metadump.log)"
+            wd_logger 2 "ERROR: timing out after ${i} seconds of waiting for 'metadump..&' to terminate itself, so killing its pid ${metadump_pid}:\n$(< ${status_log_file})"
             kill  ${metadump_pid} 2>/dev/null
             rc=124
         fi
 
         if (( rc )); then
-            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump -c 2 -s ${receiver_freq_hz}  ${receiver_ip_address} > metadump.log &':\n$(< metadump.log)"
+            wd_logger 1 "ERROR: failed to get any status stream information from 'metadump --newline --count 2 --ssrc ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file} &':\n$(< ${status_log_file})"
         else
-            sed -e 's/ \[/\n[/g' metadump.log  > ${status_log_file}
             local status_log_line_count=$(wc -l <  ${status_log_file} )
-            wd_logger 2 "Parsed the $(wc -c < metadump.log) bytes of html in 'metadump.log' into ${status_log_line_count} lines in '${status_log_file}'"
 
             if (( status_log_line_count > KA9Q_MIN_LINES_IN_USEFUL_STATUS )); then
                 wd_logger 2 "Got useful status file"
@@ -476,7 +474,7 @@ function ka9q_get_metadump() {
         wd_logger 2 "ERROR: couldn't get useful status after ${KA9Q_GET_STATUS_TRIES}"
         return 1
     else
-        wd_logger 2 "Got new status from:  'metadump -s ${receiver_freq_hz}  ${receiver_ip_address} > ${status_log_file}'"
+        wd_logger 2 "Got new status from:  'metadump -s ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file}'"
         return 0
     fi
  }
@@ -559,7 +557,7 @@ declare MAX_KA9Q_STATUS_FILE_AGE_SECONDS=${MAX_KA9Q_STATUS_FILE_AGE_SECONDS-5 }
 function ka9q_get_current_status_value() {
     declare -n __return_var="$1"
     local receiver_ip_address=$2
-    local receiver_freq_hz=$3
+    local receiver_freq_khz=$3
     local search_val="$4"
     local rc
 
@@ -575,7 +573,7 @@ function ka9q_get_current_status_value() {
         wd_logger 2 "Getting value from ${KA9Q_METADUMP_CACHE_FILE_NAME} which is less than  ${MAX_KA9Q_STATUS_FILE_AGE_SECONDS} seconds old"
     else
         wd_logger 2 "Updating ${status_log_file}"
-        ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
+        ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_khz} ${status_log_file}
         rc=$? ; if ((  rc )); then
             wd_logger 1 "ERROR: failed to update ${status_log_file}"
             return ${rc}
