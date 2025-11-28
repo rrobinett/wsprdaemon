@@ -182,6 +182,10 @@ function remote_access_connection_status() {
         remote_access_connection_stop_and_disable
         return 0
     fi
+    if [[ "$wd_conf_rac_id" =~ [[:space:]] ]]; then
+        wd_logger 1 "ERROR:  RAC '${wd_conf_rac_id}' cannot contain 'space' characters"
+        exit 1
+    fi
     eval ${__remote_access_id_var}=\${wd_conf_rac_id}
     wd_logger 2 "Found REMOTE_ACCESS_ID=${wd_conf_rac_id}" 
 
