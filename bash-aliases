@@ -7,67 +7,117 @@ alias ch=chc
 function wd-sftp-wd-test()
 {
     local rc
-    local start_epoch 
+    local start_epoch
     local end_epoch
     local runtime_seconds
-
+    
     source ~/wsprdaemon/wsprdaemon.conf
     
-    if [[ -z "${WD_SERVER_USER-}" ]]; then
-        wd_logger 1 "This WD client is not configured to sftp upload extended spots to its user account on the WD0 server"
-        return 0
-    fi
-    local tmpfile=$(mktemp)
-    trap "rm -f '$tmpfile'" RETURN  # cleanup 
-
-    local wdserver_url="${WD_SERVER_USER#*@}"
-
-    local nc_timeout=${WD_SERVER_NC_TIMEOPUT_SECONDS-2}
-    echo "Testing Internnet connectivity to the WD_SERVER server by running 'nc -vz -w ${nc_timeout} ${wdserver_url} 22'"
-    start_epoch=${EPOCHSECONDS}
-    nc -vz -w ${nc_timeout} ${wdserver_url} 22 >& ${tmpfile}
-    rc=$?
-    end_epoch=${EPOCHSECONDS}
-    runtime_seconds=$(( end_epoch - start_epoch ))
-    if (( rc )); then
-        printf "After %2d seconds, Failed to run 'nc -vz -w ${wdserver_url} 22' => ${rc}:\n$(< ${tmpfile} )\n" "${runtime_seconds}" 
-        rm -f ${tmpfile}
+    if ! declare -p WD_SERVER_USER_LIST &>/dev/null; then
+        echo "ERROR: WD_SERVER_USER_LIST is not defined in ~/wsprdaemon/wsprdaemon.conf"
+        echo "This WD client is not configured to sftp upload extended spots to the WD servers"
         return 1
     fi
-    printf "After %2d seconds, Successfully ran 'nc -vz ${wdserver_url} 22'\n" "${runtime_seconds}"
-
+    
+    if [[ ${#WD_SERVER_USER_LIST[@]} -eq 0 ]]; then
+        echo "ERROR: WD_SERVER_USER_LIST is defined but empty"
+        return 1
+    fi
+    
+    echo "Found WD_SERVER_USER_LIST with ${#WD_SERVER_USER_LIST[@]} server(s):"
+    for entry in "${WD_SERVER_USER_LIST[@]}"; do
+        echo "  $entry"
+    done
+    echo ""
+    
+    # Check for SSH keys first (only need to do this once)
     if [[ ! -d ~/.ssh ]]; then
-        printf "The ~/.ssh directory which contains ssh keys doesn't exist.  Run 'ssh-keygen -t 25519 -N '' to create them"
-        rm -f ${tmpfile}
+        echo "ERROR: The ~/.ssh directory which contains ssh keys doesn't exist."
+        echo "Run 'ssh-keygen -t ed25519 -N \"\"' to create them"
         return 1
     fi
-    local public_key_file_path_list=( $( find ~/.ssh -name '*.pub') )
-    if (( ${#public_key_file_path_list[@]} == 0 )); then
-        printf "This station ${WD_SERVER_USER%_*} has no ssh public key.  Run 'ssh-keygen -t 25519 -N \"\"' to create it\n"
-        rm -f ${tmpfile}
+    
+    local public_key_file_path_list=( $(find ~/.ssh -name '*.pub') )
+    if [[ ${#public_key_file_path_list[@]} -eq 0 ]]; then
+        echo "ERROR: No ssh public key found in ~/.ssh"
+        echo "Run 'ssh-keygen -t ed25519 -N \"\"' to create one"
         return 1
     fi
+    
     local public_key_file_path="${public_key_file_path_list[0]}"
-    (( ${verbosity-0} )) && printf "This station ${WD_SERVER_USER%_*}'s public key is:\n $(< ${public_key_file_path})\n" 
-
-    local wdserver_timeout=$(( nc_timeout * 10 ))    ### Default is to wait up to 20 seconds to execute a simple sftp connection to the WD_SERVER server
-    echo "Testing sftp autologin with 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER%_*}@${wdserver_url}'"
-    local start_epoch=${EPOCHSECONDS}
-    sftp -o ConnectTimeout=${wdserver_timeout} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -b /dev/null ${WD_SERVER_USER} >& ${tmpfile}
-    rc=$? 
-    end_epoch=${EPOCHSECONDS}
-    runtime_seconds=$(( end_epoch - start_epoch ))
-    if (( rc == 0 )); then
-        printf "After %2d seconds, Successfully ran 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER}'\n" "${runtime_seconds}"
+    (( ${verbosity-0} )) && echo "Public key file: ${public_key_file_path}"
+    (( ${verbosity-0} )) && echo "Public key: $(< ${public_key_file_path})"
+    echo ""
+    
+    local tmpfile=$(mktemp)
+    trap "rm -f '$tmpfile'" RETURN
+    
+    local nc_timeout=${WD_SERVER_NC_TIMEOUT_SECONDS:-2}
+    local sftp_timeout=$(( nc_timeout * 10 ))
+    local overall_rc=0
+    
+    # Test each server in the list
+    for server_entry in "${WD_SERVER_USER_LIST[@]}"; do
+        local server_user="${server_entry%@*}"      # Extract user (before @)
+        local server_url="${server_entry#*@}"       # Extract server (after @)
+        
+        echo "========================================"
+        echo "Testing: ${server_entry}"
+        echo "========================================"
+        
+        # Test nc connection
+        echo "  Testing TCP connectivity: nc -vz -w ${nc_timeout} ${server_url} 22"
+        start_epoch=${EPOCHSECONDS}
+        nc -vz -w ${nc_timeout} ${server_url} 22 &> ${tmpfile}
+        rc=$?
+        end_epoch=${EPOCHSECONDS}
+        runtime_seconds=$(( end_epoch - start_epoch ))
+        
+        if (( rc )); then
+            printf "  ✗ After %2d seconds, nc failed (rc=${rc}): %s\n" "${runtime_seconds}" "$(< ${tmpfile})"
+            overall_rc=1
+            echo ""
+            continue
+        fi
+        printf "  ✓ After %2d seconds, TCP connection to ${server_url}:22 successful\n" "${runtime_seconds}"
+        
+        # Test sftp connection
+        echo "  Testing SFTP autologin: sftp -o ConnectTimeout=${sftp_timeout} ${server_entry}"
+        start_epoch=${EPOCHSECONDS}
+        sftp -o ConnectTimeout=${sftp_timeout} \
+             -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null \
+             -b /dev/null \
+             "${server_entry}" &> ${tmpfile}
+        rc=$?
+        end_epoch=${EPOCHSECONDS}
+        runtime_seconds=$(( end_epoch - start_epoch ))
+        
+        if (( rc == 0 )); then
+            printf "  ✓ After %2d seconds, SFTP autologin to ${server_entry} successful\n" "${runtime_seconds}"
+        else
+            printf "  ✗ After %2d seconds, SFTP autologin failed (rc=${rc})\n" "${runtime_seconds}"
+            echo "    Output: $(< ${tmpfile})"
+            echo ""
+            echo "    Verify that this public key is registered on ${server_url}:"
+            echo "    $(< ${public_key_file_path})"
+            overall_rc=1
+        fi
+        echo ""
+    done
+    
+    if (( overall_rc == 0 )); then
+        echo "========================================"
+        echo "✓ All ${#WD_SERVER_USER_LIST[@]} server(s) passed connectivity tests"
+        echo "========================================"
     else
-        printf "After %2d seconds, the Internet connection is open, but failed to run 'sftp -o ConnectTimeout=${wdserver_timeout}  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -b /dev/null ${WD_SERVER_USER}' => ${rc}:\n$(< ${tmpfile} )\n"
-        printf "Verify that this station '${WD_SERVER_USER%_*}'s public key has been registered with the WD_SERVER server:\n $(< ${public_key_file_path})\n"
+        echo "========================================"
+        echo "✗ Some servers failed connectivity tests"
+        echo "========================================"
     fi
-    rm -f ${tmpfile}
-    return 0
+    
+    return ${overall_rc}
 }
-
 
 ### TBD: This function should be used by assign_fft_cores()
 function show_hyperthread_pairs()
