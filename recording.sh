@@ -355,12 +355,23 @@ function ka9q_recording_daemon()
             pcm_record_cmd="/usr/local/bin/pcmrecord"
             pcm_record_cmd_args="--max_length 60 --pad"
          else
-             wd_logger 1 "Running Scott's pcmrecord"
-             find-pcmrecord      ### This will exit if it can define KA9Q_RADIO_PCMRECORD_CMD
-             pcm_record_cmd="${KA9Q_RADIO_PCMRECORD_CMD}"
-             pcm_record_cmd_args="-W -q pcmrecord-errors.log -L 60"
+             if [[ -z "${PCMRECORD_CMD_PATH-}" ]]; then
+                 find-pcmrecord      ### This will exit if it can't define KA9Q_RADIO_PCMRECORD_CMD
+                 pcm_record_cmd="${KA9Q_RADIO_PCMRECORD_CMD}"
+                 wd_logger 1 "Running Scott's pcmrecord='${pcm_record_cmd}'"
+             else
+                 wd_logger 1 "Running PCMRECORD_CMD_PATH='${PCMRECORD_CMD_PATH}' defined in wsprdaemon.conf"
+                 pcm_record_cmd="${PCMRECORD_CMD_PATH}"
+             fi
+             if [[ -z "${PCMRECORD_CMD_ARGS-}" ]]; then
+                 pcm_record_cmd_args="-W -q pcmrecord-errors.log -L 60"
+             else
+                 pcm_record_cmd_args="${PCMRECORD_CMD_ARGS}"
+                 wd_logger 1 "Using PCMRECORD_CMD_ARGS='${PCMRECORD_CMD_ARGS}' defined in wsprdaemon.conf"
+             fi
         fi
-        wd_logger 1 "Start recording wav files from ${receiver_ip} ${receiver_band} using ${pcm_record_cmd}"
+        wd_logger 1 "Start recording wav files from IP='${receiver_ip}' BAND='${receiver_band}' using '${pcm_record_cmd} ${pcm_record_cmd_args}"
+
         local running_jobs_pid_list=()
         while running_jobs_pid_list=( $( ps x | grep "${pcm_record_cmd} .* ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
@@ -375,7 +386,7 @@ function ka9q_recording_daemon()
         local verbosity_args_list=( -v -v -v -v )
         local ka9q_verbosity_args="${verbosity_args_list[@]:0:$(( ${verbosity} + ${WD_RECORD_EXTRA_VERBOSITY-0} ))}"
         local pcm_cmd_line="${pcm_record_cmd} ${pcm_record_cmd_args} ${PCMRECORD_CMD_EXTRA_ARGS-} --jt ${receiver_ip}"
-        wd_logger 1 "Starting ' ${pcm_cmd_line}' in ${PWD}"
+        wd_logger 1 "Starting '${pcm_cmd_line}' in '${PWD}'"
         echo "=========== Starting at $(date -u) =================" >>  pcmrecord-errors.log
         echo "=========== Starting at $(date -u) =================" >>  pcmrecord-outs.log
         ${pcm_cmd_line} > pcmrecord-outs.log 2>&1   ## wd-record prints to stderr, but we want it in wd-record.log
