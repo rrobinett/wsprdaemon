@@ -212,7 +212,7 @@ function wd_run_in_cgroup() {
 
     if [[ -n "${WD_CPU_CORES+set}" ]]; then
         wd_core_range="$WD_CPU_CORES"
-        wd_logger 1 "MAX_WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
+        wd_logger 1 "WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
     else
         local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
         if ((  cpu_core_count < 8 )); then
