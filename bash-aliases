@@ -1491,7 +1491,7 @@ function wd-kill-uploader()
 alias wd-k=wd-kill-uploader
 alias wdk=wd-kill-uploader
 
-### Watch the upload log file
+### Watch the Wsprnet.log upload log file
 function wd-watch-wsprnet-upload-log()
 {
     local wsprnet_uploads_log_file_path=~/wsprdaemon/uploads/wsprnet/spots/upload_to_wsprnet_daemon.log
@@ -1501,8 +1501,25 @@ function wd-watch-wsprnet-upload-log()
     echo "To view the full log file execute the command: ' less ${wsprnet_uploads_log_file_path} '"
     tail -F ${wsprnet_uploads_log_file_path}
 }
-alias wd-un=wd-watch-wsprnet-upload-log
 alias wdln=wd-watch-wsprnet-upload-log
+
+### Watch the Wsprnet.log upload log file
+function wd-watch-wsprdaemon-upload-log()
+{
+    local view_mode="${1-tail}"
+
+    local wsprdaemon_uploads_log_file_path=~/wsprdaemon/uploads/wsprdaemon/upload_to_wsprdaemon_daemon.log
+    if ! [[ -f ${wsprdaemon_uploads_log_file_path} ]]; then
+         wsprdaemon_uploads_log_file_path=~/wspsrdaemon/uploads.d/wsprdaemon.d/upload_to_wsprdaemon_daemon.log
+    fi
+    echo "To view the log file with 'less': add any argument"
+    if [[ "${view_mode}" == "tail" ]]; then
+        tail -F ${wsprdaemon_uploads_log_file_path}
+    else
+        less ${wsprdaemon_uploads_log_file_path}
+    fi
+}
+alias wdld=wd-watch-wsprdaemon-upload-log
 
 ### Gets status for the Kiwis listed in WD.conf
 function wd-find-kiwis()
@@ -1846,7 +1863,6 @@ function kiwi-stats(){
 alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
-alias wdld='wd -l d'
 alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
