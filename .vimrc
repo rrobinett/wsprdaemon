@@ -4,6 +4,13 @@ if exists("g:vimrc_loaded")
 endif
 let g:vimrc_loaded = 1
 
+" Enable mouse only in normal mode, which gives you
+" Click to move cursor position
+" Click in different panes to switch between them
+" Drag pane borders to resize
+" But it won't trigger visual mode when you click and drag text - that'll go to iTerm for normal terminal selection/copy instead
+set mouse=n
+
 colorscheme industry
 if has ("autocmd")
     filetype plugin indent on
