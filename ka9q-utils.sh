@@ -864,7 +864,7 @@ function build_ka9q_radio() {
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
         1)
-            if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
+            if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
                 wd_logger 1 "New files were created but WD is not configured to install and run ka9q-radio, so don't run 'sudo make install"
             else
                 wd_logger 1 "New files were created and WD is configured to install and run ka9q-radio, so run 'sudo make install"
@@ -908,9 +908,7 @@ function build_ka9q_radio() {
     fi
 
     ### KA9Q installed, so see if it needs to be started or restarted
-    local ka9q_runs_only_remotely
-    get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
-    if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
         if [[ ${PCMRECORD_ENABLED-yes} == "yes" && -x ${KA9Q_RADIO_PCMRECORD_CMD} ]]; then
             wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_PCMRECORD_CMD}' which exists. So nothing more to do"
             return 0
@@ -1211,9 +1209,7 @@ function ka9q-ft-setup()
 {
     local rc
 
-    local ka9q_runs_only_remotely
-    get_config_file_variable "ka9q_runs_only_remotely" "KA9Q_RUNS_ONLY_REMOTELY"
-    if [[ ${ka9q_runs_only_remotely} == "yes" ]]; then
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
         wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install the FT8/4 services"
         return 0
     fi
@@ -1509,7 +1505,7 @@ function build_psk_uploader() {
     local psk_services_restart_needed="yes"
 
     wd_logger 2 "Start"
-    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == 'yes' ]]; then
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
         wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY=='yes', so don't install psk_uploader"
         return 0
     fi
@@ -1870,20 +1866,36 @@ declare GITHUB_PROJECTS_LIST=(
 function ka9q-services-setup() {
     local rc
 
-    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+    ## Check for the global variable KA9Q_RUNS_ONLY_REMOTELY which defaults to "no", but can be defined differently in wsprdaemon.conf
+     if [[ -z "${KA9Q_RUNS_ONLY_REMOTELY-}" ]]; then
+         wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is not defined, so set it to its default value 'no'"
+         KA9Q_RUNS_ONLY_REMOTELY="no"
+     else
+         local  ka9q_runs_only_remotely="${KA9Q_RUNS_ONLY_REMOTELY,,}"     ### force it to lower case
+         if [[ "${ka9q_runs_only_remotely:0:1}" == "y" ]]; then
+             wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which starts with 'y' so ensure that it is set to 'yes'"
+             KA9Q_RUNS_ONLY_REMOTELY="yes"
+         else
+             wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which doesn't start with 'y', so change it to 'no'"
+             KA9Q_RUNS_ONLY_REMOTELY="no"
+         fi
+     fi
+
+    if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
         wd_logger 1 "Skipping KA9Q setup since KA9Q_RUNS_ONLY_REMOTELY='yes'"
         return 0
     fi
     wd_logger 2 "Starting in ${PWD} and checking on ${#GITHUB_PROJECTS_LIST[@]} github projects"
-
+ 
     local index
     for (( index=0; index < ${#GITHUB_PROJECTS_LIST[@]}; ++index))  ; do
         local project_info="${GITHUB_PROJECTS_LIST[index]}"
         local project_info_list=( ${project_info} )
         local project_enabled="${project_info_list[2]}"
+	
         if [[ ${project_enabled} != "yes" ]]; then
             wd_logger 1 "Project '${project_info_list[0]}' is disabled, so don't install and start it"
-        elif [[ -n "${KA9Q_RUNS_ONLY_REMOTELY-}" && "${project_info_list[0]}" != "ka9q-radio" ]]; then
+        elif [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" && "${project_info_list[0]}" != "ka9q-radio" ]]; then
             wd_logger 1 "Skipping installation of the '${project_info}' service since KA9Q_RUNS_ONLY_REMOTELY='${KA9Q_RUNS_ONLY_REMOTELY}' is defined"   
         else
             wd_logger 2 "Setup project '${project_info}'"
