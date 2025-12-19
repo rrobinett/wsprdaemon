@@ -1868,7 +1868,7 @@ function ka9q-services-setup() {
 
     ## Check for the global variable KA9Q_RUNS_ONLY_REMOTELY which defaults to "no", but can be defined differently in wsprdaemon.conf
      if [[ -z "${KA9Q_RUNS_ONLY_REMOTELY-}" ]]; then
-         wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is not defined, so set it to its default value 'no'"
+         wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY is not defined, so set it to its default value 'no'"
          KA9Q_RUNS_ONLY_REMOTELY="no"
      else
          local  ka9q_runs_only_remotely="${KA9Q_RUNS_ONLY_REMOTELY,,}"     ### force it to lower case
@@ -1876,7 +1876,7 @@ function ka9q-services-setup() {
              wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which starts with 'y' so ensure that it is set to 'yes'"
              KA9Q_RUNS_ONLY_REMOTELY="yes"
          else
-             wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which doesn't start with 'y', so change it to 'no'"
+             wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which doesn't start with 'y', so change it to 'no'"
              KA9Q_RUNS_ONLY_REMOTELY="no"
          fi
      fi
