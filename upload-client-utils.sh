@@ -216,7 +216,7 @@ function get_wsprnet_uploading_job_dir_path(){
 declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-40} ### By default wait for the oldest spot file to be 40 seconds old before starting an upload of it and all newer spotfiles
 declare UPLOAD_SLEEP_SECONDS=10
 declare -r WSPR_CYCLE_SECONDS=120
-declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-10}    ### Wait until 100 seconds (default) into a wspr cycle before searching for spots to upload.
+declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-10}    ### Wait until 10 seconds (default) into a wspr cycle before searching for spots to upload.
 function upload_to_wsprnet_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
 
@@ -226,7 +226,7 @@ function upload_to_wsprnet_daemon() {
     wd_logger 1 "Starting in $PWD"
 
     while true; do
-        ### Wait until we are (default) 100 seconds into a 120 second wspr cycle before searching for spot files to upload
+        ### Wait until we are (default) 10 seconds into a 120 second wspr cycle before searching for spot files to upload
         ### This minimizes the number of uploads per wspr cycle by giving our server time to finish decoding all of the spots from the last cycle
         local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
         local cycle_offset=$(( ${epoch_secs} % ${WSPR_CYCLE_SECONDS}  ))
@@ -235,7 +235,7 @@ function upload_to_wsprnet_daemon() {
         else
             sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
         fi
-        sleep_secs=5       ### Just start searching after 5 seconds, not 10 seconds after the even minutes
+        #sleep_secs=5       ### Just start searching after 5 seconds, not 10 seconds after the even minutes
         wd_logger 1 "Wait for ${sleep_secs} seconds then look for spot files and for all decodes to finish"
         wd_sleep ${sleep_secs}
 
@@ -441,6 +441,67 @@ declare UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=2
 declare UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=1
 declare UPLOADS_WSPRDAEMON_PAUSE_SECS=${UPLOADS_WSPRDAEMON_PAUSE_SECS-30} ### How long to wait after the first spot and/or noise file appears before starting to create a tar file
 
+### Helper function to attempt SFTP upload with automatic host key recovery
+### Returns 0 on success, non-zero on failure
+### Arguments: server tar_file_path tar_basename sftp_output_file
+function sftp_upload_with_host_key_recovery() {
+    local server="$1"
+    local tar_file_path="$2"
+    local tar_basename="$3"
+    local sftp_output_file="$4"
+    
+    # Extract hostname from server string (user@hostname)
+    local server_host="${server#*@}"
+    
+    # First attempt - normal batch mode
+    timeout ${SFTP_XFER_TIMEOUT-90} \
+            sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} "${server}" <<EOF 2>&1 | tee "${sftp_output_file}"
+put ${tar_file_path} uploads/${tar_basename}.part
+rename uploads/${tar_basename}.part uploads/${tar_basename}
+EOF
+    local rc=${PIPESTATUS[0]}
+    
+    if [[ ${rc} -eq 0 ]]; then
+        return 0
+    fi
+    
+    # Check if failure was due to host key change
+    if grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED\|Host key verification failed\|host key.*has changed" "${sftp_output_file}" 2>/dev/null; then
+        wd_logger 1 "Detected host key change for ${server_host}. Removing old host key and retrying..."
+        
+        # Remove the old host key by hostname
+        ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${server_host}" 2>/dev/null
+        
+        # Also try removing by IP in case it's cached that way
+        local server_ip
+        server_ip=$(getent hosts "${server_host}" 2>/dev/null | awk '{print $1}')
+        if [[ -n "${server_ip}" ]]; then
+            ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${server_ip}" 2>/dev/null
+            wd_logger 2 "Also removed host key for IP ${server_ip}"
+        fi
+        
+        wd_logger 1 "Retrying SFTP upload to ${server} after removing old host key..."
+        
+        # Retry with StrictHostKeyChecking=accept-new to accept the new key automatically
+        timeout ${SFTP_XFER_TIMEOUT-90} \
+                sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} \
+                -o StrictHostKeyChecking=accept-new "${server}" <<EOF 2>&1 | tee "${sftp_output_file}"
+put ${tar_file_path} uploads/${tar_basename}.part
+rename uploads/${tar_basename}.part uploads/${tar_basename}
+EOF
+        rc=${PIPESTATUS[0]}
+        
+        if [[ ${rc} -eq 0 ]]; then
+            wd_logger 1 "SFTP upload succeeded after host key update"
+            return 0
+        else
+            wd_logger 1 "SFTP upload still failed with code ${rc} after host key update"
+        fi
+    fi
+    
+    return ${rc}
+}
+
 function upload_to_wsprdaemon_daemon() {
     setup_verbosity_traps          ### So we can increment and decrement verbosity without restarting WD
     local source_root_dir=${1}     ### i.e. ~/wsprdaemon/uploads/wsprdaemon/
@@ -471,7 +532,7 @@ function upload_to_wsprdaemon_daemon() {
         wd_logger 1 "spots file count stabilized at ${old_file_count}"
         if [[ ${#spot_file_list[@]} -gt ${UPLOADS_MAX_FILES} ]]; then
             wd_logger 1 "Found ${#spot_file_list[@]} spot files, which are more than the max ${UPLOADS_MAX_FILES} files we can process at once, so truncate the spot_file_list[]"
-            spot_file_list=(${spot_file_list[@]:0${UPLOADS_MAX_FILES}} )
+            spot_file_list=(${spot_file_list[@]:0:${UPLOADS_MAX_FILES}} )
         fi
         wd_logger 2 "Get list of noise files"
         local -a noise_file_list=()
@@ -486,7 +547,7 @@ function upload_to_wsprdaemon_daemon() {
             else
                 if [[ ${#noise_file_list[@]} -gt ${UPLOADS_MAX_FILES} ]]; then
                     wd_logger 1 "Found ${#noise_file_list[@]} noise files, which are more than the max ${UPLOADS_MAX_FILES} files we can process at once, so truncate the noise_file_list[]"
-                    noise_file_list=(${noise_file_list[@]:0${UPLOADS_MAX_FILES}} )
+                    noise_file_list=(${noise_file_list[@]:0:${UPLOADS_MAX_FILES}} )
                 else
                     wd_logger 1 "Found ${#noise_file_list[@]} noise files"
                 fi
@@ -548,28 +609,29 @@ function upload_to_wsprdaemon_daemon() {
             if [[ ${#sftp_servers[@]} -gt 0 ]]; then
                 local tar_basename=${tar_file_path##*/}
                 local server_index=0
+                local sftp_output_file="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/sftp_output.tmp"
                 
                 for server in "${sftp_servers[@]}"; do
                     ((server_index++))
                     wd_logger 1 "Attempting SFTP upload to server ${server_index}/${#sftp_servers[@]}: ${server}"
                     
-                    # Use timeout and batch mode for non-interactive operation
-                    timeout ${SFTP_XFER_TIMEOUT-90} \
-                            sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} "${server}" <<EOF
-put ${tar_file_path} uploads/${tar_basename}.part
-rename uploads/${tar_basename}.part uploads/${tar_basename}
-EOF
-                    local rc=$?
-                    
-                    if [[ ${rc} -eq 0 ]]; then
+                    # Use helper function with automatic host key recovery
+                    if sftp_upload_with_host_key_recovery "${server}" "${tar_file_path}" "${tar_basename}" "${sftp_output_file}"; then
                         wd_logger 1 "SUCCESS: SFTP upload to ${server} completed successfully"
                         sftp_success=1
                         # Delete source files on successful upload
                         wd_logger 1 "Deleting the ${#source_file_list[@]} source files that were in the uploaded tar file"
                         wd_rm ${source_file_list[@]}
+                        rm -f "${sftp_output_file}"
                         break
                     else
+                        local rc=$?
                         wd_logger 1 "WARNING: SFTP upload to ${server} failed with code ${rc}"
+                        if [[ -f "${sftp_output_file}" ]]; then
+                            wd_logger 2 "SFTP output:\n$(cat "${sftp_output_file}")"
+                        fi
+                        rm -f "${sftp_output_file}"
+                        
                         if [[ ${server_index} -lt ${#sftp_servers[@]} ]]; then
                             wd_logger 1 "Trying next server..."
                         else
