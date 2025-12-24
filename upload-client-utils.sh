@@ -23,21 +23,6 @@
 ###   print out in ascending frequency order for that 2 minute cycle.  Avoiding that unlikely and in any case lossless event would require a lot more logic
 ###   in the upload_to_wsprnet_daemon() and I would rather work on VHF/UHF support
 
-### IF RAC=<INT> is defined in wsprdaemon.conf, these allow the user 'wsprdaemon' on GW2 and GW1 to ssh auto-login through the reverse tunnel created by WD's RAC service
-declare GW2_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCgNb95tET5WSBVcd8bdVVjW0eiFkAqaF0tO/hQHBIf2vAngoHq9IKS1BrDDtdrG9auvOX1ZS4sa9pGs+ii42g3wN7bTP/Pjkv8VCYJTQ7WVx4jHPfA9R8GwsKtGKUTEjPOYaBA1vcRWvJmgHN8lLG/Rdj54PdktuwjRQ8aScoRMioLzS6ziCAEfNf9X6urRh9SQdJiCW79ykMEjscbdGr+frllcurVkhoLRwbdCUYILtMnzn6HSBajfGfdohn8Nh0b1BhO0vSBIEFU3XG55nOMRmHqFWEqn7BH2ENTeHdJny7d25PgvOLwnHRxgU0nrNyFecXzy9G5bf56XBiYhyUJ wsprdaemon@GW2"
-declare GW1_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQD09fBKxhYPtdl2MUwVeLNI5mp1vEdZQ8nM1mHZDa2yMtWfkezotPiU+fq1ecDMs/2YzFt9kFb1Wiiqrn0Dwvf9/IwWRIa7jnCV94yzHCx/yKG2tX7ygZ+8iPIYl72TrksXgvLRHV2w9MQKZGE/jAAktNlBFp0fOOdvkf7rWqN0EvqK++y50gdkLOlaYg0dexstarWiZcem5DShvYZuC/WJ6bM7YgoaCyJhRvjrG0YhLlmAkF8PHk+hlWCkWcYi4aCYXP57oY8ylYco1/TexbpZfnd117qha1FM3g/j80hmfvMi8AU9TlEu8Zwi5A8d+pFdMTU6r4Hr3NYa522pW/HgDmdzOO8K26guoBJvhbo3w6rJRcvEL/8s6kF+f7Z3SdoT/NDFZ6zUqPgtn6Zwl74ebzyno13I5D0pOkh5ZY9vc2xmtQg0U5EBEyfMGFGhKnoIueWwK1cfjNnXJyuGRrWuVHRYiBIgTTJvOPlvMxEY7qHJfKjOdAyje7BebCiz60k= wsprdaemon@GW1"
-
-for key in "${GW2_PUBLIC_KEY}"  "${GW1_PUBLIC_KEY}" ; do 
-    if ! [[ -f ~/.ssh/authorized_keys ]] || ! grep -q "${key}" ~/.ssh/authorized_keys ; then
-        wd_logger 1 "Adding the public key from '${key##* }' to  ~/.ssh/authorized_keys.\nRemote access to this server also requires that a 'RAC=<NUM> line be added to this server's wsprdaemon.conf file"
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
-        echo "${key}" >> ~/.ssh/authorized_keys
-    else
-         wd_logger 2 "The public key from '${key##* }' is already in  ~/.ssh/authorized_keys"
-    fi
-done
-
 ### The spot and noise data is saved in permanent file systems, while temp files are not saved 
 declare UPLOADS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/uploads"           ### Put under here all the spot, noise and log files so they will persist through a reboot/power cycle
 declare UPLOADS_WSPRDAEMON_ROOT_DIR="${UPLOADS_ROOT_DIR}/wsprdaemon"
