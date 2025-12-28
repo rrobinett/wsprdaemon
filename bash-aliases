@@ -2573,7 +2573,7 @@ function  wd-git-to-ssh(){
     return 0
 }
 
-alias wd-get-my-public_ip="dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/\"//g'"
+alias wd-get-my-public_ip='echo "$(curl ifconfig.me 2> /dev/null)"'
 
 alias wd-watch-wavs >& /dev/null && unalias wd-watch-wavs
 declare WSPR_BAND_TO_TUNING_FREQ=(   2200:136000  630:474200  160:1836600  80:3568600  80eu:3592600   60:5287200 60eu:5364700  40:7038600  30:10138700    22:13553900   20:14095600 \
