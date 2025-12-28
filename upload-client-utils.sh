@@ -434,40 +434,32 @@ function sftp_upload_with_host_key_recovery() {
     local tar_file_path="$2"
     local tar_basename="$3"
     local sftp_output_file="$4"
-    
-    # Extract hostname from server string (user@hostname)
     local server_host="${server#*@}"
-    
-    # First attempt - normal batch mode
+
+    # First attempt - use accept-new to handle unknown hosts automatically
+    # This still warns if a KNOWN host key changes (security preserved)
     timeout ${SFTP_XFER_TIMEOUT-90} \
-            sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} "${server}" <<EOF 2>&1 | tee "${sftp_output_file}"
+            sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} \
+            -o StrictHostKeyChecking=accept-new "${server}" <<EOF 2>&1 | tee "${sftp_output_file}"
 put ${tar_file_path} uploads/${tar_basename}.part
 rename uploads/${tar_basename}.part uploads/${tar_basename}
 EOF
     local rc=${PIPESTATUS[0]}
-    
     if [[ ${rc} -eq 0 ]]; then
         return 0
     fi
-    
-    # Check if failure was due to host key change
+
+    # Check if failure was due to host key change (known host with different key)
     if grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED\|Host key verification failed\|host key.*has changed" "${sftp_output_file}" 2>/dev/null; then
         wd_logger 1 "Detected host key change for ${server_host}. Removing old host key and retrying..."
-        
-        # Remove the old host key by hostname
         ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${server_host}" 2>/dev/null
-        
-        # Also try removing by IP in case it's cached that way
         local server_ip
         server_ip=$(getent hosts "${server_host}" 2>/dev/null | awk '{print $1}')
         if [[ -n "${server_ip}" ]]; then
             ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${server_ip}" 2>/dev/null
             wd_logger 2 "Also removed host key for IP ${server_ip}"
         fi
-        
         wd_logger 1 "Retrying SFTP upload to ${server} after removing old host key..."
-        
-        # Retry with StrictHostKeyChecking=accept-new to accept the new key automatically
         timeout ${SFTP_XFER_TIMEOUT-90} \
                 sftp -b - -o BatchMode=yes -o ConnectTimeout=${SFTP_CONNECT_TIMEOUT-10} \
                 -o StrictHostKeyChecking=accept-new "${server}" <<EOF 2>&1 | tee "${sftp_output_file}"
@@ -475,7 +467,6 @@ put ${tar_file_path} uploads/${tar_basename}.part
 rename uploads/${tar_basename}.part uploads/${tar_basename}
 EOF
         rc=${PIPESTATUS[0]}
-        
         if [[ ${rc} -eq 0 ]]; then
             wd_logger 1 "SFTP upload succeeded after host key update"
             return 0
@@ -483,7 +474,6 @@ EOF
             wd_logger 1 "SFTP upload still failed with code ${rc} after host key update"
         fi
     fi
-    
     return ${rc}
 }
 

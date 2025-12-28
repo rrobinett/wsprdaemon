@@ -4,75 +4,74 @@
 alias chc='clickhouse-client'
 alias ch=chc
 
-function wd-sftp-wd-test()
-{
+wd-sftp-wd-test() {
     local rc
     local start_epoch
     local end_epoch
     local runtime_seconds
-    
+
     source ~/wsprdaemon/wsprdaemon.conf
-    
-    if ! declare -p WD_SERVER_USER_LIST &>/dev/null; then
+
+    if ! declare -p WD_SERVER_USER_LIST &> /dev/null; then
         echo "ERROR: WD_SERVER_USER_LIST is not defined in ~/wsprdaemon/wsprdaemon.conf"
         echo "This WD client is not configured to sftp upload extended spots to the WD servers"
         return 1
     fi
-    
+
     if [[ ${#WD_SERVER_USER_LIST[@]} -eq 0 ]]; then
         echo "ERROR: WD_SERVER_USER_LIST is defined but empty"
         return 1
     fi
-    
+
     echo "Found WD_SERVER_USER_LIST with ${#WD_SERVER_USER_LIST[@]} server(s):"
     for entry in "${WD_SERVER_USER_LIST[@]}"; do
         echo "  $entry"
     done
     echo ""
-    
-    # Check for SSH keys first (only need to do this once)
+
     if [[ ! -d ~/.ssh ]]; then
         echo "ERROR: The ~/.ssh directory which contains ssh keys doesn't exist."
         echo "Run 'ssh-keygen -t ed25519 -N \"\"' to create them"
         return 1
     fi
-    
-    local public_key_file_path_list=( $(find ~/.ssh -name '*.pub') )
+
+    local public_key_file_path_list=($(find ~/.ssh -name '*.pub'))
     if [[ ${#public_key_file_path_list[@]} -eq 0 ]]; then
         echo "ERROR: No ssh public key found in ~/.ssh"
         echo "Run 'ssh-keygen -t ed25519 -N \"\"' to create one"
         return 1
     fi
-    
+
     local public_key_file_path="${public_key_file_path_list[0]}"
     (( ${verbosity-0} )) && echo "Public key file: ${public_key_file_path}"
     (( ${verbosity-0} )) && echo "Public key: $(< ${public_key_file_path})"
     echo ""
-    
+
     local tmpfile=$(mktemp)
-    trap "rm -f '$tmpfile'" RETURN
-    
+    local testfile=$(mktemp)
+    echo "sftp test $(date)" > "${testfile}"
+    trap "rm -f '$tmpfile' '$testfile'" RETURN
+
     local nc_timeout=${WD_SERVER_NC_TIMEOUT_SECONDS:-2}
     local sftp_timeout=$(( nc_timeout * 10 ))
     local overall_rc=0
-    
-    # Test each server in the list
+
     for server_entry in "${WD_SERVER_USER_LIST[@]}"; do
-        local server_user="${server_entry%@*}"      # Extract user (before @)
-        local server_url="${server_entry#*@}"       # Extract server (after @)
-        
+        local server_user="${server_entry%@*}"
+        local server_url="${server_entry#*@}"
+
         echo "========================================"
         echo "Testing: ${server_entry}"
         echo "========================================"
-        
-        # Test nc connection
+
+        # Test 1: TCP connectivity
         echo "  Testing TCP connectivity: nc -vz -w ${nc_timeout} ${server_url} 22"
         start_epoch=${EPOCHSECONDS}
         nc -vz -w ${nc_timeout} ${server_url} 22 &> ${tmpfile}
         rc=$?
         end_epoch=${EPOCHSECONDS}
         runtime_seconds=$(( end_epoch - start_epoch ))
-        
+
         if (( rc )); then
             printf "  ✗ After %2d seconds, nc failed (rc=${rc}): %s\n" "${runtime_seconds}" "$(< ${tmpfile})"
             overall_rc=1
@@ -80,42 +79,70 @@ function wd-sftp-wd-test()
             continue
         fi
         printf "  ✓ After %2d seconds, TCP connection to ${server_url}:22 successful\n" "${runtime_seconds}"
-        
-        # Test sftp connection
-        echo "  Testing SFTP autologin: sftp -o ConnectTimeout=${sftp_timeout} ${server_entry}"
+
+        # Test 2: SFTP autologin with REAL host key checking (matches upload function)
+        echo "  Testing SFTP autologin (with host key check): sftp -o BatchMode=yes ${server_entry}"
         start_epoch=${EPOCHSECONDS}
-        sftp -o ConnectTimeout=${sftp_timeout} \
-             -o StrictHostKeyChecking=no \
-             -o UserKnownHostsFile=/dev/null \
-             -b /dev/null \
-             "${server_entry}" &> ${tmpfile}
+        sftp -o BatchMode=yes -o ConnectTimeout=${sftp_timeout} -o StrictHostKeyChecking=accept-new -b /dev/null "${server_entry}" &> ${tmpfile}
         rc=$?
         end_epoch=${EPOCHSECONDS}
         runtime_seconds=$(( end_epoch - start_epoch ))
-        
+
         if (( rc == 0 )); then
             printf "  ✓ After %2d seconds, SFTP autologin to ${server_entry} successful\n" "${runtime_seconds}"
         else
-            printf "  ✗ After %2d seconds, SFTP autologin failed (rc=${rc})\n" "${runtime_seconds}"
-            echo "    Output: $(< ${tmpfile})"
+            # Check for host key issues
+            if grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED" "${tmpfile}" 2>/dev/null; then
+                printf "  ✗ After %2d seconds, SFTP failed - HOST KEY CHANGED\n" "${runtime_seconds}"
+                echo "    The server's SSH key has changed. Run:"
+                echo "      ssh-keygen -R ${server_url}"
+                echo "    Then re-run this test to accept the new key."
+            elif grep -q "Host key verification failed\|not known\|No ED25519 host key" "${tmpfile}" 2>/dev/null; then
+                printf "  ✗ After %2d seconds, SFTP failed - HOST KEY UNKNOWN\n" "${runtime_seconds}"
+                echo "    Run: ssh-keyscan -H ${server_url} >> ~/.ssh/known_hosts"
+            else
+                printf "  ✗ After %2d seconds, SFTP autologin failed (rc=${rc})\n" "${runtime_seconds}"
+                echo "    Output: $(< ${tmpfile})"
+                echo ""
+                echo "    Verify that this public key is registered on ${server_url}:"
+                echo "    $(< ${public_key_file_path})"
+            fi
+            overall_rc=1
             echo ""
-            echo "    Verify that this public key is registered on ${server_url}:"
-            echo "    $(< ${public_key_file_path})"
+            continue
+        fi
+
+        # Test 3: Actual file upload/delete (catches permission issues)
+        echo "  Testing file upload: put/rm test file"
+        start_epoch=${EPOCHSECONDS}
+        sftp -o BatchMode=yes -o ConnectTimeout=${sftp_timeout} -o StrictHostKeyChecking=accept-new "${server_entry}" <<EOF &> ${tmpfile}
+put ${testfile} uploads/.sftp_test_$$
+rm uploads/.sftp_test_$$
+EOF
+        rc=$?
+        end_epoch=${EPOCHSECONDS}
+        runtime_seconds=$(( end_epoch - start_epoch ))
+
+        if (( rc == 0 )); then
+            printf "  ✓ After %2d seconds, file upload test successful\n" "${runtime_seconds}"
+        else
+            printf "  ✗ After %2d seconds, file upload test failed (rc=${rc})\n" "${runtime_seconds}"
+            echo "    Output: $(< ${tmpfile})"
             overall_rc=1
         fi
         echo ""
     done
-    
+
     if (( overall_rc == 0 )); then
         echo "========================================"
-        echo "✓ All ${#WD_SERVER_USER_LIST[@]} server(s) passed connectivity tests"
+        echo "✓ All ${#WD_SERVER_USER_LIST[@]} server(s) passed all tests"
         echo "========================================"
     else
         echo "========================================"
-        echo "✗ Some servers failed connectivity tests"
+        echo "✗ Some servers failed tests"
         echo "========================================"
     fi
-    
+
     return ${overall_rc}
 }
 
