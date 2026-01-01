@@ -264,6 +264,7 @@ function get_conf_section_variable() {
     local conf_section=${3^^}  ### forces to UPPER CASE
     local conf_variable_name=$4
 
+    wd_logger 2 "__return_variable_name-$__return_variable_name, conf_file_name=$conf_file_name, conf_section=$conf_section, conf_variable_name=$conf_variable_name"
     local conf_dir_name="${conf_file_name}.d"
     if [[ -d ${conf_dir_name} ]]; then
         wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"

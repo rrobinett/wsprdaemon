@@ -1856,7 +1856,7 @@ function decoding_daemon() {
         local ka9q_n0_float="-999.99"     ### Report by radio of N0 in dB/Hz
         local ka9q_channel_gain_float="${KA9Q_DEFAULT_CHANNEL_GAIN_DEFAULT}"      ### Setting of radiod 's rx channel gain which can be changed by WD
         local ka9q_channel_output_float="15.0"    ### Report by radiod of the current dbFS level in PCM output stream
-        if [[ ${receiver_name} =~ ^KA9Q ]]; then
+        if [[ ${receiver_name} =~ ^KA9Q && ${KA9Q_METADUMP_STATUS_CHECKING_ENABLED-no} == "yes" ]]; then
             ### Get the rx channel status and settings from the metadump output.  The return values have to be individually parsed, so I see only complexity in creating a subroutine for this
 
             ka9q_get_current_status_value "adc_overloads_count" ${receiver_ip_address} ${receiver_freq_khz} "A/D overrange:"
