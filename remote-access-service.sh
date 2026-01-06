@@ -21,6 +21,17 @@ declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.64.0}    ### Default to us
 declare FRPC_INI_FILE=${FRPC_CMD}.ini
 declare WD_REMOTE_ACCESS_SERVICE_NAME="wd-remote-access"
 
+### Remove all vestiges of the legacy name and implementation of the RAC client service
+sudo systemctl stop wd_remote_access.service 2>/dev/null
+sudo systemctl disable wd_remote_access.service 2>/dev/null
+sudo rm -f /etc/systemd/system/wd_remote_access.service
+sudo systemctl daemon-reload
+sudo systemctl reset-failed wd_remote_access.service 2>/dev/null
+### Restart the new RAC client service if it was blocked by the legacy service we just killed
+if systemctl is-enabled ${WD_REMOTE_ACCESS_SERVICE_NAME}.service &>/dev/null && ! systemctl is-active ${WD_REMOTE_ACCESS_SERVICE_NAME}.service &>/dev/null; then
+    sudo systemctl restart ${WD_REMOTE_ACCESS_SERVICE_NAME}.service
+fi
+
 declare RAC_IP_PORT_BASE=35800    ### Don't change this!  As of 7/9/24 many WD servers have IDs which start here
 declare RAC_IP_PORT_MAX=39999
 declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} % 1000 )  + 3000 ))    ## The WS gateways RAC_IDs start at 3000
