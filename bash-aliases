@@ -28,7 +28,7 @@ get-radiod-restart-logs() {
     while read -r service; do
         [[ -z "${service}" ]] && continue
         echo "=== ${service} ==="
-        journalctl -u "${service}" --since="${since_time}" --no-pager | grep -i "restart" || true
+        sudo journalctl -u "${service}" --since="${since_time}" --no-pager | grep -i "restart" || true
     done <<< "${services}"
 }
 
