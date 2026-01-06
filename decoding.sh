@@ -1082,15 +1082,16 @@ function get_wav_file_list() {
     local return_list=()
     while (( ${#return_list[@]} == 0 )); do
         ### Get a list of all wav files for this band
-        wd_logger 1 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}' | sort -r '"
-        find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" >& find.log
+        wd_logger 1 "Get new find_files_list[] by running 'find ${wav_recording_dir} -maxdepth 1 -name '${wav_file_regex}'"
+        local find_output
+        find_output=$( find ${wav_recording_dir} -maxdepth 1 -name "${wav_file_regex}" 2>&1 )
         rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex} > find.log:\n$(<find.log)"
-            sleep 1
+            wd_logger 1 "ERROR: find ${wav_recording_dir} -maxdepth 1 -name ${wav_file_regex}:\n${find_output}"
+            sleep 2
             continue
         fi
         local find_files_list=()
-        find_files_list=( $( sort -r find.log ) )
+        mapfile -t find_files_list < <( sort -r <<< "${find_output}" )
         if (( ${#find_files_list[@]} < 2 )); then
             wd_logger 2 "Found only ${#find_files_list[@]} wav files.  Check for open *wav.tmp files"
             wait_until_newest_tmp_file_is_closed ${wav_recording_dir} "${wav_file_regex}" ${receiver_name} ${receiver_band}
