@@ -22,11 +22,11 @@ declare FRPC_INI_FILE=${FRPC_CMD}.ini
 declare WD_REMOTE_ACCESS_SERVICE_NAME="wd-remote-access"
 
 ### Remove all vestiges of the legacy name and implementation of the RAC client service
-sudo systemctl stop wd_remote_access.service 2>/dev/null
-sudo systemctl disable wd_remote_access.service 2>/dev/null
+sudo systemctl stop wd_remote_access.service 2>/dev/null       || true
+sudo systemctl disable wd_remote_access.service 2>/dev/null    || true
 sudo rm -f /etc/systemd/system/wd_remote_access.service
 sudo systemctl daemon-reload
-sudo systemctl reset-failed wd_remote_access.service 2>/dev/null
+sudo systemctl reset-failed wd_remote_access.service 2>/dev/null  || true
 ### Restart the new RAC client service if it was blocked by the legacy service we just killed
 if systemctl is-enabled ${WD_REMOTE_ACCESS_SERVICE_NAME}.service &>/dev/null && ! systemctl is-active ${WD_REMOTE_ACCESS_SERVICE_NAME}.service &>/dev/null; then
     sudo systemctl restart ${WD_REMOTE_ACCESS_SERVICE_NAME}.service
