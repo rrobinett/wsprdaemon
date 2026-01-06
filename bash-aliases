@@ -3,32 +3,40 @@
 #
 
 get-radiod-restart-logs() {
-    local watchdog_pid_file=~/wsprdaemon/watchdog_daemon.pid
-    
-    if [[ ! -f "${watchdog_pid_file}" ]]; then
-        echo "ERROR: ${watchdog_pid_file} not found"
-        return 1
+    local show_previous=0
+    if [[ "${1:-}" == "-1" ]]; then
+        show_previous=1
     fi
-    
-    # Get the file's modification time in journalctl-compatible format
-    local since_time
-    since_time=$(date -r "${watchdog_pid_file}" "+%Y-%m-%d %H:%M:%S")
-    
-    # Find all running radiod@* services
+
     local services
     services=$(systemctl list-units --type=service --state=running --no-legend | awk '/radiod@/ {print $1}')
-    
+
     if [[ -z "${services}" ]]; then
         echo "No running radiod@* services found"
         return 0
     fi
-    
-    # Query each service's logs
+
     local service
     while read -r service; do
         [[ -z "${service}" ]] && continue
+
+        local start_timestamp
+        start_timestamp=$(systemctl show -p ActiveEnterTimestamp --value "${service}")
+
         echo "=== ${service} ==="
-        sudo journalctl -u "${service}" --since="${since_time}" --no-pager | grep -i "restart" || true
+        if (( show_previous )); then
+            # Show restarts up to and including current start
+            local until_time
+            until_time=$(date -d "${start_timestamp}" "+%Y-%m-%d %H:%M:%S")
+            sudo journalctl -u "${service}" --boot --until="${until_time}" --no-pager | grep -i "restart"
+        else
+            # Show restarts after current start
+            local since_time
+            since_time=$(date -d "${start_timestamp} + 1 second" "+%Y-%m-%d %H:%M:%S")
+            sudo journalctl -u "${service}" --since="${since_time}" --no-pager | grep -i "restart"
+        fi
+        echo "=== Started: ${start_timestamp} ==="
+        echo
     done <<< "${services}"
 }
 
