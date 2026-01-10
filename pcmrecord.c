@@ -71,7 +71,6 @@ Command-line options:
 // size of stdio buffer for disk I/O. 8K is probably the default, but we have this for possible tuning
 #define BUFFERSIZE (8192) // probably the same as default
 #define RESEQ 64 // size of resequence queue. Probably excessive; WiFi reordering is rarely more than 4-5 packets
-#define OPUS_SAMPRATE 48000 // Opus always operates at 48 kHz virtual sample rate
 
 enum sync_state_t
 {
@@ -498,7 +497,7 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,stru
   }
   sp->next_expected_rtp_seq = sp->rtp_state.seq + 1;    // next expected RTP sequence number
 
-  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2); // bytes per sample time
+  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2); // bytes per sample time
   int frames = buffer_size / framesize;  // One frame per sample time
 
   // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
@@ -947,7 +946,7 @@ static int send_wav_queue(struct session * const sp,bool flush){
 
   // Anything on the resequencing queue we can now process?
   int count = 0;
-  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2); // bytes per sample time
+  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2); // bytes per sample time
   for(int i=0; i < RESEQ; i++,sp->rtp_state.seq++){
     struct reseq *qp = &sp->reseq[sp->rtp_state.seq % RESEQ];
     if(!qp->inuse && !flush)
@@ -1162,7 +1161,7 @@ static void input_loop(){
 	} else {
 	  if(!Raw)
 	    start_wav_stream(sp); // Don't emit wav header in --raw
-	  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2);
+	  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2);
 	  if(sp->can_seek){
 	    fseeko(sp->fp,framesize * sp->starting_offset,SEEK_CUR);
 	  } else {
@@ -1367,10 +1366,10 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
     switch(sp->encoding){
     case S16BE:
     case S16LE:
-    case F32LE:
+    case F32BE:
       suffix = ".wav";
       break;
-    case F16LE:
+    case F16BE:
       suffix = ".f16"; // Non standard! But gotta do something with it for now
       break;
     case OPUS:
@@ -1895,13 +1894,13 @@ static int start_wav_stream(struct session *sp){
     header.ByteRate = sp->samprate * sp->channels * 2;
     header.BlockAlign = sp->channels * 2;;
     break;
-  case F32LE:
+  case F32BE:
     header.AudioFormat = 3;
     header.BitsPerSample = 32;
     header.ByteRate = sp->samprate * sp->channels * 4;
     header.BlockAlign = sp->channels * 4;
     break;
-  case F16LE:
+  case F16BE:
     header.AudioFormat = 0; // What should go here for IEEE 16-bit float?
     header.BitsPerSample = 16;
     header.ByteRate = sp->samprate * sp->channels * 2;
