@@ -340,7 +340,7 @@ int main(int argc,char *argv[]){
       break;
     case 'V':
       VERSION();
-      fputs("wsprdaemon mode (-W): v0.10\n",stdout);
+      fputs("wsprdaemon mode (-W): v0.11\n",stdout);
       exit(EX_OK);
     case 'W':
       wd_mode = true;
