@@ -314,213 +314,175 @@ function rx888-info() {
     done
 }
 
-wd-ka9qctl ()
-{
-    local VERSION="1.1.1"
-    local action="${1-status}"
-    local config_base_name="${2-}"
-    local radio_config_dir_path="/etc/radio"
+wd-ka9qctl() {
+    # Get all services from config files in /etc/radio/
+    local RADIOD_SERVICES=()
+    local DECODE_SERVICES=()
+    local RECORD_SERVICES=()
+    local REPORTER_SERVICES=()
+    local ALL_SERVICES=()
 
-    # Helper function to get human-readable uptime for a service
-    get_service_uptime() {
-        local svc="$1"
-        local timestamp
-        timestamp=$(systemctl show -p ActiveEnterTimestamp --value "${svc}" 2>/dev/null)
-        
-        if [[ -z "${timestamp}" || "${timestamp}" == "n/a" ]]; then
-            echo ""
-            return
+    # Find radiod services
+    for conf in /etc/radio/radiod@*.conf; do
+        if [ -f "$conf" ]; then
+            local svc=$(basename "$conf" .conf).service
+            RADIOD_SERVICES+=("$svc")
         fi
-        
-        local start_epoch now_epoch diff_secs
-        start_epoch=$(date -d "${timestamp}" +%s 2>/dev/null) || { echo ""; return; }
-        now_epoch=$(date +%s)
-        diff_secs=$((now_epoch - start_epoch))
-        
-        if (( diff_secs < 0 )); then
-            echo ""
-            return
+    done
+
+    # Find ft4-decode and ft8-decode services
+    for conf in /etc/radio/ft4-decode*.conf /etc/radio/ft8-decode*.conf; do
+        if [ -f "$conf" ]; then
+            local svc=$(basename "$conf" .conf).service
+            DECODE_SERVICES+=("$svc")
         fi
-        
-        local days hours mins secs
-        days=$((diff_secs / 86400))
-        hours=$(( (diff_secs % 86400) / 3600 ))
-        mins=$(( (diff_secs % 3600) / 60 ))
-        secs=$((diff_secs % 60))
-        
-        if (( days > 0 )); then
-            printf "%dd %dh %dm" ${days} ${hours} ${mins}
-        elif (( hours > 0 )); then
-            printf "%dh %dm %ds" ${hours} ${mins} ${secs}
-        elif (( mins > 0 )); then
-            printf "%dm %ds" ${mins} ${secs}
+    done
+
+    # Find ft4-record and ft8-record services
+    for conf in /etc/radio/ft4-record*.conf /etc/radio/ft8-record*.conf; do
+        if [ -f "$conf" ]; then
+            local svc=$(basename "$conf" .conf).service
+            RECORD_SERVICES+=("$svc")
+        fi
+    done
+
+    # Find pskreporter services (handle both formats: pskreporter@*.conf and *-pskreporter.conf)
+    for conf in /etc/radio/pskreporter*.conf /etc/radio/*-pskreporter.conf; do
+        if [ -f "$conf" ]; then
+            local basename=$(basename "$conf" .conf)
+            # Convert ft4-pskreporter to pskreporter@ft4 format
+            if [[ "$basename" == *-pskreporter ]]; then
+                local prefix=${basename%-pskreporter}
+                local svc="pskreporter@${prefix}.service"
+            else
+                local svc="${basename}.service"
+            fi
+            REPORTER_SERVICES+=("$svc")
+        fi
+    done
+
+    # Populate all services list
+    for svc in "${RADIOD_SERVICES[@]}"; do
+        ALL_SERVICES+=("$svc")
+    done
+    for svc in "${DECODE_SERVICES[@]}"; do
+        ALL_SERVICES+=("$svc")
+    done
+    for svc in "${RECORD_SERVICES[@]}"; do
+        ALL_SERVICES+=("$svc")
+    done
+    for svc in "${REPORTER_SERVICES[@]}"; do
+        ALL_SERVICES+=("$svc")
+    done
+
+    cmd_start() {
+        echo "Starting all KA9Q services..."
+        for svc in "${ALL_SERVICES[@]}"; do
+            echo "  Starting $svc..."
+            sudo systemctl start "$svc" 2>/dev/null || true
+        done
+        echo "Done."
+    }
+
+    cmd_stop() {
+        echo "Stopping all KA9Q services..."
+        # Stop in reverse order
+        for ((i=${#ALL_SERVICES[@]}-1; i>=0; i--)); do
+            svc="${ALL_SERVICES[$i]}"
+            echo "  Stopping $svc..."
+            sudo systemctl stop "$svc" 2>/dev/null || true
+        done
+        echo "Done."
+    }
+
+    cmd_restart() {
+        cmd_stop
+        sleep 2
+        cmd_start
+    }
+
+    cmd_status() {
+        printf "%-55s %-18s %s\n" "COMMAND" "STATUS" "UPTIME"
+        echo "--------------------------------------------------------------------------------------------"
+
+        # Check each radiod service
+        for svc in "${RADIOD_SERVICES[@]}"; do
+            check_service "sudo systemctl status   $svc"
+        done
+
+        # Check decode services
+        for svc in "${DECODE_SERVICES[@]}"; do
+            check_service "sudo systemctl status   $svc"
+        done
+
+        # Check record services
+        for svc in "${RECORD_SERVICES[@]}"; do
+            check_service "sudo systemctl status   $svc"
+        done
+
+        # Check reporter services
+        for svc in "${REPORTER_SERVICES[@]}"; do
+            check_service "sudo systemctl status   $svc"
+        done
+    }
+
+    check_service() {
+        local cmd="$1"
+        local service=$(echo "$cmd" | awk '{print $NF}')
+
+        if sudo systemctl is-active --quiet "$service" 2>/dev/null; then
+            local uptime=$(sudo systemctl show "$service" -p ActiveEnterTimestamp --value)
+            if [ -n "$uptime" ]; then
+                local seconds=$(($(date +%s) - $(date -d "$uptime" +%s)))
+                local hours=$((seconds / 3600))
+                local minutes=$(((seconds % 3600) / 60))
+                local secs=$((seconds % 60))
+                printf "%-55s [running]          %dh %dm %ds\n" "$cmd" $hours $minutes $secs
+            else
+                printf "%-55s [running]          \n" "$cmd"
+            fi
+        elif sudo systemctl is-enabled --quiet "$service" 2>/dev/null; then
+            printf "%-55s [stopped]\n" "$cmd"
         else
-            printf "%ds" ${secs}
+            local status=$(sudo systemctl status "$service" 2>&1)
+            if echo "$status" | grep -q "could not be found"; then
+                printf "%-55s [ERROR: none found]\n" "$cmd"
+            else
+                local rc=$(sudo systemctl show "$service" -p ExecMainStatus --value 2>/dev/null)
+                if [ -n "$rc" ] && [ "$rc" != "0" ]; then
+                    printf "%-55s [ERROR: rc=%s]\n" "$cmd" "$rc"
+                else
+                    printf "%-55s [stopped]\n" "$cmd"
+                fi
+            fi
         fi
     }
 
-    # Handle -h/--help
-    if [[ "${action}" == "-h" || "${action}" == "--help" ]]; then
-        cat <<EOF
-Usage: wd-ka9qctl [ACTION] [CONFIG_BASE_NAME]
-
-Control and monitor ka9q radiod and associated services.
-
-Actions:
-    status      Show status of all services (default)
-    start       Start all services
-    stop        Stop all services
-    restart     Restart all services
-
-Arguments:
-    CONFIG_BASE_NAME    Optional filter for radiod config selection
-
-Options:
-    -h, --help      Show this help message
-    -V, --version   Show version information
-
-Examples:
-    wd-ka9qctl                  # Show status of all services
-    wd-ka9qctl status           # Same as above
-    wd-ka9qctl restart kph2     # Restart services for kph2 config
-EOF
-        return 0
-    fi
-
-    # Handle -V/--version
-    if [[ "${action}" == "-V" || "${action}" == "--version" ]]; then
-        echo "wd-ka9qctl version ${VERSION}"
-        return 0
-    fi
-
-    local radio_conf_list=($(find ${radio_config_dir_path} \( -type d -name 'radiod@*.conf.d' -printf '%f\tD\n' -o -type f -name 'radiod@*.conf' -printf '%f\tF\n' \) | awk -F'\t' '
-{
-  name=$1; typ=$2
-  key=name
-  sub(/\.conf\.d$/,"",key)
-  sub(/\.conf$/,"",key)
-  if (typ=="D") dir[key]=name
-  else if (typ=="F") file[key]=name
-}
-END {
-  for (k in dir) print dir[k]
-  for (k in file) if (!(k in dir)) print file[k]
-}
-' | sort))
-    local radiod_start_arg=""
-    if (( ${#radio_conf_list[@]} == 0 )); then
-        echo "Can't find any conf.. files"
-        return 0
-    fi
-    local cfg
-    for cfg in "${radio_conf_list[@]}"; do
-        if [[ "${cfg}" == *"${config_base_name}"* ]]; then
-            radiod_start_arg="${cfg%.conf*}.service"
-            break
-        fi
-    done
-    if [[ -z "${radiod_start_arg}" ]]; then
-        echo "Can't find a conf file for the specified '${config_base_name}'"
-        return 1
-    fi
-
-    # Print header
-    printf "\n%-55s %-18s %s\n" "COMMAND" "STATUS" "UPTIME"
-    printf "%s\n" "--------------------------------------------------------------------------------------------"
-
-    # Show radiod services
-    # Columns from systemctl list-units: 1=UNIT, 2=LOAD, 3=ACTIVE, 4=SUB, 5+=DESCRIPTION
-    systemctl list-units --type=service --no-legend | grep 'radiod' | while read -r line; do
-        local svc_name=$(echo "${line}" | awk '{print $1}')
-        local svc_active=$(echo "${line}" | awk '{print $3}')   # ACTIVE state: active/inactive
-        local svc_sub=$(echo "${line}" | awk '{print $4}')      # SUB state: running/exited/dead
-        local uptime_str=""
-        # Get uptime if service is active (regardless of SUB state)
-        if [[ "${svc_active}" == "active" ]]; then
-            uptime_str=$(get_service_uptime "${svc_name}")
-        fi
-        printf "sudo systemctl %-8s %-30s %-18s %s\n" "${action}" "${svc_name}" "[${svc_sub}]" "${uptime_str}"
-    done
-
-    # Services that require at least one instance (standard OR template) to be running
-    local required_decode_bases=("ft4-decode" "ft8-decode")
-    
-    # Other services to check (standard services and template instances)
-    local other_services=("ft4-record.service" "ft8-record.service" "pskreporter@ft4.service" "pskreporter@ft8.service" "pskreporter@wspr.service")
-
-    # Check for hfdl service
-    if sudo systemctl cat hfdl &>/dev/null; then
-        if sudo systemctl is-enabled hfdl &>/dev/null; then
-            other_services+=("hfdl.service")
-        fi
-    fi
-
-    local has_errors=0
-
-    # Check required decode services (must have at least standard OR template running)
-    local base
-    for base in "${required_decode_bases[@]}"; do
-        local standard_service="${base}.service"
-        local template_pattern="${base}@"
-        local found_standard=0
-        local found_template=0
-        local template_instances=()
-
-        # Check standard service
-        if systemctl list-units --type=service --all --no-legend | grep -q "^${standard_service}\s"; then
-            local uptime_str=""
-            if systemctl is-active "${standard_service}" &>/dev/null; then
-                found_standard=1
-                uptime_str=$(get_service_uptime "${standard_service}")
-                printf "sudo systemctl %-8s %-30s %-18s %s\n" "${action}" "${standard_service}" "[running]" "${uptime_str}"
-            else
-                printf "sudo systemctl %-8s %-30s %-18s\n" "${action}" "${standard_service}" "[stopped]"
-            fi
-            sudo systemctl ${action} "${standard_service}" &>/dev/null
-        fi
-
-        # Find and check template instances
-        template_instances=($(systemctl list-units --type=service --all --no-legend | grep "${template_pattern}" | awk '{print $1}'))
-        
-        if (( ${#template_instances[@]} > 0 )); then
-            local instance
-            for instance in "${template_instances[@]}"; do
-                local uptime_str=""
-                if systemctl is-active "${instance}" &>/dev/null; then
-                    found_template=1
-                    uptime_str=$(get_service_uptime "${instance}")
-                    printf "sudo systemctl %-8s %-30s %-18s %s\n" "${action}" "${instance}" "[running]" "${uptime_str}"
-                else
-                    printf "sudo systemctl %-8s %-30s %-18s\n" "${action}" "${instance}" "[stopped]"
-                fi
-                sudo systemctl ${action} "${instance}" &>/dev/null
-            done
-        fi
-
-        # Report error if neither standard nor template is running
-        if (( ! found_standard && ! found_template )); then
-            printf "sudo systemctl %-8s %-30s %-18s\n" "${action}" "${base}*.service" "[ERROR: none found]"
-            has_errors=1
-        fi
-    done
-
-    # Check other services
-    local svc
-    for svc in "${other_services[@]}"; do
-        sudo systemctl ${action} "${svc}" &>/dev/null
-        local rc=$?
-        local uptime_str=""
-        if (( rc )); then
-            printf "sudo systemctl %-8s %-30s %-18s\n" "${action}" "${svc}" "[ERROR: rc=${rc}]"
-            has_errors=1
-        else
-            uptime_str=$(get_service_uptime "${svc}")
-            printf "sudo systemctl %-8s %-30s %-18s %s\n" "${action}" "${svc}" "[running]" "${uptime_str}"
-        fi
-    done
-
-    printf "\n"
-    return ${has_errors}
+    # Main command dispatcher
+    case "${1:-status}" in
+        start)
+            cmd_start
+            ;;
+        stop)
+            cmd_stop
+            ;;
+        restart)
+            cmd_restart
+            ;;
+        status)
+            cmd_status
+            ;;
+        *)
+            echo "Usage: wd-ka9qctl {start|stop|restart|status}"
+            echo ""
+            echo "Controls KA9Q radio daemon and associated services (from /etc/radio/*.conf):"
+            echo "  - radiod@*.service"
+            echo "  - ft4-decode*.service, ft8-decode*.service"
+            echo "  - ft4-record*.service, ft8-record*.service"
+            echo "  - pskreporter*.service"
+            return 1
+            ;;
+    esac
 }
 
 #############################################
@@ -2018,7 +1980,6 @@ alias wdle='wd -l e'
 alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
-alias wds='wd -s'
 alias wdv='wd -V'
 alias wdvv='(cd ~/wsprdaemon; echo "$(< wd_version.txt)-$(git rev-list --count HEAD)" )'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD

@@ -331,7 +331,7 @@ function ka9q_recording_daemon()
         while    running_jobs_pid_list=( $( ps x | grep "${KA9Q_RADIO_WD_RECORD_CMD} .*-s ${receiver_rx_freq_hz} ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
             wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${KA9Q_RADIO_WD_RECORD_CMD} .*-s ${receiver_rx_freq_hz} ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
-            kill ${running_jobs_pid_list[@]}
+            kill ${running_jobs_pid_list[@]} >& /dev/null
             rc=$? ; if (( rc ==  0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
             fi
@@ -376,7 +376,7 @@ function ka9q_recording_daemon()
         while running_jobs_pid_list=( $( ps x | grep "${pcm_record_cmd} .* ${receiver_ip}" | grep -v grep | awk '{ print $1 }' ) ) \
             && [[ ${#running_jobs_pid_list[@]} -ne 0 ]] ; do
             wd_logger 1 "ERROR: found ${#running_jobs_pid_list[@]} running '${pcm_record_cmd} .. ${receiver_ip}' jobs: '${running_jobs_pid_list[*]}'.  Killing them"
-            kill ${running_jobs_pid_list[@]}
+            kill ${running_jobs_pid_list[@]} >& /dev/null
             rc=$? ; if (( rc == 0 )); then
                 wd_logger 1 "ERROR: 'kill ${running_jobs_pid_list[*]}' => ${rc}"
             fi
@@ -580,7 +580,7 @@ function spawn_wav_recording_daemon() {
     if (( ${#wav_file_list[@]} == 0 )); then
         wd_logger 1 "ERROR: Found no new wav files in ${recording_dir} after the next second 59->00 transition after spawning the wav file reccording daemon, so killing the wav file recorder PID ${wav_recorder_pid} and deleting the file rm -f  ${recording_dir}/${wav_recording_pid_file} where that PID is stored"
         rm -f ${recording_dir}/${wav_recording_pid_file}
-        kill ${wav_recorder_pid}
+        kill ${wav_recorder_pid} >& /dev/null
         return 1
     fi
     wd_logger 1 "Found ${#wav_file_list[@]} new wav files in ${recording_dir} after the next second 59->00 transition"
