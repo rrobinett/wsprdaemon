@@ -497,19 +497,21 @@ static int wd_write(struct session * const sp,void *samples,int buffer_size,stru
   }
   sp->next_expected_rtp_seq = sp->rtp_state.seq + 1;    // next expected RTP sequence number
 
-  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2); // bytes per sample time
+  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2); // bytes per sample time
   int frames = buffer_size / framesize;  // One frame per sample time
 
   // is the rtp.timestamp value what we expect from the last datagram (don't log on first datagram of file)
   if ((0 != sp->total_file_samples) && (sp->rtp_state.timestamp != sp->next_expected_rtp_ts)){
-    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u)\n",
+    wd_log(0,"Weird rtp.timestamp: expected %u, received %u (delta %d) on SSRC %d (tx %u, rx %u, drops %u) frame: %d size: %d\n",
            sp->next_expected_rtp_ts,
            sp->rtp_state.timestamp,
            sp->rtp_state.timestamp - sp->next_expected_rtp_ts,
            sp->ssrc,
            sp->max_tx_queue,
            sp->max_rx_queue,
-           sp->max_drops);
+           sp->max_drops,
+           frames,
+           framesize);
   }
   sp->next_expected_rtp_ts = sp->rtp_state.timestamp + frames;    // next expected RTP timestamp
 
@@ -946,7 +948,7 @@ static int send_wav_queue(struct session * const sp,bool flush){
 
   // Anything on the resequencing queue we can now process?
   int count = 0;
-  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2); // bytes per sample time
+  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2); // bytes per sample time
   for(int i=0; i < RESEQ; i++,sp->rtp_state.seq++){
     struct reseq *qp = &sp->reseq[sp->rtp_state.seq % RESEQ];
     if(!qp->inuse && !flush)
@@ -1161,7 +1163,7 @@ static void input_loop(){
 	} else {
 	  if(!Raw)
 	    start_wav_stream(sp); // Don't emit wav header in --raw
-	  int framesize = sp->channels * (sp->encoding == F32BE ? 4 : 2);
+	  int framesize = sp->channels * (sp->encoding == F32LE ? 4 : 2);
 	  if(sp->can_seek){
 	    fseeko(sp->fp,framesize * sp->starting_offset,SEEK_CUR);
 	  } else {
@@ -1175,6 +1177,22 @@ static void input_loop(){
       sp->last_active = gps_time_ns();
 
       if (wd_mode){
+        if(S16LE == sp->encoding){
+          wd_log(0,"SSRC %u: Little endian 16 bit ints are not supported!\n",sp->ssrc);
+          exit(EX_DATAERR);
+        }
+        if(F16LE == sp->encoding){
+          wd_log(0,"SSRC %u: Little endian 16 bit floats are not supported!\n",sp->ssrc);
+          exit(EX_DATAERR);
+        }
+        if(F16BE == sp->encoding){
+          wd_log(0,"SSRC %u: Big endian 16 bit floats are not supported!\n",sp->ssrc);
+          exit(EX_DATAERR);
+        }
+        if(F32BE == sp->encoding){
+          wd_log(0,"SSRC %u: Big endian 32 bit floats are not supported!\n",sp->ssrc);
+          exit(EX_DATAERR);
+        }
         if(sp->encoding == S16BE){
           // Flip endianness from big-endian on network to little endian wanted by .wav
           // byteswap.h is linux-specific; need to find a portable way to get the machine instructions
@@ -1366,7 +1384,7 @@ int session_file_init(struct session *sp,struct sockaddr const *sender){
     switch(sp->encoding){
     case S16BE:
     case S16LE:
-    case F32BE:
+    case F32LE:
       suffix = ".wav";
       break;
     case F16BE:
@@ -1894,7 +1912,7 @@ static int start_wav_stream(struct session *sp){
     header.ByteRate = sp->samprate * sp->channels * 2;
     header.BlockAlign = sp->channels * 2;;
     break;
-  case F32BE:
+  case F32LE:
     header.AudioFormat = 3;
     header.BitsPerSample = 32;
     header.ByteRate = sp->samprate * sp->channels * 4;
