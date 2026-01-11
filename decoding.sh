@@ -996,8 +996,9 @@ function wait_until_newest_tmp_file_is_closed()
                 wd_logger 1 "Found no '${wav_file_regex}' file and there is no pcmrecord running, so spawn a new pcmrecord"
                 spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
                 rc=$? ; if (( rc )); then
-                    wd_logger 1 "ERROR: unexpected error that 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
-                    echo ${force_abort}
+                    wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+                    sleep 2
+                    return 1
                 fi
                 ps_output=$( ps aux | grep "${pcm_dns_regex}" | grep -v grep )
                 wd_logger 2 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has spawned the wav file recorder and 'ps aux  | grep '${pcm_dns_regex}'' now outputs:\n${ps_output}"
@@ -1027,7 +1028,7 @@ function wait_until_newest_tmp_file_is_closed()
             else
                 wd_logger 1 "ERROR: no wav file appeared after waiting for the next second 59->00 transition, so kill the running pcmrecord ${pcmrecord_pid}"
                 wd_logger 1 "       The deaf pcmrecord may be due to Ubuntu restarting the network services due to a Wifi interface restart"
-                sudo kill ${pcmrecord_pid}
+                sudo kill ${pcmrecord_pid} >& /dev/null
             fi
         fi
     done
