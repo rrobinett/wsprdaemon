@@ -1005,7 +1005,7 @@ function wait_until_newest_tmp_file_is_closed()
             fi
             local pcmrecord_pid=$(echo "${ps_output}" | awk '{print $2}')
             if [[ -z "${pcmrecord_pid}" ]]; then
-                local ps_pcm_all="$(ps aux | grep pcmrecord | grep -v grep)"
+                local ps_pcm_all="$(ps aux | grep record | grep -v grep)"
                 wd_logger 1 "ERROR: 'ps aux | grep '${pcm_dns_regex}' | grep -v grep' returned no error, but we couldn't extract a PID from ps's :\n'${ps_pcm_all}'.  Perhaps MC stream is not present on LAN."
                 sleep 1
                 return 1

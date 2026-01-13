@@ -517,12 +517,12 @@ function spawn_wav_recording_daemon() {
         local ps_output
         local timeout
         for (( timeout=0; timeout < 5; ++timeout )); do
-            ps_output="$( ps aux | grep "pcmrecord .*${receiver_ip}" | grep -v grep )"
+            ps_output="$( ps aux | grep "record .*${receiver_ip}" | grep -v grep )"
             if [[ -n "${ps_output}" ]]; then
-                wd_logger 1 "Found 'pcmrecord .*${receiver_ip}' is running after ${timeout} seconds"
+                wd_logger 1 "Found 'record .*${receiver_ip}' is running after ${timeout} seconds"
                 break
             fi
-            wd_logger 1 "Can't find expected 'pcmrecord .*${receiver_ip}', so sleeping 1"
+            wd_logger 1 "Can't find expected 'record .*${receiver_ip}', so sleeping 1"
             sleep 1
         done
         if [[ -z "${ps_output}" ]]; then
