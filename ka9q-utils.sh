@@ -858,61 +858,24 @@ function build_ka9q_radio() {
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
         1)
-            if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
-                wd_logger 1 "New files were created but WD is not configured to install and run ka9q-radio, so don't run 'sudo make install"
-            else
-                wd_logger 1 "New files were created and WD is configured to install and run ka9q-radio, so run 'sudo make install"
-                ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
-            fi
+            ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
             ;;
         *)
             wd_logger 1 "ERROR: 'diff before_make.txt after_make.txt' => ${rc}:\n$(< diff.log)"
             exit 1
     esac
 
-    ### This is a hack until Phil accepts Scott's version of pcmrecorder which  supports the -W and -q flags
-    if ! [[ -f pcmrecord.c ]]; then
-        wd_logger 2 "WD no longer stores Scott's version of pcmrecord.c, so Phil has integrated it"
-    else
-        ### The directory structure of KA9Q-radio changed in 9/1/2025, so pcmrecord.c needs to be found
-        local pcmrecord_src_file_path=$(find ${PWD} -mindepth 2 -name pcmrecord.c)
-        if [[ -z "${pcmrecord_src_file_path}" ]]; then
-            wd_logger 1 "ERROR: couldn't 'find . -name pcmrecord.c'"
-            exit 1
-        fi
-        if diff -q pcmrecord.c ${pcmrecord_src_file_path}  > /dev/null ; then
-            wd_logger 2 "WD's pcmrecord.c matches the one in ${pcmrecord_src_file_path}"
-        else
-            wd_logger 1 "Installing Scott's version of pcmrecord.c"
-            cp pcmrecord.c ${pcmrecord_src_file_path}         ## '-p' also updates the file's timestamp so make knows to rebuild it
-            ( cd ${pcmrecord_src_file_path%/*} ; make -f ${makefile_name} ) >& make.log
-            rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: failed to build Scott's version of pcmrecord.c:\n$(< make.log)"
-                exit 1
-            else
-                local pcmrecord_cmd=${pcmrecord_src_file_path%.c}
-                if ! [[ -x ${pcmrecord_cmd} ]]; then 
-                    wd_logger 1 "ERROR: the expected executable ${pcmrecord_cmd} wasn't created"
-                    exit 1
-                fi
-                KA9Q_RADIO_PCMRECORD_CMD=${pcmrecord_cmd}
-                wd_logger 1 "Built Scott's version of pcmrecord '${KA9Q_RADIO_PCMRECORD_CMD}'"
-            fi
-        fi
-    fi
+    shopt -s nullglob
+    local -a conf_files=( /etc/radio/radiod@*.conf )
+    local -a conf_dirs=( /etc/radio/radiod@*.conf.d/ )
+    shopt -u nullglob
 
-    ### KA9Q installed, so see if it needs to be started or restarted
-    if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
-        if [[ ${PCMRECORD_ENABLED-yes} == "yes" && -x ${KA9Q_RADIO_PCMRECORD_CMD} ]]; then
-            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_PCMRECORD_CMD}' which exists. So nothing more to do"
-            return 0
-        elif [[ -x ${KA9Q_RADIO_WD_RECORD_CMD} ]]; then
-            wd_logger 2 "KA9Q software wasn't updated and WD needs only the executable '${KA9Q_RADIO_WD_RECORD_CMD}' which exists. So nothing more to do"
-            return 0
-        else
-            wd_logger 1 "ERROR: KA9Q software wasn't updated and only needs the executable 'pcmrecord' or 'wd-record', but it isn't present"
-            exit 1
-        fi
+    if (( ${#conf_files[@]} + ${#conf_dirs[@]} == 0 )); then
+        wd_logger 1 "There are no radiod config files or directories in /etc/radio/, so no need in configure and start radiod"
+        return 0
+    fi
+    if (( ${#conf_files[@]} + ${#conf_dirs[@]} > 1 )); then
+        wd_logger 1 "WARNING: There are multiple radiod configs: ${conf_files[*]} ${conf_dirs[*]}.  For now such configurations must be manually managed"
     fi
 
     ### We are configured to decode from a local RX888.  
