@@ -358,7 +358,7 @@ function ka9q-get-configured-radiod() {
         wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
 
         if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q__CONF_NAME} doesn't exist"
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q_CONF_NAME} doesn't exist"
             exit 1
         fi
         wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
