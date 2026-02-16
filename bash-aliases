@@ -2389,8 +2389,8 @@ function wd-get_ka9q-conf_file-base_name() {
         return 0
     fi
 
-    ### KA9Q_CONF_NAME wasnet defined in wsprdaemon.conf.  See if there is one and only one
-    local conf_file_list=( $(find /etc/radio -maxdepth 1 -name 'radiod@*.conf') )
+    ### KA9Q_CONF_NAME wasnt defined in wsprdaemon.conf.  See if there is one and only one
+    local conf_file_list=( $(find /etc/radio -maxdepth 1 -type f -name 'radiod@*.conf' -o -type d -name '*.conf.d') )
     case ${#conf_file_list[@]} in
         0) 
             echo "ERROR: There is no KA9Q_CONF_NAME='...' line found in  ~/wsprdaemon/wsprdaemon.conf and there are no radiod@...conf files in /etc/radio" 1>&2
@@ -2399,7 +2399,8 @@ function wd-get_ka9q-conf_file-base_name() {
             ;;
         1)
             conf_base_name=${conf_file_list[0]##*/radiod@}         ### remove leading path if present
-            conf_base_name="${conf_base_name%.conf}"        ### remove trailing '.conf' if present
+            conf_base_name="${conf_base_name%.conf}"               ### remove trailing '.conf' if present
+            conf_base_name="${conf_base_name%.conf.d}"             ### remove trailing '.conf' if present
             [[ ${verbosity-0} -ge 1 ]] && echo "There is no KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf. But since there is only one one radiod@..conf file '${conf_file_list[0]}', assume it is the active radiod configuration" 1>&2
             echo "${conf_base_name}"
             return 0
