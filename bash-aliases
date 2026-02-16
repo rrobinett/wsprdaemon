@@ -2377,20 +2377,43 @@ function wd-get_ka9q-conf_file-base_name() {
     local conf_base_name
 
     if [[ -n "${KA9Q_CONF_NAME-}" ]]; then
-        [[ ${verbosity-0} -gt 0 ]] && echo "Using conf base name KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf" 1>&2
-        conf_base_name="${KA9Q_CONF_NAME}"
-    else
-        [[ ${verbosity-0} -gt 0 ]] && echo "Using default conf base name 'rx888-wsprdaemon'" 1>&2
-         conf_base_name="rx888-wsprdaemon"
+        conf_base_name="${KA9Q_CONF_NAME##*/}"          ### remove leading path if present
+        conf_base_name="${conf_base_name%.conf}"        ### remove trailing '.conf' if present
+        if [[ ! -f /etc/radio/radiod@${conf_base_name}.conf ]]; then
+            echo "ERROR: the KA9Q-radio conf file ${KA9Q_CONF_NAME} defined in wsprdaemon.conf doesn't exist in /etc/radio/" 1>&2
+            echo ""
+            return 1
+        fi
+        [[ ${verbosity-0} -ge 1 ]] && echo "Using conf name extracted from the line KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf" 1>&2
+        echo "${conf_base_name}"
+        return 0
     fi
 
-    local running_radiod_status_line=$(sudo systemctl status 'radiod@*' | grep '.conf' | grep -v '\\x')
-    if [[ -n "${running_radiod_status_line}" ]]; then
-        conf_base_name="${running_radiod_status_line##*@}"
-        conf_base_name="${conf_base_name%.conf*}"
-        [[ ${verbosity-0} -gt 0 ]] && echo "Found radiod service and extracted from it the base name ${conf_base_name}" 2>&1
-    fi
-    echo "${conf_base_name}"
+    ### KA9Q_CONF_NAME wasnet defined in wsprdaemon.conf.  See if there is one and only one
+    local conf_file_list=( $(find /etc/radio -maxdepth 1 -name 'radiod@*.conf') )
+    case ${#conf_file_list[@]} in
+        0) 
+            echo "ERROR: There is no KA9Q_CONF_NAME='...' line found in  ~/wsprdaemon/wsprdaemon.conf and there are no radiod@...conf files in /etc/radio" 1>&2
+            echo ""
+            return 1
+            ;;
+        1)
+            conf_base_name=${conf_file_list[0]##*/radiod@}         ### remove leading path if present
+            conf_base_name="${conf_base_name%.conf}"        ### remove trailing '.conf' if present
+            [[ ${verbosity-0} -ge 1 ]] && echo "There is no KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' found in  ~/wsprdaemon/wsprdaemon.conf. But since there is only one one radiod@..conf file '${conf_file_list[0]}', assume it is the active radiod configuration" 1>&2
+            echo "${conf_base_name}"
+            return 0
+            ;;
+        *)
+            echo "ERROR: There is no KA9Q_CONF_NAME='...' line in ~/wsprdaemon/wsprdaemon.conf and there are more than one /etc/radio/radiod@...conf file. So remove all but the active file:" 1>&2
+            echo "       ${conf_file_list[*]}" 1>&2
+            echo ""
+            return 1
+            ;;
+    esac
+    ### Should never get here
+    echo ""
+    return 1
 }
 
 function wd-get-ka9q-conf-file-path () {
@@ -2415,16 +2438,27 @@ alias wdrl='wd-rl'
 function wd-radiod-action(){
    local action=$1
 
-   local base_name=$(wd-get_ka9q-conf_file-base_name)
-   sudo systemctl ${action} radiod@${base_name}.service
+   local ka9q_base_name=$(wd-get_ka9q-conf_file-base_name)
+   if [[ -z "${ka9q_base_name}" ]]; then
+       echo "ERROR: can't find a config file for KA9Q-radio"
+       return 1
+   fi
 
-   sudo systemctl ${action} ft8-decode.service
-   sudo systemctl ${action} ft4-decode.service
-   sudo systemctl ${action} ft8-record.service
-   sudo systemctl ${action} ft4-record.service
-   sudo systemctl ${action} pskreporter@ft4.service
-   sudo systemctl ${action} pskreporter@ft8.service
-   sudo systemctl ${action} pskreporter@wspr.service
+   local ka9q_services_list=( radiod@${ka9q_base_name} ft4-record ft8-record ft4-decode ft8-decode  pskreporter@ft4  pskreporter@ft8  pskreporter@wspr )
+
+   for service in ${ka9q_services_list[@]}; do
+       if [[ "${action}"  == "status" ]]; then
+           if sudo systemctl is-active --quiet ${service}.service; then
+               printf "Service %20s is     active\n" "${service}"
+           else
+               printf "Service %20s is not active\n" "${service}"
+           fi
+       else
+           ### should be 'start' or 'stop'
+           sudo systemctl ${action} ${service}.service
+       fi
+   done
+
 }
 
 alias wd-ra='wd-radiod-action start'  ### show it's status
