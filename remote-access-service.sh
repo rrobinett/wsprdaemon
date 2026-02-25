@@ -12,7 +12,7 @@
 
 declare WD_BIN_DIR=${WSPRDAEMON_ROOT_DIR}/bin
 declare FRPC_CMD=${WD_BIN_DIR}/frpc
-declare WD_FRPS_URL=${WD_FRPS_URL-vpn.wsprdaemon.org}
+declare WD_FRPS_URL=${WD_FRPS_URL-remote.wsprdaemon.org}
 declare HAMSCI_FRPS_URL=${HAMSCI_FRPS_URL-vpn.hamsci.org}
 declare HAMSCI_RAC_MIN=200
 declare HAMSCI_RAC_MAX=299
