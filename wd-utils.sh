@@ -399,6 +399,7 @@ function setup_systemctl_daemon() {
     if [[ ! $(groups) =~ radio ]]; then
         sudo adduser --quiet --system --group radio
         sudo usermod -aG radio ${USER}
+        exec newgrp radio             ### switch to a new shell in which we are a member of the 'radio' group and allow us to modify files in /etc/radio/
         wd_logger 1 "Added ${USER} to the group radio"
     fi
     local my_id=$(id -u -n)
