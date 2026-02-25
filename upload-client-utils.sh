@@ -398,7 +398,7 @@ function upload_to_wsprnet_daemon() {
 ###################  Upload to wsprdaemon.org functions ##################
 if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]]; then
 
-    declare TS_HOSTNAME=${TS_HOSTNAME-logs.wsprdaemon.org}
+    declare TS_HOSTNAME=${TS_HOSTNAME-gw1.wsprdaemon.org}
     declare HOST_RETURN_LINE_LIST=()
     HOST_RETURN_LINE_LIST=( $(host ${TS_HOSTNAME}) )
     if [[ $? -ne 0 ]]; then
