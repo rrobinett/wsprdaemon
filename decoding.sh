@@ -884,20 +884,28 @@ function file_is_closed_or_last_write_was_seconds_ago() {
         fi
     fi
 
-    wd_logger 2 "Check that file in ${PWD} has not been written for ${wait_for_no_writes_seconds} seconds since it is probably being written by kiwirecorders which opens and closes the file every second to write new smaples"
-    local file_age_seconds
+    wd_logger 2 "Check that file in ${PWD} has not been written for ${wait_for_no_writes_seconds} seconds since it is probably being written by kiwirecorders which opens and closes the file every second to write new samples"
+    local file_age_seconds=0
+    local stat_output
     local timeout=${wait_for_no_writes_seconds}
-    while (( --timeout >= 0 )) &&  file_age_seconds=$(( $(date +%s) - $(stat --format=%Y ${newest_file_name}) )) &&  ((file_age_seconds <  kiwirecorder_file_must_be_closed_seconds)) ; do
+
+    while (( --timeout >= 0 )); do
+        if ! stat_output=$(stat --format=%Y "${newest_file_name}" 2>/dev/null); then
+            wd_logger 1 "ERROR: stat failed on '${newest_file_name}' - file may have disappeared"
+            sleep 2
+            return 2
+        fi
+        file_age_seconds=$(( $(date +%s) - stat_output ))
+        if (( file_age_seconds >= kiwirecorder_file_must_be_closed_seconds )); then
+            wd_logger 2 "File ${newest_file_name} has been closed for ${file_age_seconds} seconds, so we can assume kiwirecorder is really done with it"
+            return 0
+        fi
         wd_logger 2 "File ${newest_file_name} is only ${file_age_seconds} seconds old, so sleep 1 second and check again"
         sleep 1
     done
-    if (( file_age_seconds >= kiwirecorder_file_must_be_closed_seconds )); then
-        wd_logger 2 "File ${newest_file_name} has been closed for ${file_age_seconds} seconds, so we can assume kiwirecorder is really done with it"
-        return 0
-    else
-        wd_logger 1 "ERROR: timeout after ${wait_for_no_writes_seconds} seconds while waiting for ${file_path} to be at least ${kiwirecorder_file_must_be_closed_seconds} seconds old"
-        return 1
-    fi
+
+    wd_logger 1 "ERROR: timeout after ${wait_for_no_writes_seconds} seconds while waiting for ${newest_file_name} to be at least ${kiwirecorder_file_must_be_closed_seconds} seconds old"
+    return 1
 }
 
 ### Scott's pcmrecord creates the first wav file only at the next second 59 to second 00 transition
