@@ -1978,6 +1978,7 @@ alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
 alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
+alias wds='wd -s'
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
 alias wdv='wd -V'
