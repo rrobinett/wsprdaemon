@@ -871,8 +871,7 @@ function build_ka9q_radio() {
     shopt -u nullglob
 
     if (( ${#conf_files[@]} + ${#conf_dirs[@]} == 0 )); then
-        wd_logger 1 "There are no radiod config files or directories in /etc/radio/, so no need in configure and start radiod"
-        return 0
+        wd_logger 1 "There are no radiod config files or directories in /etc/radio/, so we need to configure and start radiod"
     fi
     if (( ${#conf_files[@]} + ${#conf_dirs[@]} > 1 )); then
         wd_logger 1 "WARNING: There are multiple radiod configs: ${conf_files[*]} ${conf_dirs[*]}.  For now such configurations must be manually managed"
@@ -1565,10 +1564,10 @@ function build_psk_uploader() {
         sed -i "s/User=recordings/User=${USER}/"  ${tmp_service_file_path}
         wd_logger 1 "'Changed 'User=recordings' to 'User=${USER}' in  ${tmp_service_file_path}"
     fi
-    if grep -q "Group=radio"  ${tmp_service_file_path} ; then
+    if ! grep -q "Group=radio"  ${tmp_service_file_path} ; then
         local my_group=$(id -gn)
         sed -i "s/Group=radio/Group=${my_group}/"  ${tmp_service_file_path}
-        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}}' in  ${tmp_service_file_path}"
+        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}' in  ${tmp_service_file_path}"
     fi
     if ! grep -q "Environment=" ${tmp_service_file_path} ; then
         sed -i "/ExecStart=/i\\
