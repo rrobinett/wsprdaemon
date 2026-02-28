@@ -211,24 +211,34 @@ function upload_to_wsprnet_daemon() {
     wd_logger 1 "Starting in $PWD"
 
     while true; do
-        ### Wait until we are (default) 10 seconds into a 120 second wspr cycle before searching for spot files to upload
-        ### This minimizes the number of uploads per wspr cycle by giving our server time to finish decoding all of the spots from the last cycle
-        local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
-        local cycle_offset=$(( ${epoch_secs} % ${WSPR_CYCLE_SECONDS}  ))
-        if [[ ${cycle_offset} -lt ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} ]]; then
-            sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} - ${cycle_offset} ))
-        else
-            sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
+        local spots_files_list=()
+
+        if [[ "${WSPRNET_UPLOAD_DELAY-no}" == "no" ]]; then
+             wd_logger 1 "Don't delay search for new spot files"
+         else
+             wd_logger 1 "Delay search for new spot files"
+             ### Wait until we are (default) 10 seconds into a 120 second wspr cycle before searching for spot files to upload
+             ### This minimizes the number of uploads per wspr cycle by giving our server time to finish decoding all of the spots from the last cycle
+             local epoch_secs=$(printf "%(%s)T\n" -1)    ### more efficient than $(date +%s)'
+             local cycle_offset=$(( ${epoch_secs} % ${WSPR_CYCLE_SECONDS}  ))
+             if [[ ${cycle_offset} -lt ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} ]]; then
+                 sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} - ${cycle_offset} ))
+             else
+                 sleep_secs=$(( ${WN_UPLOAD_OFFSET_SECS_IN_CYCLE} + ( ${WSPR_CYCLE_SECONDS} - ${cycle_offset}) ))
+             fi
+             spots_files_list=($(find . -name '*_spots.txt') )
+             if (( ${#spots_files_list[@]} )); then
+                 wd_logger 1 "There are ${#spots_files_list[@]} spot files queued for upload, so don't sleep"
+                 else
+                     wd_logger 1 "There are no spot files queued for upload, so wait for ${sleep_secs} seconds then look for spot files and for all decodes to finish"
+                     wd_sleep ${sleep_secs}
+             fi
         fi
-        #sleep_secs=5       ### Just start searching after 5 seconds, not 10 seconds after the even minutes
-        wd_logger 1 "Wait for ${sleep_secs} seconds then look for spot files and for all decodes to finish"
-        wd_sleep ${sleep_secs}
 
         ### Wait until there are some spot files, the number of spot files hasn't changed for 5 seconds, and there are no running 'wsprd' or 'jt9' jobs
         wd_logger 1 "Waiting for there to be some spot files, for the number of spot files to stabilize, and for there to be no running 'wsprd' or 'jt9 jobs"
         local ps_stdout=""
         local old_spot_file_count=0
-        local spots_files_list=()
         while    spots_files_list=($(find . -name '*_spots.txt') ) \
               && ps_stdout="$( ps aux )" \
               && [[ ${#spots_files_list[@]} -eq 0 ]] \
@@ -288,7 +298,7 @@ function upload_to_wsprnet_daemon() {
             sed 's/none/    /' ${upload_spots_file_list[@]} | sort -k 1,1 -k 2,2 -k 6,6n > ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}
 
             if [[ "${UPLOAD_TO_WSPRNET_DROP_MY_CALL-yes}" == "yes" || -n "${UPLOAD_TO_WSPRNET_DROP_REGX+set}" ]]; then
-                wd_logger 1 "Dropping my call ${call} and/or spot lines which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX-}'"
+                wd_logger 2 "Dropping my call ${call} and/or spot lines which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX-}'"
                 grep -iw "${call}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "Report all spots since there are no spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
@@ -300,7 +310,7 @@ function upload_to_wsprnet_daemon() {
                 if [[ -n "${UPLOAD_TO_WSPRNET_DROP_REGX+set}" ]]; then
                     grep "${UPLOAD_TO_WSPRNET_DROP_REGX}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
                     rc=$? ; if (( rc )); then
-                        wd_logger 1 "Report all spots since there are no spots which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX}' in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
+                        wd_logger 2 "Report all spots since there are no spots which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX}' in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
                     else
                         wd_logger 1 "Dropping $(wc -l < grep.txt) spots which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX}' in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(< grep.txt)"
                         grep -v "${UPLOAD_TO_WSPRNET_DROP_REGX}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
