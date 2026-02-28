@@ -214,7 +214,7 @@ function upload_to_wsprnet_daemon() {
         local spots_files_list=()
 
         if [[ "${WSPRNET_UPLOAD_DELAY-no}" == "no" ]]; then
-             wd_logger 1 "Don't delay search for new spot files"
+             wd_logger 2 "Don't delay search for new spot files"
          else
              wd_logger 1 "Delay search for new spot files"
              ### Wait until we are (default) 10 seconds into a 120 second wspr cycle before searching for spot files to upload
@@ -261,9 +261,8 @@ function upload_to_wsprnet_daemon() {
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
         done
-        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and 'ps' didn't find any jobs which might create more.  Here are the top 10 jobs currently running on the system:\n$(top -w 256 -b -n 1 | sed -n '7,17p') "
- 
-        wd_logger 1 "Checking for CALL/GRID directories"
+        wd_logger 1 "There are ${#spots_files_list[@]} spot files ready for upload and 'ps' didn't find any jobs which might create more"
+        wd_logger 2 "Here are the top 10 jobs currently running on the system:\n$(top -w 256 -b -n 1 | sed -n '7,17p') "
         local call_grid_dirs_list
         call_grid_dirs_list=( $(find . -mindepth 1 -maxdepth 1 -type d) )
         call_grid_dirs_list=(${call_grid_dirs_list[@]#./})       ### strip the './' off the front of each element
@@ -285,7 +284,7 @@ function upload_to_wsprnet_daemon() {
            spots_files_list=( $(find ${call_grid_dir} -name '*.txt' -printf '%T@,%p\n' | sort -n ) )
 
            if (( ${#spots_files_list[@]} == 0 )); then
-               wd_logger 1 "Found no '*_spots.txt' files under  ${call_grid_dir}"
+               wd_logger 2 "Found no '*_spots.txt' files under  ${call_grid_dir}"
                continue
            fi
            wd_logger 1 "Found ${#spots_files_list[@]}  '*_spots.txt' files under  ${call_grid_dir}"
@@ -302,7 +301,7 @@ function upload_to_wsprnet_daemon() {
                 wd_logger 2 "Dropping my call ${call} and/or spot lines which match regex '${UPLOAD_TO_WSPRNET_DROP_REGX-}'"
                 grep -iw "${call}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
                 rc=$? ; if (( rc )); then
-                    wd_logger 1 "Report all spots since there are no spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
+                    wd_logger 2 "Report all spots since there are no spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}"
                 else
                     wd_logger 1 "Dropping $(wc -l < grep.txt) spots with my reporter_id ${call} in ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE}:\n$(< grep.txt)"
                     grep -viw "${call}" ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} > grep.txt
@@ -395,7 +394,8 @@ function upload_to_wsprnet_daemon() {
                         if [[ ${spots_xfered} -ne ${spots_offered} ]]; then
                             wd_logger 1 "INFO: Successful curl upload has completed, but only ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org"
                         fi
-                        wd_logger 1 "Successful curl upload has completed and all of the ${spots_xfered} offered spots were accepted by wsprnet.org:\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
+                        wd_logger 1 "Successful curl upload has completed and all of the ${spots_xfered} offered spots were accepted by wsprnet.org"
+                        wd_logger 2 "\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                     fi
                     wd_logger 1 "After a ${curl_exec_seconds} second long upload, flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that the spots they contain have been uploaded"
                     wd_logger 2 "\n${upload_spots_file_list[*]}"
