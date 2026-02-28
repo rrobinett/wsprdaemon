@@ -255,7 +255,8 @@ function upload_to_wsprnet_daemon() {
             else
                 local running_jobs
                 running_jobs="$(echo "${ps_stdout}" | grep 'wsprd \|wsprd.spread_nodrift.x86 \|jt9\|derived_calc.py' )"
-                wd_logger 1 "Not ready to start uploads because there are running 'wsprd', 'wsprd.spread_nodrift', 'jt9' and/or 'derived_calc.py' jobs:\n${running_jobs}"
+                wd_logger 1 "Not ready to start uploads because there are running 'wsprd', 'wsprd.spread_nodrift', 'jt9' and/or 'derived_calc.py' jobs"
+                wd_logger 2 "${running_jobs}"
             fi
             old_spot_file_count=${#spots_files_list[@]}
             sleep ${UPLOAD_SLEEP_SECONDS}
