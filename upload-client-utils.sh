@@ -559,7 +559,18 @@ function upload_to_wsprdaemon_daemon() {
         ### So to preserve backwards compatibility we will mimic that behavior by executing tar from ..uploads and prepending 'wsprdaemon' to all the filenames we are tarring
         local tar_source_file_list=( wsprdaemon/${config_relative_path} ${source_file_list[@]/./wsprdaemon} )
 
-        local tar_file_name="${SIGNAL_LEVEL_UPLOAD_ID}_$(date -u +%g%m%d_%H%M_%S).tbz"
+        local site_name="${SIGNAL_LEVEL_UPLOAD_ID-}"
+        if [[ -n "${site_name}" ]]; then
+            wd_logger 1 "Use SIGNAL_LEVEL_UPLOAD_ID='${SIGNAL_LEVEL_UPLOAD_ID}' from wsprdaemon.conf as the site name to use in creating the WD .tgz file for upload"
+        else
+            if ! get_first_receiver_reporter "site_name" ; then
+                wd_logger 1 "ERROR: can't find a site name to use in creating the WD .tgz file for upload"
+                sleep 1
+                return 1
+            fi
+            wd_logger 1 "SIGNAL_LEVEL_UPLOAD_ID is not defined in wsprdaemon.conf, so use the first receiver's reporter id '${site_name}' as the site name to use in creating the WD .tgz file for upload"
+        fi
+        local tar_file_name="${site_name}_$(date -u +%g%m%d_%H%M_%S).tbz"
         local tar_file_path="${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}/${tar_file_name}"
         mkdir -p ${UPLOADS_TMP_WSPRDAEMON_ROOT_DIR}
         wd_logger 1 "Creating tar file '${tar_file_path}' with:  '( cd ${UPLOADS_ROOT_DIR}; tar cfj ${tar_file_path} \${tar_source_file_list[*]})"

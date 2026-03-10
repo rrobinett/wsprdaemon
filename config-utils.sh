@@ -247,6 +247,7 @@ function get_first_receiver_reporter() {
     fi
     local receiver_info=( ${RECEIVER_LIST[0]} )
     eval ${__return_var_name}=\${receiver_info[2]}
+    wd_logger 1 "First receiver's wsprnet.org reporter name in RECEIVER_LIST[] is '${receiver_info[2]}'"
     return 0
 }
 

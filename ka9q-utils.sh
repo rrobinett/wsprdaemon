@@ -257,7 +257,7 @@ function get_conf_section_variable() {
     local conf_section=${3^^}  ### forces to UPPER CASE
     local conf_variable_name=$4
 
-    wd_logger 2 "__return_variable_name-$__return_variable_name, conf_file_name=$conf_file_name, conf_section=$conf_section, conf_variable_name=$conf_variable_name"
+    wd_logger 1 "__return_variable_name-$__return_variable_name, conf_file_name=$conf_file_name, conf_section=$conf_section, conf_variable_name=$conf_variable_name"
     local conf_dir_name="${conf_file_name}.d"
     if [[ -d ${conf_dir_name} ]]; then
         wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"
@@ -334,16 +334,19 @@ function get_current_commit_sha() {
 }
 
 function ka9q-get-configured-radiod() {
-    local __return_radio_conf_file_name=$1
-
-    local _radiod_conf_file_name=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}')
-    if [[ -n "${_radiod_conf_file_name}" ]]; then
+    local -n __return_radio_conf_file_name=$1
+    local _radiod_conf_file_list=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}')
+    if [[ -n "${_radiod_conf_file_list}" ]]; then
+        local _radiod_conf_file_count=$(wc -l <<< "${_radiod_conf_file_list}")
+        if (( _radiod_conf_file_count > 1 )); then
+            wd_logger 1 "WARNING: found ${_radiod_conf_file_count} running radiod instances:\n${_radiod_conf_file_list}\nUsing only the first one"
+        fi
+        local _radiod_conf_file_name=$(head -1 <<< "${_radiod_conf_file_list}")
         wd_logger 2 "Found radiod is running and configured by ${_radiod_conf_file_name}"
-        eval ${__return_radio_conf_file_name}="\${_radiod_conf_file_name}"
+        __return_radio_conf_file_name="${_radiod_conf_file_name}"
         return 0
     fi
     wd_logger 2 "radiod isn't running, so find the conf file to use"
-
     local ka9q_conf_file_name
     if [[ -z "${KA9Q_CONF_NAME-}" ]]; then
         ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@rx888-wsprdaemon.conf
@@ -356,19 +359,16 @@ function ka9q-get-configured-radiod() {
     else
         ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@${KA9Q_CONF_NAME}.conf
         wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
-
         if [[ ! -f ${ka9q_conf_file_name} ]]; then
             wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q_CONF_NAME} doesn't exist"
             exit 1
         fi
         wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
     fi
-
-    eval ${__return_radio_conf_file_name}="\${ka9q_conf_file_name}"
-    wd_logger 2 "Assigned ${__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
+    __return_radio_conf_file_name="${ka9q_conf_file_name}"
+    wd_logger 2 "Assigned ${!__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
     return 0
 }
-
 
 ### Checks that the radiod config file is set with the desired low = 1300, high = 1700 and fix them if they were set to 100, 5000 by WD 3.1.4
 function ka9q_conf_file_bw_check() {
@@ -1298,7 +1298,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 2 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
+    wd_logger 1 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
