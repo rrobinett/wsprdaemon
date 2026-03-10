@@ -330,7 +330,7 @@ function post_files()
         fi
     fi
 
-    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
+    if [[ ${SIGNAL_LEVEL_UPLOAD-yes} == "no" ]]; then
         wd_logger 1 "We are not configured to uplaod spots and noise to wsprdaemon.org, so flush the extended spots file(s): '${spot_file_list[*]}'"
         wd_rm ${spot_file_list[@]}
         return 0
