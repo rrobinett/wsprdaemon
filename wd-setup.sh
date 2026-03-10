@@ -522,7 +522,7 @@ WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
-declare SIGNAL_LEVEL_UPLOAD="${SIGNAL_LEVEL_UPLOAD-yes}"
+declare SIGNAL_LEVEL_UPLOAD="yes"               ###  as of 3/10/26 force uplaods to the WD servers  "${SIGNAL_LEVEL_UPLOAD-yes}"
 if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
      if [[ "${SIGNAL_LEVEL_UPLOAD_ID-}" == "AI6VN" ]]; then
         wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"
