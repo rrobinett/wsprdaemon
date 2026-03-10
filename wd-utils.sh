@@ -539,8 +539,18 @@ function wd_rm()
     fi
 }
 
+### Validates that a PID is a positive non-zero integer.  Rejects empty string, 0, negatives, floats, and non-integers
+function wd_is_valid_pid() {
+    local pid=$1
+    if [[ -z "${pid}" ]] || ! [[ "${pid}" =~ ^[1-9][0-9]*$ ]]; then
+        wd_logger 1 "ERROR: invalid pid '${pid}' - must be a positive non-zero integer"
+        return 1
+    fi
+    return 0
+}
+
 ### Returns a list of PIDs in bottom up order
-function wd_list_decendant_pids() {
+function wd_list_descendant_pids() {
   local children=$(ps -o pid= --ppid "$1")
 
   if [[  -z "${children}" ]]; then
@@ -548,23 +558,27 @@ function wd_list_decendant_pids() {
   fi
 
   for pid in ${children}; do
-     wd_list_decendant_pids "${pid}"
+     wd_list_descendant_pids "${pid}"
   done
   echo "${children}"
 }
 
-function wd_list_parent_and_decenddant_pids() {
+function wd_list_parent_and_descendant_pids() {
     local root_pid_to_be_killed=$1
-    local top_down_pids_list=( $(wd_list_decendant_pids ${root_pid_to_be_killed}) )
-    echo ${root_pid_to_be_killed} ${top_down_pids_list[@]}
+    local top_down_pids_list=( $(wd_list_descendant_pids ${root_pid_to_be_killed}) )
+    echo ${top_down_pids_list[@]} ${root_pid_to_be_killed} ## parent goes last
 }
 
-function wd_kill_pid_and_its_decendants() {
-    local pid_list=( $( wd_list_parent_and_decenddant_pids $1 ) )
+function wd_kill_pid_and_its_descendants() {
+    if ! wd_is_valid_pid $1 ; then
+        wd_logger 1 "ERROR: called with invalid pid '$1'"
+        return 1
+    fi
+    local pid_list=( $( wd_list_parent_and_descendant_pids $1 ) )
     local save_rc=0
     local rc=0
 
-    wd_logger 2 "Killing pid $1 and all of its decendents: '${pid_list[*]}'"
+    wd_logger 2 "Killing pid $1 and all of its descendants: '${pid_list[*]}'"
 
     local pid_to_kill
     for pid_to_kill in ${pid_list[@]} ; do
@@ -597,15 +611,20 @@ function wd_kill()
     local kill_errors=0
     local kill_pid
     for kill_pid in ${kill_pid_list[@]}; do
+        if ! wd_is_valid_pid ${kill_pid} ; then
+            wd_logger 1 "ERROR: skipping invalid pid '${kill_pid}'"
+            (( ++kill_errors ))
+            continue
+        fi
         if ! ps ${kill_pid} > /dev/null ; then
             wd_logger 2 "ERROR: pid ${kill_pid} is not running"
             (( ++not_running_errors ))
         else
             wd_logger 2 "Killing pid ${kill_pid}"
-            wd_kill_pid_and_its_decendants  ${kill_pid}
+            wd_kill_pid_and_its_descendants  ${kill_pid}
             local rc=$?
             if [[ ${rc} -ne 0 ]]; then
-                wd_logger 1 "ERROR: 'wd_kill_pid_and_its_decendants  ${kill_pid}' => ${rc}"
+                wd_logger 1 "ERROR: 'wd_kill_pid_and_its_descendants  ${kill_pid}' => ${rc}"
                 (( ++kill_errors ))
             fi
         fi
@@ -706,38 +725,43 @@ function get_pid_from_file()
 
 declare KILL_TIMEOUT_MAX_SECS=${KILL_TIMEOUT_MAX_SECS-10}
 
-function wd_kill_and_wait_for_death() 
+function wd_kill_and_wait_for_death()
 {
     local pid_to_kill=$1
 
+    if ! wd_is_valid_pid ${pid_to_kill} ; then
+        wd_logger 1 "ERROR: called with invalid pid '${pid_to_kill}'"
+        return 1
+    fi
     if ! ps ${pid_to_kill} > /dev/null ; then
         wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
         return 1
     fi
+    wd_kill ${pid_to_kill}
     local timeout=0
-
     while [[ ${timeout} -lt ${KILL_TIMEOUT_MAX_SECS} ]]; do
-        wd_kill ${pid_to_kill}
-        local rc=$?
-        if [[ ${rc} -eq 0 ]]; then
-            wd_logger 1 "Killed after ${timeout} seconds"
+        if ! ps ${pid_to_kill} > /dev/null ; then
+            wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
             return 0
         fi
         (( ++timeout ))
+        sleep 1
     done
-    wd_logger 1 "ERROR: timeout after ${timeout} seconds  trying to kill ${pid_to_kill}"
+    wd_logger 1 "ERROR: timeout after ${timeout} seconds waiting for pid ${pid_to_kill} to die"
     return 2
 }
 
 function wd_kill_pid_file()
 {
-    local local recording_pid_file=$1
+    local recording_pid_file=$1
     local recording_pid
 
     get_pid_from_file recording_pid ${recording_pid_file}
     local rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 3 "ERROR: 'get_pid_from_file recording_pid ${recording_pid_file}' => ${rc}"
+        wd_rm ${recording_pid_file}
+        return ${rc}
     fi
 
     wd_rm ${recording_pid_file}
@@ -749,7 +773,7 @@ function wd_kill_pid_file()
     wd_kill_and_wait_for_death ${recording_pid}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
-        wd_logger 1 "ERROR: 'wd_kill ${recording_pid}' => $?"
+        wd_logger 1 "ERROR: 'wd_kill_and_wait_for_death ${recording_pid}' => ${ret_code}"
         return 4
     fi
     return 0
@@ -914,7 +938,7 @@ function get_file_variable()
     eval ${__return_variable}=\${value_in_file}
 }
 
-################################################################################################################################################################
+###############################################################################################################################################################
 declare MUTEX_DEFAULT_TIMEOUT=${MUTEX_DEFAULT_TIMEOUT-5}   ### How many seconds to wait to create lock before returning an error.  Defaults to 5 seconds
 declare MUTEX_MAX_AGE=${MUTEX_MAX_AGE-30}                  ### If can't get lock and the lock is older than this, then flush the lock directory.  Defaults to 30 seconds
 
@@ -924,16 +948,27 @@ function wd_mutex_lock() {
     local mutex_timeout_count=${3-${MUTEX_DEFAULT_TIMEOUT}}     ### How many seconds to wait to get mutex,  Defaults to 5 seconds
 
     if [[ ! -d ${mutex_dir} ]]; then
-        wd_logger 1 "ERROR: directory '${mutex_dir}' for muxtex doesn't exist"
+        wd_logger 1 "ERROR: directory '${mutex_dir}' for mutex doesn't exist"
         return 1
     fi
 
     local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     wd_logger 2 "Trying to lock '${mutex_name}' by executing 'mkdir ${mutex_lock_dir_name}'"
+
     local mkdir_try_count=1
     while ! mkdir ${mutex_lock_dir_name} 2> /dev/null; do
         ((++mkdir_try_count))
         if [[ ${mkdir_try_count} -ge ${mutex_timeout_count} ]]; then
+            ### Before giving up, check if the lock directory is stale (older than MUTEX_MAX_AGE seconds)
+            if [[ -d ${mutex_lock_dir_name} ]]; then
+                local lock_age=$(( EPOCHSECONDS - $(stat -c %Y ${mutex_lock_dir_name} 2>/dev/null || echo ${EPOCHSECONDS}) ))
+                if [[ ${lock_age} -gt ${MUTEX_MAX_AGE} ]]; then
+                    wd_logger 1 "WARNING: lock '${mutex_lock_dir_name}' is ${lock_age} seconds old which is older than MUTEX_MAX_AGE=${MUTEX_MAX_AGE}, so forcibly removing stale lock and retrying"
+                    rmdir ${mutex_lock_dir_name}
+                    mkdir_try_count=1    ### Reset the try count and retry
+                    continue
+                fi
+            fi
             wd_logger 1 "ERROR: timeout waiting to lock ${mutex_name} after ${mkdir_try_count} tries"
             return 1
         fi
@@ -950,19 +985,19 @@ function wd_mutex_unlock() {
     local mutex_name=$1
     local mutex_dir=$2                                          ### Directory in which to create lock
 
-    wd_logger 2 "Unock mutex '${mutex_name}' in directory '${mutex_dir}'"
+    wd_logger 2 "Unlock mutex '${mutex_name}' in directory '${mutex_dir}'"
     if [[ ! -d ${mutex_dir} ]]; then
-        wd_logger 1 "ERROR: directory '${mutex_dir}' containing the muxtex '${mutex_name}' doesn't exist"
+        wd_logger 1 "ERROR: directory '${mutex_dir}' containing the mutex '${mutex_name}' doesn't exist"
         return 1
     fi
 
     local mutex_lock_dir_name="${mutex_dir}/${mutex_name}-mutex.lock"         ### The lock directory
     if [[ ! -d ${mutex_lock_dir_name} ]]; then
-        wd_logger 1 "ERROR: the expected mutex directory '${mutex_dir}' doesn't exist"
+        wd_logger 1 "ERROR: the expected mutex lock directory '${mutex_lock_dir_name}' doesn't exist"
         return 1
     fi
     rmdir ${mutex_lock_dir_name}
-    rc=$?
+    local rc=$?
     if [[ ${rc} -ne 0 ]]; then
         wd_logger 1 "ERROR: 'rmdir ${mutex_lock_dir_name}' => ${rc}"
         return 1
