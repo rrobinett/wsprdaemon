@@ -1,6 +1,12 @@
 #!/bin/bash 
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 #
+#
+function wd-kiwi-logtimes() {
+    date
+    ls -l ~/wsprdaemon/watchdog_daemon.pid
+    ls -lt /dev/shm/wsprdaemon/recording.d/KIWI_*/*/decoding_daemon.log | tail -5
+}
 
 get-radiod-restart-logs() {
     local show_previous=0
