@@ -2375,10 +2375,17 @@ function decoding_daemon() {
 
                         wd_logger 1 "fft_noise_level_float=${fft_noise_level_float} which is calculated from 'local fft_noise_level_float=\$(bc <<< 'scale=2;var=${c2_fft_noise_level_float};var+=${fft_nl_adjust};var/=1;var')"
                     else
-                        ### sox has normalized the wav file level, so add this negative number to the measured FFT levels to compensate for the gain applied by sox
+                        ### sox has normalized the wav file level, so subtract from the measured FFT levels to compensate for the gain applied by sox
+                        ### For KiwiSDRs, fft_nl_adjust (via cal_c2_correction) was calibrated on actual Kiwi hardware so it already includes the Kiwi +60 dB hardware gain.
+                        ### Therefore, just like the RMS correction below, we must add +60 to sdr_noise_level_adjust_float before applying it to the FFT.
+                        local fft_sdr_adjust=${sdr_noise_level_adjust_float}
+                        if ! [[ $receiver_name =~ KA9Q ]]; then
+                            fft_sdr_adjust=$( echo "scale=1;(${sdr_noise_level_adjust_float} + 60.0)" | bc )
+                            wd_logger 1 "KiwiSDR: adjusting FFT sdr correction from ${sdr_noise_level_adjust_float} to ${fft_sdr_adjust} dB (+60 dB since fft_nl_adjust already includes Kiwi hardware gain)"
+                        fi
                         local corrected_fft_noise_level_float
-                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${sdr_noise_level_adjust_float})/1" | bc )
-                        wd_logger 2 "Since sdr_noise_level_adjust_float=$sdr_noise_level_adjust_float, correct measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
+                        corrected_fft_noise_level_float=$( echo "scale=1;(${fft_noise_level_float} - ${fft_sdr_adjust})/1" | bc )
+                        wd_logger 2 "Since fft_sdr_adjust=$fft_sdr_adjust, correct measured FFT noise from ${fft_noise_level_float} to ${corrected_fft_noise_level_float}"
                         fft_noise_level_float=${corrected_fft_noise_level_float}
                     fi
  
