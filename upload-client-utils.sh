@@ -395,7 +395,11 @@ function upload_to_wsprnet_daemon() {
                             wd_logger 1 "INFO: Successful curl upload has completed, but only ${spots_xfered} of these offered ${spots_offered} spots were accepted by wsprnet.org"
                         fi
                         wd_logger 1 "Successful curl upload has completed and all of the ${spots_xfered} offered spots were accepted by wsprnet.org"
-                        wd_logger 2 "\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
+                        local upload_spot_log_verbosity=1
+                        if [[ -n "${UPLOAD_SPOT_LOG_VERBOSITY-}" ]]; then
+                            upload_spot_log_verbosity="${UPLOAD_SPOT_LOG_VERBOSITY}"
+                        fi
+                        wd_logger ${upload_spot_log_verbosity} "\n$( <${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} )"
                     fi
                     wd_logger 1 "After a ${curl_exec_seconds} second long upload, flushing the ${#upload_spots_file_list[*]} spot files containing ${spots_offered} spots now that the spots they contain have been uploaded"
                     wd_logger 2 "\n${upload_spots_file_list[*]}"

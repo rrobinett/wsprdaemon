@@ -257,7 +257,7 @@ function get_conf_section_variable() {
     local conf_section=${3^^}  ### forces to UPPER CASE
     local conf_variable_name=$4
 
-    wd_logger 1 "__return_variable_name-$__return_variable_name, conf_file_name=$conf_file_name, conf_section=$conf_section, conf_variable_name=$conf_variable_name"
+    wd_logger 2 "__return_variable_name-$__return_variable_name, conf_file_name=$conf_file_name, conf_section=$conf_section, conf_variable_name=$conf_variable_name"
     local conf_dir_name="${conf_file_name}.d"
     if [[ -d ${conf_dir_name} ]]; then
         wd_logger 2 "Search for variable '${conf_variable_name}' in section '${conf_section}' among the files found in ${conf_dir_name}"
@@ -1298,7 +1298,7 @@ function ka9q-ft-setup()
     fi
     wd_logger 2 "Found the radiod conf file is '${radiod_conf_file_name}'"
 
-    wd_logger 1 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
+    wd_logger 2 "Find the multicast DNS name of the ${ft_type^^} stream in radiod_conf_file_name=${radiod_conf_file_name}"
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
@@ -1567,7 +1567,7 @@ function build_psk_uploader() {
     if ! grep -q "Group=radio"  ${tmp_service_file_path} ; then
         local my_group=$(id -gn)
         sed -i "s/Group=radio/Group=${my_group}/"  ${tmp_service_file_path}
-        wd_logger 1 "'Changed 'Group=radio' to 'Group=${my_group}' in  ${tmp_service_file_path}"
+        wd_logger 2 "'Changed 'Group=radio' to 'Group=${my_group}' in  ${tmp_service_file_path}"
     fi
     if ! grep -q "Environment=" ${tmp_service_file_path} ; then
         sed -i "/ExecStart=/i\\
