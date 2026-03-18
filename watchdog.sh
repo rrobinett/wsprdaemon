@@ -121,8 +121,12 @@ ka9q_rx_channel_is_configured "ka9q_rx_is_active"
 if (( $ka9q_rx_is_active != 1)); then
     wd_logger 2 "Not adding ka9q_web_daemon() to watchdog_daemon_list[] since there are no KA9Q receivers"
 else
-    wd_logger 2 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers"
-    watchdog_daemon_list+=( "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}" )
+    if [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
+        wd_logger 1 "All KA9Q receive channels are fed from remote servers.  So don't spawn a local KA9Q-web job"
+    else
+        wd_logger 2 "Adding ka9q_web_daemon() to watchdog_daemon_list[] since there are KA9Q receivers and a local -radiod running"
+        watchdog_daemon_list+=( "ka9q_web_daemon         ${WSPRDAEMON_ROOT_DIR}" )
+    fi
 fi
 
 function test_ka9q_rx_channel_is_configured()
