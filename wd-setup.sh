@@ -266,7 +266,7 @@ function wd_run_in_cgroup() {
 wd_run_in_cgroup
 
 declare CPU_FREQ_MIN_KHZ=${CPU_FREQ_MIN_KHZ-1000000}
-declare CPU_FREQ_MAX_KHZ=${CPU_FREQ_MAX_KHZ-5000000}
+declare CPU_FREQ_MAX_KHZ=${CPU_FREQ_MAX_KHZ-6100000}
 
 function turbo_control() {
     action="${1:-off}"   # default to "off" if no argument
