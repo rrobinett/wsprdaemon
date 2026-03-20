@@ -199,7 +199,7 @@ function get_wsprnet_uploading_job_dir_path(){
 }
 
 declare MAX_SPOTFILE_SECONDS=${MAX_SPOTFILE_SECONDS-40} ### By default wait for the oldest spot file to be 40 seconds old before starting an upload of it and all newer spotfiles
-declare UPLOAD_SLEEP_SECONDS=10
+declare UPLOAD_SLEEP_SECONDS=${UPLOAD_SLEEP_SECONDS-10}
 declare -r WSPR_CYCLE_SECONDS=120
 declare    WN_UPLOAD_OFFSET_SECS_IN_CYCLE=${WN_UPLOAD_OFFSET_SECS_IN_CYCLE-10}    ### Wait until 10 seconds (default) into a wspr cycle before searching for spots to upload.
 function upload_to_wsprnet_daemon() {
