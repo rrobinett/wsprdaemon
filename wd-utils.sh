@@ -507,9 +507,11 @@ function wd_sleep()
     local sleep_for_secs=$1
     local start_secs=${SECONDS}
     local end_secs=$(( start_secs + sleep_for_secs ))
+    local caller="${FUNCNAME[1]}() line ${BASH_LINENO[0]}"
 
     wd_logger 2 "Starting to sleep for a total of ${sleep_for_secs} seconds"
     while [[ ${SECONDS} -le ${end_secs} ]]; do
+        wd_logger 2 "Called by ${caller}: $(( end_secs - SECONDS )) seconds remaining of ${sleep_for_secs} second sleep"
         sleep 1
     done
     wd_logger 2 "Finished sleeping"
