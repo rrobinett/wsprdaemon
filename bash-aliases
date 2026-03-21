@@ -2,6 +2,11 @@
 ### This file ~/wsprdaemon/bash-aliases  includes functions and aliases which are helpful in running and debugging WD systems
 #
 #
+
+function wd-decoding-logs-times() {
+    ls -lrt `find /dev/shm/wsprdaemon/recording.d/ -name decoding_daemon.log`
+}
+
 function wd-kiwi-logtimes() {
     date
     ls -l ~/wsprdaemon/watchdog_daemon.pid
