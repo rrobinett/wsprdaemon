@@ -4,7 +4,7 @@
 #
 
 function wd-decoding-logs-times() {
-    ls -lrt `find /dev/shm/wsprdaemon/recording.d/ -name decoding_daemon.log`
+    ls -lt `find /dev/shm/wsprdaemon/recording.d/ -name decoding_daemon.log`
 }
 
 function wd-kiwi-logtimes() {
