@@ -859,15 +859,15 @@ function file_is_closed_or_last_write_was_seconds_ago() {
              wd_logger 2 "The file ${file_path} is closed"
              return 0
          else
-            wd_logger 2 "The file ${file_path} is open so run 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name}' so we wakeup when it is closed"
-            inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name} >& /dev/null
+            wd_logger 2 "The file ${file_path} is open so run 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${file_path}' so we wakeup when it is closed"
+            inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${file_path} >& /dev/null
             rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_file_name}' => ${rc}"
+            wd_logger 1 "ERROR: After $(( SECONDS - start_second )) seconds, 'inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${file_path}' => ${rc}"
                 return ${rc}
             else
-                log_wav_file_create_times "$newest_file_name"
+                log_wav_file_create_times "${file_path}"
 
-                local date_time_list=( $(stat $newest_file_name | awk '/Modify/{printf "%s %s", $2, $3} ') )
+                local date_time_list=( $(stat ${file_path} | awk '/Modify/{printf "%s %s", $2, $3} ') )
                 local date=${date_time_list[0]}
                 local hhmmss=${date_time_list[1]%.*}
                 local microseconds=${date_time_list[1]##*.}
@@ -875,9 +875,9 @@ function file_is_closed_or_last_write_was_seconds_ago() {
                 local max_delay_secs=${RECORDING_MAX_DELAY_SECONDS-2}  ### If 'stat' reports last write is greater than 2 seconds 
                 local min_early_secs=${RECORDING_MIN_EARLY_SECONDS-59} ### and it is earlier than second 59, then log error
                 if (( (seconds > max_delay_secs) && (seconds < min_early_secs) )); then
-                    wd_logger 1 "ERROR: File ${newest_file_name##*/} last write time ${date_time_list[*]} is not in second 00"
+                    wd_logger 1 "ERROR: File ${file_path##*/} last write time ${date_time_list[*]} is not in second 00"
                 else
-                    wd_logger 1 "File ${newest_file_name##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds after a wait of $(( SECONDS - start_second )) seconds"
+                    wd_logger 1 "File ${file_path##*/} last write time ${date_time_list[*]} shows it has been closed in second $seconds after a wait of $(( SECONDS - start_second )) seconds"
                 fi
                 return 0
             fi
@@ -890,21 +890,21 @@ function file_is_closed_or_last_write_was_seconds_ago() {
     local timeout=${wait_for_no_writes_seconds}
 
     while (( --timeout >= 0 )); do
-        if ! stat_output=$(stat --format=%Y "${newest_file_name}" 2>/dev/null); then
-            wd_logger 1 "ERROR: stat failed on '${newest_file_name}' - file may have disappeared"
+        if ! stat_output=$(stat --format=%Y "${file_path}" 2>/dev/null); then
+            wd_logger 1 "ERROR: stat failed on '${file_path}' - file may have disappeared"
             sleep 2
             return 2
         fi
         file_age_seconds=$(( $(date +%s) - stat_output ))
         if (( file_age_seconds >= kiwirecorder_file_must_be_closed_seconds )); then
-            wd_logger 2 "File ${newest_file_name} has been closed for ${file_age_seconds} seconds, so we can assume kiwirecorder is really done with it"
+            wd_logger 2 "File ${file_path} has been closed for ${file_age_seconds} seconds, so we can assume kiwirecorder is really done with it"
             return 0
         fi
-        wd_logger 2 "File ${newest_file_name} is only ${file_age_seconds} seconds old, so sleep 1 second and check again"
+        wd_logger 2 "File ${file_path} is only ${file_age_seconds} seconds old, so sleep 1 second and check again"
         sleep 1
     done
 
-    wd_logger 1 "ERROR: timeout after ${wait_for_no_writes_seconds} seconds while waiting for ${newest_file_name} to be at least ${kiwirecorder_file_must_be_closed_seconds} seconds old"
+    wd_logger 1 "ERROR: timeout after ${wait_for_no_writes_seconds} seconds while waiting for ${file_path} to be at least ${kiwirecorder_file_must_be_closed_seconds} seconds old"
     return 1
 }
 

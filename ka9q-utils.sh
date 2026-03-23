@@ -434,14 +434,14 @@ function ka9q_get_metadump() {
         local i
         for (( i=0; i<${KA9Q_METADUMP_WAIT_SECS}; ++i)); do
             if ! kill -0 ${metadump_pid} 2> /dev/null; then
-                wait ${metadump_pid}
-                rc=$?
-                wd_logger 2 "'metadump...&' has finished before we timed out"
+                wd_logger 2 "metadump pid ${metadump_pid} has exited after ${i} seconds, collecting status"
                 break
             fi
-            wd_logger 2 "Waiting another second for 'metadump...&' to finish"
+            wd_logger 2 "Waiting another second for metadump pid ${metadump_pid} to finish"
             sleep 1
         done
+        wait ${metadump_pid} 2>/dev/null
+        rc=$?
 
         if [[ ${i} -lt ${KA9Q_METADUMP_WAIT_SECS} ]]; then
             wd_logger 2 "'metadump..&' finished after ${i} seconds of waiting"

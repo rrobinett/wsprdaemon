@@ -507,6 +507,7 @@ function spawn_wav_recording_daemon() {
         WD_LOGFILE=${wav_record_daemon_log_filename} ka9q_recording_daemon ${receiver_ip} ${receiver_rx_band}  &    ### Once instance of pcmrecord outputs all the bands in the stream to a series of wav files
         rc1=$?
         wav_recorder_pid=$!
+        disown ${wav_recorder_pid}    ### Detach from bash job table so wait4(-1) in parent cannot hang on this child
         cd - > /dev/null
         echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
         if (( rc1 )); then
@@ -539,6 +540,7 @@ function spawn_wav_recording_daemon() {
         WD_LOGFILE=${wav_record_daemon_log_filename}  kiwirecorder_manager_daemon ${receiver_name} ${receiver_ip} ${receiver_rx_freq_khz} ${my_receiver_password} &
         rc1=$?
         wav_recorder_pid=$!
+        disown ${wav_recorder_pid}    ### Detach from bash job table so wait4(-1) in parent cannot hang on this child
         echo ${wav_recorder_pid}  >  ${recording_dir}/${wav_recording_pid_file}
         cd - > /dev/null
     fi
