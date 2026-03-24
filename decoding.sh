@@ -996,7 +996,12 @@ function wait_until_newest_tmp_file_is_closed()
         else
             ### We found no '*wav*' files, so make sure pcmrecord is running
             local receiver_ip=$(get_receiver_ip_from_name  ${receiver_name})
-            local pcm_dns_regex="pcmrecord .*${receiver_ip}"
+            local pcm_dns_regex
+            if [[ "${receiver_name}" =~ ^KA9Q ]]; then
+                pcm_dns_regex="pcmrecord .*${receiver_ip}"
+            else
+                pcm_dns_regex="kiwirecorder.py.*${receiver_ip}"
+            fi
             wd_logger 1 "We found no '*wav*' files for ${receiver_name} ${receiver_band}, so make sure ps reports a '${pcm_dns_regex}' which would create it is running"
 
             local ps_output=$( ps aux | grep "${pcm_dns_regex}" | grep -v grep )
@@ -1018,7 +1023,7 @@ function wait_until_newest_tmp_file_is_closed()
                 sleep 1
                 return 1
             fi
-            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the pcmrecord with PID ${pcmrecord_pid} to be running until the next ssecond 59 to second 00 transition"
+            wd_logger 1 "Found no '${wav_file_regex}.*' file(s) but wait for the kiwi.. or wd-record wav file recorder with PID ${pcmrecord_pid} to be running until the next second 59 to second 00 transition"
             wait_for_pid_to_run_seconds ${pcmrecord_pid}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: unexpected error 'wait_for_pid_to_run_seconds ${pcmrecord_pid}' => ${rc}"
