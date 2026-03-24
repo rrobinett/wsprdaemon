@@ -67,7 +67,7 @@ if [[ ${HOSTNAME:0:2} == "WD" ]]; then
     PACKAGE_NEEDED_LIST+=( jq )
 fi
 
-if ! grep -q "Raspbian.*buster" /etc/os-release; then
+if ! grep -q "Raspbian.*buster\|Focal Fossa" /etc/os-release; then
     ### 'btop' isn't part of the Pi's buster distro.  Perhaps other distros will have that problem
     PACKAGE_NEEDED_LIST+=( btop )
 fi
