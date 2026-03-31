@@ -335,6 +335,20 @@ function get_current_commit_sha() {
 
 function ka9q-get-configured-radiod() {
     local -n __return_radio_conf_file_name=$1
+
+    local ka9q_conf_file_name
+
+    if [[ -n  "${KA9Q_CONF_NAME-}" ]]; then
+        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@${KA9Q_CONF_NAME}.conf
+        if [[ ! -f ${ka9q_conf_file_name} ]]; then
+            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q_CONF_NAME} doesn't exist"
+            exit 1
+        fi
+        wd_logger 1 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
+        __return_radio_conf_file_name="${ka9q_conf_file_name}"
+        return 0
+    fi
+
     local _radiod_conf_file_list=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}')
     if [[ -n "${_radiod_conf_file_list}" ]]; then
         local _radiod_conf_file_count=$(wc -l <<< "${_radiod_conf_file_list}")
@@ -346,25 +360,15 @@ function ka9q-get-configured-radiod() {
         __return_radio_conf_file_name="${_radiod_conf_file_name}"
         return 0
     fi
+
     wd_logger 2 "radiod isn't running, so find the conf file to use"
-    local ka9q_conf_file_name
-    if [[ -z "${KA9Q_CONF_NAME-}" ]]; then
-        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@rx888-wsprdaemon.conf
-        wd_logger 2 "Found that KA9Q_CONF_NAME has not been defined in WD.conf, so use the default radiod conf file ${ka9q_conf_file_name}"
-        if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: KA9Q_CONF_NAME was not defined in WD.conf, but the default ${ka9q_conf_file_name} doesn't exist"
-            exit 1
-        fi
-        wd_logger 2 "The default radiod conf file ${ka9q_conf_file_name} has been found"
-    else
-        ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@${KA9Q_CONF_NAME}.conf
-        wd_logger 2 "In WD.conf found KA9Q_CONF_NAME='${KA9Q_CONF_NAME}' => ${ka9q_conf_file_name}"
-        if [[ ! -f ${ka9q_conf_file_name} ]]; then
-            wd_logger 1 "ERROR: The conf file ${ka9q_conf_file_name} specified by KA9Q_CONF_NAME=${KA9Q_CONF_NAME} doesn't exist"
-            exit 1
-        fi
-        wd_logger 2 "The configured radio conf file ${ka9q_conf_file_name} has been found"
+    ka9q_conf_file_name=${KA9Q_RADIOD_CONF_DIR}/radiod@rx888-wsprdaemon.conf
+    wd_logger 2 "Found that KA9Q_CONF_NAME has not been defined in WD.conf, so use the default radiod conf file ${ka9q_conf_file_name}"
+    if [[ ! -f ${ka9q_conf_file_name} ]]; then
+        wd_logger 1 "ERROR: KA9Q_CONF_NAME was not defined in WD.conf, but the default ${ka9q_conf_file_name} doesn't exist"
+        exit 1
     fi
+    wd_logger 2 "The default radiod conf file ${ka9q_conf_file_name} has been found"
     __return_radio_conf_file_name="${ka9q_conf_file_name}"
     wd_logger 2 "Assigned ${!__return_radio_conf_file_name}='${ka9q_conf_file_name}'"
     return 0
