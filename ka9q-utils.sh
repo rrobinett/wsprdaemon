@@ -23,7 +23,13 @@ declare KA9Q_RADIO_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
 declare KA9Q_TEMPLATE_FILE="${WSPRDAEMON_ROOT_DIR}/radiod@rx888-wsprdaemon-template.conf"
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"
-declare KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
+declare KA9Q_RADIO_WD_RECORD_CMD=$(which wd-record)
+if [[ -n "${KA9Q_RADIO_WD_RECORD_CMD}" ]]; then
+    wd_logger 2 "Found ${KA9Q_RADIO_WD_RECORD_CMD}"
+else
+    KA9Q_RADIO_WD_RECORD_CMD="${KA9Q_RADIO_ROOT_DIR}/wd-record"
+    wd_logger 1 "Can't find wd-record, so default to ${KA9Q_RADIO_WD_RECORD_CMD}"
+fi
 
 # 11/15/24 - Scott N5TNL enhanced wd-record to output wav files with 32bit float samples
 # wd-record has some new command line options. -p enables float32 wav output (without the -p it'll do int wav files). You'll probably have to also pass -c (channels) and -S (sample rate) because the float
@@ -32,7 +38,7 @@ declare KA9Q_RADIO_WD_RECORD_CMD_FLOAT_ARGS="${KA9Q_RADIO_WD_RECORD_CMD_FLOAT_AR
 
 ### As of 1/12/2026 WD runs the wd-record command in ka9q-radio comes from Scott instead of a custom version of pcmrecord.
 ### So KA9Q_RADIO_PCMRECORD_CMD should really be KA9Q_RADIO_WD_RECORD_CMD, but there are too many places that would need to be changed
-declare KA9Q_RADIO_PCMRECORD_CMD="/usr/local/bin/wd-record"
+declare KA9Q_RADIO_PCMRECORD_CMD="${KA9Q_RADIO_WD_RECORD_CMD}"
 
 declare ka9q_receivers
 get_ka9q_receivers "ka9q_receivers"
