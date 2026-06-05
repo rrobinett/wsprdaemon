@@ -1115,11 +1115,11 @@ function get_wav_file_list() {
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
                 fi
-                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder.  So sleep 1 and check again"
+                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder.  So sleep 10 and check again"
             else
-                wd_logger 1 "Done waiting.  So sleep 1 and check again"
+                wd_logger 1 "Done waiting.  So sleep 10 and check again"
             fi
-            sleep 1
+            sleep 10
             continue
         fi
         ### There is at least one file on the list
