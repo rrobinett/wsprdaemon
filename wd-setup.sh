@@ -113,6 +113,8 @@ case ${CPU_ARCH} in
             PACKAGE_NEEDED_LIST+=( python3-matplotlib python3-numpy libgfortran5:amd64 ${LIB_QT5_CORE_AMD64} )
         elif [[ "${VERSION_ID}" =~ 24.04 ]]; then
             PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
+        elif [[ "${VERSION_ID}" =~ 26.04 ]]; then
+            PACKAGE_NEEDED_LIST+=( libhdf5-dev  python3-matplotlib libgfortran5:amd64 python3-dev libpq-dev python3-psycopg2 ${LIB_QT5_CORE_UBUNTU_24_04})
         elif [[ "${VERSION_ID}" =~ 24.10 ]]; then
             PACKAGE_NEEDED_LIST+=( python3-numpy libgfortran5:amd64 libqt5core5t64 python3-psycopg2 )
         elif grep -q 'Linux Mint' /etc/os-release; then
