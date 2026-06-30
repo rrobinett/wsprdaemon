@@ -41,3 +41,4 @@ onion/
 reflector.conf
 *.backup
 test.txt
+.wd-logrotate.state
