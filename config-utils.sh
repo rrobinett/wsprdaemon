@@ -833,8 +833,11 @@ function install_python_package()
         fi
     fi
 
+    ### On PEP-668 'externally managed' Pythons (Debian 12+, Ubuntu 24.04+ including 26.04) a system-wide 'pip install'
+    ### is refused unless '--break-system-packages' is given.  Detect that marker file directly rather than maintaining
+    ### a list of distro versions, which has missed newer releases.  Keep the version checks as a fallback.
     local pip3_extra_args=""
-    if [[ ${VERSION_ID} =~ ^1[23]$ || ${VERSION_ID} == "24.04" ]]; then
+    if ls /usr/lib/python3*/EXTERNALLY-MANAGED >& /dev/null || [[ ${VERSION_ID} =~ ^1[23]$ || ${VERSION_ID} == "24.04" ]]; then
         pip3_extra_args="--break-system-packages"
     fi
     if ! sudo pip3 install ${pip3_extra_args}  ${pip_package} ; then

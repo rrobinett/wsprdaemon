@@ -901,6 +901,16 @@ function build_ka9q_radio() {
         wd_logger 1 "ERROR: the group 'radio' which should have been created by KA9Q-radio doesn't exist"
         exit 1
     fi
+    if [[ ! -d ${KA9Q_RADIOD_CONF_DIR} ]]; then
+        ### On a greenfield install the radiod conf dir may not yet exist, so create it owned by group 'radio'
+        ### with the setgid bit and group write permission so members of 'radio' can install conf files there.
+        wd_logger 1 "The KA9Q-radio config dir '${KA9Q_RADIOD_CONF_DIR}' doesn't exist, so create it owned by group 'radio'"
+        sudo mkdir -p "${KA9Q_RADIOD_CONF_DIR}" && sudo chgrp radio "${KA9Q_RADIOD_CONF_DIR}" && sudo chmod 2775 "${KA9Q_RADIOD_CONF_DIR}"
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: failed to create '${KA9Q_RADIOD_CONF_DIR}' => ${rc}"
+            exit 1
+        fi
+    fi
     if id -nG "${USER}" | grep -qw "radio" ; then
         if ! touch ${KA9Q_RADIOD_CONF_DIR}/test_writing 2> /dev/null ; then
             wd_logger 1 "You are a member of the group 'radio', but you need to log out of Linux and log in again in order to install KA9Q-radio files"
@@ -1706,7 +1716,11 @@ function build_onion() {
     cd ${project_subdir}
     mkdir -p build
     cd build
-    cmake -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
+    ### onion's CMakeLists.txt declares 'cmake_minimum_required (VERSION 2.8)' which CMake >= 4 rejects, and its
+    ### tools (e.g. opack.c) use K&R-style empty-parens prototypes which GCC >= 14 (Ubuntu 24.04/26.04) rejects when
+    ### the default C standard is C23.  CMAKE_POLICY_VERSION_MINIMUM lets the old project configure, and -std=gnu17
+    ### restores the pre-C23 prototype semantics so the onion library and tools compile.
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_FLAGS="-std=gnu17" -DONION_USE_PAM=false -DONION_USE_PNG=false -DONION_USE_JPEG=false -DONION_USE_XML2=false -DONION_USE_SYSTEMD=false -DONION_USE_SQLITE3=false -DONION_USE_REDIS=false -DONION_USE_GC=false -DONION_USE_TESTS=false -DONION_EXAMPLES=false -DONION_USE_BINDINGS_CPP=false ..
     make
     sudo make install
     sudo ldconfig

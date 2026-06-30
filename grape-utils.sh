@@ -906,7 +906,7 @@ function grape_init() {
 
     if ! [[ -d ~/.ssh ]] || ! find -L ~/.ssh -type f -name '*.pub' | grep -q .; then
         wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"
-        ssh-keygen
+        ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ~/.ssh/id_ed25519 -N ""    ### Non-interactive: a bare 'ssh-keygen' prompts for the file and passphrase, which hangs WD startup
         rc=$? ;  if (( rc )); then
             wd_logger 1 "ERROR:  GRAPE_PSWS_ID is configured, but this server has no ssh public key needed for this feature to run"
             return ${rc}
