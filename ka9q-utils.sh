@@ -848,10 +848,19 @@ function build_ka9q_radio() {
     fi
     wd_logger 2 "Building ${project_subdir}"
     local makefile_name="Makefile"
-    if [[ ${project_subdir} == "ka9q-radio" && -f "${project_subdir}/Makefile.linux" ]]; then
-        makefile_name="Makefile.linux"
+    local -a make_args=()
+    if [[ ${project_subdir} == "ka9q-radio" ]]; then
+        if [[ -f "${project_subdir}/Makefile.linux" ]]; then
+            makefile_name="Makefile.linux"
+        fi
+        ### ka9q-radio's Makefile defaults every SDR driver to ENABLE_*=1, but these three need dev
+        ### libraries WD does not install (libbladeRF.h, fobos.h, libhydrasdr/hydrasdr.h), so the build
+        ### would fail.  Disable them; the radios WD supports (RX888, RTL-SDR, Airspy, AirspyHF, HackRF,
+        ### Funcube) still build unchanged.  Override via KA9Q_RADIO_DISABLE_MAKE_ARGS if needed.
+        local ka9q_radio_disable_make_args="${KA9Q_RADIO_DISABLE_MAKE_ARGS-ENABLE_BLADERF=0 ENABLE_FOBOS=0 ENABLE_HYDRASDR=0}"
+        make_args+=( ${ka9q_radio_disable_make_args} )
     fi
-    ( cd  ${project_subdir} ; make -f ${makefile_name} ) >&  ${project_logfile}
+    ( cd  ${project_subdir} ; make -f ${makefile_name} "${make_args[@]}" ) >&  ${project_logfile}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$(< ${project_logfile})"
         return 3
@@ -1822,11 +1831,11 @@ fi
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-42273761ba5b96b243317592a6b8964ab99a9794}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-707fd7cc6bedd2d98f6ac9390e267288365ff6c6}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-a612dce854f548133907f3c486f90db587515de6}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-aba3ab4af281f4dcb63c76e1b499dd3c40f7855a}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-2946c9fed43a57c3d0391cec25493c657d9b6f58}"
 )
 ###
 function ka9q-services-setup() {
