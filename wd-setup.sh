@@ -967,3 +967,34 @@ if [[ -n "${WIFI-}" ]]; then
     setup_wifi_connection
     (( --verbosity))
 fi
+
+##############################################################
+### Install (idempotently) the hourly cron job which runs wd-cleanup.sh to:
+###   - rotate oversized *.log files in /dev/shm/wsprdaemon via logrotate copytruncate
+###     (safe for the daemons' redirected-stdout logs, which are held open)
+###   - delete stale *.wav files and old wav-archive files, and prune empty archive dirs
+function wd_cleanup_setup() {
+    local cron_file="/etc/cron.d/wd-cleanup"
+    local cleanup_cmd="${WSPRDAEMON_ROOT_DIR}/wd-cleanup.sh"
+
+    if [[ ! -x ${cleanup_cmd} ]]; then
+        chmod +x ${cleanup_cmd} 2>/dev/null
+    fi
+
+    local desired_cron="SHELL=/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+# wsprdaemon hourly housekeeping: rotate oversized logs (copytruncate) and purge old wav/archive files
+10 * * * * root ${cleanup_cmd} -r > /dev/null 2>&1"
+
+    if [[ -f ${cron_file} ]] && [[ "$(cat ${cron_file})" == "${desired_cron}" ]]; then
+        wd_logger 2 "wd-cleanup cron job '${cron_file}' is already installed and current"
+        return 0
+    fi
+    wd_logger 1 "Installing/updating the hourly wd-cleanup cron job '${cron_file}'"
+    local tmp_file
+    tmp_file=$(mktemp)
+    echo "${desired_cron}" > ${tmp_file}
+    sudo cp ${tmp_file} ${cron_file}
+    sudo chmod 644 ${cron_file}
+    rm -f ${tmp_file}
+}

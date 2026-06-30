@@ -160,6 +160,7 @@ while getopts :aAzZsg:hij:l:pvVw:dDr: opt ; do
                 echo "Wsprdaemon is delaying startup for ${WD_STARTUP_DELAY_SECS} seconds"
                 wd_sleep ${WD_STARTUP_DELAY_SECS}
             fi
+            wd_cleanup_setup
             watchdog_cmd a
             ;;
         a)
