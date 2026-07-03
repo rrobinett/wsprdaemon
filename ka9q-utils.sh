@@ -1605,6 +1605,9 @@ function build_psk_uploader() {
     fi
     ### add '--tcp' if it is missing
     sed -i '/ExecStart=.*pskreporter-sender/ {/--tcp/! s/pskreporter-sender/pskreporter-sender --tcp/}'  ${tmp_service_file_path}
+    ### add '--software="${WD_SOFTWARE_VERSION}"' if it is missing.  systemd expands ${WD_SOFTWARE_VERSION} from the
+    ### per-instance EnvironmentFile /etc/radio/%i-pskreporter.conf, whose value is managed in the ft_type loop below.
+    sed -i '/ExecStart=.*pskreporter-sender/ {/--software/! s|pskreporter-sender|pskreporter-sender --software="${WD_SOFTWARE_VERSION}"|}'  ${tmp_service_file_path}
 
     if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
         wd_logger 2 "The service file has not beeen changed"
@@ -1622,7 +1625,11 @@ function build_psk_uploader() {
     ### Phil's templates /etc/radio/ don't have group write, so make sure we can write to them if WD modifies them
     sudo chmod g+w ${KA9Q_RADIOD_CONF_DIR}/*
  
-    local ft_type 
+    ### The pskreporter '--software=' value reported for every ftX instance.  Defaults to 'WD_' plus the WD release
+    ### version without the churning '-<git-commit-count>' suffix (e.g. 'WD_3.3.2'); override with PSK_SOFTWARE_VERSION=... in WD.conf.
+    local wd_software_version="${PSK_SOFTWARE_VERSION:-WD_${VERSION%%-*}}"
+
+    local ft_type
     for ft_type in ft4 ft8 wspr; do
         local psk_conf_file="${KA9Q_RADIOD_CONF_DIR}/${ft_type}-pskreporter.conf"
         wd_logger 2 "Checking and updating  ${psk_conf_file}"
@@ -1681,6 +1688,18 @@ function build_psk_uploader() {
                 needs_systemctl_restart="yes"
             fi
         done
+
+        ### Ensure the conf file declares WD_SOFTWARE_VERSION so the service's --software arg reports the WD version
+        local variable_line="WD_SOFTWARE_VERSION=${wd_software_version}"
+        if grep -Fq "${variable_line}" ${psk_conf_file} ; then
+            wd_logger 2 "Found expected '${variable_line}' line in ${psk_conf_file}"
+        else
+            grep -v "WD_SOFTWARE_VERSION=" ${psk_conf_file} > ${psk_conf_file}.tmp
+            echo "${variable_line}" >> ${psk_conf_file}.tmp
+            wd_logger 1 "Added or replaced 'WD_SOFTWARE_VERSION=' line in ${psk_conf_file} with '${variable_line}'"
+            mv  ${psk_conf_file}.tmp  ${psk_conf_file}
+            needs_systemctl_restart="yes"
+        fi
 
         sudo systemctl status pskreporter@${ft_type} >& /dev/null
         rc=$? ; if (( rc )); then
@@ -1847,7 +1866,7 @@ fi
 declare GITHUB_PROJECTS_LIST=(
     "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-707fd7cc6bedd2d98f6ac9390e267288365ff6c6}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
-    "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-a612dce854f548133907f3c486f90db587515de6}"
+    "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-f585e1c4cdbacf2f4dd442d7d5f47bcc881ab910}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
     "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-2946c9fed43a57c3d0391cec25493c657d9b6f58}"
 )
