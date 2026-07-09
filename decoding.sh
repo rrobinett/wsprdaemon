@@ -12,6 +12,15 @@ declare FFT_WINDOW_CMD=${WSPRDAEMON_ROOT_DIR}/wav_window.py
 declare C2_FFT_ENABLED="yes"          ### If "yes", then use the c2 file produced by wsprd to calculate FFT noise levels
 declare C2_FFT_CMD=${WSPRDAEMON_ROOT_DIR}/c2_noise.py
 
+### Default per-band KA9Q/RX888 noise calibration.  The sox noise calibration was derived for a KiwiSDR and is not
+### calibrated for the RX888 chain, so KA9Q noise over-reads by a band-dependent ~5-10 dB.  These offsets (dRMS, dC2 =
+### KIWI - KA9Q) were measured at AI6VN (2026-07) against a co-located calibrated KiwiSDR treated as truth, and make
+### RX888-only sites report noise levels that match the calibrated Kiwi ground truth.  Applied by default (KA9Q_USE_BAND_CAL);
+### a site with its own co-located Kiwi measurements can override KA9Q_USE_BAND_CAL / KA9Q_RMS_CAL_OFFSET / KA9Q_C2_CAL_OFFSET
+### in wsprdaemon.conf.  2200/630 use the 160m value (RX888 RF amp is impaired at LF); 6m uses the 10m value (Kiwi can't reach 50 MHz).
+declare -p KA9Q_RMS_CAL_OFFSET &>/dev/null || declare -A KA9Q_RMS_CAL_OFFSET=( [2200]=-10.1 [630]=-10.1 [160]=-10.1 [80]=-8.5 [80eu]=-8.4 [60]=-8.8 [60eu]=-8.9 [40]=-8.7 [30]=-8.3 [22]=-7.5 [20]=-7.2 [17]=-6.3 [15]=-5.5 [12]=-5.4 [10]=-6.3 [6]=-6.3 )
+declare -p KA9Q_C2_CAL_OFFSET  &>/dev/null || declare -A KA9Q_C2_CAL_OFFSET=(  [2200]=-7.5  [630]=-7.5  [160]=-7.5  [80]=-5.9 [80eu]=-5.8 [60]=-6.1 [60eu]=-6.0 [40]=-6.0 [30]=-5.5 [22]=-4.8 [20]=-4.6 [17]=-3.6 [15]=-2.8 [12]=-2.6 [10]=-3.7 [6]=-3.7 )
+
 function get_decode_mode_list() {
     local modes_variable_to_return=$1
     local receiver_modes_arg=$2
@@ -2436,7 +2445,7 @@ function decoding_daemon() {
                     ### band-dependent ~5-10 dB.  Preferred fix: per-band offsets measured against a co-located calibrated KiwiSDR
                     ### (KIWI treated as truth), with separate RMS and C2 corrections (KA9Q_*_CAL_OFFSET[] in WD.conf).
                     ### Alternative: KA9Q_USE_RADIOD_N0=yes reports radiod's calibrated N0 directly (needs metadump status checking).
-                    if [[ ${receiver_name} =~ ^KA9Q && ${KA9Q_USE_BAND_CAL:-no} == "yes" ]]; then
+                    if [[ ${receiver_name} =~ ^KA9Q && ${KA9Q_USE_BAND_CAL:-yes} == "yes" ]]; then
                         local rms_off="${KA9Q_RMS_CAL_OFFSET[${receiver_band}]:-0}"
                         local c2_off="${KA9Q_C2_CAL_OFFSET[${receiver_band}]:-0}"
                         if [[ "${rms_off}" != "0" || "${c2_off}" != "0" ]]; then
