@@ -66,9 +66,7 @@ declare WSPR_BAND_LIST=(
 "WWV_15 15000.0   W0"
 "WWV_20 20000.0   W0"
 "WWV_25 25000.0   W0"
-"CHU_3   3330.0   W0"
-"CHU_7   7850.0   W0"
-"CHU_14 14670.0   W0"
+### CHU_3/CHU_7/CHU_14 removed - the CHU time stations went off the air (2026)
 "SUPERDARN_9   9120.0  J1"
 "SUPERDARN_11 11070.0  J1"
 "SUPERDARN_14 14650.0  J1"

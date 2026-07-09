@@ -834,6 +834,78 @@ function ka9q_web_service_daemon() {
 #}
 # test_ka9q-web-setup
 
+### Keep the radiod band list current: ensure the 8m (40.680 MHz) WSPR/FT8/FT4 channels are present, and remove the
+### obsolete CHU time-station frequencies (3330/7850/14670 kHz - the CHU stations went off the air in 2026) from the
+### WWV-IQ channel.  Section-aware in-place edit (with a timestamped backup) of the given radiod conf file.
+### Returns: 0 = already current (no change), 1 = file was changed (caller should restart radiod), 2 = error/not found.
+function wd_reconcile_radiod_band_list() {
+    local conf_file=$1
+    if [[ ! -f ${conf_file} ]]; then
+        wd_logger 2 "radiod conf '${conf_file}' not found yet; skipping band-list reconcile"
+        return 2
+    fi
+    local tmp_file
+    tmp_file=$(mktemp) || return 2
+    gawk '
+        /^[[:space:]]*\[/ { section=$0 }
+        /^[[:space:]]*freq[[:space:]]*=/ {
+            if (section ~ /\[WSPR\]|\[FT8\]|\[FT4\]/) {
+                if ($0 !~ /40m680000/) { $0 = gensub(/"([^"]*)"/, "\"\\1 40m680000\"", 1) }      # add 8m to the freq list
+            } else if (section ~ /\[WWV-IQ\]/) {
+                gsub(/[[:space:]]*3330000/, ""); gsub(/[[:space:]]*7850000/, ""); gsub(/[[:space:]]*14670000/, "")   # remove CHU freqs
+            }
+        }
+        { print }
+    ' "${conf_file}" > "${tmp_file}"
+    if cmp -s "${conf_file}" "${tmp_file}"; then
+        rm -f "${tmp_file}"
+        wd_logger 2 "radiod band list in ${conf_file} is already current (8m present, CHU absent)"
+        return 0
+    fi
+    wd_logger 1 "Updating radiod band list in ${conf_file}: add 8m (40.680 MHz) to WSPR/FT8/FT4 if missing, remove obsolete CHU freqs from WWV-IQ"
+    sudo cp -p "${conf_file}" "${conf_file}.bak.$(date +%Y%m%d-%H%M%S)"
+    if sudo cp "${tmp_file}" "${conf_file}"; then
+        rm -f "${tmp_file}"
+        return 1
+    fi
+    wd_logger 1 "ERROR: failed to write reconciled radiod conf '${conf_file}'"
+    rm -f "${tmp_file}"
+    return 2
+}
+
+### Standard check: keep WSPR_SCHEDULE[] in WD.conf current - remove obsolete CHU time-station entries (off air 2026)
+### and add the 8m band mirroring each receiver's 10m entry.  Edits WD.conf in place with a timestamped backup, and
+### only applies the change if the result still parses (bash -n).  WD re-sources WD.conf every cycle, so the change
+### takes effect without a restart.  Returns: 0 = already current, 1 = changed, 2 = error.
+function wd_reconcile_wspr_schedule() {
+    local conf_file=${1-${WSPRDAEMON_CONFIG_FILE}}
+    [[ -f ${conf_file} ]] || { wd_logger 1 "ERROR: WD.conf '${conf_file}' not found"; return 2; }
+    local tmp_file
+    tmp_file=$(mktemp) || return 2
+    gawk '
+    {
+        l = $0
+        if (l ~ /,CHU_/)              { gsub(/[[:space:]]*[A-Za-z0-9_]+,CHU_[0-9]+(,[A-Za-z0-9:]+)?/, "", l) }   # drop CHU entries
+        if (l ~ /,10,/ && l !~ /,8,/) { l = gensub(/([A-Za-z0-9_]+),10,([A-Za-z0-9:]+)/, "\\0 \\1,8,\\2", "g", l) }   # add 8m mirroring 10m
+        print l
+    }' "${conf_file}" > "${tmp_file}"
+    if cmp -s "${conf_file}" "${tmp_file}"; then
+        rm -f "${tmp_file}"
+        wd_logger 2 "WSPR_SCHEDULE in ${conf_file} is already current (no CHU, 8m present)"
+        return 0
+    fi
+    if ! bash -n "${tmp_file}" 2>/dev/null ; then
+        wd_logger 1 "ERROR: reconciled ${conf_file} failed 'bash -n'; leaving WD.conf unchanged"
+        rm -f "${tmp_file}"
+        return 2
+    fi
+    wd_logger 1 "Updating WSPR_SCHEDULE in ${conf_file}: remove obsolete CHU entries, add 8m (mirroring 10m)"
+    cp -p "${conf_file}" "${conf_file}.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "${tmp_file}" "${conf_file}"
+    rm -f "${tmp_file}"
+    return 1
+}
+
 ### This function is executed once the ka9q-radio dirrectory is created and has the configured version of SW installed
 function build_ka9q_radio() {
     local project_subdir=$1
@@ -949,6 +1021,15 @@ function build_ka9q_radio() {
 
     ### Default is to find the config sections in the old style single ..conf file
     local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
+
+    ### Standard check: keep the radiod band list current (add 8m WSPR/FT8/FT4, remove obsolete CHU freqs) before (re)starting radiod
+    wd_reconcile_radiod_band_list "${ka9q_conf_file_path}"
+    if (( $? == 1 )); then
+        radio_restart_needed="yes"
+    fi
+
+    ### Standard check: keep WSPR_SCHEDULE current (remove obsolete CHU entries, add 8m mirroring 10m).  WD re-sources WD.conf every cycle.
+    wd_reconcile_wspr_schedule "${WSPRDAEMON_CONFIG_FILE}"
 
     local rx888_rf_gain="#"
     if [[ -n "${RX888_RF_AGC_FIXED_GAIN-}" ]]; then
