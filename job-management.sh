@@ -9,9 +9,18 @@ function start_stop_job() {
     local receiver_band=$3
     local receiver_modes=$4
 
+    ### Verify the radiod configuration can actually produce this stream.  For a KA9Q/RX888 receiver a band whose frequency
+    ### is above the ADC Nyquist (e.g. 8m/6m when the RX888 samprate is 64.8 Msps instead of 129.6 Msps) is never produced,
+    ### so its recording/decoding daemons would fail and restart forever.  Skip it with a clear, actionable warning.
+    if [[ ${action} == "a" && ${receiver_name} =~ ^KA9Q ]] && ! wd_ka9q_band_is_producible "${receiver_band}"; then
+        wd_logger 1 "WARNING: NOT starting ${receiver_name},${receiver_band},${receiver_modes}: the ${receiver_band}m band ($(get_wspr_band_freq_khz ${receiver_band}) kHz) is above the radiod ADC Nyquist ($(( $(wd_get_radiod_samprate_hz) / 2000 )) kHz).  radiod cannot produce this stream at the current RX888 sample rate - increase samprate (e.g. to 129600000) in the radiod conf to decode this band."
+        add_remove_jobs_in_running_file z ${receiver_name},${receiver_band},${receiver_modes}   ### make sure no stale job for it lingers
+        return 0
+    fi
+
     wd_logger 1 "Beginning '${action}' for ${receiver_name} on band ${receiver_band}"
     case ${action} in
-        a) 
+        a)
             spawn_posting_daemon        ${receiver_name} ${receiver_band} ${receiver_modes}
             ;;
         z)

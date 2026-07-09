@@ -906,6 +906,37 @@ function wd_reconcile_wspr_schedule() {
     return 1
 }
 
+### Return the RX888 ADC sample rate (Hz) from the [rx888] section of the radiod conf.  This sets the Nyquist limit for
+### which bands radiod can produce.  Defaults to 129600000 (the standard rate) if it can't be read.
+function wd_get_radiod_samprate_hz() {
+    local conf_name="${KA9Q_CONF_NAME:-${KA9Q_DEFAULT_CONF_NAME}}"
+    local conf_file="${KA9Q_RADIOD_CONF_DIR}/radiod@${conf_name}.conf"
+    local samprate=""
+    if [[ -f ${conf_file} ]]; then
+        samprate=$( awk '/^\[rx888\]/{f=1;next} /^\[/{f=0} f && /^[[:space:]]*samprate[[:space:]]*=/{s=$0; gsub(/[^0-9]/,"",s); print s; exit}' "${conf_file}" )
+    fi
+    if [[ -z "${samprate}" ]] || (( samprate < 1000000 )); then
+        samprate=129600000
+    fi
+    echo "${samprate}"
+}
+
+### Return 0 (true) if the given WSPR band's frequency is at/below the radiod ADC Nyquist (radiod can produce the stream),
+### 1 (false) if it is above Nyquist and therefore cannot be produced - e.g. 8m (40.68 MHz) / 6m (50.29 MHz) when the RX888
+### samprate is 64.8 Msps (Nyquist 32.4 MHz) rather than 129.6 Msps.  Unknown bands return 0 (don't block).
+function wd_ka9q_band_is_producible() {
+    local band=$1
+    local band_khz
+    band_khz=$( get_wspr_band_freq_khz "${band}" )
+    [[ -n "${band_khz}" ]] || return 0
+    local band_hz samprate_hz nyquist_hz
+    band_hz=$( awk -v k="${band_khz}" 'BEGIN{ printf "%.0f", k*1000 }' )
+    samprate_hz=$( wd_get_radiod_samprate_hz )
+    nyquist_hz=$(( samprate_hz / 2 ))
+    (( band_hz <= nyquist_hz )) && return 0
+    return 1
+}
+
 ### This function is executed once the ka9q-radio dirrectory is created and has the configured version of SW installed
 function build_ka9q_radio() {
     local project_subdir=$1
