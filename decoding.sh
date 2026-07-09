@@ -2430,6 +2430,40 @@ function decoding_daemon() {
                     fi
                     wd_logger 1 "sox_rms_noise_level_float=${sox_rms_noise_level_float}"
 
+                    ### === KA9Q/RX888 noise calibration ===
+                    ### The sox noise calibration (cal_rms_offset=-50.4, cal_c2_correction, the +60 gain) was derived for a
+                    ### KiwiSDR at --agc-gain=60 (G3ZIL/AI6VN 2019); it is NOT calibrated for the RX888 chain and over-reads by a
+                    ### band-dependent ~5-10 dB.  Preferred fix: per-band offsets measured against a co-located calibrated KiwiSDR
+                    ### (KIWI treated as truth), with separate RMS and C2 corrections (KA9Q_*_CAL_OFFSET[] in WD.conf).
+                    ### Alternative: KA9Q_USE_RADIOD_N0=yes reports radiod's calibrated N0 directly (needs metadump status checking).
+                    if [[ ${receiver_name} =~ ^KA9Q && ${KA9Q_USE_BAND_CAL:-no} == "yes" ]]; then
+                        local rms_off="${KA9Q_RMS_CAL_OFFSET[${receiver_band}]:-0}"
+                        local c2_off="${KA9Q_C2_CAL_OFFSET[${receiver_band}]:-0}"
+                        if [[ "${rms_off}" != "0" || "${c2_off}" != "0" ]]; then
+                            wd_logger 1 "KA9Q_USE_BAND_CAL: band ${receiver_band} rms_offset=${rms_off} c2_offset=${c2_off}; correcting C2=${fft_noise_level_float} RMS=${sox_rms_noise_level_float}"
+                            fft_noise_level_float=$( echo "scale=1; (${fft_noise_level_float} + ${c2_off})/1" | bc )
+                            sox_rms_noise_level_float=$( echo "scale=1; (${sox_rms_noise_level_float} + ${rms_off})/1" | bc )
+                            local -a _rms_in=( ${rms_line} ) _rms_out=()                              ### apply the RMS offset to all sox fields (12 signal-level stats + RMS_noise)
+                            local _v
+                            for _v in "${_rms_in[@]}"; do _rms_out+=( "$( echo "scale=2; (${_v} + ${rms_off})/1" | bc )" ); done
+                            rms_line="${_rms_out[*]}"
+                        else
+                            wd_logger 1 "KA9Q_USE_BAND_CAL=yes but no KA9Q_*_CAL_OFFSET defined for band '${receiver_band}'; leaving sox noise uncorrected"
+                        fi
+                    elif [[ ${receiver_name} =~ ^KA9Q && ${KA9Q_USE_RADIOD_N0:-no} == "yes" ]]; then
+                        if is_a_float "${ka9q_n0_float}" && [[ $(bc <<< "${ka9q_n0_float} > -900") == "1" ]]; then
+                            local ka9q_reported_noise=$( echo "scale=1; (${ka9q_n0_float} + ${KA9Q_N0_CAL_OFFSET_DB:-0.0})/1" | bc )
+                            wd_logger 1 "KA9Q_USE_RADIOD_N0: replaced sox noise (RMS=${sox_rms_noise_level_float}, C2=${fft_noise_level_float}) with radiod N0=${ka9q_n0_float} + ${KA9Q_N0_CAL_OFFSET_DB:-0.0} => ${ka9q_reported_noise} dBm/Hz"
+                            fft_noise_level_float=${ka9q_reported_noise}
+                            sox_rms_noise_level_float=${ka9q_reported_noise}
+                            local -a _rms_line_arr=( ${rms_line} )
+                            _rms_line_arr[$(( ${#_rms_line_arr[@]} - 1 ))]=${ka9q_reported_noise}
+                            rms_line="${_rms_line_arr[*]}"
+                        else
+                            wd_logger 1 "KA9Q_USE_RADIOD_N0=yes but ka9q_n0_float='${ka9q_n0_float}' is invalid - is KA9Q_METADUMP_STATUS_CHECKING_ENABLED=yes?  Keeping sox-derived noise."
+                        fi
+                    fi
+
                     ### The two noise levels and the count of A/D overloads will be added to the extended spots record
                     sox_signals_rms_fft_and_overload_info="${rms_line} ${fft_noise_level_float} ${new_sdr_overloads_count}"
 

@@ -433,12 +433,16 @@ function ka9q_get_metadump() {
 
     local got_status="no"
     local timeout=${KA9Q_GET_STATUS_TRIES}
+    ### radiod assigns each channel an SSRC = round(tune_freq_hz/1000) = round(freq_khz).  The WSPR band table holds
+    ### fractional kHz (e.g. 20m = 14095.6), so the raw value never matches the channel's integer SSRC (14096) and
+    ### metadump returns an empty status file.  Round to the nearest integer kHz so the SSRC matches.
+    local metadump_ssrc=$( printf "%.0f" "${receiver_freq_khz}" )
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
-        wd_logger 2 "Spawning 'metadump --newline --count 2 --ssrc ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file} &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
+        wd_logger 2 "Spawning 'metadump --newline --count 2 --ssrc ${metadump_ssrc}  ${receiver_ip_address} > ${status_log_file} &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
 
         local metadump_pid
-        metadump --newline --count 2 --ssrc ${receiver_freq_khz}  ${receiver_ip_address} > ${status_log_file} &
+        metadump --newline --count 2 --ssrc ${metadump_ssrc}  ${receiver_ip_address} > ${status_log_file} &
         metadump_pid=$!
 
         local i
