@@ -2033,9 +2033,13 @@ function decoding_daemon() {
                     local ka9q_channel_gain_int=$(printf "%.0f" ${ka9q_channel_gain_float})
                     local new_channel_gain_dB=$(( ka9q_channel_gain_int + channel_level_adjust ))
                     wd_logger 1 "Changing channel gain by ${channel_gain_value} dB from ${channel_gain_value} to ${new_channel_gain_dB}"
-                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}
+                    ### Resolve the channel's real radiod SSRC (not the frequency) - the same handle metadump uses,
+                    ### so the gain command addresses the right channel on both old and new radiod SSRC conventions.
+                    local tune_ssrc
+                    ka9q_resolve_ssrc tune_ssrc "${receiver_ip_address}" "${receiver_freq_khz}"
+                    timeout 5 tune --radio ${ka9q_status_ip} --ssrc ${tune_ssrc} --gain ${new_channel_gain_dB}
                     rc=$? ; if (( rc )); then
-                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${receiver_ip_address} --ssrc ${receiver_freq_hz} --gain ${new_channel_gain_dB}i ' => ${rc}"
+                        wd_logger 1 "ERROR: 'timeout 5 tune --radio  ${ka9q_status_ip} --ssrc ${tune_ssrc} --gain ${new_channel_gain_dB}' => ${rc}"
                     fi
                 fi
             fi

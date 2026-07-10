@@ -425,6 +425,66 @@ declare KA9Q_GET_STATUS_TRIES=${KA9Q_GET_STATUS_TRIES-1}
 declare KA9Q_METADUMP_WAIT_SECS=${KA9Q_METADUMP_WAIT_SEC-15}       ### low long to wait for a 'metadump...&' to complete
 declare -A ka9q_status_list=()
 
+### Resolve a channel's radiod-assigned SSRC from its RF frequency by reading the live status stream.
+### radiod's SSRC is an opaque handle: older radiod derived it as round(freq_khz), but recent ka9q-radio
+### assigns SSRCs that are NOT a function of frequency, so the SSRC must be looked up, never computed.
+### 'metadump' with no --ssrc dumps every active channel, each STAT line carrying '[18] SSRC <n>' and
+### '[33] RF <hz>'; we sample that, cache the freq->SSRC map (stable for the life of radiod), and match the
+### target frequency.  Works on both old and new radiod.  Falls back to round(freq_khz) only if the channel
+### can't be found in the status stream, so behavior is never worse than before.
+###  ka9q_resolve_ssrc _ssrc_return_var  ${receiver_ip_address}  ${receiver_freq_khz}
+declare KA9Q_SSRC_MAP_CACHE_FILE_NAME="./ka9q_ssrc_map.cache"
+declare MAX_KA9Q_SSRC_MAP_AGE_SECONDS=${MAX_KA9Q_SSRC_MAP_AGE_SECONDS-3600}   ### the freq<->SSRC map is stable for the life of radiod
+declare KA9Q_SSRC_ENUM_COUNT=${KA9Q_SSRC_ENUM_COUNT-100}                      ### status packets to sample when enumerating all channels
+declare KA9Q_SSRC_ENUM_TIMEOUT_SECS=${KA9Q_SSRC_ENUM_TIMEOUT_SECS-8}         ### cap on the enumeration metadump
+
+function ka9q_resolve_ssrc() {
+    declare -n __ssrc_ret="$1"
+    local receiver_ip_address="$2"
+    local receiver_freq_khz="$3"
+    local target_freq_hz
+    target_freq_hz=$( gawk -v k="${receiver_freq_khz}" 'BEGIN{ printf "%.0f", k*1000 }' )
+    local fallback_ssrc
+    fallback_ssrc=$( printf "%.0f" "${receiver_freq_khz}" )    ### legacy round(freq_khz), used only if the lookup fails
+
+    ### (Re)build the cached freq->SSRC map when it is missing, stale, or lacks this frequency.
+    local need_refresh="no"
+    if [[ ! -f ${KA9Q_SSRC_MAP_CACHE_FILE_NAME} ]]; then
+        need_refresh="yes"
+    else
+        local map_age=$(( $(printf "%(%s)T") - $(stat -c %Y ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}) ))
+        if (( map_age > MAX_KA9Q_SSRC_MAP_AGE_SECONDS )) || ! gawk -v f="${target_freq_hz}" '$1==f{found=1} END{exit !found}' ${KA9Q_SSRC_MAP_CACHE_FILE_NAME} ; then
+            need_refresh="yes"
+        fi
+    fi
+    if [[ ${need_refresh} == "yes" ]]; then
+        wd_logger 2 "Enumerating radiod channels on ${receiver_ip_address} to build the freq->SSRC map"
+        timeout ${KA9Q_SSRC_ENUM_TIMEOUT_SECS} metadump --count ${KA9Q_SSRC_ENUM_COUNT} ${receiver_ip_address} 2>/dev/null \
+            | gawk 'match($0, /\[18\] SSRC ([0-9,]+)/, a) && match($0, /\[33\] RF ([0-9,]+)/, b) {
+                        ssrc=a[1]; gsub(/,/, "", ssrc); rf=b[1]; gsub(/,/, "", rf); print rf, ssrc }' \
+            | sort -un > ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}.tmp
+        if [[ -s ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}.tmp ]]; then
+            mv ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}.tmp ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}
+        else
+            wd_logger 1 "WARNING: 'metadump --count ${KA9Q_SSRC_ENUM_COUNT} ${receiver_ip_address}' returned no SSRC/RF pairs"
+            rm -f ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}.tmp
+        fi
+    fi
+
+    local resolved_ssrc=""
+    if [[ -f ${KA9Q_SSRC_MAP_CACHE_FILE_NAME} ]]; then
+        resolved_ssrc=$( gawk -v f="${target_freq_hz}" '$1==f{print $2; exit}' ${KA9Q_SSRC_MAP_CACHE_FILE_NAME} )
+    fi
+    if [[ -z "${resolved_ssrc}" ]]; then
+        wd_logger 1 "WARNING: could not resolve an SSRC for ${target_freq_hz} Hz from radiod status on ${receiver_ip_address}; falling back to round(freq_khz)=${fallback_ssrc}"
+        __ssrc_ret="${fallback_ssrc}"
+        return 1
+    fi
+    wd_logger 2 "Resolved ${target_freq_hz} Hz -> SSRC ${resolved_ssrc} on ${receiver_ip_address}"
+    __ssrc_ret="${resolved_ssrc}"
+    return 0
+}
+
 ###  ka9q_get_metadump ${receiver_ip_address} ${receiver_freq_hz} ${status_log_file}
 function ka9q_get_metadump() {
     local receiver_ip_address=$1
@@ -433,10 +493,11 @@ function ka9q_get_metadump() {
 
     local got_status="no"
     local timeout=${KA9Q_GET_STATUS_TRIES}
-    ### radiod assigns each channel an SSRC = round(tune_freq_hz/1000) = round(freq_khz).  The WSPR band table holds
-    ### fractional kHz (e.g. 20m = 14095.6), so the raw value never matches the channel's integer SSRC (14096) and
-    ### metadump returns an empty status file.  Round to the nearest integer kHz so the SSRC matches.
-    local metadump_ssrc=$( printf "%.0f" "${receiver_freq_khz}" )
+    ### radiod's SSRC is an opaque handle that need not track frequency (older radiod used round(freq_khz);
+    ### recent ka9q-radio assigns non-frequency SSRCs).  Resolve the channel's real SSRC from the live status
+    ### stream rather than computing it, so status queries work on both radiod conventions.
+    local metadump_ssrc
+    ka9q_resolve_ssrc metadump_ssrc "${receiver_ip_address}" "${receiver_freq_khz}"
     while [[ "${got_status}" == "no" && ${timeout} -gt 0 ]]; do
         (( --timeout ))
         wd_logger 2 "Spawning 'metadump --newline --count 2 --ssrc ${metadump_ssrc}  ${receiver_ip_address} > ${status_log_file} &' and waiting ${KA9Q_METADUMP_WAIT_SECS} seconds for it to complete"
