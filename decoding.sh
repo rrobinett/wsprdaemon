@@ -14,12 +14,13 @@ declare C2_FFT_CMD=${WSPRDAEMON_ROOT_DIR}/c2_noise.py
 
 ### Default per-band KA9Q/RX888 noise calibration.  The sox noise calibration was derived for a KiwiSDR and is not
 ### calibrated for the RX888 chain, so KA9Q noise over-reads by a band-dependent ~5-10 dB.  These offsets (dRMS, dC2 =
-### KIWI - KA9Q) were measured at AI6VN (2026-07) against a co-located calibrated KiwiSDR treated as truth, and make
+### KIWI - KA9Q) were re-measured at IO90hw/G3ZIL (2026-07-10) with a G3ZIL noise source split to the RX888 and a
+### co-located KiwiSDR, referenced to a Rigol DSA815 as ground truth (10 cycles; refines the earlier AI6VN values), and make
 ### RX888-only sites report noise levels that match the calibrated Kiwi ground truth.  Applied by default (KA9Q_USE_BAND_CAL);
 ### a site with its own co-located Kiwi measurements can override KA9Q_USE_BAND_CAL / KA9Q_RMS_CAL_OFFSET / KA9Q_C2_CAL_OFFSET
-### in wsprdaemon.conf.  2200/630 use the 160m value (RX888 RF amp is impaired at LF); 6m uses the 10m value (Kiwi can't reach 50 MHz).
-declare -p KA9Q_RMS_CAL_OFFSET &>/dev/null || declare -A KA9Q_RMS_CAL_OFFSET=( [2200]=-10.1 [630]=-10.1 [160]=-10.1 [80]=-8.5 [80eu]=-8.4 [60]=-8.8 [60eu]=-8.9 [40]=-8.7 [30]=-8.3 [22]=-7.5 [20]=-7.2 [17]=-6.3 [15]=-5.5 [12]=-5.4 [10]=-6.3 [6]=-6.3 )
-declare -p KA9Q_C2_CAL_OFFSET  &>/dev/null || declare -A KA9Q_C2_CAL_OFFSET=(  [2200]=-7.5  [630]=-7.5  [160]=-7.5  [80]=-5.9 [80eu]=-5.8 [60]=-6.1 [60eu]=-6.0 [40]=-6.0 [30]=-5.5 [22]=-4.8 [20]=-4.6 [17]=-3.6 [15]=-2.8 [12]=-2.6 [10]=-3.7 [6]=-3.7 )
+### in wsprdaemon.conf.  2200/630 use the 160m value (RX888 RF amp is impaired at LF); 8m/6m use the 10m value (Kiwi/Rigol can't reach 40/50 MHz).
+declare -p KA9Q_RMS_CAL_OFFSET &>/dev/null || declare -A KA9Q_RMS_CAL_OFFSET=( [2200]=-9.9 [630]=-9.9 [160]=-9.9 [80]=-9.8 [80eu]=-9.8 [60]=-9.4 [60eu]=-9.7 [40]=-9.4 [30]=-9.1 [22]=-8.8 [20]=-9.0 [17]=-8.4 [15]=-7.5 [12]=-5.9 [10]=-7.6 [8]=-7.6 [6]=-7.6 )
+declare -p KA9Q_C2_CAL_OFFSET  &>/dev/null || declare -A KA9Q_C2_CAL_OFFSET=(  [2200]=-7.3  [630]=-7.3  [160]=-7.3  [80]=-7.1 [80eu]=-7.1 [60]=-6.7 [60eu]=-7.1 [40]=-6.7 [30]=-6.5 [22]=-6.2 [20]=-6.4 [17]=-5.8 [15]=-4.9 [12]=-3.2 [10]=-4.9 [8]=-4.9 [6]=-4.9 )
 
 function get_decode_mode_list() {
     local modes_variable_to_return=$1
