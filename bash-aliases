@@ -2101,6 +2101,185 @@ function wd-wav-clean() {
     done
 }
 
+### Human-readable byte count (falls back to raw bytes if numfmt is missing).
+function wd-hrb() { numfmt --to=iec --suffix=B "${1:-0}" 2>/dev/null || echo "${1:-0}B"; }
+
+### Echo the value of VAR from wsprdaemon.conf (tolerates 'declare ', quotes, trailing comment), or nothing.
+function wd-conf-value() {
+    local var=$1 conf="${2:-${HOME}/wsprdaemon/wsprdaemon.conf}" line val
+    [[ -r ${conf} ]] || return 0
+    line=$( command grep -E "^[[:space:]]*(declare[[:space:]]+(-[a-zA-Z]+[[:space:]]+)?)?${var}=" "${conf}" | tail -1 )
+    [[ -z ${line} ]] && return 0
+    val=${line#*${var}=}; val=${val%%#*}; val=${val//[\"\' ]/}
+    echo "${val}"
+}
+
+### HELP: wd-grape-purge-uploaded (alias wdgpu) - reclaim disk from PSWS-delivered wav-archive trees.
+### HELP: A reporter dir <DATE>/<REPORTER>_<GRID> holding the 'pswsnetwork_upload_completed' marker has been fully
+### HELP: uploaded, so its raw *.wv work files, 24_hour_10sps_iq.wav, sox.log and marker are all purgeable.
+### HELP:
+### HELP: By design raw files are KEPT while the volume has room; they are purged OLDEST-FIRST only once the
+### HELP: filesystem holding the archive reaches the fill threshold, and only enough to drop back under it.
+### HELP: This keeps space free for the current day's recording (a full disk = missing minutes = silence-padded,
+### HELP: partial PSWS uploads).  Undelivered dirs (no marker, e.g. today's recording) are never touched.
+### HELP:
+### HELP: It also reports the filesystem's free space and raises a DEADLOCK ALERT when there is not room for one
+### HELP: day's recording even after purging every delivered tree (add disk / drop bands / lower retention).
+### HELP:
+### HELP: Usage: wd-grape-purge-uploaded [-r] [-a]      (alias wdgpu)
+### HELP:   (default) DRY RUN: report filesystem space and what WOULD be purged; change nothing.
+### HELP:   -r        REAL RUN: actually delete and prune emptied <DATE> trees.
+### HELP:   -a        Purge ALL delivered trees, ignoring the fill threshold (full reclaim).
+### HELP: Config (export in your shell/profile to override the defaults):
+### HELP:   WD_ARCHIVE_FILL_PERCENT (default 75)  purge delivered trees once the volume is >= this % full.
+### HELP:   WD_ARCHIVE_MIN_FREE_GB  (default 0)   GB one day of recording needs for the deadlock check;
+### HELP:                                         0 => auto-estimate from the largest <DATE> tree present.
+function wd-grape-purge-uploaded() {
+    local marker_name="pswsnetwork_upload_completed"
+    local do_delete="no" purge_all="no" arg
+    for arg in "$@"; do
+        case "${arg}" in
+            -r)       do_delete="yes" ;;
+            -a)       purge_all="yes" ;;
+            -ra|-ar)  do_delete="yes"; purge_all="yes" ;;
+            -h|--help)
+                cat <<'EOF'
+wd-grape-purge-uploaded [-r] [-a]   (alias wdgpu) - reclaim disk from PSWS-delivered wav-archive trees.
+
+A reporter dir <DATE>/<REPORTER>_<GRID> holding the 'pswsnetwork_upload_completed' marker is fully
+uploaded, so its raw *.wv work files, 24_hour_10sps_iq.wav, sox.log and marker are purgeable.
+Raw files are KEPT while there is room; they are purged OLDEST-FIRST once the volume reaches the fill
+threshold, and only enough to drop back under it, so space stays free for the current day's recording.
+Undelivered dirs (no marker, e.g. today's recording) are never touched.
+
+  (default)  DRY RUN: report free space and what WOULD be purged; change nothing.
+  -r         REAL RUN: delete and prune emptied <DATE> trees.
+  -a         Purge ALL delivered trees, ignoring the fill threshold (full reclaim).
+
+Config (export to override):
+  WD_ARCHIVE_FILL_PERCENT (default 75)  purge once the volume is >= this % full.
+  WD_ARCHIVE_MIN_FREE_GB  (default 0)   GB one day of recording needs; 0 => auto from largest <DATE> tree.
+Returns 2 when even purging every delivered tree cannot free one day's space (deadlock alert).
+EOF
+                return 0 ;;
+            *) echo "usage: wd-grape-purge-uploaded [-r] [-a]  (see 'wdgpu -h')"; return 1 ;;
+        esac
+    done
+
+    if [[ ! -d ${WD_WAV_ARCHIVE_ROOT_DIR} ]]; then
+        echo "No wav-archive dir '${WD_WAV_ARCHIVE_ROOT_DIR}', nothing to purge."
+        return 1
+    fi
+
+    ### Config precedence: environment var > wsprdaemon.conf > built-in default (matches the wd-cleanup.sh cron).
+    local _cv
+    _cv="${WD_ARCHIVE_FILL_PERCENT:-$(wd-conf-value WD_ARCHIVE_FILL_PERCENT)}"; local -i fill_percent=${_cv:-75}
+    _cv="${WD_ARCHIVE_MIN_FREE_GB:-$(wd-conf-value WD_ARCHIVE_MIN_FREE_GB)}";   local -i min_free_gb=${_cv:-0}
+
+    ### Stats for the volume that physically holds the archive (df follows to its real mountpoint).
+    local -a df_fields
+    df_fields=( $(df -P -B1 "${WD_WAV_ARCHIVE_ROOT_DIR}" | awk 'NR==2{print $2, $3, $4, $5, $6}') )
+    local -i fs_total=${df_fields[0]} fs_used=${df_fields[1]} fs_avail=${df_fields[2]}
+    local -i fs_usep=${df_fields[3]%\%}
+    local fs_mount=${df_fields[4]}
+
+    ### One day's space requirement for the room / deadlock checks.
+    local -i one_day_bytes=0
+    local estimate_src
+    if (( min_free_gb > 0 )); then
+        one_day_bytes=$(( min_free_gb * 1000000000 ))
+        estimate_src="WD_ARCHIVE_MIN_FREE_GB=${min_free_gb}"
+    else
+        local d db
+        for d in $(find "${WD_WAV_ARCHIVE_ROOT_DIR}" -mindepth 1 -maxdepth 1 -type d); do
+            db=$( du -sb "${d}" 2>/dev/null | cut -f1 )
+            (( db > one_day_bytes )) && one_day_bytes=${db}
+        done
+        estimate_src="auto: largest <DATE> tree"
+    fi
+
+    ### Delivered (uploaded) reporter trees, OLDEST FIRST (path sort => YYYYMMDD date sort).
+    local -a marker_list
+    mapfile -t marker_list < <(find "${WD_WAV_ARCHIVE_ROOT_DIR}" -type f -name "${marker_name}" | sort)
+
+    printf "=== wd-grape-purge-uploaded %s ===\n" "$( [[ ${do_delete} == yes ]] && echo "REAL RUN" || echo "DRY RUN (pass -r to delete)" )"
+    printf "Volume %s holding %s:\n" "${fs_mount}" "${WD_WAV_ARCHIVE_ROOT_DIR}"
+    printf "  size %s   used %s (%d%%)   free %s   fill-threshold %d%%\n" \
+        "$(wd-hrb ${fs_total})" "$(wd-hrb ${fs_used})" "${fs_usep}" "$(wd-hrb ${fs_avail})" "${fill_percent}"
+    printf "  one day of recording needs ~%s (%s)\n" "$(wd-hrb ${one_day_bytes})" "${estimate_src}"
+    printf "  room for another full day right now? %s\n" \
+        "$( (( fs_avail >= one_day_bytes )) && echo "YES ($(wd-hrb ${fs_avail}) free)" || echo "*** NO -- only $(wd-hrb ${fs_avail}) free ***" )"
+
+    ### Total reclaimable across every delivered tree.
+    local -i delivered_bytes=0 dbytes
+    local m reporter_dir
+    for m in "${marker_list[@]}"; do
+        dbytes=$( du -sb "${m%/*}" 2>/dev/null | cut -f1 )
+        (( delivered_bytes += dbytes ))
+    done
+
+    ### DEADLOCK ALERT: even purging everything delivered still can't buy one day.
+    local -i avail_after_all=$(( fs_avail + delivered_bytes ))
+    local -i deadlock=0
+    if (( avail_after_all < one_day_bytes )); then
+        deadlock=1
+        printf "\n*** DEADLOCK ALERT ***\n"
+        printf "    Purging ALL %d delivered tree(s) would free %s, leaving %s free -- still LESS than one day (~%s).\n" \
+            "${#marker_list[@]}" "$(wd-hrb ${delivered_bytes})" "$(wd-hrb ${avail_after_all})" "$(wd-hrb ${one_day_bytes})"
+        printf "    This site will keep producing partial (silence-padded) PSWS uploads until you add disk,\n"
+        printf "    reduce recorded bands/receivers, or point wav-archive at a larger volume.\n"
+    fi
+
+    if (( ${#marker_list[@]} == 0 )); then
+        printf "\nNo delivered reporter trees present to purge.\n"
+        return $(( deadlock ? 2 : 0 ))
+    fi
+
+    ### Below threshold and not forcing -a: keep everything (raw files retained while there's room).
+    if [[ ${purge_all} == no ]] && (( fs_usep < fill_percent )); then
+        printf "\n%d%% full is below the %d%% threshold: keeping all %d delivered tree(s), %s reclaimable when needed.\n" \
+            "${fs_usep}" "${fill_percent}" "${#marker_list[@]}" "$(wd-hrb ${delivered_bytes})"
+        return $(( deadlock ? 2 : 0 ))
+    fi
+
+    if [[ ${purge_all} == yes ]]; then
+        printf "\nPurging ALL %d delivered tree(s) (-a), oldest first:\n" "${#marker_list[@]}"
+    else
+        printf "\n%d%% full >= %d%% threshold: purging oldest delivered tree(s) until under threshold:\n" "${fs_usep}" "${fill_percent}"
+    fi
+
+    local -i freed=0 purged=0 used_now=${fs_used} cur_usep
+    for m in "${marker_list[@]}"; do
+        reporter_dir="${m%/*}"                                        ### <DATE>/<REPORTER>_<GRID>
+        dbytes=$( du -sb "${reporter_dir}" 2>/dev/null | cut -f1 )
+        printf "  %9s  %s\n" "$(wd-hrb ${dbytes})" "${reporter_dir#${WD_WAV_ARCHIVE_ROOT_DIR}/}"
+        [[ ${do_delete} == yes ]] && rm -rf "${reporter_dir}"
+        (( used_now -= dbytes, freed += dbytes, purged++ ))
+        if [[ ${purge_all} == no ]]; then
+            ### Re-measure after a real delete; project from running total during a dry run.
+            if [[ ${do_delete} == yes ]]; then
+                cur_usep=$( df -P "${WD_WAV_ARCHIVE_ROOT_DIR}" | awk 'NR==2{gsub(/%/,"",$5);print $5}' )
+            else
+                cur_usep=$(( fs_total > 0 ? used_now * 100 / fs_total : 0 ))
+            fi
+            (( cur_usep < fill_percent )) && break
+        fi
+    done
+
+    if [[ ${do_delete} == yes ]]; then
+        while [[ -n $( find "${WD_WAV_ARCHIVE_ROOT_DIR}" -mindepth 1 -type d -empty -print -quit ) ]]; do
+            find "${WD_WAV_ARCHIVE_ROOT_DIR}" -mindepth 1 -type d -empty -delete
+        done
+    fi
+
+    printf "=== %s %s across %d of %d delivered tree(s) ===\n" \
+        "$( [[ ${do_delete} == yes ]] && echo "Freed" || echo "Would free" )" \
+        "$(wd-hrb ${freed})" "${purged}" "${#marker_list[@]}"
+    [[ ${do_delete} != yes ]] && echo "Re-run with -r to delete (add -a to purge ALL delivered, ignoring the threshold)."
+    return $(( deadlock ? 2 : 0 ))
+}
+alias wdgpu='wd-grape-purge-uploaded'
+
 ### At sites which are archiving wav files, this gets some info
 alias wd-wav-archive='df -h ~ ; du -sh ~/wsprdaemon/wav-archive/ ; ls -lt ~/wsprdaemon/wav-archive/ | head  -n 3; ls -lt ~/wsprdaemon/wav-archive/ | tail -n 2'
 

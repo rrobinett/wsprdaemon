@@ -12,10 +12,17 @@
 ###          then truncates the original in place, preserving the inode/fd.
 ###        - *.wav files older than ${WAV_AGE_MINUTES} minutes are deleted (closed files).
 ###   2) The archive tree ${ARCHIVE_TREE}:
-###        - *.wav/*.wv/*.flac files older than ${ARCHIVE_AGE_DAYS} days are deleted, EXCEPT a
-###          10 Hz wav (${TEN_HZ_WAV_NAME}) is preserved until its <DATE>/<REPORTER>_<GRID>
-###          directory holds the PSWS '${PSWS_UPLOAD_MARKER}' marker, so wavs queued for a
-###          PSWS upload survive long Internet outages until they are successfully uploaded.
+###        - Purge is governed by how FULL the volume is, NOT by age.  The raw *.wv files are a
+###          research cache (remote users may later request them re-uploaded), so they are kept as
+###          long as there is room.  Only once the volume reaches ${ARCHIVE_FILL_PERCENT}% full are the
+###          OLDEST *delivered* reporter trees (those holding the PSWS '${PSWS_UPLOAD_MARKER}' marker)
+###          purged, oldest-first, just enough to drop back under the threshold.
+###        - Delivered trees are purged first.  As a LAST RESORT, if purging every delivered tree still
+###          leaves the volume over threshold (a site that can never reach PSWS), the OLDEST UNDELIVERED
+###          trees are purged too so recent recordings still have room - this loses un-uploaded data and
+###          is logged as a WARNING to stdout + syslog.  The current UTC day is ALWAYS protected.
+###        - A DEADLOCK ALERT (stdout + syslog) fires when even purging every non-current tree cannot
+###          free one day's space (WD_ARCHIVE_MIN_FREE_GB, 0 => auto from the largest date tree).
 ###        - directories left empty (including trees of only empty subdirs) are pruned.
 ###
 ### By default this runs in DRY-RUN mode: it only reports what WOULD change and how
@@ -29,11 +36,11 @@ declare ARCHIVE_TREE="${WD_CLEANUP_ARCHIVE_TREE:-${WD_ROOT_DIR}/wav-archive}"
 declare LOG_MAX_SIZE="${WD_CLEANUP_LOG_MAX_SIZE:-1M}"            ### logrotate 'size' threshold for *.log files
 declare -i LOG_ROTATE_KEEP=${WD_CLEANUP_LOG_ROTATE_KEEP:-1}     ### number of old (compressed) copies logrotate keeps in the tree
 declare -i WAV_AGE_MINUTES=${WD_CLEANUP_WAV_AGE_MINUTES:-60}    ### delete *.wav in the temp tree older than this
-declare -i ARCHIVE_AGE_DAYS=${WD_CLEANUP_ARCHIVE_AGE_DAYS:-7}   ### delete archive files older than this
 
-### Only these audio file types are purged from the archive tree (leaves logs/markers/metadata alone).
-declare TEN_HZ_WAV_NAME="24_hour_10sps_iq.wav"                  ### the 24-hour, 10 sample/sec IQ wav uploaded to the PSWS network
+### Archive purge is fill-driven; these two knobs (resolved below from env > wsprdaemon.conf > default)
+### match the interactive 'wdgpu' (wd-grape-purge-uploaded) alias so one setting governs both.
 declare PSWS_UPLOAD_MARKER="pswsnetwork_upload_completed"       ### present in a <DATE>/<REPORTER>_<GRID> dir once its 10 Hz wavs have been accepted by PSWS
+declare WD_CONF_FILE="${WD_CLEANUP_CONF_FILE:-${WD_ROOT_DIR}/wsprdaemon.conf}"   ### per-site overrides for WD_ARCHIVE_FILL_PERCENT / WD_ARCHIVE_MIN_FREE_GB
 
 declare LOGROTATE_STATE_FILE="${WD_CLEANUP_LOGROTATE_STATE:-${WD_ROOT_DIR}/.wd-logrotate.state}"
 declare GET_FILE_SIZE_CMD="stat --format=%s"
@@ -62,6 +69,20 @@ function hr() {
     else
         echo "${bytes} bytes"
     fi
+}
+
+### Echo the value assigned to a variable in wsprdaemon.conf (tolerates an optional 'declare ',
+### quotes and a trailing comment), or nothing if the file or var is absent.  Avoids sourcing the
+### whole conf (which has side effects) just to read a couple of knobs.
+function conf_value() {
+    local var=$1 line val
+    [[ -r ${WD_CONF_FILE} ]] || return 0
+    line=$( grep -E "^[[:space:]]*(declare[[:space:]]+(-[a-zA-Z]+[[:space:]]+)?)?${var}=" "${WD_CONF_FILE}" | tail -1 )
+    [[ -z ${line} ]] && return 0
+    val=${line#*${var}=}
+    val=${val%%#*}                 ### strip any trailing comment
+    val=${val//[\"\' ]/}           ### strip quotes and spaces
+    echo "${val}"
 }
 
 ### Emit a logrotate config for the temp-tree *.log files to stdout.
@@ -138,73 +159,108 @@ function clean_temp_wavs() {
 }
 
 #######################################################################
-### Return 0 if the <DATE>/<REPORTER>_<GRID> directory controlling this archive file
-### contains the PSWS upload-completed marker (i.e. its 10 Hz wavs have been uploaded).
-function reporter_dir_is_uploaded() {
-    local file_path=$1
-    local rel=${file_path#${ARCHIVE_TREE}/}      ### <DATE>/<REPORTER>_<GRID>/<RX>@.../<BAND>/<file>
-    local date_dir=${rel%%/*}
-    local rest=${rel#*/}
-    local reporter_dir=${rest%%/*}
-    [[ -f "${ARCHIVE_TREE}/${date_dir}/${reporter_dir}/${PSWS_UPLOAD_MARKER}" ]]
+### Current used-percentage of the volume holding the archive tree.
+function archive_fs_used_percent() {
+    df -P "${ARCHIVE_TREE}" | awk 'NR==2{gsub(/%/,"",$5); print $5}'
 }
 
 #######################################################################
-### 3) Archive tree: delete *.wav/*.wv/*.flac older than ARCHIVE_AGE_DAYS, EXCEPT
-###    a 10 Hz wav (${TEN_HZ_WAV_NAME}) is preserved until its <DATE>/<REPORTER>_<GRID>
-###    directory holds the PSWS '${PSWS_UPLOAD_MARKER}' marker.  This protects wavs that
-###    are still queued for upload when a site has lost its Internet connection for weeks.
-function clean_archive_files() {
+### 3) Archive tree: fill-driven purge.  Raw *.wv files are kept as a research cache until the
+###    volume reaches ARCHIVE_FILL_PERCENT, then the OLDEST *delivered* (marker-present) reporter
+###    trees are purged oldest-first, just enough to drop back under the threshold.  Undelivered
+###    trees are never touched.  Emits a DEADLOCK ALERT if even purging every delivered tree cannot
+###    free one day's space.
+function clean_archive_by_fill_threshold() {
     [[ ! -d ${ARCHIVE_TREE} ]] && { echo "  (archive tree '${ARCHIVE_TREE}' not found, skipping)"; return; }
 
-    local -i del_count=0 del_bytes=0 kept_count=0 kept_bytes=0 file_size
-    local file
-    while IFS= read -r -d '' file; do
-        file_size=$( ${GET_FILE_SIZE_CMD} "${file}" )
-        if [[ "${file##*/}" == "${TEN_HZ_WAV_NAME}" ]] && ! reporter_dir_is_uploaded "${file}"; then
-            (( kept_count++ ))
-            (( kept_bytes += file_size ))
-            continue
+    ### Volume stats (df follows the archive path to its real mountpoint).
+    local -a df_fields
+    df_fields=( $(df -P -B1 "${ARCHIVE_TREE}" | awk 'NR==2{print $2, $3, $4, $5, $6}') )
+    local -i fs_total=${df_fields[0]} fs_used=${df_fields[1]} fs_avail=${df_fields[2]}
+    local -i fs_usep=${df_fields[3]%\%}
+    local fs_mount=${df_fields[4]}
+
+    ### One day's space requirement for the deadlock check.
+    local -i one_day_bytes=0 db
+    if (( ARCHIVE_MIN_FREE_GB > 0 )); then
+        one_day_bytes=$(( ARCHIVE_MIN_FREE_GB * 1000000000 ))
+    else
+        local d
+        for d in $(find "${ARCHIVE_TREE}" -mindepth 1 -maxdepth 1 -type d); do
+            db=$( du -sb "${d}" 2>/dev/null | cut -f1 )
+            (( db > one_day_bytes )) && one_day_bytes=${db}
+        done
+    fi
+
+    ### Build the ordered purge list.  Prefer DELIVERED (marker-present) reporter trees, oldest-first,
+    ### since they are already safe on the PSWS server.  As a LAST RESORT - a site that can never upload
+    ### would otherwise fill up and stop recording - fall back to the oldest UNDELIVERED trees so recent
+    ### recordings still have somewhere to land.  The current UTC day is always protected (recording now).
+    local today
+    today=$( date -u +%Y%m%d )
+    local -a delivered_dirs=() undelivered_dirs=()
+    mapfile -t delivered_dirs < <(find "${ARCHIVE_TREE}" -type f -name "${PSWS_UPLOAD_MARKER}" -printf '%h\n' | sort)
+    local rdir
+    while IFS= read -r rdir; do
+        [[ -f "${rdir}/${PSWS_UPLOAD_MARKER}" ]] && continue            ### delivered: already in delivered_dirs
+        [[ "${rdir#${ARCHIVE_TREE}/}" == "${today}/"* ]] && continue    ### never purge today's in-progress recording
+        undelivered_dirs+=( "${rdir}" )
+    done < <(find "${ARCHIVE_TREE}" -mindepth 2 -maxdepth 2 -type d | sort)
+
+    local -i delivered_bytes=0 undelivered_bytes=0
+    for rdir in "${delivered_dirs[@]}";   do db=$( du -sb "${rdir}" 2>/dev/null | cut -f1 ); (( delivered_bytes += db )); done
+    for rdir in "${undelivered_dirs[@]}"; do db=$( du -sb "${rdir}" 2>/dev/null | cut -f1 ); (( undelivered_bytes += db )); done
+    local -i reclaimable_bytes=$(( delivered_bytes + undelivered_bytes ))
+
+    echo "  volume ${fs_mount}: used $(hr ${fs_used}) of $(hr ${fs_total}) (${fs_usep}%), free $(hr ${fs_avail}), fill-threshold ${ARCHIVE_FILL_PERCENT}%"
+    echo "  purgeable: ${#delivered_dirs[@]} delivered ($(hr ${delivered_bytes})) + ${#undelivered_dirs[@]} undelivered ($(hr ${undelivered_bytes})); one-day need ~$(hr ${one_day_bytes})"
+
+    ### DEADLOCK ALERT to stdout AND syslog (cron drops stdout).  Now that undelivered trees are purgeable,
+    ### this means even emptying everything but today still can't fit a day => the volume is physically too small.
+    local -i avail_after_all=$(( fs_avail + reclaimable_bytes ))
+    if (( avail_after_all < one_day_bytes )); then
+        local alert="DEADLOCK: ${fs_mount} would have only $(hr ${avail_after_all}) free after purging every non-current tree, less than one day (~$(hr ${one_day_bytes})); add disk / reduce bands"
+        echo "  *** ${alert} ***"
+        command -v logger >/dev/null 2>&1 && logger -t wd-cleanup "${alert}"
+    fi
+
+    if (( fs_usep < ARCHIVE_FILL_PERCENT )); then
+        echo "  ${fs_usep}% < ${ARCHIVE_FILL_PERCENT}% threshold: keeping all raw wav cache, nothing purged"
+        return
+    fi
+
+    local -a purge_order=( "${delivered_dirs[@]}" "${undelivered_dirs[@]}" )
+    local -i delivered_count=${#delivered_dirs[@]}
+    if (( ${#purge_order[@]} == 0 )); then
+        echo "  ${fs_usep}% >= ${ARCHIVE_FILL_PERCENT}% threshold but nothing purgeable (only today's recording present)"
+        return
+    fi
+
+    local -i freed=0 purged=0 undelivered_purged=0 used_now=${fs_used} cur_usep i=0
+    local tag
+    for rdir in "${purge_order[@]}"; do
+        tag="DELIVERED"; (( i >= delivered_count )) && tag="UNDELIVERED"
+        db=$( du -sb "${rdir}" 2>/dev/null | cut -f1 )
+        echo "  purge [${tag}] $(hr ${db})  ${rdir#${ARCHIVE_TREE}/}"
+        [[ ${dry_run} == "no" ]] && rm -rf "${rdir}"
+        (( used_now -= db )); (( freed += db )); (( purged++ )); (( i++ ))
+        [[ ${tag} == "UNDELIVERED" ]] && (( undelivered_purged++ ))
+        ### Re-measure after a real delete; project from the running total during a dry run.
+        if [[ ${dry_run} == "no" ]]; then
+            cur_usep=$( archive_fs_used_percent )
+        else
+            cur_usep=$(( fs_total > 0 ? used_now * 100 / fs_total : 0 ))
         fi
-        (( del_count++ ))
-        (( del_bytes += file_size ))
-        [[ ${dry_run} == "no" ]] && rm -f "${file}"
-    done < <(find "${ARCHIVE_TREE}" -type f -mtime +${ARCHIVE_AGE_DAYS} \
-                  \( -name '*.wav' -o -name '*.wv' -o -name '*.flac' \) -print0)
+        (( cur_usep < ARCHIVE_FILL_PERCENT )) && break
+    done
 
-    echo "  .wav/.wv/.flac older than ${ARCHIVE_AGE_DAYS} days: ${del_count} file(s) to delete, $(hr ${del_bytes})"
-    echo "  preserved (10 Hz wav awaiting PSWS upload): ${kept_count} file(s), $(hr ${kept_bytes})"
-}
-
-#######################################################################
-### 3b) Archive tree: in already-uploaded reporter dirs, sweep the leftover sox.log
-###     files and the PSWS marker so the emptied <DATE>/<REPORTER>_<GRID> dirs can be
-###     pruned.  The marker is deleted LAST so 'reporter_dir_is_uploaded' stays valid for
-###     the audio and sox.log passes during a real run.
-function clean_archive_uploaded_cruft() {
-    [[ ! -d ${ARCHIVE_TREE} ]] && return
-
-    local -i log_count=0 marker_count=0 bytes=0 file_size
-    local file
-
-    ### sox.log files, but only inside reporter dirs that have already been uploaded
-    while IFS= read -r -d '' file; do
-        reporter_dir_is_uploaded "${file}" || continue
-        (( log_count++ ))
-        file_size=$( ${GET_FILE_SIZE_CMD} "${file}" )
-        (( bytes += file_size ))
-        [[ ${dry_run} == "no" ]] && rm -f "${file}"
-    done < <(find "${ARCHIVE_TREE}" -type f -mtime +${ARCHIVE_AGE_DAYS} -name 'sox.log' -print0)
-
-    ### PSWS upload markers (by definition only in uploaded dirs); delete last
-    while IFS= read -r -d '' file; do
-        (( marker_count++ ))
-        file_size=$( ${GET_FILE_SIZE_CMD} "${file}" )
-        (( bytes += file_size ))
-        [[ ${dry_run} == "no" ]] && rm -f "${file}"
-    done < <(find "${ARCHIVE_TREE}" -type f -mtime +${ARCHIVE_AGE_DAYS} -name "${PSWS_UPLOAD_MARKER}" -print0)
-
-    echo "  uploaded-dir cruft: ${log_count} sox.log + ${marker_count} marker file(s) to delete, $(hr ${bytes})"
+    local verb="would free"; [[ ${dry_run} == "no" ]] && verb="freed"
+    echo "  ${verb} $(hr ${freed}) by purging ${purged} tree(s), of which ${undelivered_purged} were undelivered"
+    if (( undelivered_purged > 0 )); then
+        local warn="purged ${undelivered_purged} UNDELIVERED tree(s) to make room - this site is not keeping up with PSWS uploads (data lost)"
+        echo "  *** WARNING: ${warn} ***"
+        [[ ${dry_run} == "no" ]] && command -v logger >/dev/null 2>&1 && logger -t wd-cleanup "${warn}"
+    fi
 }
 
 #######################################################################
@@ -241,8 +297,12 @@ fi
 echo "Temp tree: ${SHM_TREE}"
 clean_temp_logs
 clean_temp_wavs
+### Resolve the two archive knobs: environment var > wsprdaemon.conf > built-in default.
+declare _cfg
+_cfg="${WD_ARCHIVE_FILL_PERCENT:-$(conf_value WD_ARCHIVE_FILL_PERCENT)}"; declare -i ARCHIVE_FILL_PERCENT=${_cfg:-75}
+_cfg="${WD_ARCHIVE_MIN_FREE_GB:-$(conf_value WD_ARCHIVE_MIN_FREE_GB)}";   declare -i ARCHIVE_MIN_FREE_GB=${_cfg:-0}
+
 echo "Archive tree: ${ARCHIVE_TREE}"
-clean_archive_files
-clean_archive_uploaded_cruft
+clean_archive_by_fill_threshold
 clean_archive_empty_dirs
 echo "=== wd-cleanup done ($(date)) ==="
