@@ -1045,7 +1045,7 @@ function build_ka9q_radio() {
             wd_logger 2 "No new files were created, so no need for a 'sudo make install"
             ;;
         1)
-            ( cd  ${project_subdir}; sudo make install ) >& ${project_logfile}
+            ( cd  ${project_subdir}; sudo make -f ${makefile_name} "${make_args[@]}" install ) >& ${project_logfile}
             ;;
         *)
             wd_logger 1 "ERROR: 'diff before_make.txt after_make.txt' => ${rc}:\n$(< diff.log)"
