@@ -129,6 +129,8 @@ source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all u
 source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/config-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-setup.sh
+source ${WSPRDAEMON_ROOT_DIR}/wd-cpu-tuning.sh   ### MUST precede ka9q-utils.sh: that file runs
+                                                  ### ka9q-setup at source time, which calls wd_cpu_tuning
 source ${WSPRDAEMON_ROOT_DIR}/ka9q-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/noise-graphing.sh
 source ${WSPRDAEMON_ROOT_DIR}/atsc.sh
@@ -144,7 +146,6 @@ source ${WSPRDAEMON_ROOT_DIR}/noise-graphs-daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-drops.sh
-source ${WSPRDAEMON_ROOT_DIR}/wd-cpu-tuning.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
