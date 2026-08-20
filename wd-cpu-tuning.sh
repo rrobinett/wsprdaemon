@@ -101,11 +101,49 @@ function wd_cpu_tuning_report()
     return 0
 }
 
+### Install and enable the boot-time units.  Running the helper scripts once is NOT enough:
+### resctrl groups and IRQ affinity are both lost across a reboot, so without these units a tuned
+### host silently reverts on the next power cycle.  On a site that has never been tuned the unit
+### files do not exist at all.
+function wd_cpu_tuning_install_units()
+{
+    local unit desc script path content
+    local -i changed=0
+    for unit in wd-resctrl wd-irq-affinity ; do
+        case ${unit} in
+            wd-resctrl)      desc="L3 CAT partition for radiod vs the WD decoders" ; script="wd-resctrl-setup.sh" ;;
+            wd-irq-affinity) desc="Pin USB (xhci) IRQs off the radiod and decoder cores" ; script="wd-irq-affinity.sh" ;;
+        esac
+        path="/etc/systemd/system/${unit}.service"
+        content="[Unit]
+Description=${desc}
+Documentation=man:wsprdaemon
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${WD_CPU_TUNING_SBIN}/${script}
+
+[Install]
+WantedBy=multi-user.target"
+        if [[ ! -f ${path} ]] || [[ "$(cat ${path} 2>/dev/null)" != "${content}" ]]; then
+            echo "${content}" | sudo tee "${path}" >/dev/null && changed=1
+            wd_cpu_tuning_log 1 "CPU tuning: wrote ${path}"
+        fi
+    done
+    (( changed )) && sudo systemctl daemon-reload
+    sudo systemctl enable wd-resctrl wd-irq-affinity >/dev/null 2>&1
+    wd_cpu_tuning_log 1 "CPU tuning: boot-time units enabled: wd-resctrl=$(systemctl is-enabled wd-resctrl 2>/dev/null) wd-irq-affinity=$(systemctl is-enabled wd-irq-affinity 2>/dev/null)"
+    return 0
+}
+
 ### Apply the layout.  Only ever called when WD_CPU_TUNING="yes".
 function wd_cpu_tuning_apply()
 {
     wd_cpu_tuning_log 1 "CPU tuning: WD_CPU_TUNING=yes, so applying the planned layout"
     wd_cpu_tuning_install_scripts || { wd_cpu_tuning_log 1 "ERROR: CPU tuning helpers could not be installed; not applying"; return 1; }
+    wd_cpu_tuning_install_units
 
     local out
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
@@ -128,7 +166,13 @@ function wd_cpu_tuning()
     if [[ ! -w ${log_dir} ]]; then
         WD_CPU_TUNING_LOG="${WSPRDAEMON_ROOT_DIR:-.}/cpu-tuning.log"     ### fall back if /var/log is not writable
     fi
-    : > ${WD_CPU_TUNING_LOG} 2>/dev/null
+    ### Append rather than truncate: wd_cpu_tuning() runs more than once per WD start, and
+    ### truncating meant the run that actually did the work was overwritten by a later run that
+    ### found nothing to do.  Cap the size instead so it still needs no rotation.
+    if [[ -f ${WD_CPU_TUNING_LOG} ]] && (( $(stat -c %s "${WD_CPU_TUNING_LOG}" 2>/dev/null || echo 0) > 200000 )); then
+        tail -n 500 "${WD_CPU_TUNING_LOG}" > "${WD_CPU_TUNING_LOG}.tmp" 2>/dev/null && mv "${WD_CPU_TUNING_LOG}.tmp" "${WD_CPU_TUNING_LOG}" 2>/dev/null
+    fi
+    printf '%s ---- wd_cpu_tuning run ----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
 
     wd_cpu_tuning_report
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
