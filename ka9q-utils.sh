@@ -1338,7 +1338,11 @@ function build_ka9q_radio() {
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
-    if [[ -z "${RADIOD_CPU_CORES-}" ]] && (( cpu_core_count < 6 )); then
+    if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+        ### The layout is owned by wd-cpu-plan.sh, which writes per-instance drop-ins.  Writing
+        ### CPUAffinity into the radiod@.service template as well would leave two sources of truth.
+        wd_logger 1 "WD_CPU_TUNING=yes, so radiod cores come from wd-cpu-plan.sh; not setting CPUAffinity from RADIOD_CPU_CORES"
+    elif [[ -z "${RADIOD_CPU_CORES-}" ]] && (( cpu_core_count < 6 )); then
         wd_logger 2 "Found only ${cpu_core_count} cores, so don't restrict which cores it can run on"
     else
         local radiod_cores

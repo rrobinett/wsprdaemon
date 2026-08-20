@@ -91,6 +91,12 @@ WD reports the planned layout on every start, and whether the running system mat
 WD_CPU_TUNING="yes"     # in wsprdaemon.conf; default is "no"
 ```
 
+When `WD_CPU_TUNING="yes"`, **`WD_CPU_CORES` and `RADIOD_CPU_CORES` in `wsprdaemon.conf` are
+ignored** -- the plan owns the layout and WD stops writing `CPUAffinity` into the unit files from
+them. That is deliberate: two writers meant the unit file and the drop-in could disagree, and
+`systemctl cat` would show two contradictory values. Those variables still work normally at sites
+that leave `WD_CPU_TUNING` at its default of `no`.
+
 **Check `/var/log/wsprdaemon/drops.log` before enabling it.** If the counts stay at 0 this host is
 keeping up and does not need tuning. Only turn it on if you are actually losing blocks.
 

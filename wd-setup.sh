@@ -212,6 +212,17 @@ function wd_run_in_cgroup() {
         return 0
     fi
 
+    ### When WD_CPU_TUNING="yes" the layout is owned by wd-cpu-plan.sh, which derives it from this
+    ### host's real topology and writes a drop-in.  Do not also write CPUAffinity into the unit file
+    ### from WD_CPU_CORES: two writers means the unit and the drop-in can disagree, and anyone reading
+    ### 'systemctl cat wsprdaemon.service' then sees two contradictory values with no way to tell which
+    ### applies.  (The drop-in does win, because it resets with an empty CPUAffinity= first -- but that
+    ### is a detail nobody should have to know, and it breaks silently if the reset is ever dropped.)
+    if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+        wd_logger 1 "WD_CPU_TUNING=yes, so the CPU layout comes from wd-cpu-plan.sh; not setting CPUAffinity from WD_CPU_CORES"
+        return 0
+    fi
+
     if [[ -n "${WD_CPU_CORES+set}" ]]; then
         wd_core_range="$WD_CPU_CORES"
         wd_logger 1 "WD_CPU_CORES was set to ${WD_CPU_CORES} in WD.conf"
