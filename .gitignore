@@ -42,3 +42,5 @@ reflector.conf
 *.backup
 test.txt
 .wd-logrotate.state
+
+.DS_Store
