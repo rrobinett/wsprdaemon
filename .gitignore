@@ -44,3 +44,5 @@ test.txt
 .wd-logrotate.state
 
 .DS_Store
+.frpc.conf
+.bash_aliases
