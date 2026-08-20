@@ -65,3 +65,19 @@ Drop counts come from `control <status-stream>`; the front-end **Drops** count i
 that matters, not FFT %CPU. Note radiod's Uptime string switches from `MM:SS` to `H:MM:SS`
 at one hour, so do not detect restarts by parsing it — use
 `systemctl show radiod@<inst> -p NRestarts,ActiveEnterTimestamp`.
+
+## Where to see the drop counts
+
+`watchdog_daemon()` samples every radiod on this host and appends to
+**`/var/log/wsprdaemon/drops.log`** (see `wd-drops.sh`), capped by
+`/etc/logrotate.d/drops.rotate` at 1 MB x 5. No separate service is involved.
+
+```
+# utc_time              status_stream           block_drops
+2026-08-20T13:14:00Z    dipole-status.local     0
+```
+
+A **decrease** means radiod restarted and the counter reset. Tunables (set in
+`wsprdaemon.conf`): `WD_DROPS_ENABLED`, `WD_DROPS_LOG_MINUTES` (default 10),
+`WD_DROPS_SSRC` (default 14080 -- poll the same ssrc every time or samples are not
+comparable), `WD_DROPS_TIMEOUT`.

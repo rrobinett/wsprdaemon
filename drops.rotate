@@ -1,0 +1,11 @@
+### Caps the radiod drop log.  Install to /etc/logrotate.d/drops.rotate
+/var/log/wsprdaemon/drops.log
+{
+	size 1M
+	rotate 5
+	missingok
+	notifempty
+	compress
+	delaycompress
+	copytruncate
+}
