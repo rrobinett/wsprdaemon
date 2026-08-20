@@ -59,12 +59,20 @@ fi
 
 # ---- 3. allocate physical cores ----
 OS_CORES=1
-CORES_PER_RADIOD=2
+### Two physical cores per radiod is the default, so fft and proc_rx888 each get their own and do
+### not contend for one core's execution units / L1 / L2.  A site short of cores -- or one that would
+### rather give a core back to the decoders -- can set CORES_PER_RADIOD_MAX=1 in /etc/wd-cpu-plan.conf.
+### At 1 core the two hot threads share an SMT pair, which measurably raises their CPU cost, and with
+### channel threads running SCHED_FIFO it also concentrates RT time on fewer runqueues -- watch for
+### "RT throttling activated" in the kernel log.
+CORES_PER_RADIOD=${CORES_PER_RADIOD_MAX:-2}
 need=$(( OS_CORES + RADIOD_INSTANCES * CORES_PER_RADIOD + 1 ))   # +1 => at least one decoder core
 if [ "$need" -gt "$NCORES" ]; then
     CORES_PER_RADIOD=1
     need=$(( OS_CORES + RADIOD_INSTANCES + 1 ))
-    DEGRADED="yes (not enough physical cores for 2 per radiod)"
+    DEGRADED="yes (only $NCORES cores; wanted ${CORES_PER_RADIOD_MAX:-2} per radiod)"
+elif [ -n "${CORES_PER_RADIOD_MAX:-}" ]; then
+    DEGRADED="no (CORES_PER_RADIOD_MAX=${CORES_PER_RADIOD_MAX} set in /etc/wd-cpu-plan.conf)"
 else
     DEGRADED="no"
 fi
