@@ -146,12 +146,31 @@ function wd_cpu_tuning_apply()
     wd_cpu_tuning_install_units
 
     local out
+    ### Write the drop-ins first: this does its own daemon-reload, which would otherwise reset the
+    ### oneshot units' RemainAfterExit state and leave them reporting "inactive" after we start them.
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
     wd_cpu_tuning_log 1 "CPU tuning: systemd affinity:\n${out}"
-    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-resctrl-setup.sh 2>&1 )
-    wd_cpu_tuning_log 1 "CPU tuning: L3 partition:\n${out}"
-    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-irq-affinity.sh 2>&1 )
-    wd_cpu_tuning_log 1 "CPU tuning: USB IRQ affinity:\n${out}"
+
+    ### Drive the L3 partition and IRQ pinning through their UNITS rather than by running the scripts
+    ### directly.  Same code path systemd uses at boot, and it leaves the units genuinely active
+    ### instead of enabled-but-inactive, which reads as broken in 'systemctl is-active'.
+    local unit
+    for unit in wd-resctrl wd-irq-affinity ; do
+        if sudo systemctl restart "${unit}" 2>/dev/null ; then
+            wd_cpu_tuning_log 1 "CPU tuning: ${unit} => $(systemctl is-active ${unit} 2>/dev/null)/$(systemctl is-enabled ${unit} 2>/dev/null)"
+        else
+            wd_cpu_tuning_log 1 "ERROR: CPU tuning: ${unit} failed to start:\n$(sudo systemctl status ${unit} --no-pager 2>&1 | tail -5)"
+        fi
+    done
+
+    ### Log the resulting state, which is what actually matters, rather than the scripts' stdout
+    wd_cpu_tuning_log 1 "CPU tuning: L3 partition now radiod=$(cat /sys/fs/resctrl/radiod/cpus_list 2>/dev/null || echo none) decoders=$(cat /sys/fs/resctrl/decoders/cpus_list 2>/dev/null || echo none)"
+    local irq_state=""
+    local irq
+    for irq in $(grep -E "xhci" /proc/interrupts 2>/dev/null | awk -F: '{gsub(/ /,"",$1); print $1}'); do
+        irq_state+="IRQ${irq}=$(cat /proc/irq/${irq}/smp_affinity_list 2>/dev/null) "
+    done
+    wd_cpu_tuning_log 1 "CPU tuning: USB IRQ affinity now ${irq_state:-none found}"
     wd_cpu_tuning_log 1 "CPU tuning: applied.  radiod picks up new CPU affinity on its next restart."
     return 0
 }
