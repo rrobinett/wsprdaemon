@@ -1,0 +1,115 @@
+##########################################################################################################################################################
+########## Section which reports (and optionally applies) the radiod CPU / cache / IRQ layout  ############################################################
+##########################################################################################################################################################
+###
+### radiod competes with the WSPR decoders for CPU, L3 cache and USB interrupt service.  When it
+### loses, it drops blocks of the RX888 input stream -- see /var/log/wsprdaemon/drops.log.
+### wd-cpu-plan.sh works out a layout from THIS host's real topology; the helper scripts apply it.
+###
+### This reports on every WD start no matter what, so a site can see whether its layout is sane
+### without having to understand any of it.  It only CHANGES the machine when the operator sets
+### WD_CPU_TUNING="yes" in wsprdaemon.conf, because the layout touches CPU affinity, L3 cache
+### partitioning and IRQ routing, and a bad assignment can take a receiver off the air.
+###
+### Reporting needs no privileges and runs the planner straight out of the WD directory.
+### Applying installs the helpers to /usr/local/sbin, because the systemd units reference them there.
+
+declare WD_CPU_TUNING=${WD_CPU_TUNING-no}                     ### "yes" => apply.  Anything else => report only.
+declare WD_CPU_TUNING_SBIN=${WD_CPU_TUNING_SBIN-/usr/local/sbin}
+declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-apply.sh"
+
+### Copy the helper scripts to ${WD_CPU_TUNING_SBIN} when they are missing or out of date.
+function wd_cpu_tuning_install_scripts()
+{
+    local script rc=0
+    for script in ${WD_CPU_TUNING_SCRIPTS}; do
+        local src="${WSPRDAEMON_ROOT_DIR}/${script}"
+        local dst="${WD_CPU_TUNING_SBIN}/${script}"
+        [[ -f ${src} ]] || { wd_logger 1 "ERROR: ${src} is missing from the WD directory"; rc=1; continue; }
+        if [[ -f ${dst} ]] && cmp -s "${src}" "${dst}" ; then
+            continue
+        fi
+        if sudo install -m 755 "${src}" "${dst}" ; then
+            wd_logger 1 "Installed ${dst}"
+        else
+            wd_logger 1 "ERROR: could not install ${dst}"; rc=1
+        fi
+    done
+    return ${rc}
+}
+
+### Report the planned layout and whether the running system matches it.
+function wd_cpu_tuning_report()
+{
+    local planner="${WSPRDAEMON_ROOT_DIR}/wd-cpu-plan.sh"
+    [[ -x ${planner} ]] || { wd_logger 1 "CPU tuning: ${planner} not found, skipping report"; return 0; }
+
+    local plan
+    plan=$( ${planner} 2>/dev/null ) || { wd_logger 1 "CPU tuning: could not read the CPU topology, skipping"; return 0; }
+    eval "${plan}"
+
+    if [[ "${WD_PLAN_OK:-no}" != "yes" ]]; then
+        wd_logger 1 "CPU tuning: no usable layout for this host: ${WD_PLAN_REASON:-unknown}.  ${WD_ADVICE:-Leaving CPU affinity unmanaged.}"
+        return 0
+    fi
+
+    wd_logger 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3"
+    wd_logger 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
+
+    ### Compare the plan against what is actually in effect
+    local -i mismatches=0
+    local i name cpus actual
+    for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
+        eval "name=\${WD_RADIOD${i}_NAME}; cpus=\${WD_RADIOD${i}_CPUS}"
+        [[ -n "${name}" ]] || continue
+        actual=$(systemctl show "radiod@${name}" -p CPUAffinity --value 2>/dev/null)
+        if [[ -z "${actual}" ]]; then
+            wd_logger 1 "CPU tuning: radiod@${name} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
+            (( ++mismatches ))
+        else
+            wd_logger 2 "CPU tuning: radiod@${name} CPUAffinity=${actual}, plan wants ${cpus}"
+        fi
+    done
+    if [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
+        wd_logger 2 "CPU tuning: L3 partition radiod=$(cat /sys/fs/resctrl/radiod/cpus_list) decoders=$(cat /sys/fs/resctrl/decoders/cpus_list 2>/dev/null)"
+    else
+        wd_logger 1 "CPU tuning: no L3 cache partition configured; the decoders can evict radiod's FFT working set"
+        (( ++mismatches ))
+    fi
+
+    if (( mismatches == 0 )); then
+        wd_logger 1 "CPU tuning: the running layout matches the plan"
+    elif [[ "${WD_CPU_TUNING}" != "yes" ]]; then
+        wd_logger 1 "CPU tuning: ${mismatches} item(s) differ from the plan.  This host is NOT tuned."
+        wd_logger 1 "CPU tuning: to apply it, set WD_CPU_TUNING=\"yes\" in ${WSPRDAEMON_CONFIG_FILE} and restart WD.  See wd-cpu-tuning.md."
+        wd_logger 1 "CPU tuning: check /var/log/wsprdaemon/drops.log first -- if the counts stay 0, this host does not need tuning."
+    fi
+    return 0
+}
+
+### Apply the layout.  Only ever called when WD_CPU_TUNING="yes".
+function wd_cpu_tuning_apply()
+{
+    wd_logger 1 "CPU tuning: WD_CPU_TUNING=yes, so applying the planned layout"
+    wd_cpu_tuning_install_scripts || { wd_logger 1 "ERROR: CPU tuning helpers could not be installed; not applying"; return 1; }
+
+    local out
+    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
+    wd_logger 1 "CPU tuning: systemd affinity:\n${out}"
+    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-resctrl-setup.sh 2>&1 )
+    wd_logger 1 "CPU tuning: L3 partition:\n${out}"
+    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-irq-affinity.sh 2>&1 )
+    wd_logger 1 "CPU tuning: USB IRQ affinity:\n${out}"
+    wd_logger 1 "CPU tuning: applied.  radiod picks up new CPU affinity on its next restart."
+    return 0
+}
+
+### Entry point, called once per WD start.
+function wd_cpu_tuning()
+{
+    wd_cpu_tuning_report
+    if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
+        wd_cpu_tuning_apply
+    fi
+    return 0
+}

@@ -144,6 +144,7 @@ source ${WSPRDAEMON_ROOT_DIR}/noise-graphs-daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-drops.sh
+source ${WSPRDAEMON_ROOT_DIR}/wd-cpu-tuning.sh
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage

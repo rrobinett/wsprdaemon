@@ -2190,6 +2190,10 @@ function ka9q-setup() {
     wd_logger 2 "There are KA9Q receivers in the conf file, so set up KA9Q"
  
     sudo systemctl start set_lo_multicast
+
+    ### Report the radiod CPU/cache/IRQ layout every start; only change it if WD_CPU_TUNING="yes"
+    wd_cpu_tuning
+
     ka9q-services-setup
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: ka9q-services-setup() => ${rc}"

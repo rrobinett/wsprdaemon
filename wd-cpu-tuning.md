@@ -81,3 +81,26 @@ A **decrease** means radiod restarted and the counter reset. Tunables (set in
 `wsprdaemon.conf`): `WD_DROPS_ENABLED`, `WD_DROPS_LOG_MINUTES` (default 10),
 `WD_DROPS_SSRC` (default 14080 -- poll the same ssrc every time or samples are not
 comparable), `WD_DROPS_TIMEOUT`.
+
+## How it is enabled
+
+WD reports the planned layout on every start, and whether the running system matches it. It does
+**not** change the machine unless you opt in:
+
+```sh
+WD_CPU_TUNING="yes"     # in wsprdaemon.conf; default is "no"
+```
+
+**Check `/var/log/wsprdaemon/drops.log` before enabling it.** If the counts stay at 0 this host is
+keeping up and does not need tuning. Only turn it on if you are actually losing blocks.
+
+Reporting needs no privileges. Applying installs the helper scripts to `/usr/local/sbin`, writes the
+systemd drop-ins, sets the L3 partition and pins the USB IRQs. It is idempotent, it never restarts
+radiod for a cosmetic change, and it reports which units need a restart rather than restarting them
+itself. radiod picks up new CPU affinity on its next restart.
+
+To undo: set `WD_CPU_TUNING="no"`, remove the generated drop-ins
+(`/etc/systemd/system/radiod@*.service.d/cpu-affinity.conf`,
+`/etc/systemd/system/wsprdaemon.service.d/cpu-affinity.conf`,
+`/etc/systemd/system.conf.d/radiod-cpu-affinity.conf`), `systemctl disable --now wd-resctrl
+wd-irq-affinity`, then `systemctl daemon-reload` and restart radiod.
