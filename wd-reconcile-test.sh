@@ -53,5 +53,29 @@ check "WD.conf: result still parses"             "0" "$(bash -n "${TMP}/wd.conf"
 wd_reconcile_wspr_schedule "${TMP}/wd.conf" ; rc=$?
 check "WD.conf: idempotent (2nd run = no change)" "0" "${rc}"
 
+### ---- multi-radiod site: every conf must be reconciled independently ----
+### A multi-RX888 site has one conf per receiver.  Only the KA9Q_CONF_NAME one used to be
+### cleaned, so the others kept their CHU channels indefinitely.
+mkdir -p "${TMP}/etc"
+for inst in dipole ns-bev ; do
+    cat > "${TMP}/etc/radiod@${inst}.conf" <<CONF
+[WWV-IQ]
+freq = "60k000 2500000 3330000 5000000 7850000 10000000 14670000 25000000"
+CONF
+done
+cat > "${TMP}/etc/radiod@clean.conf" <<'CONF'
+[WWV-IQ]
+freq = "60k000 2500000 5000000 10000000 25000000"
+CONF
+declare -i changed=0 unchanged=0
+for f in "${TMP}"/etc/radiod@*.conf ; do
+    wd_reconcile_radiod_band_list "${f}" ; rc=$?
+    (( rc == 1 )) && changed+=1
+    (( rc == 0 )) && unchanged+=1
+done
+check "multi-conf: both CHU-bearing confs changed"   "2" "${changed}"
+check "multi-conf: the already-clean conf untouched" "1" "${unchanged}"
+check "multi-conf: no CHU left in ANY conf"          "0" "$(grep -l -E '3330000|7850000|14670000' "${TMP}"/etc/radiod@*.conf 2>/dev/null | wc -l | tr -d ' ')"
+
 printf "\n  %d passed, %d failed\n" "${PASS}" "${FAIL}"
 (( FAIL == 0 ))

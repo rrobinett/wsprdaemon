@@ -1140,11 +1140,29 @@ function build_ka9q_radio() {
     ### Default is to find the config sections in the old style single ..conf file
     local ka9q_conf_file_path="${KA9Q_RADIOD_CONF_DIR}/${ka9q_conf_file_name}"
 
-    ### Standard check: remove the obsolete CHU frequencies from the radiod conf before (re)starting radiod
-    wd_reconcile_radiod_band_list "${ka9q_conf_file_path}"
-    if (( $? == 1 )); then
-        radio_restart_needed="yes"
-    fi
+    ### Standard check: remove the obsolete CHU frequencies from EVERY radiod conf on this host before (re)starting radiod.
+    ### A multi-RX888 site runs one radiod per receiver (radiod@dipole.conf, radiod@ns-bev.conf, ...).  Only the conf named
+    ### by KA9Q_CONF_NAME used to be reconciled, so every OTHER receiver silently kept its CHU channels forever -- and those
+    ### are wideband IQ channels, so they are the expensive ones to leave running.
+    local reconcile_conf reconcile_instance
+    for reconcile_conf in ${KA9Q_RADIOD_CONF_DIR}/radiod@*.conf ; do
+        [[ -f ${reconcile_conf} ]] || continue         ### no match, or a conf.d directory
+        wd_reconcile_radiod_band_list "${reconcile_conf}"
+        if (( $? != 1 )); then
+            continue                                   ### 0 = already current, 2 = error (already logged)
+        fi
+        reconcile_instance=${reconcile_conf##*/radiod@}
+        reconcile_instance=${reconcile_instance%.conf}
+        if [[ ${reconcile_instance} == "${ka9q_conf_name}" ]]; then
+            radio_restart_needed="yes"                 ### this instance is (re)started at the end of this function
+        elif sudo systemctl is-active --quiet "radiod@${reconcile_instance}" ; then
+            wd_logger 1 "Restarting radiod@${reconcile_instance} so it picks up its reconciled band list"
+            sudo systemctl restart "radiod@${reconcile_instance}"
+        else
+            ### Do not START an instance the site has chosen not to run; just leave the cleaned conf for next time
+            wd_logger 1 "Reconciled ${reconcile_conf}, but radiod@${reconcile_instance} is not running so it was left stopped"
+        fi
+    done
 
     ### Standard check: remove obsolete CHU entries from WSPR_SCHEDULE.  WD re-sources WD.conf every cycle.
     wd_reconcile_wspr_schedule "${WSPRDAEMON_CONFIG_FILE}"
