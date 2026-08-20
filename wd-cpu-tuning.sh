@@ -14,9 +14,22 @@
 ### Reporting needs no privileges and runs the planner straight out of the WD directory.
 ### Applying installs the helpers to /usr/local/sbin, because the systemd units reference them there.
 
+declare WD_CPU_TUNING_LOG=${WD_CPU_TUNING_LOG-/var/log/wsprdaemon/cpu-tuning.log}
 declare WD_CPU_TUNING=${WD_CPU_TUNING-no}                     ### "yes" => apply.  Anything else => report only.
 declare WD_CPU_TUNING_SBIN=${WD_CPU_TUNING_SBIN-/usr/local/sbin}
 declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-apply.sh"
+
+### Log a line to BOTH the normal WD log and ${WD_CPU_TUNING_LOG}.
+### This report runs while ka9q-utils.sh is being sourced, and at that point WD_LOGFILE is not yet
+### set -- wd_logger() returns without writing anything when that is true, and there is no terminal
+### to echo to either.  So the report would be silently discarded.  Write it to a file the operator
+### can simply read instead.  Truncated at the start of each run: this is current status, not history.
+function wd_cpu_tuning_log()
+{
+    local log_level=$1 log_line=$2
+    wd_logger ${log_level} "${log_line}"
+    printf "%s %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
+}
 
 ### Copy the helper scripts to ${WD_CPU_TUNING_SBIN} when they are missing or out of date.
 function wd_cpu_tuning_install_scripts()
@@ -42,19 +55,19 @@ function wd_cpu_tuning_install_scripts()
 function wd_cpu_tuning_report()
 {
     local planner="${WSPRDAEMON_ROOT_DIR}/wd-cpu-plan.sh"
-    [[ -x ${planner} ]] || { wd_logger 1 "CPU tuning: ${planner} not found, skipping report"; return 0; }
+    [[ -x ${planner} ]] || { wd_cpu_tuning_log 1 "CPU tuning: ${planner} not found, skipping report"; return 0; }
 
     local plan
-    plan=$( ${planner} 2>/dev/null ) || { wd_logger 1 "CPU tuning: could not read the CPU topology, skipping"; return 0; }
+    plan=$( ${planner} 2>/dev/null ) || { wd_cpu_tuning_log 1 "CPU tuning: could not read the CPU topology, skipping"; return 0; }
     eval "${plan}"
 
     if [[ "${WD_PLAN_OK:-no}" != "yes" ]]; then
-        wd_logger 1 "CPU tuning: no usable layout for this host: ${WD_PLAN_REASON:-unknown}.  ${WD_ADVICE:-Leaving CPU affinity unmanaged.}"
+        wd_cpu_tuning_log 1 "CPU tuning: no usable layout for this host: ${WD_PLAN_REASON:-unknown}.  ${WD_ADVICE:-Leaving CPU affinity unmanaged.}"
         return 0
     fi
 
-    wd_logger 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3"
-    wd_logger 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
+    wd_cpu_tuning_log 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3"
+    wd_cpu_tuning_log 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
 
     ### Compare the plan against what is actually in effect
     local -i mismatches=0
@@ -64,25 +77,25 @@ function wd_cpu_tuning_report()
         [[ -n "${name}" ]] || continue
         actual=$(systemctl show "radiod@${name}" -p CPUAffinity --value 2>/dev/null)
         if [[ -z "${actual}" ]]; then
-            wd_logger 1 "CPU tuning: radiod@${name} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
+            wd_cpu_tuning_log 1 "CPU tuning: radiod@${name} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
             (( ++mismatches ))
         else
-            wd_logger 2 "CPU tuning: radiod@${name} CPUAffinity=${actual}, plan wants ${cpus}"
+            wd_cpu_tuning_log 2 "CPU tuning: radiod@${name} CPUAffinity=${actual}, plan wants ${cpus}"
         fi
     done
     if [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
-        wd_logger 2 "CPU tuning: L3 partition radiod=$(cat /sys/fs/resctrl/radiod/cpus_list) decoders=$(cat /sys/fs/resctrl/decoders/cpus_list 2>/dev/null)"
+        wd_cpu_tuning_log 2 "CPU tuning: L3 partition radiod=$(cat /sys/fs/resctrl/radiod/cpus_list) decoders=$(cat /sys/fs/resctrl/decoders/cpus_list 2>/dev/null)"
     else
-        wd_logger 1 "CPU tuning: no L3 cache partition configured; the decoders can evict radiod's FFT working set"
+        wd_cpu_tuning_log 1 "CPU tuning: no L3 cache partition configured; the decoders can evict radiod's FFT working set"
         (( ++mismatches ))
     fi
 
     if (( mismatches == 0 )); then
-        wd_logger 1 "CPU tuning: the running layout matches the plan"
+        wd_cpu_tuning_log 1 "CPU tuning: the running layout matches the plan"
     elif [[ "${WD_CPU_TUNING}" != "yes" ]]; then
-        wd_logger 1 "CPU tuning: ${mismatches} item(s) differ from the plan.  This host is NOT tuned."
-        wd_logger 1 "CPU tuning: to apply it, set WD_CPU_TUNING=\"yes\" in ${WSPRDAEMON_CONFIG_FILE} and restart WD.  See wd-cpu-tuning.md."
-        wd_logger 1 "CPU tuning: check /var/log/wsprdaemon/drops.log first -- if the counts stay 0, this host does not need tuning."
+        wd_cpu_tuning_log 1 "CPU tuning: ${mismatches} item(s) differ from the plan.  This host is NOT tuned."
+        wd_cpu_tuning_log 1 "CPU tuning: to apply it, set WD_CPU_TUNING=\"yes\" in ${WSPRDAEMON_CONFIG_FILE} and restart WD.  See wd-cpu-tuning.md."
+        wd_cpu_tuning_log 1 "CPU tuning: check /var/log/wsprdaemon/drops.log first -- if the counts stay 0, this host does not need tuning."
     fi
     return 0
 }
@@ -90,23 +103,32 @@ function wd_cpu_tuning_report()
 ### Apply the layout.  Only ever called when WD_CPU_TUNING="yes".
 function wd_cpu_tuning_apply()
 {
-    wd_logger 1 "CPU tuning: WD_CPU_TUNING=yes, so applying the planned layout"
-    wd_cpu_tuning_install_scripts || { wd_logger 1 "ERROR: CPU tuning helpers could not be installed; not applying"; return 1; }
+    wd_cpu_tuning_log 1 "CPU tuning: WD_CPU_TUNING=yes, so applying the planned layout"
+    wd_cpu_tuning_install_scripts || { wd_cpu_tuning_log 1 "ERROR: CPU tuning helpers could not be installed; not applying"; return 1; }
 
     local out
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
-    wd_logger 1 "CPU tuning: systemd affinity:\n${out}"
+    wd_cpu_tuning_log 1 "CPU tuning: systemd affinity:\n${out}"
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-resctrl-setup.sh 2>&1 )
-    wd_logger 1 "CPU tuning: L3 partition:\n${out}"
+    wd_cpu_tuning_log 1 "CPU tuning: L3 partition:\n${out}"
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-irq-affinity.sh 2>&1 )
-    wd_logger 1 "CPU tuning: USB IRQ affinity:\n${out}"
-    wd_logger 1 "CPU tuning: applied.  radiod picks up new CPU affinity on its next restart."
+    wd_cpu_tuning_log 1 "CPU tuning: USB IRQ affinity:\n${out}"
+    wd_cpu_tuning_log 1 "CPU tuning: applied.  radiod picks up new CPU affinity on its next restart."
     return 0
 }
 
 ### Entry point, called once per WD start.
 function wd_cpu_tuning()
 {
+    ### Make sure the log directory exists and is writable by us, then start a fresh report
+    local log_dir=${WD_CPU_TUNING_LOG%/*}
+    [[ -d ${log_dir} ]] || sudo mkdir -p "${log_dir}" 2>/dev/null
+    [[ -w ${log_dir} ]] || sudo chown "$(id -un)" "${log_dir}" 2>/dev/null
+    if [[ ! -w ${log_dir} ]]; then
+        WD_CPU_TUNING_LOG="${WSPRDAEMON_ROOT_DIR:-.}/cpu-tuning.log"     ### fall back if /var/log is not writable
+    fi
+    : > ${WD_CPU_TUNING_LOG} 2>/dev/null
+
     wd_cpu_tuning_report
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
         wd_cpu_tuning_apply
