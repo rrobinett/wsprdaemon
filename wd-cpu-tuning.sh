@@ -28,7 +28,8 @@ function wd_cpu_tuning_log()
 {
     local log_level=$1 log_line=$2
     wd_logger ${log_level} "${log_line}"
-    printf "%s %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
+    ### %b so embedded \n render as newlines, matching what wd_logger does with 'echo -e'
+    printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
 }
 
 ### Copy the helper scripts to ${WD_CPU_TUNING_SBIN} when they are missing or out of date.
