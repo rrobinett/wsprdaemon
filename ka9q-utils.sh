@@ -1388,13 +1388,35 @@ function build_ka9q_radio() {
     else
         wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
     fi
-    if sudo systemctl restart radiod@${ka9q_conf_name}  > /dev/null ; then
-        wd_logger 2 "KA9Q-radio was started"
-        return 0
-    else
-       wd_logger 2 "KA9Q-radio failed to start"
-       return 1
-    fi
+    ### Restart the KA9Q_CONF_NAME instance, plus every OTHER radiod instance that is already running.
+    ### A rebuild replaces /usr/local/sbin/radiod, but a running process keeps executing the OLD
+    ### binary until it is restarted.  Only the KA9Q_CONF_NAME instance used to be restarted here, so
+    ### at a multi-RX888 site the other receivers silently kept running the previous build -- observed
+    ### at KX4AZ-T, where after an upgrade radiod@dipole had the new binary and new thread scheduling
+    ### while radiod@ns-bev was still on the old one.
+    ### Other instances are only RESTARTED, never started: do not bring up a receiver the site has
+    ### chosen to leave stopped.
+    local -a radiod_restart_list=( "${ka9q_conf_name}" )
+    local other_conf other_inst
+    for other_conf in ${KA9Q_RADIOD_CONF_DIR}/radiod@*.conf ; do
+        [[ -f ${other_conf} ]] || continue
+        other_inst=${other_conf##*/radiod@}
+        other_inst=${other_inst%.conf}
+        [[ ${other_inst} == "${ka9q_conf_name}" ]] && continue
+        if sudo systemctl is-active --quiet "radiod@${other_inst}" ; then
+            radiod_restart_list+=( "${other_inst}" )
+        fi
+    done
+    local radiod_instance restart_rc=0
+    for radiod_instance in "${radiod_restart_list[@]}" ; do
+        if sudo systemctl restart "radiod@${radiod_instance}" > /dev/null ; then
+            wd_logger 2 "radiod@${radiod_instance} was started"
+        else
+            wd_logger 1 "ERROR: radiod@${radiod_instance} failed to start"
+            restart_rc=1
+        fi
+    done
+    return ${restart_rc}
 
 }
 
