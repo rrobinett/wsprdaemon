@@ -823,9 +823,24 @@ declare ka9q_service_daemons_list=(
     "hf1.local 8081 WW0WWV"
 )
 
-### This is called by the watchdog daemon and needs to be extended to support multiple RX888 servers at a site.
+### This is called by the watchdog daemon.
+###
+### When KA9Q_WEB_SYSTEMD="yes" is set in wsprdaemon.conf, the ka9q-web UIs are run
+### as per-RX888 systemd services (ka9q-web@<name>.service) instead of by WD, so this
+### daemon just idles and does NOT launch a competing ka9q-web.  This is the way to
+### run one web UI per RX888 at a multi-RX888 site.
+###
+### When KA9Q_WEB_SYSTEMD is unset/"no", the original WD behavior is used: a single
+### ka9q-web on ${KA9Q_WEB_IP_PORT-8081} for the WD-managed radiod.
 function ka9q_web_daemon() {
     wd_logger 1 "Starting"
+
+    if [[ "${KA9Q_WEB_SYSTEMD-no}" == "yes" ]]; then
+        wd_logger 1 "KA9Q_WEB_SYSTEMD=yes in WD.conf => ka9q-web is managed by systemd units (ka9q-web@*.service), not by WD.  Idling this daemon."
+        while true; do
+            wd_sleep 60
+        done
+    fi
 
     while true; do
         local rc
