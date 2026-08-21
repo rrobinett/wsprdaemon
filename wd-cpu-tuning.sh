@@ -32,6 +32,25 @@ function wd_cpu_tuning_log()
     printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
 }
 
+### Expand "0-1,4-6" / "0 1 4" into a canonical sorted "0,1,4,5,6" so the two formats compare.
+function wd_cpu_list_normalise()
+{
+    local spec="${1//[[:space:]]/,}" part lo hi i
+    local -a out=() parts
+    IFS=',' read -r -a parts <<< "${spec}"
+    for part in "${parts[@]}"; do
+        [[ -z "${part}" ]] && continue
+        if [[ "${part}" == *-* ]]; then
+            lo=${part%%-*}; hi=${part##*-}
+            for (( i=lo; i<=hi; i++ )); do out+=("$i"); done
+        else
+            out+=("${part}")
+        fi
+    done
+    (( ${#out[@]} == 0 )) && return 0
+    printf '%s\n' "${out[@]}" | sort -n -u | paste -sd, -
+}
+
 ### Copy the helper scripts to ${WD_CPU_TUNING_SBIN} when they are missing or out of date.
 function wd_cpu_tuning_install_scripts()
 {
@@ -77,11 +96,18 @@ function wd_cpu_tuning_report()
         eval "name=\${WD_RADIOD${i}_NAME}; cpus=\${WD_RADIOD${i}_CPUS}"
         [[ -n "${name}" ]] || continue
         actual=$(systemctl show "radiod@${name}" -p CPUAffinity --value 2>/dev/null)
+        ### Compare the VALUES, not just "is it set".  The previous version only counted a mismatch
+        ### when CPUAffinity was empty, so a host running radiod on entirely the wrong cores -- core 0
+        ### included -- was reported as "matches the plan".  The report lied on exactly the machines
+        ### that needed it.  Normalise first: systemd reports "2-5" where the plan says "2,3,4,5".
         if [[ -z "${actual}" ]]; then
             wd_cpu_tuning_log 1 "CPU tuning: radiod@${name} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
             (( ++mismatches ))
+        elif [[ "$(wd_cpu_list_normalise "${actual}")" != "$(wd_cpu_list_normalise "${cpus}")" ]]; then
+            wd_cpu_tuning_log 1 "CPU tuning: radiod@${name} is on CPUs ${actual} but the plan wants ${cpus}"
+            (( ++mismatches ))
         else
-            wd_cpu_tuning_log 2 "CPU tuning: radiod@${name} CPUAffinity=${actual}, plan wants ${cpus}"
+            wd_cpu_tuning_log 2 "CPU tuning: radiod@${name} CPUAffinity=${actual} matches the plan"
         fi
     done
     if [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
@@ -90,6 +116,19 @@ function wd_cpu_tuning_report()
         wd_cpu_tuning_log 1 "CPU tuning: no L3 cache partition configured; the decoders can evict radiod's FFT working set"
         (( ++mismatches ))
     fi
+
+    ### The decoders matter as much as radiod: confining them to too few cores is how a host ends up
+    ### with idle CPUs and a load average in the 80s.
+    if systemctl cat wsprdaemon.service >/dev/null 2>&1 ; then
+        local dec_actual
+        dec_actual=$(systemctl show wsprdaemon.service -p CPUAffinity --value 2>/dev/null)
+        if [[ -n "${dec_actual}" ]] && [[ "$(wd_cpu_list_normalise "${dec_actual}")" != "$(wd_cpu_list_normalise "${WD_DECODER_CPUS}")" ]]; then
+            wd_cpu_tuning_log 1 "CPU tuning: the decoders are confined to ${dec_actual} but the plan wants ${WD_DECODER_CPUS}"
+            (( ++mismatches ))
+        fi
+    fi
+    [[ "${WD_DECODER_FLOOR_APPLIED:-no}" == "yes" ]] && \
+        wd_cpu_tuning_log 1 "CPU tuning: cores per radiod reduced to keep ${WD_MIN_DECODER_CORES} core(s) for the decoders"
 
     if (( mismatches == 0 )); then
         wd_cpu_tuning_log 1 "CPU tuning: the running layout matches the plan"

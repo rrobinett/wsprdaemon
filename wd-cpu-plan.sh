@@ -22,7 +22,7 @@
 #   KX4AZ-T when a radiod accidentally ran in the decoders' 3 MB partition).
 set -u
 # Optional per-site overrides (RADIOD_L3_FRACTION, MIN_DECODER_WAYS, RADIOD_INSTANCES,
-# RADIOD_NAMES, CORES_PER_RADIOD_MAX).  Lets a site keep a tuned split without editing code.
+# RADIOD_NAMES, CORES_PER_RADIOD_MAX, MIN_DECODER_CORES).  Lets a site tune without editing code.
 [ -r /etc/wd-cpu-plan.conf ] && . /etc/wd-cpu-plan.conf
 RADIOD_INSTANCES="${RADIOD_INSTANCES:-}"        # override; else auto-detect
 RADIOD_NAMES="${RADIOD_NAMES:-}"                # override; else auto-detect (sorted)
@@ -66,6 +66,20 @@ OS_CORES=1
 ### channel threads running SCHED_FIFO it also concentrates RT time on fewer runqueues -- watch for
 ### "RT throttling activated" in the kernel log.
 CORES_PER_RADIOD=${CORES_PER_RADIOD_MAX:-2}
+
+### The decoders must keep a guaranteed share.  At ON5KQ-BL, 2 radiods on an 8-core box took 4 cores
+### and left 3 for 161 wsprd processes: those 3 cores pinned at 0% idle, load average 85, while the
+### radiod cores sat half idle.  Hardware alone cannot tell that site apart from one running 58
+### decoders on identical hardware, so reserve for the decoders by default and let a site that knows
+### its decode load raise CORES_PER_RADIOD_MAX deliberately.
+MIN_DECODER_CORES=${MIN_DECODER_CORES:-$(( NCORES / 2 ))}
+(( MIN_DECODER_CORES < 2 )) && MIN_DECODER_CORES=2
+DECODER_FLOOR_APPLIED="no"
+while (( CORES_PER_RADIOD > 1 && OS_CORES + RADIOD_INSTANCES * CORES_PER_RADIOD + MIN_DECODER_CORES > NCORES )); do
+    CORES_PER_RADIOD=$(( CORES_PER_RADIOD - 1 ))
+    DECODER_FLOOR_APPLIED="yes"
+done
+
 need=$(( OS_CORES + RADIOD_INSTANCES * CORES_PER_RADIOD + 1 ))   # +1 => at least one decoder core
 if [ "$need" -gt "$NCORES" ]; then
     CORES_PER_RADIOD=1
@@ -151,6 +165,8 @@ WD_RADIOD_INSTANCES=$RADIOD_INSTANCES
 WD_RADIOD_NAMES="$RADIOD_NAMES"
 WD_CORES_PER_RADIOD=$CORES_PER_RADIOD
 WD_DEGRADED="$DEGRADED"
+WD_MIN_DECODER_CORES=$MIN_DECODER_CORES
+WD_DECODER_FLOOR_APPLIED="$DECODER_FLOOR_APPLIED"
 EOF
 for i in $(seq 0 $((RADIOD_INSTANCES-1))); do
     echo "WD_RADIOD${i}_NAME=\"${_names[$i]:-}\""
