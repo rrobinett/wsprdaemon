@@ -74,6 +74,23 @@ plan=$("$PLAN_CMD" 2>/dev/null) || { echo "wd-cpu-apply: cannot run $PLAN_CMD"; 
 eval "$plan"
 [ "${WD_PLAN_OK:-no}" = "yes" ] || { echo "wd-cpu-apply: no usable plan: ${WD_PLAN_REASON:-unknown}"; exit 0; }
 
+### The drop-ins are written from the plan THIS script ran, but radiod-pin-threads.sh reads the
+### INSTALLED plan at ExecStartPost time.  If those two copies disagree, the unit's CPUAffinity and
+### the thread pinning come from different layouts.  That happened at ON5KQ-BL: apply wrote
+### CPUAffinity=2-3 from an updated plan while the pin script read an older installed plan and pinned
+### proc_rx888 to CPU4 -- outside the unit's own allowed set, which taskset permits when run as root.
+CANON_PLAN=/usr/local/sbin/wd-cpu-plan.sh
+if [ "$(readlink -f "$PLAN_CMD" 2>/dev/null)" != "$(readlink -f "$CANON_PLAN" 2>/dev/null)" ]; then
+    if [ ! -f "$CANON_PLAN" ]; then
+        echo "wd-cpu-apply: WARNING -- $CANON_PLAN is not installed, so radiod-pin-threads.sh cannot plan"
+    elif ! cmp -s "$PLAN_CMD" "$CANON_PLAN" ; then
+        echo "wd-cpu-apply: REFUSING to apply -- planning from $PLAN_CMD, but radiod-pin-threads.sh"
+        echo "  will read $CANON_PLAN and the two DIFFER.  The drop-ins and the thread pinning would"
+        echo "  come from different layouts.  Install the same plan to $CANON_PLAN first."
+        exit 1
+    fi
+fi
+
 echo "wd-cpu-apply: ${WD_TOPO_CORES} cores, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_CORES_PER_RADIOD} core(s)/radiod"
 [ "${WD_DECODER_FLOOR_APPLIED:-no}" = "yes" ] && \
     echo "  note: cores per radiod reduced to keep ${WD_MIN_DECODER_CORES} core(s) for the decoders"
