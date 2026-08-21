@@ -87,9 +87,18 @@ for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
         [ -f "$f" ] || continue
         b=$(basename "$f")
         [ "$b" = "$DROPIN_NAME" ] && continue
-        if [ "$b" \> "$DROPIN_NAME" ] && grep -qi '^[[:space:]]*CPUAffinity' "$f" ; then
-            echo "  CONFLICT: $f sets CPUAffinity and sorts after ${DROPIN_NAME}, so it would override the plan"
-            conflict=1
+        if [ "$b" \> "$DROPIN_NAME" ] && grep -qi '^[[:space:]]*CPUAffinity=[0-9]' "$f" ; then
+            ### Only a DIFFERENT value is a conflict.  A later drop-in that already agrees with the
+            ### plan is harmless, and refusing on it would block sites that keep their layout in
+            ### their own file.
+            eval "want=\$WD_RADIOD${i}_CPUS"
+            other=$(grep -i '^[[:space:]]*CPUAffinity=[0-9]' "$f" | tail -1 | cut -d= -f2)
+            if [ "$(cpu_list_normalise "$other")" != "$(cpu_list_normalise "$want")" ]; then
+                echo "  CONFLICT: $f sets CPUAffinity=${other} and sorts after ${DROPIN_NAME}; plan wants ${want}"
+                conflict=1
+            else
+                echo "  note: $f also sets CPUAffinity=${other}, which agrees with the plan"
+            fi
         fi
     done
 done

@@ -146,6 +146,14 @@ for _ in $(seq 1 "$RADIOD_INSTANCES"); do
     RADIOD_OTHER+=("$( [ ${#others[@]} -gt 0 ] && join "${others[@]}" || echo "$first_cpu" )")
 done
 dec=(); for i in $(seq "$idx" $((NCORES-1))); do dec+=("$(cpus_of "$i")"); done
+### The decoders may also use the OS core.  Reserving a whole physical core for the OS wastes real
+### capacity -- it measured 94-99% idle on one host -- and WSPR decoding is throughput work, not
+### latency work: a decode that is preempted by kernel or interrupt activity simply finishes a
+### moment later.  radiod is the latency-sensitive part and stays off this core.
+### Set DECODERS_USE_OS_CORE=no to keep the OS core exclusive.
+if [ "${DECODERS_USE_OS_CORE:-yes}" = "yes" ]; then
+    dec=( "$os_list" "${dec[@]}" )
+fi
 dec_list=$(join "${dec[@]}")
 
 # ---- 4. L3 / CAT masks from the real cache geometry ----
