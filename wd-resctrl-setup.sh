@@ -20,7 +20,7 @@ DRY="${DRY_RUN:-0}"
 R=/sys/fs/resctrl
 w(){ if [ "$DRY" = "1" ]; then echo "    would: echo '$1' > $2"; else echo "$1" > "$2"; fi; }
 
-plan=$("$PLAN_CMD" 2>/dev/null) || { echo "wd-resctrl: cannot run $PLAN_CMD"; exit 0; }
+plan=$("$PLAN_CMD" 2>/dev/null) || { echo "wd-resctrl: cannot run $PLAN_CMD"; exit 1; }
 eval "$plan"
 [ "${WD_PLAN_OK:-no}" = "yes" ] || { echo "wd-resctrl: no usable plan: ${WD_PLAN_REASON:-unknown}"; exit 0; }
 [ -n "${WD_L3_RADIOD_MASK:-}" ] || { echo "wd-resctrl: no L3 CAT on this CPU; nothing to do"; exit 0; }

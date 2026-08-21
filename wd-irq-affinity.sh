@@ -23,7 +23,7 @@ if [ -z "$OS_CPUS" ]; then
     plan=$("$PLAN_CMD" 2>/dev/null) && eval "$plan"
     OS_CPUS="${WD_OS_CPUS:-}"
 fi
-[ -n "$OS_CPUS" ] || { echo "wd-irq-affinity: no OS cpu list available; leaving IRQs unmanaged"; exit 0; }
+[ -n "$OS_CPUS" ] || { echo "wd-irq-affinity: no OS cpu list available; leaving IRQs unmanaged"; exit 1; }
 
 found=0
 while read -r irq; do

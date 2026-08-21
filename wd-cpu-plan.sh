@@ -79,7 +79,10 @@ CORES_PER_RADIOD=${CORES_PER_RADIOD_MAX:-2}
 ### hardware, nearly 3x the decode load, and nothing in the CPU topology reveals it.
 ### MERG_* entries are merge pseudo-receivers and decode nothing themselves, so they are excluded.
 if [ -z "${WD_RECEIVER_COUNT:-}" ]; then
-    for wd_conf in "${WSPRDAEMON_CONFIG_FILE:-}" "$HOME/wsprdaemon/wsprdaemon.conf" /home/wsprdaemon/wsprdaemon/wsprdaemon.conf ; do
+    ### ${HOME:-} not $HOME: systemd does not set HOME for a service, and with set -u an unbound
+    ### HOME aborts the whole script -- which is exactly how this failed under wd-resctrl.service
+    ### while working perfectly when run by hand from a login shell.
+    for wd_conf in "${WSPRDAEMON_CONFIG_FILE:-}" "${HOME:-}/wsprdaemon/wsprdaemon.conf" /home/wsprdaemon/wsprdaemon/wsprdaemon.conf ; do
         [ -n "$wd_conf" ] && [ -r "$wd_conf" ] || continue
         WD_RECEIVER_COUNT=$(awk '/^declare[[:space:]]+RECEIVER_LIST/,/^\)/' "$wd_conf" 2>/dev/null \
             | grep -oE '"[A-Za-z0-9_]+' | tr -d '\042' | grep -vE '^MERG' | sort -u | wc -l)
