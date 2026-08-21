@@ -72,8 +72,28 @@ CORES_PER_RADIOD=${CORES_PER_RADIOD_MAX:-2}
 ### radiod cores sat half idle.  Hardware alone cannot tell that site apart from one running 58
 ### decoders on identical hardware, so reserve for the decoders by default and let a site that knows
 ### its decode load raise CORES_PER_RADIOD_MAX deliberately.
-MIN_DECODER_CORES=${MIN_DECODER_CORES:-$(( NCORES / 2 ))}
+### Size the decoder reservation from the number of RECEIVERS, not the number of radiods.
+### radiod instance count is a poor proxy for decode load: ON5KQ-BL runs 2 RX888s AND 6 KiwiSDRs,
+### so 8 receivers' worth of channels are decoded on a host the planner thought had "2 radiods".
+### That site ran ~150 wsprd processes where a 2-radiod site with no Kiwis runs ~58 -- same
+### hardware, nearly 3x the decode load, and nothing in the CPU topology reveals it.
+### MERG_* entries are merge pseudo-receivers and decode nothing themselves, so they are excluded.
+if [ -z "${WD_RECEIVER_COUNT:-}" ]; then
+    for wd_conf in "${WSPRDAEMON_CONFIG_FILE:-}" "$HOME/wsprdaemon/wsprdaemon.conf" /home/wsprdaemon/wsprdaemon/wsprdaemon.conf ; do
+        [ -n "$wd_conf" ] && [ -r "$wd_conf" ] || continue
+        WD_RECEIVER_COUNT=$(awk '/^declare[[:space:]]+RECEIVER_LIST/,/^\)/' "$wd_conf" 2>/dev/null \
+            | grep -oE '"[A-Za-z0-9_]+' | tr -d '\042' | grep -vE '^MERG' | sort -u | wc -l)
+        break
+    done
+fi
+WD_RECEIVER_COUNT=${WD_RECEIVER_COUNT:-0}
+(( WD_RECEIVER_COUNT < RADIOD_INSTANCES )) && WD_RECEIVER_COUNT=$RADIOD_INSTANCES
+
+### Roughly one decoder core per two receivers, bounded by what is actually left after OS + radiod.
+MIN_DECODER_CORES=${MIN_DECODER_CORES:-$(( (WD_RECEIVER_COUNT + 1) / 2 ))}
 (( MIN_DECODER_CORES < 2 )) && MIN_DECODER_CORES=2
+(( MIN_DECODER_CORES > NCORES - OS_CORES - RADIOD_INSTANCES )) && MIN_DECODER_CORES=$(( NCORES - OS_CORES - RADIOD_INSTANCES ))
+(( MIN_DECODER_CORES < 1 )) && MIN_DECODER_CORES=1
 DECODER_FLOOR_APPLIED="no"
 while (( CORES_PER_RADIOD > 1 && OS_CORES + RADIOD_INSTANCES * CORES_PER_RADIOD + MIN_DECODER_CORES > NCORES )); do
     CORES_PER_RADIOD=$(( CORES_PER_RADIOD - 1 ))
@@ -165,6 +185,7 @@ WD_RADIOD_INSTANCES=$RADIOD_INSTANCES
 WD_RADIOD_NAMES="$RADIOD_NAMES"
 WD_CORES_PER_RADIOD=$CORES_PER_RADIOD
 WD_DEGRADED="$DEGRADED"
+WD_RECEIVER_COUNT=$WD_RECEIVER_COUNT
 WD_MIN_DECODER_CORES=$MIN_DECODER_CORES
 WD_DECODER_FLOOR_APPLIED="$DECODER_FLOOR_APPLIED"
 EOF
