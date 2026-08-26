@@ -27,9 +27,15 @@ declare WD_DROPS_SSRC=${WD_DROPS_SSRC-14080}
 declare WD_DROPS_TIMEOUT=${WD_DROPS_TIMEOUT-10}
 
 ### Print the radiod status streams configured on this host, one per line ("hf.local").
+### radiod configs come in TWO layouts: a single radiod@NAME.conf file, or a
+### radiod@NAME.conf.d/ directory of fragments (ka9q's newer style, used by the udev
+### autostart).  Searching only the file form found NO streams on a conf.d host, so
+### the drops log sat header-only forever and looked like "no drops" instead of
+### "not sampling".  Search both.
 function wd_drops_status_streams()
 {
-    grep -sh -oE '^[[:space:]]*status[[:space:]]*=[[:space:]]*[^[:space:]#]+' /etc/radio/radiod@*.conf \
+    grep -sh -oE '^[[:space:]]*status[[:space:]]*=[[:space:]]*[^[:space:]#]+' \
+            /etc/radio/radiod@*.conf /etc/radio/radiod@*.conf.d/*.conf \
         | sed -E 's/.*=[[:space:]]*//' | sort -u
 }
 
