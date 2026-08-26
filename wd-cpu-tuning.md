@@ -110,3 +110,46 @@ To undo: set `WD_CPU_TUNING="no"`, remove the generated drop-ins
 `/etc/systemd/system/wsprdaemon.service.d/cpu-affinity.conf`,
 `/etc/systemd/system.conf.d/radiod-cpu-affinity.conf`), `systemctl disable --now wd-resctrl
 wd-irq-affinity`, then `systemctl daemon-reload` and restart radiod.
+
+## What a tuned host still shares: a measurement (KFS-NW, Aug 2026)
+
+Even on a fully tuned host, radiod's `fft` thread costs more CPU while the WSPR decoders are
+running. On KFS-NW (Ryzen 5 5560U, 6c/12t, 8 MB L3; radiod alone on cpus 2,3; decoders on
+0,1,4-11; 5 MB exclusive L3 for radiod; irqbalance absent, all movable IRQs and unbound
+workqueues herded to cpus 0,1) `fft` sits at 49% of CPU2 between cycles and rises to 56-59%
+during each decode burst. If nothing else may run on its core and nothing may evict its cache,
+why does it slow down?
+
+Because the L3 partition protects cache **capacity**, and capacity is not what the burst takes
+away. Sampled at 3-second intervals through a decode burst, using the MBM counters that come
+free with the resctrl groups (`mon_data/mon_L3_00/mbm_total_bytes`):
+
+```
+phase          fft %CPU2   CPU2 clock   radiod mem BW   decoders mem BW
+quiet             49%       3137 MHz      5.75 GB/s       0.6-0.9 GB/s
+decode burst    56-59%      3125 MHz      5.7  GB/s       5.4-6.9 GB/s
+```
+
+Three things fall out of that table:
+
+1. **radiod streams ~5.75 GB/s from DRAM all the time.** Every RX888 sample block is new data;
+   it cannot be in any cache the first time `fft` touches it. Those are compulsory misses and no
+   amount of L3 prevents them. The partition earns its keep on the *reused* state -- twiddle
+   factors, filter overlap, channel buffers -- which is why the burst costs 10 points and not a
+   meltdown.
+2. **The decoders' burst doubles the load on the shared memory controller.** Their traffic jumps
+   from under 1 GB/s to ~7 GB/s (the small 3 MB partition makes them miss more, by design).
+   Queue latency at the DRAM controller / data fabric rises for every requester, radiod
+   included. Each streaming load stalls longer, and a thread that stalls longer per access needs
+   more busy cycles for the same real-time sample flow. Same work, slower memory, more %CPU.
+3. **It is not frequency.** CPU2 held ~3.13 GHz flat through the burst, so boost droop --
+   the usual suspect on a 15 W mobile part -- contributes nothing here.
+
+The %CPU rise is the *visible price* of memory contention, not a fault. The number that decides
+whether it matters is the drop counter, and it stays 0 with ~40% headroom at burst peak.
+
+The one remaining lever would be AMD MBA (the `MB:` line in the resctrl schemata) to cap the
+decoders' DRAM bandwidth. Testing at KX4AZ on a similar processor showed MBA to be a weak
+control on this silicon: even aggressive settings reduced peak memory bandwidth by at most
+~50%. Treat it as the last resort, not the next step -- and remember the decoders finishing
+fast also gets them off the memory bus sooner.
