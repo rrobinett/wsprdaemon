@@ -46,15 +46,28 @@ NCORES=${#CORE_ORDER[@]}
 SMT=$(( NCPUS / NCORES ))   # both counts come from the SAME lscpu output
 
 # ---- 2. which radiod instances? (names SORTED so index assignment is stable) ----
-if [ -z "$RADIOD_NAMES" ]; then
-    RADIOD_NAMES=$(systemctl list-units 'radiod@*.service' --all --no-legend 2>/dev/null \
-                   | grep -oE 'radiod@[^ .]+' | sed 's/radiod@//' | sort -u | tr '\n' ' ')
+# radiod runs as 'radiod@NAME.service' when systemd manages it directly, but ka9q-radio's
+# udev autostart (Phil, Aug 2026) runs the SAME radiod as 'ka9q-radio@VVVV-PPPP-SERIAL.service'
+# when the SDR enumerates.  Detect both, and carry the FULL unit name: a drop-in written for
+# radiod@X is silently inert on a host whose radiod really runs under ka9q-radio@Y (KFS-NW).
+# A RADIOD_NAMES override still means radiod@NAME; RADIOD_UNITS overrides with full unit names.
+RADIOD_UNITS="${RADIOD_UNITS:-}"
+if [ -z "$RADIOD_UNITS" ]; then
+    if [ -n "$RADIOD_NAMES" ]; then
+        for _n in $RADIOD_NAMES; do RADIOD_UNITS="${RADIOD_UNITS}radiod@${_n}.service "; done
+    else
+        RADIOD_UNITS=$(systemctl list-units 'radiod@*.service' 'ka9q-radio@*.service' --all --no-legend 2>/dev/null \
+                       | grep -oE '(radiod|ka9q-radio)@[^ ]+\.service' | sort -u | tr '\n' ' ')
+    fi
 fi
-RADIOD_NAMES=$(echo $RADIOD_NAMES)
-read -r -a _names <<< "$RADIOD_NAMES"
+RADIOD_UNITS=$(echo $RADIOD_UNITS)
+read -r -a _units <<< "$RADIOD_UNITS"
+_names=()
+for _u in "${_units[@]}"; do _n="${_u#*@}"; _names+=("${_n%.service}"); done
+RADIOD_NAMES="${_names[*]-}"
 if [ -z "$RADIOD_INSTANCES" ]; then
     RADIOD_INSTANCES=${#_names[@]}
-    [ "$RADIOD_INSTANCES" -eq 0 ] && { RADIOD_INSTANCES=1; _names=("unknown"); RADIOD_NAMES="unknown"; }
+    [ "$RADIOD_INSTANCES" -eq 0 ] && { RADIOD_INSTANCES=1; _names=("unknown"); _units=(""); RADIOD_NAMES="unknown"; RADIOD_UNITS=""; }
 fi
 
 # ---- 3. allocate physical cores ----
@@ -194,6 +207,7 @@ WD_L3_KB_PER_WAY=$KB_PER_WAY
 WD_OS_CPUS="$os_list"
 WD_RADIOD_INSTANCES=$RADIOD_INSTANCES
 WD_RADIOD_NAMES="$RADIOD_NAMES"
+WD_RADIOD_UNITS="$RADIOD_UNITS"
 WD_CORES_PER_RADIOD=$CORES_PER_RADIOD
 WD_DEGRADED="$DEGRADED"
 WD_RECEIVER_COUNT=$WD_RECEIVER_COUNT
@@ -202,6 +216,7 @@ WD_DECODER_FLOOR_APPLIED="$DECODER_FLOOR_APPLIED"
 EOF
 for i in $(seq 0 $((RADIOD_INSTANCES-1))); do
     echo "WD_RADIOD${i}_NAME=\"${_names[$i]:-}\""
+    echo "WD_RADIOD${i}_UNIT=\"${_units[$i]:-}\""
     echo "WD_RADIOD${i}_CPUS=\"${RADIOD_LISTS[$i]}\""
     echo "WD_RADIOD${i}_FFT_CPU=\"${RADIOD_FFT[$i]}\""
     echo "WD_RADIOD${i}_RX888_CPU=\"${RADIOD_RX[$i]}\""

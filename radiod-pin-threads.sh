@@ -36,11 +36,15 @@ for i in $(seq 0 $(( ${WD_RADIOD_INSTANCES:-0} - 1 ))); do
 done
 [ -n "$idx" ] || { log "instance not present in plan (plan has: ${WD_RADIOD_NAMES:-none}); leaving unmanaged"; exit 0; }
 eval "FFT_CPU=\$WD_RADIOD${idx}_FFT_CPU; RX_CPU=\$WD_RADIOD${idx}_RX888_CPU; OTHER_CPUS=\$WD_RADIOD${idx}_OTHER_CPUS"
+# The plan carries the full unit name: this same radiod runs as 'ka9q-radio@$inst' when
+# ka9q-radio's udev autostart launched it.  Fall back to radiod@ for an older installed plan.
+eval "unit=\${WD_RADIOD${idx}_UNIT:-}"
+[ -n "$unit" ] || unit="radiod@$inst.service"
 log "plan: fft->CPU$FFT_CPU  proc_rx888->CPU$RX_CPU  others->CPUs $OTHER_CPUS  (${WD_TOPO_SIBLING_STYLE:-?} SMT)"
 
 pid=""
 for _ in $(seq 1 30); do
-    pid=$(systemctl show "radiod@$inst" -p MainPID --value 2>/dev/null)
+    pid=$(systemctl show "$unit" -p MainPID --value 2>/dev/null)
     [ -n "$pid" ] && [ "$pid" != "0" ] && [ -d "/proc/$pid/task" ] && break
     [ "$DRY" = "1" ] && break
     sleep 1

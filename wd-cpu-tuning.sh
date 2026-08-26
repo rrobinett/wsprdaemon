@@ -93,21 +93,30 @@ function wd_cpu_tuning_report()
     local -i mismatches=0
     local i name cpus actual
     for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
-        eval "name=\${WD_RADIOD${i}_NAME}; cpus=\${WD_RADIOD${i}_CPUS}"
+        eval "name=\${WD_RADIOD${i}_NAME}; cpus=\${WD_RADIOD${i}_CPUS}; unit=\${WD_RADIOD${i}_UNIT:-}"
         [[ -n "${name}" ]] || continue
-        actual=$(systemctl show "radiod@${name}" -p CPUAffinity --value 2>/dev/null)
+        ### The plan carries the FULL unit name because radiod is not always 'radiod@NAME':
+        ### ka9q-radio's udev autostart runs it as 'ka9q-radio@VVVV-PPPP-SERIAL'.  An older
+        ### installed plan that predates WD_RADIODn_UNIT emits no unit, so fall back.
+        [[ -z "${unit}" && "${name}" != "unknown" ]] && unit="radiod@${name}.service"
+        if [[ -z "${unit}" ]]; then
+            wd_cpu_tuning_log 1 "CPU tuning: found no radiod@ or ka9q-radio@ systemd unit; plan wants radiod on ${cpus} but there is no unit to pin"
+            (( ++mismatches ))
+            continue
+        fi
+        actual=$(systemctl show "${unit}" -p CPUAffinity --value 2>/dev/null)
         ### Compare the VALUES, not just "is it set".  The previous version only counted a mismatch
         ### when CPUAffinity was empty, so a host running radiod on entirely the wrong cores -- core 0
         ### included -- was reported as "matches the plan".  The report lied on exactly the machines
         ### that needed it.  Normalise first: systemd reports "2-5" where the plan says "2,3,4,5".
         if [[ -z "${actual}" ]]; then
-            wd_cpu_tuning_log 1 "CPU tuning: radiod@${name} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
+            wd_cpu_tuning_log 1 "CPU tuning: ${unit} has NO CPUAffinity set; plan wants ${cpus} (fft on CPU$(eval echo \${WD_RADIOD${i}_FFT_CPU}), proc_rx888 on CPU$(eval echo \${WD_RADIOD${i}_RX888_CPU}))"
             (( ++mismatches ))
         elif [[ "$(wd_cpu_list_normalise "${actual}")" != "$(wd_cpu_list_normalise "${cpus}")" ]]; then
-            wd_cpu_tuning_log 1 "CPU tuning: radiod@${name} is on CPUs ${actual} but the plan wants ${cpus}"
+            wd_cpu_tuning_log 1 "CPU tuning: ${unit} is on CPUs ${actual} but the plan wants ${cpus}"
             (( ++mismatches ))
         else
-            wd_cpu_tuning_log 2 "CPU tuning: radiod@${name} CPUAffinity=${actual} matches the plan"
+            wd_cpu_tuning_log 2 "CPU tuning: ${unit} CPUAffinity=${actual} matches the plan"
         fi
     done
     if [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
