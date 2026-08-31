@@ -35,7 +35,11 @@ radiod_cpus=""
 for i in $(seq 0 $(( ${WD_RADIOD_INSTANCES:-0} - 1 ))); do
     eval "c=\$WD_RADIOD${i}_CPUS"; radiod_cpus="${radiod_cpus:+$radiod_cpus,}$c"
 done
-other_cpus="${WD_OS_CPUS},${WD_DECODER_CPUS}"
+### WD_DECODER_CPUS already contains the OS cpus unless DECODERS_USE_OS_CORE=no, so a
+### plain concatenation printed them twice ("0,6,0,6,3,9,..."), which reads like a bug in
+### the plan.  Only this REPORT was affected; the writes below use the plan lists directly.
+other_cpus=$(printf '%s\n%s\n' "${WD_OS_CPUS}" "${WD_DECODER_CPUS}" \
+            | tr ',' '\n' | grep -v '^$' | sort -n -u | paste -sd, -)
 
 echo "wd-resctrl: radiod cpus=$radiod_cpus mask=$WD_L3_RADIOD_MASK ; others cpus=$other_cpus mask=$WD_L3_OTHER_MASK"
 # masks BEFORE cpus, to avoid a transient window where a group has the full mask

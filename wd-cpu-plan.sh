@@ -175,12 +175,23 @@ dec_list=$(join "${dec[@]}")
 # ---- 4. L3 / CAT masks from the real cache geometry ----
 L3_KB=$(lscpu -B 2>/dev/null | awk -F: '/L3 cache/{gsub(/ /,"",$2); print int($2/1024)}')
 CBM=$(cat /sys/fs/resctrl/info/L3/cbm_mask 2>/dev/null || echo "")
+### Having an L3 and being able to PARTITION it are separate facts.  Intel gates RDT/CAT to
+### Xeon, so a consumer part reports its ways in sysfs with no way to divide them -- HPi7's
+### i7-8700 advertises 16 ways and has no rdt_a/cat_l3 flag and no /sys/fs/resctrl at all.
+### Reading ways_of_associativity alone therefore emitted masks for a cache that cannot be
+### partitioned, and wd-resctrl only discovered it at the mount, several steps too late.
 if [ -n "$CBM" ]; then
+    L3_CAT="yes"                    ### resctrl is mounted: the mask IS the usable geometry
     WAYS=$(( $(echo "obase=2; ibase=16; ${CBM^^}" | bc | tr -cd '1' | wc -c) ))
 else
     WAYS=$(cat /sys/devices/system/cpu/cpu0/cache/index3/ways_of_associativity 2>/dev/null || echo 0)
+    if grep -qE '^flags[[:space:]]*:.*[[:space:]](cat_l3|rdt_a)([[:space:]]|$)' /proc/cpuinfo 2>/dev/null ; then
+        L3_CAT="yes"                ### CAT present, resctrl simply not mounted yet
+    else
+        L3_CAT="no"                 ### no CAT on this CPU: report the geometry, emit no masks
+    fi
 fi
-if [ "$WAYS" -gt 0 ]; then
+if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ]; then
     rw=$(awk -v w="$WAYS" -v f="$RADIOD_L3_FRACTION" 'BEGIN{printf "%d", int(w*f+0.5)}')
     [ $(( WAYS - rw )) -lt "$MIN_DECODER_WAYS" ] && rw=$(( WAYS - MIN_DECODER_WAYS ))
     [ "$rw" -lt 1 ] && rw=1
@@ -202,6 +213,7 @@ WD_TOPO_SIBLING_STYLE="$( if [ "$SMT" -gt 1 ]; then a=$(cpus_of 0); b=${a%%,*}; 
 WD_TOPO_CORE_MAP="$(for k in "${CORE_ORDER[@]}"; do printf '%s=[%s] ' "$k" "${CORE_CPUS[$k]}"; done)"
 WD_L3_KB=${L3_KB:-unknown}
 WD_L3_WAYS=$WAYS
+WD_L3_CAT="$L3_CAT"
 WD_L3_KB_PER_WAY=$KB_PER_WAY
 # --- plan ---
 WD_OS_CPUS="$os_list"
@@ -223,5 +235,10 @@ for i in $(seq 0 $((RADIOD_INSTANCES-1))); do
     echo "WD_RADIOD${i}_OTHER_CPUS=\"${RADIOD_OTHER[$i]}\""
 done
 echo "WD_DECODER_CPUS=\"$dec_list\""
-echo "WD_L3_RADIOD_MASK=\"$RADIOD_MASK\"   # $rw ways = $(( rw * KB_PER_WAY / 1024 )) MB"
-echo "WD_L3_OTHER_MASK=\"$OTHER_MASK\"   # $(( WAYS - rw )) ways = $(( (WAYS-rw) * KB_PER_WAY / 1024 )) MB"
+if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ]; then
+    echo "WD_L3_RADIOD_MASK=\"$RADIOD_MASK\"   # $rw ways = $(( rw * KB_PER_WAY / 1024 )) MB"
+    echo "WD_L3_OTHER_MASK=\"$OTHER_MASK\"   # $(( WAYS - rw )) ways = $(( (WAYS-rw) * KB_PER_WAY / 1024 )) MB"
+else
+    echo "WD_L3_RADIOD_MASK=\"\"   # no CAT on this CPU: the L3 cannot be partitioned"
+    echo "WD_L3_OTHER_MASK=\"\"   # no CAT on this CPU: the L3 cannot be partitioned"
+fi
