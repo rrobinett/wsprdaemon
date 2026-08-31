@@ -29,8 +29,14 @@ RADIOD_NAMES="${RADIOD_NAMES:-}"                # override; else auto-detect (so
 RADIOD_L3_FRACTION="${RADIOD_L3_FRACTION:-0.62}" # ~5/8; tune per site
 MIN_DECODER_WAYS="${MIN_DECODER_WAYS:-4}"
 ### Clock cap for every cpu that is NOT radiod's.  1.4 GHz is the efficient point on the
-### Zen3 mobile parts most WD sites run; radiod always gets the hardware maximum instead.
+### Zen3 mobile parts most WD sites run.
 FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"
+### radiod's cores default to the hardware maximum.  Override it on a thermally constrained
+### host: at KX4AZ-T, taking the two fft cores to 4.44 GHz cut the busiest fft from 86% to 52%
+### of a core but pushed the package from 78 C to 84.8 C against a 94.8 C limit, on a chassis
+### whose fan cannot be controlled from Linux at all.  Trading a little of that clock back
+### keeps most of the margin for meaningfully less heat.
+FREQ_RADIOD_KHZ="${FREQ_RADIOD_KHZ:-}"
 
 # ---- 1. group logical CPUs by physical core (socket-aware) ----
 declare -A CORE_CPUS
@@ -216,7 +222,13 @@ if [ -r "$FREQ_DIR/cpuinfo_max_freq" ]; then
     FREQ_AVAILABLE="yes"
     FREQ_HW_MAX=$(cat "$FREQ_DIR/cpuinfo_max_freq")
     FREQ_HW_MIN=$(cat "$FREQ_DIR/cpuinfo_min_freq" 2>/dev/null || echo 0)
-    FREQ_RADIOD=${FREQ_HW_MAX}
+    if [ -n "${FREQ_RADIOD_KHZ}" ] && [ "${FREQ_RADIOD_KHZ}" -gt 0 ] 2>/dev/null; then
+        FREQ_RADIOD=${FREQ_RADIOD_KHZ}
+        [ "${FREQ_RADIOD}" -gt "${FREQ_HW_MAX}" ] && FREQ_RADIOD=${FREQ_HW_MAX}
+        [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_RADIOD}" -lt "${FREQ_HW_MIN}" ] && FREQ_RADIOD=${FREQ_HW_MIN}
+    else
+        FREQ_RADIOD=${FREQ_HW_MAX}
+    fi
     FREQ_OTHER=${FREQ_OTHER_KHZ}
     [ "${FREQ_OTHER}" -gt "${FREQ_HW_MAX}" ] && FREQ_OTHER=${FREQ_HW_MAX}
     [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_OTHER}" -lt "${FREQ_HW_MIN}" ] && FREQ_OTHER=${FREQ_HW_MIN}
