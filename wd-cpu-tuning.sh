@@ -187,6 +187,44 @@ WantedBy=multi-user.target"
 }
 
 ### Apply the layout.  Only ever called when WD_CPU_TUNING="yes".
+### When WD_CPU_TUNING="yes", wd-cpu-plan.sh owns CPU placement and ka9q-utils.sh deliberately
+### ignores RADIOD_CPU_CORES / WD_CPU_CORES.  Left uncommented they are dead settings that read
+### as operative: HPi7 carried RADIOD_CPU_CORES="5,11" in its conf while radiod actually ran on
+### cpus 1,2,7,8, and the file was the first place its operator (and we) looked.  A config that
+### contradicts the running system is worse than no config, so comment them out and say why.
+### Idempotent -- already-commented lines do not match -- and the original is backed up first.
+function wd_cpu_tuning_retire_manual_cores()
+{
+    local conf=${WSPRDAEMON_CONFIG_FILE}
+    [[ -f ${conf} ]] || return 0
+
+    local -a found=()
+    local var
+    for var in RADIOD_CPU_CORES WD_CPU_CORES ; do
+        grep -qE "^[[:space:]]*${var}=" "${conf}" && found+=("${var}")
+    done
+    (( ${#found[@]} )) || return 0        ### nothing active: the usual case after the first run
+
+    if [[ ! -w ${conf} ]]; then
+        wd_cpu_tuning_log 1 "CPU tuning: ${found[*]} in ${conf} are ignored while WD_CPU_TUNING=yes, but the file is not writable, so they are left as they are"
+        return 0
+    fi
+
+    local stamp; stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    if ! cp -a "${conf}" "${conf}.bak-cpu-tuning-${stamp}" ; then
+        wd_cpu_tuning_log 1 "ERROR: CPU tuning: could not back up ${conf}, so it was left unedited"
+        return 1
+    fi
+
+    local note="### Commented out by WD CPU tuning ${stamp}: WD_CPU_TUNING=\"yes\" means wd-cpu-plan.sh computes"
+    local note2="### the CPU layout and this setting is IGNORED.  Restore it only if you set WD_CPU_TUNING=\"no\"."
+    for var in "${found[@]}" ; do
+        sed -i -E "s|^([[:space:]]*)(${var}=.*)$|\1${note}\n\1${note2}\n\1#\2|" "${conf}"
+    done
+    wd_cpu_tuning_log 1 "CPU tuning: commented out ${found[*]} in ${conf} -- the planner owns placement now (backup: ${conf}.bak-cpu-tuning-${stamp})"
+    return 0
+}
+
 function wd_cpu_tuning_apply()
 {
     wd_cpu_tuning_log 1 "CPU tuning: WD_CPU_TUNING=yes, so applying the planned layout"
@@ -198,6 +236,10 @@ function wd_cpu_tuning_apply()
     ### oneshot units' RemainAfterExit state and leave them reporting "inactive" after we start them.
     out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
     wd_cpu_tuning_log 1 "CPU tuning: systemd affinity:\n${out}"
+
+    ### Only now that the planner's layout is actually written: retire any hand-set core
+    ### assignments still sitting active in wsprdaemon.conf, so the file cannot claim otherwise.
+    wd_cpu_tuning_retire_manual_cores
 
     ### Drive the L3 partition and IRQ pinning through their UNITS rather than by running the scripts
     ### directly.  Same code path systemd uses at boot, and it leaves the units genuinely active
