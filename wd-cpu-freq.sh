@@ -101,7 +101,9 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
     fi
 done
 
-printf 'wd-cpu-freq: radiod cpus %s -> %d kHz (hardware max), %d other cpu(s) -> %d kHz'"\n" \
-       "$(echo $radiod_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$n_capped" "$OTHER_KHZ"
+### say which it is, so a site running FREQ_RADIOD_KHZ is not misreported as at the maximum
+if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by FREQ_RADIOD_KHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
+printf 'wd-cpu-freq: radiod cpus %s -> %d kHz (%s), %d other cpu(s) -> %d kHz'"\n" \
+       "$(echo $radiod_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
 [ "$n_skipped" -gt 0 ] && echo "wd-cpu-freq: $n_skipped cpu(s) had no writable scaling_max_freq and were left alone"
 exit 0
