@@ -429,8 +429,16 @@ function wd-set-cpu-speed() {
 }
 
 CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
+### With WD_CPU_TUNING="yes" the clock policy comes from wd-cpu-plan.sh and is applied by
+### wd-cpu-freq.sh: radiod's cores at the hardware maximum, every other core capped.  This
+### hand-written per-core list must not fight it -- and note its unset default caps EVERY core
+### at 3.2 GHz, which on a Ryzen 7 5825U silently hides 0.86 GHz of headroom from fft.
+if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+    wd_logger 2 "WD_CPU_TUNING=yes, so wd-cpu-freq.sh sets the CPU clocks from the plan; not applying CPU_CORE_KHZ"
+else
 #(( ++verbosity ))
 wd-set-cpu-speed "${CPU_CORE_KHZ}"
+fi
 #(( --verbosity ))
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions

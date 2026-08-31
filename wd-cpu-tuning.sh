@@ -17,7 +17,7 @@
 declare WD_CPU_TUNING_LOG=${WD_CPU_TUNING_LOG-/var/log/wsprdaemon/cpu-tuning.log}
 declare WD_CPU_TUNING=${WD_CPU_TUNING-no}                     ### "yes" => apply.  Anything else => report only.
 declare WD_CPU_TUNING_SBIN=${WD_CPU_TUNING_SBIN-/usr/local/sbin}
-declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-apply.sh"
+declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-freq.sh wd-cpu-apply.sh"
 
 ### Log a line to BOTH the normal WD log and ${WD_CPU_TUNING_LOG}.
 ### This report runs while ka9q-utils.sh is being sourced, and at that point WD_LOGFILE is not yet
@@ -88,6 +88,11 @@ function wd_cpu_tuning_report()
 
     wd_cpu_tuning_log 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3, CAT ${WD_L3_CAT:-unknown}"
     wd_cpu_tuning_log 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
+    if [[ "${WD_FREQ_AVAILABLE:-no}" == "yes" ]]; then
+        wd_cpu_tuning_log 1 "CPU tuning: planned clocks => radiod $(( ${WD_FREQ_RADIOD_KHZ:-0} / 1000 )) MHz (hardware max), other cores $(( ${WD_FREQ_OTHER_KHZ:-0} / 1000 )) MHz"
+    else
+        wd_cpu_tuning_log 1 "CPU tuning: no cpufreq driver on this host, so the clock cannot be managed (BIOS EIST/SpeedStep disabled?)"
+    fi
 
     ### Compare the plan against what is actually in effect
     local -i mismatches=0
@@ -157,10 +162,11 @@ function wd_cpu_tuning_install_units()
 {
     local unit desc script path content
     local -i changed=0
-    for unit in wd-resctrl wd-irq-affinity ; do
+    for unit in wd-resctrl wd-irq-affinity wd-cpu-freq ; do
         case ${unit} in
             wd-resctrl)      desc="L3 CAT partition for radiod vs the WD decoders" ; script="wd-resctrl-setup.sh" ;;
             wd-irq-affinity) desc="Pin USB (xhci) IRQs off the radiod and decoder cores" ; script="wd-irq-affinity.sh" ;;
+            wd-cpu-freq)     desc="CPU clock policy: radiod at hardware max, other cores capped" ; script="wd-cpu-freq.sh" ;;
         esac
         path="/etc/systemd/system/${unit}.service"
         content="[Unit]
@@ -181,14 +187,16 @@ WantedBy=multi-user.target"
         fi
     done
     (( changed )) && sudo systemctl daemon-reload
-    sudo systemctl enable wd-resctrl wd-irq-affinity >/dev/null 2>&1
+    sudo systemctl enable wd-resctrl wd-irq-affinity wd-cpu-freq >/dev/null 2>&1
     wd_cpu_tuning_log 1 "CPU tuning: boot-time units enabled: wd-resctrl=$(systemctl is-enabled wd-resctrl 2>/dev/null) wd-irq-affinity=$(systemctl is-enabled wd-irq-affinity 2>/dev/null)"
     return 0
 }
 
 ### Apply the layout.  Only ever called when WD_CPU_TUNING="yes".
 ### When WD_CPU_TUNING="yes", wd-cpu-plan.sh owns CPU placement and ka9q-utils.sh deliberately
-### ignores RADIOD_CPU_CORES / WD_CPU_CORES.  Left uncommented they are dead settings that read
+### ignores RADIOD_CPU_CORES / WD_CPU_CORES, and wd-cpu-freq.sh supersedes CPU_CORE_KHZ
+### (whose hand-written core:khz list was written for a layout we no longer use, so it is
+### always wrong once the planner moves the cores).  Left uncommented they read
 ### as operative: HPi7 carried RADIOD_CPU_CORES="5,11" in its conf while radiod actually ran on
 ### cpus 1,2,7,8, and the file was the first place its operator (and we) looked.  A config that
 ### contradicts the running system is worse than no config, so comment them out and say why.
@@ -200,7 +208,7 @@ function wd_cpu_tuning_retire_manual_cores()
 
     local -a found=()
     local var
-    for var in RADIOD_CPU_CORES WD_CPU_CORES ; do
+    for var in RADIOD_CPU_CORES WD_CPU_CORES CPU_CORE_KHZ ; do
         grep -qE "^[[:space:]]*${var}=" "${conf}" && found+=("${var}")
     done
     (( ${#found[@]} )) || return 0        ### nothing active: the usual case after the first run
@@ -216,8 +224,8 @@ function wd_cpu_tuning_retire_manual_cores()
         return 1
     fi
 
-    local note="### Commented out by WD CPU tuning ${stamp}: WD_CPU_TUNING=\"yes\" means wd-cpu-plan.sh computes"
-    local note2="### the CPU layout and this setting is IGNORED.  Restore it only if you set WD_CPU_TUNING=\"no\"."
+    local note="### Commented out by WD CPU tuning ${stamp}: WD_CPU_TUNING=\"yes\" means wd-cpu-plan.sh decides"
+    local note2="### the CPU layout AND the clock policy, so this setting is IGNORED.  Restore it only if you set WD_CPU_TUNING=\"no\"."
     for var in "${found[@]}" ; do
         sed -i -E "s|^([[:space:]]*)(${var}=.*)$|\1${note}\n\1${note2}\n\1#\2|" "${conf}"
     done
@@ -245,7 +253,7 @@ function wd_cpu_tuning_apply()
     ### directly.  Same code path systemd uses at boot, and it leaves the units genuinely active
     ### instead of enabled-but-inactive, which reads as broken in 'systemctl is-active'.
     local unit
-    for unit in wd-resctrl wd-irq-affinity ; do
+    for unit in wd-resctrl wd-irq-affinity wd-cpu-freq ; do
         if sudo systemctl restart "${unit}" 2>/dev/null ; then
             wd_cpu_tuning_log 1 "CPU tuning: ${unit} => $(systemctl is-active ${unit} 2>/dev/null)/$(systemctl is-enabled ${unit} 2>/dev/null)"
         else

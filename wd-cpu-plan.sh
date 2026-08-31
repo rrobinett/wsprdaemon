@@ -28,6 +28,9 @@ RADIOD_INSTANCES="${RADIOD_INSTANCES:-}"        # override; else auto-detect
 RADIOD_NAMES="${RADIOD_NAMES:-}"                # override; else auto-detect (sorted)
 RADIOD_L3_FRACTION="${RADIOD_L3_FRACTION:-0.62}" # ~5/8; tune per site
 MIN_DECODER_WAYS="${MIN_DECODER_WAYS:-4}"
+### Clock cap for every cpu that is NOT radiod's.  1.4 GHz is the efficient point on the
+### Zen3 mobile parts most WD sites run; radiod always gets the hardware maximum instead.
+FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"
 
 # ---- 1. group logical CPUs by physical core (socket-aware) ----
 declare -A CORE_CPUS
@@ -202,6 +205,26 @@ else
     RADIOD_MASK=""; OTHER_MASK=""; rw=0; KB_PER_WAY=0
 fi
 
+# ---- 4b. CPU clock policy ----
+### fft rises FASTER than linearly with the RX888 sample rate: measured on one Ryzen 7 5825U
+### it needs 0.54 Gcycle/s at 64.8 Msps but 2.75 Gcycle/s at 129.6 Msps, which is 86% of a
+### 3.19 GHz core.  A blanket cap would starve it, so radiod's cores get the hardware maximum.
+### The decoders finish their burst ~35 s into each 120 s cycle, so capping them spends slack
+### we have and buys less DRAM/L3 contention against fft, less power and cooler peaks.
+FREQ_DIR=/sys/devices/system/cpu/cpu0/cpufreq
+if [ -r "$FREQ_DIR/cpuinfo_max_freq" ]; then
+    FREQ_AVAILABLE="yes"
+    FREQ_HW_MAX=$(cat "$FREQ_DIR/cpuinfo_max_freq")
+    FREQ_HW_MIN=$(cat "$FREQ_DIR/cpuinfo_min_freq" 2>/dev/null || echo 0)
+    FREQ_RADIOD=${FREQ_HW_MAX}
+    FREQ_OTHER=${FREQ_OTHER_KHZ}
+    [ "${FREQ_OTHER}" -gt "${FREQ_HW_MAX}" ] && FREQ_OTHER=${FREQ_HW_MAX}
+    [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_OTHER}" -lt "${FREQ_HW_MIN}" ] && FREQ_OTHER=${FREQ_HW_MIN}
+else
+    ### No cpufreq driver at all: BIOS EIST/SpeedStep disabled, or a VM that hides the MSRs.
+    FREQ_AVAILABLE="no"; FREQ_HW_MAX=0; FREQ_HW_MIN=0; FREQ_RADIOD=0; FREQ_OTHER=0
+fi
+
 # ---- 5. emit ----
 cat <<EOF
 WD_PLAN_OK=yes
@@ -214,6 +237,11 @@ WD_TOPO_CORE_MAP="$(for k in "${CORE_ORDER[@]}"; do printf '%s=[%s] ' "$k" "${CO
 WD_L3_KB=${L3_KB:-unknown}
 WD_L3_WAYS=$WAYS
 WD_L3_CAT="$L3_CAT"
+WD_FREQ_AVAILABLE="$FREQ_AVAILABLE"
+WD_FREQ_HW_MAX_KHZ=$FREQ_HW_MAX
+WD_FREQ_HW_MIN_KHZ=$FREQ_HW_MIN
+WD_FREQ_RADIOD_KHZ=$FREQ_RADIOD
+WD_FREQ_OTHER_KHZ=$FREQ_OTHER
 WD_L3_KB_PER_WAY=$KB_PER_WAY
 # --- plan ---
 WD_OS_CPUS="$os_list"
