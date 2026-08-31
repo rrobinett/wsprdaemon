@@ -88,6 +88,15 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
         n_fast=$((n_fast+1))
     else
         w "$OTHER_KHZ" "$maxf"
+        ### The cap is inert under the performance governor -- that governor drives the core to
+        ### its top P-state regardless of scaling_max_freq (measured at KX4AZ-T: capped cores
+        ### still ran 3.5 GHz).  Move them to powersave so the cap has any effect at all.
+        ### radiod's cores are untouched by this; they are handled above.
+        if [ "$(cat "$gov" 2>/dev/null)" = "performance" ] && \
+           grep -q powersave "$d/scaling_available_governors" 2>/dev/null && \
+           { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
+            w "powersave" "$gov"
+        fi
         n_capped=$((n_capped+1))
     fi
 done
