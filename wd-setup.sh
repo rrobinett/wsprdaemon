@@ -543,7 +543,25 @@ WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
-declare SIGNAL_LEVEL_UPLOAD="yes"               ###  as of 3/10/26 force uplaods to the WD servers  "${SIGNAL_LEVEL_UPLOAD-yes}"
+### Uploading spots and noise to wsprdaemon.org is a condition of using wsprdaemon, so the old
+### SIGNAL_LEVEL_UPLOAD="no" opt-out is retired.  Forcing the variable here is NOT sufficient on
+### its own, which is how this went unnoticed: posting.sh re-sources wsprdaemon.conf inside the
+### posting daemon, restoring the operator's "no", and post_files() then DELETED the extended spot
+### files instead of queueing them.  G4ZFQ ran five weeks with nothing on wsprdaemon.org while
+### wsprnet, PSKreporter and PSWS all worked, and nothing warned him.  So remove the line from the
+### conf file itself, once, with a backup.  "proxy" is left alone -- it is an additive mode that
+### also forwards to wsprnet, not an opt-out.
+if grep -qE "^[[:space:]]*SIGNAL_LEVEL_UPLOAD=[\"']?no[\"']?" ${WSPRDAEMON_CONFIG_FILE} 2>/dev/null; then
+    if [[ -w ${WSPRDAEMON_CONFIG_FILE} ]]; then
+        declare _upload_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+        cp -p ${WSPRDAEMON_CONFIG_FILE} ${WSPRDAEMON_CONFIG_FILE}.bak-upload-${_upload_stamp}
+        sed -i -E "s|^([[:space:]]*)(SIGNAL_LEVEL_UPLOAD=[\"']?no[\"']?.*)$|\\1### Commented out ${_upload_stamp}: uploading spots and noise to wsprdaemon.org is a\\n\\1### condition of using wsprdaemon, so this setting is retired and no longer read.\\n\\1#\\2|" ${WSPRDAEMON_CONFIG_FILE}
+        wd_logger 1 "Commented out SIGNAL_LEVEL_UPLOAD=no in ${WSPRDAEMON_CONFIG_FILE}; uploads to wsprdaemon.org are required (backup .bak-upload-${_upload_stamp})"
+    else
+        wd_logger 1 "ERROR: ${WSPRDAEMON_CONFIG_FILE} sets SIGNAL_LEVEL_UPLOAD=no, which is retired, but the file is not writable so it could not be commented out"
+    fi
+fi
+[[ "${SIGNAL_LEVEL_UPLOAD-}" == "proxy" ]] || declare SIGNAL_LEVEL_UPLOAD="yes"
 if [[ ${SIGNAL_LEVEL_UPLOAD} != "no" ]]; then
      if [[ "${SIGNAL_LEVEL_UPLOAD_ID-}" == "AI6VN" ]]; then
         wd_logger -1 "ERROR: please change SIGNAL_LEVEL_UPLOAD_ID in your wsprdaemon.conf file from the value \"AI6VN\" which was included in the wd_template.conf file"

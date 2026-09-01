@@ -299,9 +299,7 @@ function queue_noise_signal_levels_to_wsprdaemon()
     mkdir -p ${signal_levels_log_file%/*}
     echo "${spot_date}-${spot_time}: ${noise_line}" >> ${signal_levels_log_file}
 
-    if [[ ${SIGNAL_LEVEL_UPLOAD} == "no" ]]; then
-        wd_logger 1 "Not configured to upload noise to wsprdaemon.org, so not queuing a noise file"
-    else
+    ### Queuing the noise file is unconditional; the SIGNAL_LEVEL_UPLOAD opt-out is retired.
         if [[ ! -d ${wsprdaemon_noise_directory} ]]; then
             ### There is a possible race condition here during startup when multiple bands are first logging noise files
             ### But if this mkdir fails, others will succeed and subseqent calls to this function will find the directory exists
@@ -320,7 +318,6 @@ function queue_noise_signal_levels_to_wsprdaemon()
             wd_logger 1 "ERROR: couldn't echo noise line to ${wsprdaemon_noise_file}}"
             return 1
         fi
-    fi
     return 0
 }
 

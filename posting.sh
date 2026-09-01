@@ -330,11 +330,8 @@ function post_files()
         fi
     fi
 
-    if [[ ${SIGNAL_LEVEL_UPLOAD-yes} == "no" ]]; then
-        wd_logger 1 "We are not configured to uplaod spots and noise to wsprdaemon.org, so flush the extended spots file(s): '${spot_file_list[*]}'"
-        wd_rm ${spot_file_list[@]}
-        return 0
-    fi
+    ### There is deliberately no opt-out here any more.  This block used to delete the extended
+    ### spot files when SIGNAL_LEVEL_UPLOAD was "no" -- silently discarding the operator's data.
 
     ### We are configured to upload extended spots and noise files to wsprdaemon.org and/or configured for proxy uploads
     ### If confgiured to upload to wsprdaemon, the noise files are queued by the decoding_daemon(), so we need to upload only spot files here

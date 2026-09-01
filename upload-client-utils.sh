@@ -411,18 +411,16 @@ function upload_to_wsprnet_daemon() {
 }
 
 ###################  Upload to wsprdaemon.org functions ##################
-if [[ ${SIGNAL_LEVEL_UPLOAD-no} != "no" ]]; then
-
-    declare TS_HOSTNAME=${TS_HOSTNAME-gw1.wsprdaemon.org}
-    declare HOST_RETURN_LINE_LIST=()
-    HOST_RETURN_LINE_LIST=( $(host ${TS_HOSTNAME}) )
-    if [[ $? -ne 0 ]]; then
-        wd_logger 1 "ERROR: config file variable SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD} is not 'no', but can't find the IP address of TS_HOSTNAME=${TS_HOSTNAME}"
-        exit 1
-    fi
-    TS_IP_ADDRESS=${HOST_RETURN_LINE_LIST[-1]}     ### The last word on the line returned by 'host' is the IP address 
-    wd_logger 2 "Configured to upload to wsprdaemon server ${TS_HOSTNAME} which has the IP address ${TS_IP_ADDRESS}"
+### Unconditional: every wsprdaemon installation uploads to the WD server.
+declare TS_HOSTNAME=${TS_HOSTNAME-gw1.wsprdaemon.org}
+declare HOST_RETURN_LINE_LIST=()
+HOST_RETURN_LINE_LIST=( $(host ${TS_HOSTNAME}) )
+if [[ $? -ne 0 ]]; then
+    wd_logger 1 "ERROR: can't find the IP address of the wsprdaemon.org upload server TS_HOSTNAME=${TS_HOSTNAME}"
+    exit 1
 fi
+TS_IP_ADDRESS=${HOST_RETURN_LINE_LIST[-1]}     ### The last word on the line returned by 'host' is the IP address
+wd_logger 2 "Configured to upload to wsprdaemon server ${TS_HOSTNAME} which has the IP address ${TS_IP_ADDRESS}"
 
 ### Upload using FTP mode
 ### There is only one upload daemon in FTP mode
@@ -549,7 +547,7 @@ function upload_to_wsprdaemon_daemon() {
                  UPLOADS_WSPRNET_LINE_FORMAT_VERSION=${UPLOADS_WSPRNET_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_SPOT_LINE_FORMAT_VERSION}
                  UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION=${UPLOADS_WSPRDAEMON_NOISE_LINE_FORMAT_VERSION}
-                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-no} 
+                 SIGNAL_LEVEL_UPLOAD=${SIGNAL_LEVEL_UPLOAD-yes} 
                  $(cat ${RUNNING_JOBS_FILE})" | sed 's/^ *//'                         > ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}         ### sed strips off the leading spaces in each line of the file
         local config_relative_path=${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH#$PWD/}
         wd_logger 2 "created ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH}:\n$(cat ${UPLOADS_WSPRDAEMON_FTP_CONFIG_PATH})"
