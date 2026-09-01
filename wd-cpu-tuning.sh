@@ -88,6 +88,11 @@ function wd_cpu_tuning_report()
 
     wd_cpu_tuning_log 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3, CAT ${WD_L3_CAT:-unknown}"
     wd_cpu_tuning_log 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
+    ### Say so when the instance list did not come from systemctl, so a recovered run is not
+    ### silently indistinguishable from a normal one.
+    if [[ -n "${WD_RADIOD_DISCOVERY:-}" && "${WD_RADIOD_DISCOVERY}" != "systemctl" ]]; then
+        wd_cpu_tuning_log 1 "CPU tuning: radiod instance(s) identified from ${WD_RADIOD_DISCOVERY}"
+    fi
     if [[ "${WD_FREQ_AVAILABLE:-no}" == "yes" ]]; then
         wd_cpu_tuning_log 1 "CPU tuning: planned clocks => radiod $(( ${WD_FREQ_RADIOD_KHZ:-0} / 1000 )) MHz (hardware max), other cores $(( ${WD_FREQ_OTHER_KHZ:-0} / 1000 )) MHz"
     else

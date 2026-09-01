@@ -61,12 +61,35 @@ SMT=$(( NCPUS / NCORES ))   # both counts come from the SAME lscpu output
 # radiod@X is silently inert on a host whose radiod really runs under ka9q-radio@Y (KFS-NW).
 # A RADIOD_NAMES override still means radiod@NAME; RADIOD_UNITS overrides with full unit names.
 RADIOD_UNITS="${RADIOD_UNITS:-}"
+RADIOD_DISCOVERY='systemctl'        ### how the instances were found; see the stages below
 if [ -z "$RADIOD_UNITS" ]; then
     if [ -n "$RADIOD_NAMES" ]; then
         for _n in $RADIOD_NAMES; do RADIOD_UNITS="${RADIOD_UNITS}radiod@${_n}.service "; done
     else
+        ### Stage 1 -- ask systemd.  The normal path.
         RADIOD_UNITS=$(systemctl list-units 'radiod@*.service' 'ka9q-radio@*.service' --all --no-legend 2>/dev/null \
                        | grep -oE '(radiod|ka9q-radio)@[^ ]+\.service' | sort -u | tr '\n' ' ')
+        ### Stage 2 -- ask the RUNNING radiod which unit owns it.  That systemctl call has twice
+        ### returned nothing on a host where radiod was demonstrably up and never restarted
+        ### (N2YCH, 2026-08-25 and 2026-09-01).  The plan then fell back to the placeholder name
+        ### 'unknown', wd-cpu-apply correctly refused to pin the decoders against a radiod it could
+        ### not find, and the operator got an alarming message about a perfectly healthy machine.
+        ### /proc/PID/cgroup carries the owning unit and does not depend on systemctl answering,
+        ### so consult it before giving up.  Instance names arrive systemd-escaped, hence printf %b.
+        if [ -z "$RADIOD_UNITS" ]; then
+            for _p in $(pgrep -x radiod 2>/dev/null); do
+                _u=$(grep -oE '(radiod|ka9q-radio)@[^/]+\.service' "/proc/${_p}/cgroup" 2>/dev/null | head -1)
+                [ -n "$_u" ] && RADIOD_UNITS="${RADIOD_UNITS}$(printf '%b' "$_u") "
+            done
+            RADIOD_UNITS=$(echo "$RADIOD_UNITS" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
+            [ -n "$RADIOD_UNITS" ] && RADIOD_DISCOVERY='running process cgroup (systemctl listed none)'
+        fi
+        ### There is deliberately NO third stage guessing instances from leftover
+        ### radiod@*.service.d directories.  Tried and rejected: on a host that once ran
+        ### radiod@kfs-nw and now runs the same receiver under ka9q-radio@<serial>, the stale
+        ### directory makes it look like TWO receivers and the plan reserves four cores for one.
+        ### When radiod is genuinely stopped there is nothing to pin, and wd-cpu-apply refusing
+        ### is the correct, harmless outcome -- the next run picks it up once radiod is back.
     fi
 fi
 RADIOD_UNITS=$(echo $RADIOD_UNITS)
@@ -260,6 +283,7 @@ WD_OS_CPUS="$os_list"
 WD_RADIOD_INSTANCES=$RADIOD_INSTANCES
 WD_RADIOD_NAMES="$RADIOD_NAMES"
 WD_RADIOD_UNITS="$RADIOD_UNITS"
+WD_RADIOD_DISCOVERY="$RADIOD_DISCOVERY"
 WD_CORES_PER_RADIOD=$CORES_PER_RADIOD
 WD_DEGRADED="$DEGRADED"
 WD_RECEIVER_COUNT=$WD_RECEIVER_COUNT
