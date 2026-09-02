@@ -303,7 +303,10 @@ function get_conf_section_variable() {
         echo ${force_abort}
     fi
     wd_logger 2 "Got section '\[.*${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
-    local section_variable_value=$( echo "${section_lines}" | awk "/${conf_variable_name} *=/ { print \$3 }" )
+    ### Anchor to line start so a COMMENTED example line (e.g. "# data = ft8-pcm.local") is not
+    ### matched -- on such a line $3 is "=", not the value, which corrupted ft8-decode.conf into
+    ### "MCAST==" + a stray value line and silently killed FT8 recording (K6FOD, 2026-09-02).
+    local section_variable_value=$( echo "${section_lines}" | awk "/^[[:space:]]*${conf_variable_name}[[:space:]]*=/ { print \$3 }" )
     if [[ -z "${section_variable_value}" ]]; then
         wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
         echo ${force_abort}
