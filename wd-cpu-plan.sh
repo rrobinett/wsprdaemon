@@ -54,6 +54,51 @@ NCORES=${#CORE_ORDER[@]}
 [ "$NCORES" -gt 0 ] || { echo "WD_PLAN_OK=no   # could not read topology from lscpu"; exit 1; }
 SMT=$(( NCPUS / NCORES ))   # both counts come from the SAME lscpu output
 
+# ---- 1b. Intel hybrid (P-core + E-core) awareness ----
+### A chip whose physical cores do NOT all have the same thread count is hybrid: Intel
+### Alder/Raptor Lake pair 2-thread P-cores with 1-thread E-cores (e.g. i9-12900HK = 6 P x2 +
+### 8 E x1).  SMT=NCPUS/NCORES is meaningless for it -- 20/14 rounds to 1 and reports "no SMT"
+### though the P-cores plainly have SMT.  Detect it, keep radiod on the P-cores BY DESIGN
+### rather than by relying on the kernel enumerating P before E, and report it honestly.
+### On a uniform chip (all cores same thread count) HYBRID stays "no" and nothing below runs,
+### so uniform hosts get byte-identical placement, SMT and sibling-style output.
+declare -A CORE_THREADS CORE_MAXKHZ
+_min_threads=0; _max_threads=0
+for _key in "${CORE_ORDER[@]}"; do
+    IFS=, read -r -a _tarr <<< "${CORE_CPUS[$_key]}"
+    _n=${#_tarr[@]}; CORE_THREADS[$_key]=$_n
+    [ "$_min_threads" -eq 0 ] && _min_threads=$_n
+    [ "$_n" -lt "$_min_threads" ] && _min_threads=$_n
+    [ "$_n" -gt "$_max_threads" ] && _max_threads=$_n
+    _cm=0
+    for _c in "${_tarr[@]}"; do
+        _f=$(cat /sys/devices/system/cpu/cpu${_c}/cpufreq/cpuinfo_max_freq 2>/dev/null || echo 0)
+        [ "$_f" -gt "$_cm" ] && _cm=$_f
+    done
+    CORE_MAXKHZ[$_key]=$_cm
+done
+HYBRID="no"; NPCORES=0; NECORES=0; PCORE_MAXKHZ=0
+if [ "$_min_threads" != "$_max_threads" ]; then
+    HYBRID="yes"
+    ### Performance cores = those with the most threads (Intel P-cores carry SMT, E-cores do not).
+    _P_ORDER=(); _E_ORDER=()
+    for _key in "${CORE_ORDER[@]}"; do
+        if [ "${CORE_THREADS[$_key]}" = "$_max_threads" ]; then
+            _P_ORDER+=("$_key")
+            [ "${CORE_MAXKHZ[$_key]}" -gt "$PCORE_MAXKHZ" ] && PCORE_MAXKHZ=${CORE_MAXKHZ[$_key]}
+        else
+            _E_ORDER+=("$_key")
+        fi
+    done
+    ### Stable partition: every P-core first (in enumeration order), then the E-cores.  The OS
+    ### core and radiod are allocated from the front of CORE_ORDER, so this guarantees they land
+    ### on P-cores and the decoders inherit the leftover P-cores plus all the E-cores.
+    CORE_ORDER=( "${_P_ORDER[@]}" "${_E_ORDER[@]}" )
+    NPCORES=${#_P_ORDER[@]}; NECORES=${#_E_ORDER[@]}
+    ### The meaningful SMT for radiod placement is the P-cores' thread count, not 20/14.
+    SMT=$_max_threads
+fi
+
 # ---- 2. which radiod instances? (names SORTED so index assignment is stable) ----
 # radiod runs as 'radiod@NAME.service' when systemd manages it directly, but ka9q-radio's
 # udev autostart (Phil, Aug 2026) runs the SAME radiod as 'ka9q-radio@VVVV-PPPP-SERIAL.service'
@@ -244,6 +289,10 @@ FREQ_DIR=/sys/devices/system/cpu/cpu0/cpufreq
 if [ -r "$FREQ_DIR/cpuinfo_max_freq" ]; then
     FREQ_AVAILABLE="yes"
     FREQ_HW_MAX=$(cat "$FREQ_DIR/cpuinfo_max_freq")
+    ### On a hybrid chip base radiod's clock on a P-core's maximum, not cpu0's blindly -- radiod
+    ### is pinned to P-cores, and if the kernel ever enumerated an E-core as cpu0 the E-core's
+    ### lower max would wrongly cap radiod.  Uniform chips are unaffected (PCORE_MAXKHZ=0).
+    [ "$HYBRID" = "yes" ] && [ "${PCORE_MAXKHZ:-0}" -gt 0 ] && FREQ_HW_MAX=$PCORE_MAXKHZ
     FREQ_HW_MIN=$(cat "$FREQ_DIR/cpuinfo_min_freq" 2>/dev/null || echo 0)
     if [ -n "${FREQ_RADIOD_KHZ}" ] && [ "${FREQ_RADIOD_KHZ}" -gt 0 ] 2>/dev/null; then
         FREQ_RADIOD=${FREQ_RADIOD_KHZ}
@@ -267,7 +316,10 @@ WD_PLAN_OK=yes
 WD_TOPO_CPUS=$NCPUS
 WD_TOPO_CORES=$NCORES
 WD_TOPO_SMT=$SMT
-WD_TOPO_SIBLING_STYLE="$( if [ "$SMT" -gt 1 ]; then a=$(cpus_of 0); b=${a%%,*}; c=${a##*,}; if [ $(( c - b )) -eq 1 ]; then echo adjacent; else echo "sparse (stride $(( (c - b) / (SMT - 1) )))"; fi; else echo "no SMT"; fi )"
+WD_TOPO_SIBLING_STYLE="$( if [ "$HYBRID" = "yes" ]; then echo "hybrid ${NPCORES}P+${NECORES}E"; elif [ "$SMT" -gt 1 ]; then a=$(cpus_of 0); b=${a%%,*}; c=${a##*,}; if [ $(( c - b )) -eq 1 ]; then echo adjacent; else echo "sparse (stride $(( (c - b) / (SMT - 1) )))"; fi; else echo "no SMT"; fi )"
+WD_TOPO_HYBRID="$HYBRID"
+WD_TOPO_PCORES=$NPCORES
+WD_TOPO_ECORES=$NECORES
 WD_TOPO_CORE_MAP="$(for k in "${CORE_ORDER[@]}"; do printf '%s=[%s] ' "$k" "${CORE_CPUS[$k]}"; done)"
 WD_L3_KB=${L3_KB:-unknown}
 WD_L3_WAYS=$WAYS

@@ -86,7 +86,7 @@ function wd_cpu_tuning_report()
         return 0
     fi
 
-    wd_cpu_tuning_log 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_L3_KB} KB L3, CAT ${WD_L3_CAT:-unknown}"
+    wd_cpu_tuning_log 1 "CPU tuning: ${WD_TOPO_CORES} physical cores, ${WD_TOPO_CPUS} CPUs, ${WD_TOPO_SIBLING_STYLE}, ${WD_L3_KB} KB L3, CAT ${WD_L3_CAT:-unknown}"
     wd_cpu_tuning_log 1 "CPU tuning: planned layout => OS ${WD_OS_CPUS} | radiod ${WD_CORES_PER_RADIOD} core(s) each | decoders ${WD_DECODER_CPUS}"
     ### Say so when the instance list did not come from systemctl, so a recovered run is not
     ### silently indistinguishable from a normal one.
