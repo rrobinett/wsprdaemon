@@ -21,6 +21,20 @@ declare FRP_REQUIRED_VERSION=${FRP_REQUIRED_VERSION-0.64.0}    ### Default to us
 declare FRPC_INI_FILE=${FRPC_CMD}.ini
 declare WD_REMOTE_ACCESS_SERVICE_NAME="wd-remote-access"
 
+### Since WD 3.4.6 the RAC is provided by the wd-rac-client package (https://github.com/rrobinett/wd-rac-client):
+### one frpc tunnel to EACH WD gateway (gw2 primary, gw1 standby), on the authenticated frps-secure tier, with the
+### station registered under its own node key.  WD still owns the decision through RAC= / REMOTE_ACCESS_CHANNEL=
+### in wsprdaemon.conf: when it is set WD installs (or updates) that package and lets its installer (re)configure
+### the tunnels -- idempotent, and add-before-remove when it replaces the legacy single tunnel below -- and when it
+### is unset WD stops the tunnels.  The legacy frpc built into this file is kept only for the HamSCI RAC range
+### (200-299, a different frps) and for channels outside what the WD registrar accepts (0-199, 300-999).
+declare WD_RAC_CLIENT_REPO_URL=${WD_RAC_CLIENT_REPO_URL-https://github.com/rrobinett/wd-rac-client}
+declare WD_RAC_CLIENT_DIR=${WD_RAC_CLIENT_DIR-${WSPRDAEMON_ROOT_DIR}/wd-rac-client}
+declare WD_RAC_CLIENT_LOG=${WSPRDAEMON_ROOT_DIR}/wd-rac-client-install.log
+declare WD_RAC_CLIENT_CONF_DIR=/etc/wd-remote-access
+declare WD_RAC_CLIENT_INSTALL_UNIT=wd-rac-client-install
+declare WD_RAC_CLIENT_INSTALL_TIMEOUT=${WD_RAC_CLIENT_INSTALL_TIMEOUT-180}    ### Seconds to wait for the installer before leaving it to finish in the background
+
 ### Remove all vestiges of the legacy name and implementation of the RAC client service
 sudo systemctl stop wd_remote_access.service 2>/dev/null       || true
 sudo systemctl disable wd_remote_access.service 2>/dev/null    || true
@@ -67,8 +81,137 @@ function remote_access_connection_stop_and_disable() {
         wd_logger 1 "Stopping running previously enabled and active ${WD_REMOTE_ACCESS_SERVICE_NAME}"
         execute_sysctl_command stop ${WD_REMOTE_ACCESS_SERVICE_NAME}
     fi
+    wd_rac_client_stop_and_disable
     wd_logger 2 "The Remote Access Connection (RAC) service has been stopped and disabled"
     return 0
+}
+
+### Is this channel served by the WD registrar and wd-rac-client (rather than one of the legacy paths)?
+function wd_rac_client_channel_ok() {
+    local channel=$1
+    if (( channel >= HAMSCI_RAC_MIN && channel <= HAMSCI_RAC_MAX )); then
+        return 1        ### HamSCI stations tunnel to vpn.hamsci.org with the legacy frpc
+    fi
+    if (( channel > 999 || ( channel > 199 && channel < 300 ) )); then
+        return 1        ### e.g. the WSPRSONDE-GW-nnn channels >= 2200: the registrar does not know them
+    fi
+    return 0
+}
+
+### Stop the per-gateway tunnel instances (RAC= has been removed from the conf file)
+function wd_rac_client_stop_and_disable() {
+    local unit
+    for unit in $(systemctl list-units --all --plain --no-legend 'wd-remote-access@*' 2>/dev/null | awk '{print $1}'); do
+        wd_logger 1 "Disabling ${unit}"
+        execute_sysctl_command "disable --now" ${unit}
+    done
+    return 0
+}
+
+### True when the installed wd-rac-client already serves this channel on every gateway: then there is nothing
+### to do and no registrar round trip is made on this WD start
+function wd_rac_client_is_current() {
+    local channel=$1
+    local ssh_port=$(( RAC_IP_PORT_BASE + channel ))
+    local conf
+    local found=0
+
+    [[ -s ${WD_RAC_CLIENT_CONF_DIR}/VERSION ]] || return 1
+    for conf in ${WD_RAC_CLIENT_CONF_DIR}/gateways/*.toml; do
+        [[ -f ${conf} ]] || continue
+        sudo grep -q "^remotePort = ${ssh_port}$" ${conf} || return 1      ### the RAC number changed in the conf file
+        local gw=${conf##*/}
+        gw=${gw%.toml}
+        systemctl is-active --quiet wd-remote-access@${gw}.service || return 1
+        found=1
+    done
+    (( found ))
+}
+
+### Fetch the wd-rac-client package, or update a git checkout of it
+function wd_rac_client_fetch() {
+    if [[ -d ${WD_RAC_CLIENT_DIR}/.git ]]; then
+        wd_logger 2 "Updating ${WD_RAC_CLIENT_DIR}"
+        if ! timeout 60 git -C ${WD_RAC_CLIENT_DIR} pull -q --ff-only >& /tmp/wd-rac-client-git.txt; then
+            wd_logger 1 "WARNING: 'git pull' in ${WD_RAC_CLIENT_DIR} failed, so using the copy already there: $(< /tmp/wd-rac-client-git.txt)"
+        fi
+        return 0
+    fi
+    if [[ -x ${WD_RAC_CLIENT_DIR}/install.sh ]]; then
+        wd_logger 2 "${WD_RAC_CLIENT_DIR} is a tarball install, so it is not updated automatically"
+        return 0
+    fi
+    wd_logger 1 "Installing the wd-rac-client package into ${WD_RAC_CLIENT_DIR}"
+    if command -v git >& /dev/null; then
+        if timeout 120 git clone -q ${WD_RAC_CLIENT_REPO_URL}.git ${WD_RAC_CLIENT_DIR} >& /tmp/wd-rac-client-git.txt; then
+            return 0
+        fi
+        wd_logger 1 "WARNING: 'git clone' failed, so trying the tarball: $(< /tmp/wd-rac-client-git.txt)"
+    fi
+    local tmp_dir=$(mktemp -d)
+    if ( cd ${tmp_dir} && timeout 120 curl -fsSL ${WD_RAC_CLIENT_REPO_URL}/archive/main.tar.gz | tar xz ) && [[ -d ${tmp_dir}/wd-rac-client-main ]]; then
+        mv ${tmp_dir}/wd-rac-client-main ${WD_RAC_CLIENT_DIR}
+        rm -rf ${tmp_dir}
+        return 0
+    fi
+    rm -rf ${tmp_dir}
+    wd_logger 1 "ERROR: could not download ${WD_RAC_CLIENT_REPO_URL}"
+    return 1
+}
+
+### Install, upgrade or migrate to wd-rac-client for this channel.  The package's installer is run DETACHED from
+### this shell: when WD itself is being started over the legacy tunnel, retiring that tunnel would kill a
+### foreground installer half way (its rollback timer would recover the node, but only ten minutes later).
+function wd_rac_client_manager() {
+    local channel=$1
+    local rac_id=$2
+    local rc
+
+    if wd_rac_client_is_current ${channel}; then
+        wd_logger 2 "wd-rac-client $(< ${WD_RAC_CLIENT_CONF_DIR}/VERSION) already serves RAC ${channel} on every gateway"
+        return 0
+    fi
+    wd_rac_client_fetch
+    rc=$? ; if (( rc )); then
+        return ${rc}
+    fi
+
+    ### The registrar wants site names of A-Z 0-9 _ - (3-32 chars), so 'KFS/OMNI' becomes 'KFS-OMNI'
+    local site=$( echo "${rac_id}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_-]/-/g' )
+    local ssh_port=22
+    local sshd_config_port=$( awk '/^Port /{print $2}' /etc/ssh/sshd_config 2>/dev/null )
+    if [[ -n "${sshd_config_port}" ]]; then
+        ssh_port=${sshd_config_port}
+    fi
+    local proxies="vm_ssh=${ssh_port} vm_web=${KA9Q_WEB_SERVICE_PORT-8081}"    ### the same two tunnels the legacy .ini published
+
+    wd_logger 1 "Configuring wd-rac-client for RAC ${channel}, site '${site}', tunnels '${proxies}' (installer log: ${WD_RAC_CLIENT_LOG})"
+    sudo systemctl stop ${WD_RAC_CLIENT_INSTALL_UNIT}.service 2>/dev/null || true
+    sudo systemd-run --quiet --collect --unit=${WD_RAC_CLIENT_INSTALL_UNIT} \
+        --property=WorkingDirectory=${WD_RAC_CLIENT_DIR} \
+        --setenv=WD_RAC_SITE="${site}" --setenv=WD_RAC_NUMBER=${channel} \
+        --setenv=WD_RAC_PROXIES="${proxies}" --setenv=WD_RAC_RETIRE_LEGACY=managed \
+        /bin/bash -c "./install.sh > ${WD_RAC_CLIENT_LOG} 2>&1"
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: could not start the wd-rac-client installer: 'systemd-run' => ${rc}"
+        return ${rc}
+    fi
+    local waited=0
+    while systemctl is-active --quiet ${WD_RAC_CLIENT_INSTALL_UNIT}.service; do
+        if (( waited >= WD_RAC_CLIENT_INSTALL_TIMEOUT )); then
+            wd_logger 1 "The wd-rac-client installer is still running after ${waited} seconds, so leaving it to finish in the background (see ${WD_RAC_CLIENT_LOG})"
+            return 0
+        fi
+        sleep 5
+        waited=$(( waited + 5 ))
+    done
+    if grep -q '^SUCCESS' ${WD_RAC_CLIENT_LOG} 2>/dev/null; then
+        wd_logger 1 "wd-rac-client is running: $( grep -E '^Tunnels|^    gw' ${WD_RAC_CLIENT_LOG} | tr '\n' ' ' )"
+        wd_logger 1 "So authorized WD developers can ssh to this server at IP port $(( RAC_IP_PORT_BASE + channel )) and open its KA9Q-web UI at port $(( RAC_IP_PORT_BASE + channel + 10000 )) on either gateway"
+        return 0
+    fi
+    wd_logger 1 "ERROR: the wd-rac-client installer did not report success.  Last lines of ${WD_RAC_CLIENT_LOG}: $( tail -n 5 ${WD_RAC_CLIENT_LOG} 2>/dev/null | tr '\n' '|' )"
+    return 1
 }
 
 function get_frpc_ini_values() {
@@ -297,12 +440,20 @@ function wd_remote_access_service_manager() {
     local remote_access_id
 
     remote_access_connection_status "remote_access_channel" "remote_access_id"
+    rc=$?
 
-    rc=$? ; if (( rc == 0 )); then
+    ### Channels the WD registrar serves get the wd-rac-client package (dual-gateway tunnels); this also migrates
+    ### a station off the legacy single tunnel below, even when that one is configured and running normally
+    if [[ -n "${remote_access_channel-}" ]] && wd_rac_client_channel_ok ${remote_access_channel}; then
+        wd_rac_client_manager ${remote_access_channel} "${remote_access_id}"
+        return $?
+    fi
+
+    if (( rc == 0 )); then
         wd_logger 2 "Remote Access Connection service is not enabled, or it is enabled and running normally"
         return 0
     fi
-    wd_logger 1 "Setting up the Remote Access Connection service with REMOTE_ACCESS_CHANNEL=${remote_access_channel}, REMOTE_ACCESS_ID='${remote_access_id}'"
+    wd_logger 1 "Setting up the legacy Remote Access Connection service with REMOTE_ACCESS_CHANNEL=${remote_access_channel}, REMOTE_ACCESS_ID='${remote_access_id}'"
 
     ### If it isn't already installed, download and install the FRP service from github
     mkdir -p ${WD_BIN_DIR}

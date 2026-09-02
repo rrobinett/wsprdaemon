@@ -46,3 +46,5 @@ test.txt
 .DS_Store
 .frpc.conf
 .bash_aliases
+wd-rac-client/
+wd-rac-client-install.log
