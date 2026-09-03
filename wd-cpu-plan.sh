@@ -219,6 +219,36 @@ fi
 cpus_of(){ echo "${CORE_CPUS[${CORE_ORDER[$1]}]}"; }
 join(){ local IFS=,; echo "$*"; }
 
+### ---- optional: reserve a whole L3 cache DOMAIN for radiod (opt-in per site) ----
+### A split-L3 chip (AMD Zen2 mobile: two 4 MiB CCX caches, cpus 0-5 and 6-11) lets radiod own
+### an entire L3 domain, so its FFT working set is never evicted by the decoders and NO CAT is
+### needed -- the physical cache split IS the partition, and fft/proc land on separate cores of
+### that domain.  Opt-in (RADIOD_L3_RESERVE=yes in /etc/wd-cpu-plan.conf) because it trades
+### decoder cores for cache isolation.  Single radiod instance only; no-op on unified-L3 chips.
+RADIOD_L3_RESERVE="${RADIOD_L3_RESERVE:-no}"
+RADIOD_L3_RESERVED="no"
+if [ "$RADIOD_L3_RESERVE" = "yes" ] && [ "$RADIOD_INSTANCES" -eq 1 ]; then
+    _core_l3(){ local cpu=${1%%,*}; cat /sys/devices/system/cpu/cpu${cpu}/cache/index3/shared_cpu_list 2>/dev/null; }
+    _os_dom=$(_core_l3 "$(cpus_of 0)")
+    declare -A _seen=(); _ndom=0
+    for _k in "${CORE_ORDER[@]}"; do _d=$(_core_l3 "${CORE_CPUS[$_k]}"); [ -n "$_d" ] && [ -z "${_seen[$_d]:-}" ] && { _seen[$_d]=1; _ndom=$((_ndom+1)); }; done
+    if [ "${_ndom:-0}" -gt 1 ]; then
+        _rad_dom=""
+        for _k in "${CORE_ORDER[@]}"; do _d=$(_core_l3 "${CORE_CPUS[$_k]}"); [ -n "$_d" ] && [ "$_d" != "$_os_dom" ] && { _rad_dom=$_d; break; }; done
+        _oskey="${CORE_ORDER[0]}"; _radkeys=(); _restkeys=()
+        for _k in "${CORE_ORDER[@]}"; do
+            [ "$_k" = "$_oskey" ] && continue
+            _d=$(_core_l3 "${CORE_CPUS[$_k]}")
+            if [ "$_d" = "$_rad_dom" ]; then _radkeys+=("$_k"); else _restkeys+=("$_k"); fi
+        done
+        if [ "${#_radkeys[@]}" -ge 1 ] && [ "${#_restkeys[@]}" -ge 1 ]; then
+            CORE_ORDER=( "$_oskey" "${_radkeys[@]}" "${_restkeys[@]}" )
+            CORES_PER_RADIOD=${#_radkeys[@]}
+            RADIOD_L3_RESERVED="yes"
+        fi
+    fi
+fi
+
 os_list=$(cpus_of 0)
 idx=1
 declare -a RADIOD_LISTS RADIOD_FFT RADIOD_RX RADIOD_OTHER
@@ -268,6 +298,8 @@ else
         L3_CAT="no"                 ### no CAT on this CPU: report the geometry, emit no masks
     fi
 fi
+### radiod owns a whole L3 domain: no CAT -- the physical cache split already isolates it.
+if [ "$RADIOD_L3_RESERVED" = "yes" ]; then L3_CAT="reserved-domain"; RADIOD_MASK=""; OTHER_MASK=""; fi
 if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ]; then
     rw=$(awk -v w="$WAYS" -v f="$RADIOD_L3_FRACTION" 'BEGIN{printf "%d", int(w*f+0.5)}')
     [ $(( WAYS - rw )) -lt "$MIN_DECODER_WAYS" ] && rw=$(( WAYS - MIN_DECODER_WAYS ))
@@ -324,6 +356,7 @@ WD_TOPO_CORE_MAP="$(for k in "${CORE_ORDER[@]}"; do printf '%s=[%s] ' "$k" "${CO
 WD_L3_KB=${L3_KB:-unknown}
 WD_L3_WAYS=$WAYS
 WD_L3_CAT="$L3_CAT"
+WD_RADIOD_L3_RESERVED="$RADIOD_L3_RESERVED"
 WD_FREQ_AVAILABLE="$FREQ_AVAILABLE"
 WD_FREQ_HW_MAX_KHZ=$FREQ_HW_MAX
 WD_FREQ_HW_MIN_KHZ=$FREQ_HW_MIN
