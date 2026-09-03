@@ -33,6 +33,7 @@ function watchdog_daemon()
             check_kiwi_gps
             print_new_ov_lines 
             log_radiod_drops           ### Self-throttling; samples every WD_DROPS_LOG_MINUTES
+            log_decode_backlog         ### Self-throttling; FT8/FT4/WSPR decode backlog
             wd_logger 2 "Finished odd minute processing"
         fi
         last_minute=${current_minute}
