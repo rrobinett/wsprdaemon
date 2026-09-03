@@ -439,6 +439,19 @@ else
 #(( ++verbosity ))
 wd-set-cpu-speed "${CPU_CORE_KHZ}"
 fi
+
+### operator convenience: seed a toprc that shows the P (Last Used Cpu) column right of %CPU,
+### so `top -H` reveals at a glance whether radiod's fft / proc_rx888 threads are on their
+### planned cores -- the whole CPU-affinity subsystem exists to put them there.  Seed only when
+### the user has none: top rewrites this file on 'W', and a hand-tuned layout must never be
+### clobbered.  etc/toprc was produced by procps-ng top itself; its fieldscur encoding is
+### version-specific, which is why it is shipped rather than generated here.
+declare _wd_toprc="${HOME}/.config/procps/toprc"
+if [[ ! -f ${_wd_toprc} && -f ${WSPRDAEMON_ROOT_DIR}/etc/toprc ]]; then
+    if install -D -m 0644 ${WSPRDAEMON_ROOT_DIR}/etc/toprc ${_wd_toprc} 2>/dev/null ; then
+        wd_logger 1 "Seeded ${_wd_toprc} so 'top -H' shows the P (processor) column right of %CPU"
+    fi
+fi
 #(( --verbosity ))
 
 #### 11/1/22 - It appears that last summer a bug was introduced into Ubuntu 20.04 which causes kiwiwrecorder.py to crash if there are no active ssh sessions
