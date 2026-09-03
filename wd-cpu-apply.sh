@@ -159,6 +159,12 @@ for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
 # The empty CPUAffinity= reset is REQUIRED; systemd merges this directive additively.
 CPUAffinity=
 CPUAffinity=$(echo "$cpus" | tr ',' ' ')
+# AllowedCPUs (cpuset) is the HARD boundary.  radiod re-affinitizes its own threads to all
+# online CPUs, which overrides the inherited CPUAffinity (sched_setaffinity) but NOT a cpuset
+# restriction -- without this, proc_rx888 and fft drift onto the decoder cores after a
+# reconfiguration event (observed on K6FOD's split-L3 5500U, 2026-09-02).
+AllowedCPUs=
+AllowedCPUs=${cpus}
 ExecStartPost=+${PIN_SCRIPT} %i" \
         "${unit}"
 done
