@@ -47,6 +47,7 @@ if systemctl is-enabled ${WD_REMOTE_ACCESS_SERVICE_NAME}.service &>/dev/null && 
 fi
 
 declare RAC_IP_PORT_BASE=35800    ### Don't change this!  As of 7/9/24 many WD servers have IDs which start here
+declare RAC_GRAPE_PORT_OFFSET=5000    ### The registrar's vm_grape band: the GRAPE strip-chart web page of RAC n is at gateway port 40800+n (WD 3.4.6+)
 declare RAC_IP_PORT_MAX=39999
 declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} % 1000 )  + 3000 ))    ## The WS gateways RAC_IDs start at 3000
 
@@ -108,11 +109,17 @@ function wd_rac_client_stop_and_disable() {
     return 0
 }
 
+### True when this GRAPE site should publish its carrier strip-chart page (grape-utils.sh) through the RAC
+function wd_rac_grape_charts_wanted() {
+    [[ -n "${GRAPE_PSWS_ID-}" && "${GRAPE_CHARTS_ENABLED-yes}" == "yes" ]]
+}
+
 ### True when the installed wd-rac-client already serves this channel on every gateway: then there is nothing
 ### to do and no registrar round trip is made on this WD start
 function wd_rac_client_is_current() {
     local channel=$1
     local ssh_port=$(( RAC_IP_PORT_BASE + channel ))
+    local grape_port=$(( RAC_IP_PORT_BASE + RAC_GRAPE_PORT_OFFSET + channel ))
     local conf
     local found=0
 
@@ -120,6 +127,10 @@ function wd_rac_client_is_current() {
     for conf in ${WD_RAC_CLIENT_CONF_DIR}/gateways/*.toml; do
         [[ -f ${conf} ]] || continue
         sudo grep -q "^remotePort = ${ssh_port}$" ${conf} || return 1      ### the RAC number changed in the conf file
+        if wd_rac_grape_charts_wanted && ! sudo grep -q "^remotePort = ${grape_port}$" ${conf} ; then
+            wd_logger 1 "${conf} has no tunnel for the GRAPE charts page (gateway port ${grape_port}), so the wd-rac-client installer will be re-run to add it"
+            return 1
+        fi
         local gw=${conf##*/}
         gw=${gw%.toml}
         systemctl is-active --quiet wd-remote-access@${gw}.service || return 1
@@ -184,6 +195,9 @@ function wd_rac_client_manager() {
         ssh_port=${sshd_config_port}
     fi
     local proxies="vm_ssh=${ssh_port} vm_web=${KA9Q_WEB_SERVICE_PORT-8081}"    ### the same two tunnels the legacy .ini published
+    if wd_rac_grape_charts_wanted; then
+        proxies+=" vm_grape=${GRAPE_CHARTS_PORT-8088}"                          ### WD 3.4.6+: the GRAPE carrier strip-chart page, at gateway port 40800+RAC
+    fi
 
     wd_logger 1 "Configuring wd-rac-client for RAC ${channel}, site '${site}', tunnels '${proxies}' (installer log: ${WD_RAC_CLIENT_LOG})"
     sudo systemctl stop ${WD_RAC_CLIENT_INSTALL_UNIT}.service 2>/dev/null || true
@@ -208,6 +222,9 @@ function wd_rac_client_manager() {
     if grep -q '^SUCCESS' ${WD_RAC_CLIENT_LOG} 2>/dev/null; then
         wd_logger 1 "wd-rac-client is running: $( grep -E '^Tunnels|^    gw' ${WD_RAC_CLIENT_LOG} | tr '\n' ' ' )"
         wd_logger 1 "So authorized WD developers can ssh to this server at IP port $(( RAC_IP_PORT_BASE + channel )) and open its KA9Q-web UI at port $(( RAC_IP_PORT_BASE + channel + 10000 )) on either gateway"
+        if wd_rac_grape_charts_wanted; then
+            wd_logger 1 "The GRAPE carrier strip charts of this server are at gateway port $(( RAC_IP_PORT_BASE + RAC_GRAPE_PORT_OFFSET + channel ))"
+        fi
         return 0
     fi
     wd_logger 1 "ERROR: the wd-rac-client installer did not report success.  Last lines of ${WD_RAC_CLIENT_LOG}: $( tail -n 5 ${WD_RAC_CLIENT_LOG} 2>/dev/null | tr '\n' '|' )"

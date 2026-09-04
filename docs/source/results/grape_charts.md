@@ -58,6 +58,10 @@ ssh -N -L 8088:127.0.0.1:8088 wsprdaemon@<your WD server>
 
 then browse to `http://localhost:8088/`.
 
+## Remote access through the WD RAC
+
+Sites that run the WsprDaemon Remote Access Client publish the chart page through the RAC gateways as well, alongside the existing SSH and ka9q-web tunnels. The page of RAC number *n* is at gateway port `40800 + n`, and the gateways' RAC status dashboard shows it as a **GRAPE charts** link next to each station's ka9q-web link. WD adds this tunnel automatically the first time it starts after the upgrade; that one-time reconfiguration restarts the station's tunnels, so an ssh session riding the RAC at that moment drops once.
+
 ## Command line
 
 Run `wdg K` (the GRAPE sub-menu of `wd`; `wdg` is `wd -g`) to chart every existing 24 hour wav that does not yet have a chart and refresh the page. This is also useful right after upgrading, to chart any days still in the wav-archive.
