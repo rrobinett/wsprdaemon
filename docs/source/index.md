@@ -79,6 +79,7 @@ Understanding WsprDaemon's capabilities and the data it produces.
 
 results/wspr.md
 results/grape.md
+results/grape_charts.md
 results/psk.md
 ```
 

@@ -60,6 +60,18 @@ declare -r MINUTES_PER_DAY=$(( 60 * 24 ))
 declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
+
+### GRAPE carrier strip charts (WD 3.4.6+).  Each time a 24_hour_10sps_iq.wav is created, a PNG strip chart (carrier frequency offset,
+### carrier power and SNR vs UTC and local time) plus a JSON copy of the series is written under ~/wsprdaemon/grape-charts/www/...
+### A tiny web server (python3 -m http.server) publishes that directory so the station owner can browse and overlay the charts.
+declare    GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED-yes}                ### Set to "no" in WD.conf to disable chart creation and the web server
+declare    GRAPE_CHARTS_PORT=${GRAPE_CHARTS_PORT-8088}                     ### TCP port of the chart web server
+declare    GRAPE_CHARTS_BIND=${GRAPE_CHARTS_BIND-0.0.0.0}                  ### Set to 127.0.0.1 to make the charts reachable only through an ssh tunnel
+declare -r GRAPE_CHARTS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/grape-charts"      ### Home dir of the web daemon (logs and pid) ...
+declare -r GRAPE_CHARTS_WWW_DIR="${GRAPE_CHARTS_ROOT_DIR}/www"              ### ... and the directory it serves: index.html, manifest.json, <DATE>/<REPORTER>/<RECEIVER>/<BAND>.{png,json}
+declare -r GRAPE_CHART_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/grape-strip-chart.py"
+declare -r GRAPE_CHARTS_MANIFEST_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/grape-charts-manifest.py"
+declare -r GRAPE_CHARTS_INDEX_HTML_SRC="${WSPRDAEMON_ROOT_DIR}/grape-charts-index.html"
 declare -r GRAPE_24_HOUR_10_HZ_WAV_STATS_FILE_NAME="24_hour_10sps_iq.stats"
 
 ### Return codes can only be in the range 0-255.  So we reserve a few of those codes for the following routines to commmunicate errors back to grape calling functions
@@ -629,7 +641,115 @@ function grape_create_wav_file()
     else
         wd_logger 1 "Created ${output_10sps_wav_file}"
     fi
+    grape_create_chart ${output_10sps_wav_file}
     return 1
+}
+
+##########################################################################################################################################################
+########## GRAPE carrier strip charts ####################################################################################################################
+##########################################################################################################################################################
+
+### Given the path of a 24_hour_10sps_iq.wav, create (or refresh) its strip chart PNG + JSON under GRAPE_CHARTS_WWW_DIR.
+### The wav path has the form  .../wav-archive/<DATE>/<REPORTER>_<GRID>/<RECEIVER>@<PSWS_ID>/<BAND>/24_hour_10sps_iq.wav
+### Returns: 0 => chart is up to date (created now or already current), 1 => charts disabled, > 1 => error
+function grape_create_chart() {
+    local wav_file_path=$1
+
+    if [[ ${GRAPE_CHARTS_ENABLED} != "yes" ]]; then
+        wd_logger 2 "GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED}, so not charting ${wav_file_path}"
+        return 1
+    fi
+    if [[ ! -f ${wav_file_path} ]]; then
+        wd_logger 1 "ERROR: can't find ${wav_file_path}"
+        return 2
+    fi
+    local band_dir=${wav_file_path%/*}
+    local dir_path_list=( ${band_dir//\// } )
+    if (( ${#dir_path_list[@]} < 4 )); then
+        wd_logger 1 "ERROR: path ${wav_file_path} is too short to contain DATE/REPORTER/RECEIVER/BAND"
+        return 3
+    fi
+    local chart_base_path="${GRAPE_CHARTS_WWW_DIR}/${dir_path_list[-4]}/${dir_path_list[-3]}/${dir_path_list[-2]}/${dir_path_list[-1]}"
+    if [[ -s ${chart_base_path}.json && ${chart_base_path}.json -nt ${wav_file_path} ]]; then
+        wd_logger 2 "Chart ${chart_base_path}.png is already current"
+        return 0
+    fi
+    mkdir -p ${chart_base_path%/*}
+    local chart_log_file="${GRAPE_CHARTS_ROOT_DIR}/grape-strip-chart.log"
+    wd_logger 1 "Creating chart ${chart_base_path}.png from ${wav_file_path}"
+    nice -n 19 python3 ${GRAPE_CHART_PYTHON_CMD} ${wav_file_path} ${chart_base_path} >> ${chart_log_file} 2>&1
+    local rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'python3 ${GRAPE_CHART_PYTHON_CMD} ${wav_file_path} ${chart_base_path}' => ${rc}:\n$(tail -n 5 ${chart_log_file})"
+        return 4
+    fi
+    return 0
+}
+
+### Copies the viewer page into the www dir if it has changed and rebuilds manifest.json, which the page reads to learn what charts exist
+function grape_charts_update_manifest() {
+    if [[ ${GRAPE_CHARTS_ENABLED} != "yes" ]]; then
+        return 1
+    fi
+    mkdir -p ${GRAPE_CHARTS_WWW_DIR}
+    if [[ ! -f ${GRAPE_CHARTS_WWW_DIR}/index.html || ${GRAPE_CHARTS_INDEX_HTML_SRC} -nt ${GRAPE_CHARTS_WWW_DIR}/index.html ]]; then
+        cp -p ${GRAPE_CHARTS_INDEX_HTML_SRC} ${GRAPE_CHARTS_WWW_DIR}/index.html
+        wd_logger 1 "Installed ${GRAPE_CHARTS_INDEX_HTML_SRC} as ${GRAPE_CHARTS_WWW_DIR}/index.html"
+    fi
+    local manifest_log_file="${GRAPE_CHARTS_ROOT_DIR}/grape-charts-manifest.log"
+    python3 ${GRAPE_CHARTS_MANIFEST_PYTHON_CMD} ${GRAPE_CHARTS_WWW_DIR} >> ${manifest_log_file} 2>&1
+    local rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'python3 ${GRAPE_CHARTS_MANIFEST_PYTHON_CMD} ${GRAPE_CHARTS_WWW_DIR}' => ${rc}:\n$(tail -n 5 ${manifest_log_file})"
+        return 2
+    fi
+    wd_logger 2 "Updated ${GRAPE_CHARTS_WWW_DIR}/manifest.json"
+    return 0
+}
+
+### '-K'  Charts every 24_hour_10sps_iq.wav under the wav-archive which has no current chart, then refreshes the manifest.
+### Called by grape_uploader() after it has created the day's 24 hour wav files.  Returns the number of new charts created.
+function grape_create_all_charts() {
+    if [[ ${GRAPE_CHARTS_ENABLED} != "yes" ]]; then
+        wd_logger 2 "GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED}, so no charts are created"
+        return 0
+    fi
+    local wav_file_list=( $( find -L ${GRAPE_WAV_ARCHIVE_ROOT_PATH} -mindepth 5 -maxdepth 5 -type f -name ${GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME} 2>/dev/null | sort ) )
+    wd_logger 2 "Found ${#wav_file_list[@]} 24 hour wav files to check for charts"
+    local new_chart_count=0
+    local wav_file_path
+    for wav_file_path in ${wav_file_list[@]} ; do
+        local dir_path_list=( ${wav_file_path//\// } )
+        local chart_json="${GRAPE_CHARTS_WWW_DIR}/${dir_path_list[-5]}/${dir_path_list[-4]}/${dir_path_list[-3]}/${dir_path_list[-2]}.json"
+        if [[ -s ${chart_json} && ${chart_json} -nt ${wav_file_path} ]]; then
+            continue
+        fi
+        if grape_create_chart ${wav_file_path} ; then
+            (( ++new_chart_count ))
+        fi
+    done
+    if (( new_chart_count )) || [[ ! -s ${GRAPE_CHARTS_WWW_DIR}/manifest.json ]]; then
+        grape_charts_update_manifest
+    fi
+    wd_logger 1 "Created ${new_chart_count} new charts"
+    return ${new_chart_count}
+}
+
+### Spawned by the watchdog daemon when GRAPE_PSWS_ID is defined and GRAPE_CHARTS_ENABLED == "yes".
+### Serves GRAPE_CHARTS_WWW_DIR with python's built-in static file server and restarts it if it ever exits.
+function grape_charts_web_daemon() {
+    local root_dir=$1
+
+    mkdir -p ${root_dir} ${GRAPE_CHARTS_WWW_DIR}
+    cd ${GRAPE_CHARTS_WWW_DIR}
+    setup_verbosity_traps
+    grape_charts_update_manifest
+    wd_logger 1 "Starting: serving ${GRAPE_CHARTS_WWW_DIR} at http://${GRAPE_CHARTS_BIND}:${GRAPE_CHARTS_PORT}/"
+    while true; do
+        python3 -m http.server ${GRAPE_CHARTS_PORT} --bind ${GRAPE_CHARTS_BIND} >> ${root_dir}/http.server.log 2>&1
+        wd_logger 1 "ERROR: 'python3 -m http.server ${GRAPE_CHARTS_PORT} --bind ${GRAPE_CHARTS_BIND}' => $?.  Restarting it in 30 seconds"
+        wd_sleep 30
+    done
 }
 
 ### To execute this from the command line run:  'WD -g "C <YYYYMMDD>"
@@ -758,6 +878,7 @@ function grape_uploader() {
     else
         wd_logger 1 "There were no new 24h.wav files created"
     fi
+    grape_create_all_charts            ### Charts any 24h.wav which has no current strip chart and refreshes the web page's manifest
     grape_upload_all_local_wavs
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: grape_upload_all_local_wavs => ${rc}"
@@ -804,6 +925,7 @@ function grape_print_usage() {
     -R YYYYMMDD      Repair the directory tree by filling in missing minutes with soft links to ~/wsprdaemon/one-minute-silent-float.wv
     -a               Search for 24h.wav files.  If a new 24h.wav is created, then upload it to wsprdaemon.org.  Called by the watchdog_daemon()
     -c               Create 10 Hz wav files for each band for all dates from the 1440 compressed .wv files in each band
+    -K               Create carrier strip charts for all 24_hour_10sps_iq.wav files which don't yet have one, then refresh the chart web page
     -p               Purge all empty date trees
     -r               Repair all date trees
     -t               Show status of all the date trees
@@ -821,6 +943,9 @@ function grape_menu() {
             ;;
         -C)
             grape_create_24_hour_wavs ${2-h}
+            ;;
+        -K)
+            grape_create_all_charts
             ;;
         -S)
             grape_get_date_status ${2-h}
@@ -894,7 +1019,7 @@ function grape_init() {
         exit 1
     fi
 
-    local grape_python_package_list=( "digital_rf" "soundfile" )
+    local grape_python_package_list=( "digital_rf" "soundfile" "matplotlib" )     ### matplotlib draws the GRAPE carrier strip charts
     local python_package
     for python_package in ${grape_python_package_list[@]}; do
         install_python_package "${python_package}"
