@@ -1407,7 +1407,7 @@ function build_ka9q_radio() {
     fi
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
-    if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+    if [[ "${WD_CPU_TUNING-yes}" == "yes" ]]; then
         ### The layout is owned by wd-cpu-plan.sh, which writes per-instance drop-ins.  Writing
         ### CPUAffinity into the radiod@.service template as well would leave two sources of truth.
         wd_logger 1 "WD_CPU_TUNING=yes, so radiod cores come from wd-cpu-plan.sh; not setting CPUAffinity from RADIOD_CPU_CORES"
@@ -2268,7 +2268,7 @@ function ka9q-setup() {
  
     sudo systemctl start set_lo_multicast
 
-    ### Report the radiod CPU/cache/IRQ layout every start; only change it if WD_CPU_TUNING="yes"
+    ### Report the radiod CPU/cache/IRQ layout every start and apply it unless WD_CPU_TUNING="no"
     wd_cpu_tuning
 
     ka9q-services-setup

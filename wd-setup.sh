@@ -218,7 +218,7 @@ function wd_run_in_cgroup() {
     ### 'systemctl cat wsprdaemon.service' then sees two contradictory values with no way to tell which
     ### applies.  (The drop-in does win, because it resets with an empty CPUAffinity= first -- but that
     ### is a detail nobody should have to know, and it breaks silently if the reset is ever dropped.)
-    if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+    if [[ "${WD_CPU_TUNING-yes}" == "yes" ]]; then
         wd_logger 1 "WD_CPU_TUNING=yes, so the CPU layout comes from wd-cpu-plan.sh; not setting CPUAffinity from WD_CPU_CORES"
         return 0
     fi
@@ -433,7 +433,7 @@ CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
 ### wd-cpu-freq.sh: radiod's cores at the hardware maximum, every other core capped.  This
 ### hand-written per-core list must not fight it -- and note its unset default caps EVERY core
 ### at 3.2 GHz, which on a Ryzen 7 5825U silently hides 0.86 GHz of headroom from fft.
-if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
+if [[ "${WD_CPU_TUNING-yes}" == "yes" ]]; then
     wd_logger 2 "WD_CPU_TUNING=yes, so wd-cpu-freq.sh sets the CPU clocks from the plan; not applying CPU_CORE_KHZ"
 else
 #(( ++verbosity ))

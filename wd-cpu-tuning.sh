@@ -7,15 +7,18 @@
 ### wd-cpu-plan.sh works out a layout from THIS host's real topology; the helper scripts apply it.
 ###
 ### This reports on every WD start no matter what, so a site can see whether its layout is sane
-### without having to understand any of it.  It only CHANGES the machine when the operator sets
-### WD_CPU_TUNING="yes" in wsprdaemon.conf, because the layout touches CPU affinity, L3 cache
-### partitioning and IRQ routing, and a bad assignment can take a receiver off the air.
+### without having to understand any of it.  Since 2026-09-03 it also APPLIES the layout by
+### default (WD_CPU_TUNING defaults to "yes"): the planner refuses hosts it can't lay out sanely
+### (WD_PLAN_OK=no), and wd-cpu-apply.sh rolls back rather than half-apply, so the remaining risk
+### is judged smaller than radiod sitting on core 0 with the decoders, which is where every
+### untuned host ends up.  A site that wants to manage CPU affinity itself sets
+### WD_CPU_TUNING="no" in wsprdaemon.conf and gets the report only.
 ###
 ### Reporting needs no privileges and runs the planner straight out of the WD directory.
 ### Applying installs the helpers to /usr/local/sbin, because the systemd units reference them there.
 
 declare WD_CPU_TUNING_LOG=${WD_CPU_TUNING_LOG-/var/log/wsprdaemon/cpu-tuning.log}
-declare WD_CPU_TUNING=${WD_CPU_TUNING-no}                     ### "yes" => apply.  Anything else => report only.
+declare WD_CPU_TUNING=${WD_CPU_TUNING-yes}                    ### "yes" (the default) => apply.  Anything else => report only.
 declare WD_CPU_TUNING_SBIN=${WD_CPU_TUNING_SBIN-/usr/local/sbin}
 declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-freq.sh wd-cpu-apply.sh"
 
@@ -153,7 +156,7 @@ function wd_cpu_tuning_report()
         wd_cpu_tuning_log 1 "CPU tuning: the running layout matches the plan"
     elif [[ "${WD_CPU_TUNING}" != "yes" ]]; then
         wd_cpu_tuning_log 1 "CPU tuning: ${mismatches} item(s) differ from the plan.  This host is NOT tuned."
-        wd_cpu_tuning_log 1 "CPU tuning: to apply it, set WD_CPU_TUNING=\"yes\" in ${WSPRDAEMON_CONFIG_FILE} and restart WD.  See wd-cpu-tuning.md."
+        wd_cpu_tuning_log 1 "CPU tuning: WD_CPU_TUNING=\"${WD_CPU_TUNING}\" in ${WSPRDAEMON_CONFIG_FILE}, so it is not being applied.  Remove that line (or set it to \"yes\") and restart WD to apply it.  See wd-cpu-tuning.md."
         wd_cpu_tuning_log 1 "CPU tuning: check /var/log/wsprdaemon/drops.log first -- if the counts stay 0, this host does not need tuning."
     fi
     return 0

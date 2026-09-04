@@ -73,32 +73,43 @@ at one hour, so do not detect restarts by parsing it — use
 `/etc/logrotate.d/drops.rotate` at 1 MB x 5. No separate service is involved.
 
 ```
-# utc_time              status_stream           block_drops
-2026-08-20T13:14:00Z    dipole-status.local     0
+# utc_time              status_stream           block_drops   ssrc
+2026-08-20T13:14:00Z    dipole-status.local     0             14096
 ```
 
 A **decrease** means radiod restarted and the counter reset. Tunables (set in
 `wsprdaemon.conf`): `WD_DROPS_ENABLED`, `WD_DROPS_LOG_MINUTES` (default 10),
-`WD_DROPS_SSRC` (default 14080 -- poll the same ssrc every time or samples are not
-comparable), `WD_DROPS_TIMEOUT`.
+`WD_DROPS_SSRC`, `WD_DROPS_TIMEOUT`.
+
+`WD_DROPS_SSRC` is unset by default: WD listens to the first static channel group of each
+radiod (e.g. `wspr-pcm.local`), takes the lowest ssrc it hears, and keeps polling that one
+(remembered in `/var/log/wsprdaemon/drops.ssrc.<stream>`), so successive samples are
+comparable. Do not set it to an ssrc radiod does not have: radiod answers a poll for an unknown
+ssrc by *creating* a dynamic channel for it, which is how the old fixed default of 14080 left
+WSPR-only sites growing a junk 0 Hz channel every ten minutes.
 
 ## How it is enabled
 
-WD reports the planned layout on every start, and whether the running system matches it. It does
-**not** change the machine unless you opt in:
+WD reports the planned layout on every start, and whether the running system matches it, and
+since 2026-09-03 it applies the layout by default. To keep managing CPU affinity yourself and
+get the report only, opt out:
 
 ```sh
-WD_CPU_TUNING="yes"     # in wsprdaemon.conf; default is "no"
+WD_CPU_TUNING="no"      # in wsprdaemon.conf; default is "yes"
 ```
+
+The planner declines hosts it cannot lay out sanely (`WD_PLAN_OK=no`, e.g. too few cores), and
+`wd-cpu-apply.sh` rolls back rather than half-apply, so on such hosts the default changes nothing.
 
 When `WD_CPU_TUNING="yes"`, **`WD_CPU_CORES` and `RADIOD_CPU_CORES` in `wsprdaemon.conf` are
 ignored** -- the plan owns the layout and WD stops writing `CPUAffinity` into the unit files from
 them. That is deliberate: two writers meant the unit file and the drop-in could disagree, and
 `systemctl cat` would show two contradictory values. Those variables still work normally at sites
-that leave `WD_CPU_TUNING` at its default of `no`.
+that set `WD_CPU_TUNING="no"`; with the default they are commented out of `wsprdaemon.conf` (with
+a note and a backup) the first time the tuning runs, so the file does not contradict the system.
 
-**Check `/var/log/wsprdaemon/drops.log` before enabling it.** If the counts stay at 0 this host is
-keeping up and does not need tuning. Only turn it on if you are actually losing blocks.
+`/var/log/wsprdaemon/drops.log` tells you whether it is doing anything for you: if the counts
+were already 0 the host was keeping up and the tuning is insurance.
 
 Reporting needs no privileges. Applying installs the helper scripts to `/usr/local/sbin`, writes the
 systemd drop-ins, sets the L3 partition and pins the USB IRQs. It is idempotent, it never restarts
