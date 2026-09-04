@@ -2269,7 +2269,33 @@ function ka9q-setup() {
     sudo systemctl start set_lo_multicast
 
     ### Report the radiod CPU/cache/IRQ layout every start and apply it unless WD_CPU_TUNING="no"
+    ### Boot-ordering: ka9q-services-setup (below) is what STARTS radiod on a radiod@ host, so on the
+    ### first WD start after a reboot radiod is not running yet when wd_cpu_tuning runs.  Its unit
+    ### discovery (systemctl, then the running radiod's cgroup) then finds nothing, wd-cpu-apply
+    ### refuses ("found no radiod@ ... unit to pin"), and radiod comes up UNPINNED until a later run.
+    ### When this is a pure radiod@ host (WD manages the start) and radiod is not up yet, hand the
+    ### planner the configured instance name(s) via RADIOD_NAMES so the drop-ins are written BEFORE
+    ### radiod starts and it comes up pinned.  Never do this on a ka9q-radio@ (udev-autostart) host:
+    ### there the unit is ka9q-radio@<serial>, not radiod@<confname>, and radiod is already up anyway.
+    ### Skipped when the operator set RADIOD_NAMES themselves, or when radiod is already running.
+    local _radiod_hint_set="no"
+    if [[ -z "${RADIOD_NAMES:-}" ]] \
+        && ! pgrep -x radiod >/dev/null 2>&1 \
+        && ! systemctl list-units 'ka9q-radio@*.service' --all --no-legend 2>/dev/null | grep -q . ; then
+        local _conf_dir="${KA9Q_RADIOD_CONF_DIR:-/etc/radio}" _c _n _hint=""
+        for _c in "${_conf_dir}"/radiod@*.conf ; do
+            [[ -f ${_c} ]] || continue
+            _n=${_c##*/radiod@}; _n=${_n%.conf}
+            _hint+="${_n} "
+        done
+        if [[ -n ${_hint} ]]; then
+            export RADIOD_NAMES="${_hint% }"
+            _radiod_hint_set="yes"
+            wd_cpu_tuning_log 1 "CPU tuning: radiod not started yet (boot); hinting planner with configured instance(s) '${RADIOD_NAMES}' so the layout is written before radiod starts"
+        fi
+    fi
     wd_cpu_tuning
+    [[ ${_radiod_hint_set} == "yes" ]] && unset RADIOD_NAMES
 
     ka9q-services-setup
     rc=$? ; if (( rc )); then

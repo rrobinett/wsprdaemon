@@ -49,8 +49,9 @@ function log_decode_backlog()
     [[ "${WD_BACKLOG_ENABLED}" != "yes" ]] && return 0
     command -v find >/dev/null 2>&1 || return 0
 
-    local now=${EPOCHSECONDS} last_epoch=0 p_ft8="-" p_ft4="-" p_wspr="-"
-    [[ -f ${WD_BACKLOG_STATE_FILE} ]] && read -r last_epoch p_ft8 p_ft4 p_wspr < "${WD_BACKLOG_STATE_FILE}" 2>/dev/null
+    local now=${EPOCHSECONDS} last_epoch=0 p_ft8="-" p_ft4="-" p_wspr="-" wspr_grace_until=0
+    [[ -f ${WD_BACKLOG_STATE_FILE} ]] && read -r last_epoch p_ft8 p_ft4 p_wspr wspr_grace_until < "${WD_BACKLOG_STATE_FILE}" 2>/dev/null
+    wspr_grace_until=${wspr_grace_until:-0}     ### older state files have only 4 fields
     (( now - ${last_epoch:-0} < WD_BACKLOG_LOG_MINUTES * 60 )) && return 0
 
     local ft8 ft4 wspr
@@ -58,7 +59,7 @@ function log_decode_backlog()
     ft4=$(  wd_backlog_count "${WD_BACKLOG_FT_ROOT}/ft4" ${WD_BACKLOG_FT_AGE_MIN} )     ### overdue
     wspr=$( wd_backlog_count "${WSPRDAEMON_TMP_DIR:-/dev/shm/wsprdaemon}/recording.d" "" deep )  ### total
 
-    local warn="" t c pnm p
+    local warn="" grace_note="" t c pnm p
     ### FT8 / FT4: overdue count -- warn if high, or growing above half the warn floor.
     for t in ft8 ft4; do
         c=${!t}; pnm="p_${t}"; p=${!pnm}
@@ -67,17 +68,33 @@ function log_decode_backlog()
         elif [[ "$p" =~ ^[0-9]+$ ]] && (( c > p && c > WD_BACKLOG_FT_WARN / 2 )); then warn+=" ${t^^} backlog growing ${p}->${c}"
         fi
     done
-    ### WSPR: total count -- warn only on sustained growth (tolerates FST4W steady-state).
+    ### Post-restart grace.  A WD / recording / radiod restart (or a reboot) empties recording.d,
+    ### then FST4W-1800 refills it from ~0 up to steady state over ~MAX_WAV_FILE_AGE_MIN minutes.
+    ### That refill is a legitimate rise, not a backlog, and used to trip the growth warning
+    ### (K6FOD 2026-09-04: "WSPR total growing 166->315" right after a reboot).  Detect a restart as
+    ### the total DROPPING below the previous sample, and mute the WSPR growth warning until the ring
+    ### has had time to refill.  Time-based, so it is site-agnostic (not tied to FST4W wav age, which
+    ### a WSPR-only site without FST4W never accumulates).
+    local wspr_grace_min=${MAX_WAV_FILE_AGE_MIN:-35}
+    if [[ "$wspr" =~ ^[0-9]+$ && "$p_wspr" =~ ^[0-9]+$ ]] && (( wspr < p_wspr )); then
+        wspr_grace_until=$(( now + wspr_grace_min * 60 ))     ### recording.d shrank -> a restart just happened
+    fi
+    ### WSPR: total count -- warn only on sustained growth (tolerates FST4W steady-state), and never
+    ### while the post-restart refill grace is still in effect.
     if [[ "$wspr" =~ ^[0-9]+$ && "$p_wspr" =~ ^[0-9]+$ ]] \
         && (( wspr >= WD_BACKLOG_WSPR_FLOOR )) && (( wspr * 100 >= p_wspr * (100 + WD_BACKLOG_WSPR_GROW_PCT) )); then
-        warn+=" WSPR total growing ${p_wspr}->${wspr}"
+        if (( now < wspr_grace_until )); then
+            grace_note=" wspr_refill_grace=$(( (wspr_grace_until - now + 59) / 60 ))min"
+        else
+            warn+=" WSPR total growing ${p_wspr}->${wspr}"
+        fi
     fi
 
     mkdir -p "${WD_BACKLOG_LOG_DIR}" 2>/dev/null || sudo mkdir -p "${WD_BACKLOG_LOG_DIR}" 2>/dev/null
-    printf '%s\tft8_overdue=%s\tft4_overdue=%s\twspr_total=%s%s\n' \
+    printf '%s\tft8_overdue=%s\tft4_overdue=%s\twspr_total=%s%s%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$ft8" "$ft4" "$wspr" \
-        "${warn:+	WARNING:${warn}}" >> "${WD_BACKLOG_LOG_FILE}" 2>/dev/null
-    printf '%s %s %s %s\n' "$now" "$ft8" "$ft4" "$wspr" > "${WD_BACKLOG_STATE_FILE}" 2>/dev/null
+        "${grace_note}" "${warn:+	WARNING:${warn}}" >> "${WD_BACKLOG_LOG_FILE}" 2>/dev/null
+    printf '%s %s %s %s %s\n' "$now" "$ft8" "$ft4" "$wspr" "$wspr_grace_until" > "${WD_BACKLOG_STATE_FILE}" 2>/dev/null
 
     [[ -n "$warn" ]] && wd_logger 1 "WARNING: decode backlog:${warn} -- a decoder is falling behind (CPU cap too low / too few cores?).  See ${WD_BACKLOG_LOG_FILE}"
 
