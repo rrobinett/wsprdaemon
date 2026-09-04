@@ -1028,6 +1028,63 @@ function wd_ka9q_band_is_producible() {
 }
 
 ### This function is executed once the ka9q-radio dirrectory is created and has the configured version of SW installed
+### A RX888 MkII enumerates as the bare Cypress FX3 bootloader (USB ID 04b4:00f3, product 'WestBridge') until firmware has been
+### loaded into it, after which it re-enumerates as 04b4:00f1 'RX888mk2', the only form radiod will open.
+### Since ka9q-radio 2026.04 radiod no longer loads that firmware itself.  Instead 'make install' puts in place the udev rule
+### 70-rx888-boot.rules which starts rx888_boot.service (=> /usr/local/sbin/rx888_boot ${FIRMWARE from /etc/radio/rx888_bootfile.conf})
+### when a 00f3 device is *added* to the USB bus.
+### On a greenfield install the RX888 was plugged in and enumerated when the server booted, long before 'make install' installed that
+### rule, so udev never sees an 'add' event for it.  The RX888 then sits in bootloader mode until it is power cycled while radiod
+### restarts every 5 seconds with 'rx888_usb_init() failed' (seen at N8UR, RAC 175, on 2026-09-03).
+### The plain 'sudo udevadm trigger' which WD has always run doesn't help: it synthesizes 'change' events and the rule matches only 'add'.
+declare RX888_USB_VENDOR_ID="04b4"
+declare RX888_UNPROGRAMMED_PRODUCT_ID="00f3"      ### The bare FX3 bootloader
+declare RX888_PROGRAMMED_PRODUCT_ID="00f1"        ### After firmware has been loaded into the FX3
+declare RX888_BOOT_TIMEOUT_SECS=30                ### Loading the firmware and re-enumerating normally takes about 2 seconds
+
+function wd_boot_unprogrammed_rx888s() {
+    local unprogrammed_count=$( lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} 2>/dev/null | wc -l )
+    if (( unprogrammed_count == 0 )); then
+        wd_logger 2 "There are no RX888s in FX3 bootloader mode on the USB bus"
+        return 0
+    fi
+    wd_logger 1 "Found ${unprogrammed_count} RX888(s) still in FX3 bootloader mode (USB ID ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID}), so replay the udev 'add' event which starts rx888_boot.service"
+    sudo udevadm trigger --action=add --subsystem-match=usb --attr-match=idVendor=${RX888_USB_VENDOR_ID} --attr-match=idProduct=${RX888_UNPROGRAMMED_PRODUCT_ID}
+    local rc=$?
+    if (( rc )); then
+        wd_logger 1 "ERROR: 'sudo udevadm trigger --action=add ... --attr-match=idProduct=${RX888_UNPROGRAMMED_PRODUCT_ID}' => ${rc}"
+        return ${rc}
+    fi
+    local timeout=0
+    while (( timeout < RX888_BOOT_TIMEOUT_SECS )) && lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; do
+        sleep 1
+        (( ++timeout ))
+    done
+    if lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
+        ### The udev rule didn't get it done (e.g. rx888_boot.service or ${KA9Q_RADIOD_CONF_DIR}/rx888_bootfile.conf is missing), so run the loader ourselves
+        wd_logger 1 "After ${timeout} seconds a RX888 is still in FX3 bootloader mode. rx888_boot.service reported:\n$(sudo journalctl -u rx888_boot.service --no-pager -n 5 2>/dev/null)\nSo run the firmware loader directly"
+        local firmware_file=$( sed -n 's/^FIRMWARE=//p' ${KA9Q_RADIOD_CONF_DIR}/rx888_bootfile.conf 2>/dev/null )
+        sudo /usr/local/sbin/rx888_boot ${firmware_file}
+        rc=$?
+        if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo /usr/local/sbin/rx888_boot ${firmware_file}' => ${rc}"
+            return ${rc}
+        fi
+        timeout=0
+        while (( timeout < RX888_BOOT_TIMEOUT_SECS )) && lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; do
+            sleep 1
+            (( ++timeout ))
+        done
+        if lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
+            wd_logger 1 "ERROR: a RX888 is still in FX3 bootloader mode after running rx888_boot directly"
+            return 1
+        fi
+    fi
+    local programmed_count=$( lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_PROGRAMMED_PRODUCT_ID} 2>/dev/null | wc -l )
+    wd_logger 1 "Firmware was loaded and there are now ${programmed_count} programmed RX888(s) on the USB bus which radiod can open"
+    return 0
+}
+
 function build_ka9q_radio() {
     local project_subdir=$1
     local project_logfile="${project_subdir}_build.log"
@@ -1327,6 +1384,8 @@ function build_ka9q_radio() {
             wd_logger 2 "No need to update ${wisdom_file}"
         else
             wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${wisdom_file}, so install it"
+            ### On a greenfield install /etc/fftw doesn't exist (nothing in Debian/Ubuntu creates it), so the 'cp' below would fail
+            sudo mkdir -p ${wisdom_file%/*}
             sudo cp -p ${tmp_wisdom_file_path} ${wisdom_file}
             sudo chmod 664 ${wisdom_file}
             sudo chown --reference=${wisdom_file%/*} ${wisdom_file}
@@ -1339,6 +1398,13 @@ function build_ka9q_radio() {
     sudo udevadm control --reload-rules
     sudo udevadm trigger
     sudo chmod g+w ${KA9Q_RADIOD_LIB_DIR}
+
+    ### On a greenfield install the RX888 has been sitting in FX3 bootloader mode since the server booted, so load its firmware now
+    wd_boot_unprogrammed_rx888s
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'wd_boot_unprogrammed_rx888s' => ${rc}"
+        exit 1
+    fi
 
     local cpu_core_count=$( grep -c '^processor' /proc/cpuinfo )
     if [[ "${WD_CPU_TUNING-no}" == "yes" ]]; then
@@ -1379,11 +1445,15 @@ function build_ka9q_radio() {
         esac
     fi
 
-    if ! lsusb | grep -q "Cypress Semiconductor Corp" ; then
-        wd_logger 1 "KA9Q-radio software is installed and configured, but can't find a RX888 MkII attached to a USB port!"
+    if ! lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_PROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
+        if lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
+            wd_logger 1 "KA9Q-radio software is installed and configured and a RX888 MkII is attached to a USB port, but it is still in FX3 bootloader mode (USB ID ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID}), so radiod can't use it. Check 'sudo journalctl -u rx888_boot.service'"
+        else
+            wd_logger 1 "KA9Q-radio software is installed and configured, but can't find a RX888 MkII attached to a USB port!"
+        fi
         exit 1
     fi
-    wd_logger 2 "Found a RX888 MkII attached to a USB port."
+    wd_logger 2 "Found a programmed RX888 MkII attached to a USB port."
 
     if [[  ${radio_restart_needed} == "no" ]] ; then
         sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
