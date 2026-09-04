@@ -67,6 +67,34 @@ done
 
 is_radiod(){ case " $radiod_cpus " in *" $1 "*) return 0;; *) return 1;; esac; }
 
+### Which cpus are FAST.  Default "radiod": every radiod cpu (the long-standing behaviour).
+### "fft-pair": only the physical core (SMT pair) holding each instance's fft thread.  fft is
+### the one thread whose latency the receiver depends on and the only one that truly needs
+### clock; proc_rx888 (~0.24 Gcycle/s + 3.6 cyc/sample) and the other radiod threads are cheap.
+### Measured on K6FOD (Ryzen 5 5500U, 2026-09-03): with everything else pinned slow and only the
+### fft pair boosting, the package ran far cooler with fft/proc/decoders all healthy.  SMT
+### siblings share ONE clock, so the unit of "fast" is the pair, never a single thread.
+FAST_MODE="${FREQ_FAST_MODE:-radiod}"
+fast_cpus="$radiod_cpus"
+if [ "$FAST_MODE" = "fft-pair" ]; then
+    fast_cpus=""
+    for i in $(seq 0 $(( ${WD_RADIOD_INSTANCES:-0} - 1 ))); do
+        eval "f=\${WD_RADIOD${i}_FFT_CPU:-}"
+        [ -n "$f" ] || continue
+        sib=$(cat /sys/devices/system/cpu/cpu${f}/topology/thread_siblings_list 2>/dev/null || echo "$f")
+        fast_cpus+="$(expand "$sib") "
+    done
+    [ -n "$(echo $fast_cpus)" ] || fast_cpus="$radiod_cpus"    ### no fft cpu known: fall back
+fi
+is_fast(){ case " $fast_cpus " in *" $1 "*) return 0;; *) return 1;; esac; }
+
+### Per-core boost (cpb) is the HARD lever on acpi-cpufreq AMD hosts: their P-state table is
+### discrete (K6FOD: 2.1/1.7/1.4 only) and everything above the top P-state is turbo, which
+### scaling_max_freq cannot cap -- but cpb=0 pins a core at its top non-boost P-state (proven
+### 2.1 GHz, 86 -> 73 C).  amd-pstate / intel_pstate hosts have no cpb file and are untouched.
+have_cpb="no"; [ -e /sys/devices/system/cpu/cpu0/cpufreq/cpb ] && have_cpb="yes"
+n_cpb=0
+
 w(){ if [ "$DRY" = "1" ]; then echo "    would: echo '$1' > $2"; else echo "$1" > "$2" 2>/dev/null; fi; }
 
 n_fast=0 n_capped=0 n_skipped=0
@@ -76,7 +104,7 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
     maxf="$d/scaling_max_freq"
     gov="$d/scaling_governor"
     if [ ! -w "$maxf" ] && [ "$DRY" != "1" ]; then n_skipped=$((n_skipped+1)); continue; fi
-    if is_radiod "$cpu"; then
+    if is_fast "$cpu"; then
         w "$RADIOD_KHZ" "$maxf"
         ### performance keeps fft off the low P-states between decode cycles; it is the thread
         ### whose latency the whole receiver depends on, and it is never idle for long anyway.
@@ -85,6 +113,7 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
            { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
             w "performance" "$gov"
         fi
+        if [ "$have_cpb" = "yes" ] && { [ "$DRY" = "1" ] || [ -w "$d/cpb" ]; }; then w 1 "$d/cpb"; n_cpb=$((n_cpb+1)); fi
         n_fast=$((n_fast+1))
     else
         w "$OTHER_KHZ" "$maxf"
@@ -97,13 +126,16 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
            { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
             w "powersave" "$gov"
         fi
+        if [ "$have_cpb" = "yes" ] && { [ "$DRY" = "1" ] || [ -w "$d/cpb" ]; }; then w 0 "$d/cpb"; n_cpb=$((n_cpb+1)); fi
         n_capped=$((n_capped+1))
     fi
 done
 
 ### say which it is, so a site running FREQ_RADIOD_KHZ is not misreported as at the maximum
 if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by FREQ_RADIOD_KHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
-printf 'wd-cpu-freq: radiod cpus %s -> %d kHz (%s), %d other cpu(s) -> %d kHz'"\n" \
-       "$(echo $radiod_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
+label="radiod cpus"; [ "$FAST_MODE" = "fft-pair" ] && label="fft pair(s)"
+printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz'"\n" \
+       "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
+[ "$n_cpb" -gt 0 ] && echo "wd-cpu-freq: acpi-cpufreq host: per-core boost (cpb) set on $n_cpb cpu(s) -- boost ON for the fast set, OFF (hard top P-state) for the rest"
 [ "$n_skipped" -gt 0 ] && echo "wd-cpu-freq: $n_skipped cpu(s) had no writable scaling_max_freq and were left alone"
 exit 0

@@ -37,6 +37,15 @@ FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"
 ### whose fan cannot be controlled from Linux at all.  Trading a little of that clock back
 ### keeps most of the margin for meaningfully less heat.
 FREQ_RADIOD_KHZ="${FREQ_RADIOD_KHZ:-}"
+### Which radiod cpus get the fast clock.  "radiod" (default) = every radiod cpu.  "fft-pair"
+### = only the physical core(s) running fft, i.e. the fft cpu and its SMT sibling; the other
+### radiod cpus join the FREQ_OTHER_KHZ cap.  Only fft needs clock: proc_rx888 and the demod
+### threads run fine capped.  On acpi-cpufreq hosts the slow cpus also get boost (cpb) turned
+### off per core, which makes the cap a HARD ceiling rather than the advisory one amd-pstate
+### honours.  Measured at K6FOD (Ryzen 5 5500U, one RX888 at 64.8 Msps, 12 FT8/FT4 channels):
+### all-radiod-fast ran the package at 84-87 C; fft-pair alone at 4.0 GHz with the other ten
+### cpus hard-capped ran 61-64 C with fft at 53% of its core, zero drops, backlog clear.
+FREQ_FAST_MODE="${FREQ_FAST_MODE:-radiod}"
 
 # ---- 1. group logical CPUs by physical core (socket-aware) ----
 declare -A CORE_CPUS
