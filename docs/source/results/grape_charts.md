@@ -60,7 +60,7 @@ then browse to `http://localhost:8088/`.
 
 ## Command line
 
-Run `wdg -K` (the GRAPE sub-menu of `wd`) to chart every existing 24 hour wav that does not yet have a chart and refresh the page. This is also useful right after upgrading, to chart any days still in the wav-archive.
+Run `wdg K` (the GRAPE sub-menu of `wd`; `wdg` is `wd -g`) to chart every existing 24 hour wav that does not yet have a chart and refresh the page. This is also useful right after upgrading, to chart any days still in the wav-archive.
 
 ## Frequently asked questions
 
