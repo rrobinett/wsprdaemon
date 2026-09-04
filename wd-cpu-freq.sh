@@ -121,10 +121,15 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
         ### its top P-state regardless of scaling_max_freq (measured at KX4AZ-T: capped cores
         ### still ran 3.5 GHz).  Move them to powersave so the cap has any effect at all.
         ### radiod's cores are untouched by this; they are handled above.
-        if [ "$(cat "$gov" 2>/dev/null)" = "performance" ] && \
-           grep -q powersave "$d/scaling_available_governors" 2>/dev/null && \
-           { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
-            w "powersave" "$gov"
+        ### powersave where the driver offers it; Debian 12's acpi-cpufreq build offers only
+        ### performance and schedutil, and schedutil is fine here -- it still lifts an RT thread
+        ### (proc_rx888) to the cap, and lets an idle core fall to its lowest P-state.
+        if [ "$(cat "$gov" 2>/dev/null)" = "performance" ] && { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
+            slow_gov=""
+            for g in powersave schedutil; do
+                grep -qw "$g" "$d/scaling_available_governors" 2>/dev/null && { slow_gov="$g"; break; }
+            done
+            [ -n "$slow_gov" ] && w "$slow_gov" "$gov"
         fi
         if [ "$have_cpb" = "yes" ] && { [ "$DRY" = "1" ] || [ -w "$d/cpb" ]; }; then w 0 "$d/cpb"; n_cpb=$((n_cpb+1)); fi
         n_capped=$((n_capped+1))
