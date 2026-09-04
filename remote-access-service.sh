@@ -109,9 +109,12 @@ function wd_rac_client_stop_and_disable() {
     return 0
 }
 
-### True when this GRAPE site should publish its carrier strip-chart page (grape-utils.sh) through the RAC
+### True when this GRAPE site should publish its carrier strip-chart page (grape-utils.sh) through the RAC.
+### This runs from wd-setup.sh, before grape-utils.sh has derived GRAPE_PSWS_ID from PSWS_STATION_ID/PSWS_DEVICE_ID,
+### so look at the WD.conf variables themselves
 function wd_rac_grape_charts_wanted() {
-    [[ -n "${GRAPE_PSWS_ID-}" && "${GRAPE_CHARTS_ENABLED-yes}" == "yes" ]]
+    [[ "${GRAPE_CHARTS_ENABLED-yes}" == "yes" ]] || return 1
+    [[ -n "${GRAPE_PSWS_ID-}" ]] || [[ -n "${PSWS_STATION_ID-}" && -n "${PSWS_DEVICE_ID-}" ]]
 }
 
 ### True when the installed wd-rac-client already serves this channel on every gateway: then there is nothing
