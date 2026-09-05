@@ -996,6 +996,43 @@ function grape_menu() {
     return 0
 }
 
+### The strip charts' local-time axis falls back to the zone at the reporter's grid, which needs the python package 'timezonefinder'.
+### Recent releases of it require numpy 2, which must never be forced onto a server whose numpy came from Debian/Ubuntu (digital_rf
+### and soundfile depend on it), so: pin numpy to the version already installed and let pip pick a compatible timezonefinder, or
+### fail harmlessly.  Without it the charts show solar time for the grid.  Tried once per server; delete the marker file to retry.
+declare -r GRAPE_TIMEZONEFINDER_MARKER_FILE="${WSPRDAEMON_ROOT_DIR}/.timezonefinder-install-attempted"
+function grape_install_timezonefinder() {
+    if python3 -c "import timezonefinder" >& /dev/null; then
+        wd_logger 2 "Python package timezonefinder is installed"
+        return 0
+    fi
+    if [[ -f ${GRAPE_TIMEZONEFINDER_MARKER_FILE} ]]; then
+        wd_logger 2 "timezonefinder is not installed and an install was already attempted on $(< ${GRAPE_TIMEZONEFINDER_MARKER_FILE}), so the charts use solar time at the grid"
+        return 1
+    fi
+    TZ=UTC printf "%(%Y-%m-%d %H:%M:%S)T UTC\n" > ${GRAPE_TIMEZONEFINDER_MARKER_FILE}
+    local numpy_version=$( python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null )
+    if [[ -z "${numpy_version}" ]]; then
+        wd_logger 1 "NOTE: python numpy is not installed, so not installing the optional timezonefinder package; charts will show solar time at the grid"
+        return 1
+    fi
+    local pip3_extra_args=""
+    if ls /usr/lib/python3*/EXTERNALLY-MANAGED >& /dev/null; then
+        pip3_extra_args="--break-system-packages"
+    fi
+    local constraints_file="${WSPRDAEMON_TMP_DIR}/timezonefinder-constraints.txt"
+    echo "numpy==${numpy_version}" > ${constraints_file}
+    local pip_log_file="${WSPRDAEMON_TMP_DIR}/timezonefinder-pip.log"
+    wd_logger 1 "Installing the optional python package timezonefinder (numpy pinned to the installed ${numpy_version}) for the strip charts' grid-to-timezone lookup"
+    if sudo pip3 install ${pip3_extra_args} --constraint ${constraints_file} timezonefinder >& ${pip_log_file} \
+        && python3 -c "from timezonefinder import TimezoneFinder; assert TimezoneFinder().timezone_at(lng=-122.4, lat=37.8) == 'America/Los_Angeles'" >& /dev/null; then
+        wd_logger 1 "Installed python package timezonefinder"
+        return 0
+    fi
+    wd_logger 1 "NOTE: could not install a timezonefinder release compatible with the installed numpy ${numpy_version}, so the strip charts will show solar time at the reporter's grid (or set GRAPE_CHARTS_TZ in WD.conf).  pip said: $( tail -n 3 ${pip_log_file} 2>/dev/null | tr '\n' '|' )"
+    return 1
+}
+
 ### grape_init() is run during wd_setup, so I/O goes to the user terminal so they can be asked for their PSWS token/password
 function grape_init() {
     wd_logger 2 "Starting"
@@ -1021,7 +1058,7 @@ function grape_init() {
         exit 1
     fi
 
-    local grape_python_package_list=( "digital_rf" "soundfile" "matplotlib" "timezonefinder" )     ### matplotlib draws the GRAPE carrier strip charts; timezonefinder maps the reporter's grid to its timezone
+    local grape_python_package_list=( "digital_rf" "soundfile" "matplotlib" )     ### matplotlib draws the GRAPE carrier strip charts
     local python_package
     for python_package in ${grape_python_package_list[@]}; do
         install_python_package "${python_package}"
@@ -1030,6 +1067,8 @@ function grape_init() {
             return ${rc}
         fi
     done
+
+    grape_install_timezonefinder       ### Optional: never fails WD, tried once per server
 
     if ! [[ -d ~/.ssh ]] || ! find -L ~/.ssh -type f -name '*.pub' | grep -q .; then
         wd_logger 1 "This server has no ssh private/public keypair which is needed for the GRAPE upload service to run.  So running 'ssh-keygen' to create them"

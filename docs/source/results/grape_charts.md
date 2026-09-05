@@ -17,6 +17,8 @@ Each chart covers one UTC day for one band, and has two panes:
 
 The bottom axis is UTC, matching the file, and a second axis across the top of the frequency pane shows **local time**. The zone is chosen in this order: the server's own timezone, unless the server's clock runs on UTC; then `GRAPE_CHARTS_TZ` from wsprdaemon.conf if set; then the zone at the reporter's Maidenhead grid, looked up with the timezonefinder package (or plain solar time from the longitude if that package is missing). The axis label says which one was used.
 
+WD tries once to install timezonefinder, pinning numpy to the version already on the machine so that nothing else can break. Recent timezonefinder releases need numpy 2, so on a Debian or Ubuntu system with the distribution's numpy 1.x the install is skipped and the grid step shows solar time. Set `GRAPE_CHARTS_TZ` on such a server if you want proper local time with daylight saving. To retry the install after changing Python packages, delete `~/wsprdaemon/.timezonefinder-install-attempted`.
+
 ## The web page
 
 Browse to `http://<your WD server>:8088/`. The page has three tabs:
