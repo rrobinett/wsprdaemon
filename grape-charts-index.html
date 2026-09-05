@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>GRAPE carrier strip charts</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{font-family:system-ui,sans-serif;margin:0;background:#f5f6f8;color:#222}
+ header{background:#243447;color:#fff;padding:10px 18px;display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+ header h1{font-size:18px;margin:0} header small{opacity:.75}
+ nav button{background:none;border:1px solid #fff5;color:#fff;padding:5px 12px;border-radius:5px;cursor:pointer;margin-right:6px}
+ nav button.on{background:#fff;color:#243447;font-weight:600}
+ main{padding:14px 18px;max-width:1500px;margin:auto}
+ .ctl{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 3px #0002}
+ .ctl label{font-size:13px;color:#555;display:flex;gap:6px;align-items:center}
+ select{padding:4px 6px;font-size:14px}
+ .chart{background:#fff;border-radius:8px;box-shadow:0 1px 3px #0002;margin-bottom:14px;padding:8px 10px}
+ .chart img{width:100%;display:block}
+ .cap{font-size:13px;color:#555;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:4px 2px}
+ .cap a{color:#2a6fb0} .warn{color:#b3261e;font-weight:600}
+ canvas{width:100%;height:340px;display:block;background:#fff}
+ .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;padding:6px 2px}
+ .legend span i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle}
+ .picks{display:flex;gap:10px;flex-wrap:wrap} .picks label{font-size:13px}
+ table{border-collapse:collapse;font-size:13px;background:#fff} td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left}
+</style></head><body>
+<header><h1>GRAPE carrier strip charts</h1><small id="host"></small>
+ <nav><button id="tabDaily" class="on">Daily charts</button><button id="tabOverlay">Overlay</button><button id="tabTable">Table</button></nav>
+ <small id="gen"></small></header>
+<main>
+ <section id="daily">
+  <div class="ctl"><label>Date <select id="dDate"></select></label><label>Band <select id="dBand"><option value="">all</option></select></label>
+   <span style="font-size:13px;color:#666">Top pane: carrier offset from channel center (Hz), shown only where a carrier is detectable. Bottom: carrier power (dBFS, orange) and carrier SNR (dB, green; peak spectral bin over the median 0.1 Hz bin in the ±5 Hz channel). Click an image to open it full size.</span></div>
+  <div id="dCharts"></div>
+ </section>
+ <section id="overlay" hidden>
+  <div class="ctl">
+   <label>Overlay <select id="oMode"><option value="dates">several dates, one band</option><option value="bands">several bands, one date</option></select></label>
+   <label id="oFixLbl">Band <select id="oFix"></select></label>
+   <label>Freq range ±<select id="oYl"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option><option>5</option></select> Hz</label>
+   <label>Smooth <select id="oSm"><option value="1">10 s</option><option value="6" selected>1 min</option><option value="30">5 min</option><option value="90">15 min</option></select></label>
+  </div>
+  <div class="ctl picks" id="oPicks"></div>
+  <div class="chart"><div class="legend" id="oLegend"></div><canvas id="cF"></canvas><canvas id="cP"></canvas><canvas id="cS"></canvas></div>
+ </section>
+ <section id="table" hidden><table id="tbl"></table></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let M=null, series={};
+const COLORS=["#1f77b4","#d62728","#2ca02c","#ff7f0e","#9467bd","#8c564b","#e377c2","#17becf","#bcbd22","#7f7f7f"];
+const bandOrder=e=>-(e.freq_hz||0);
+function bandLabel(e){return e.band+(e.freq_hz?` (${e.freq_hz/1e6} MHz)`:"")}
+function key(e){return `${e.date}/${e.reporter}/${e.receiver}/${e.band}`}
+
+async function load(){
+  M=await (await fetch("manifest.json",{cache:"no-store"})).json();
+  $("host").textContent=M.host||""; $("gen").textContent="manifest "+M.generated_utc+" UTC";
+  const dates=[...new Set(M.entries.map(e=>e.date))].sort().reverse();
+  const bands=[...new Map(M.entries.map(e=>[e.band,e])).values()].sort((a,b)=>bandOrder(a)-bandOrder(b));
+  $("dDate").innerHTML=dates.map(d=>`<option>${d}</option>`).join("");
+  $("dBand").innerHTML='<option value="">all</option>'+bands.map(e=>`<option value="${e.band}">${bandLabel(e)}</option>`).join("");
+  $("dDate").onchange=$("dBand").onchange=renderDaily; renderDaily();
+  $("oMode").onchange=setupOverlay; $("oFix").onchange=setupPicks;
+  $("oYl").onchange=$("oSm").onchange=drawOverlay;
+  window.oDates=dates; window.oBands=bands; setupOverlay(); renderTable();
+}
+function renderDaily(){
+  const d=$("dDate").value,b=$("dBand").value;
+  const list=M.entries.filter(e=>e.date===d&&(!b||e.band===b)).sort((x,y)=>bandOrder(x)-bandOrder(y));
+  $("dCharts").innerHTML=list.map(e=>`<div class="chart"><a href="${enc(e.png)}" target="_blank"><img src="${enc(e.png)}" loading="lazy" alt="${key(e)}"></a>
+   <div class="cap"><span><b>${bandLabel(e)}</b> — ${e.reporter} ${e.receiver} — ${e.date}</span>
+   <span>local ${e.local_tz||""} UTC${e.utc_offset_h>=0?"+":""}${e.utc_offset_h} · carrier visible ${Math.round(100*e.good_frac)}% of day · zero samples ${e.zero_samples} · boundary |ΔA| ratio ${e.boundary_amp_ratio}${e.boundary_amp_ratio>1.5?' <span class="warn">(minute-join artifact?)</span>':''} · <a href="${enc(e.json)}">json</a></span></div></div>`).join("")||"<p>No charts for that selection.</p>";
+}
+const enc=p=>p.split("/").map(encodeURIComponent).join("/");
+function setupOverlay(){
+  const mode=$("oMode").value;
+  if(mode==="dates"){ $("oFixLbl").firstChild.textContent="Band "; $("oFix").innerHTML=oBands.map(e=>`<option value="${e.band}">${bandLabel(e)}</option>`).join(""); }
+  else { $("oFixLbl").firstChild.textContent="Date "; $("oFix").innerHTML=oDates.map(d=>`<option>${d}</option>`).join(""); }
+  setupPicks();
+}
+function setupPicks(){
+  const mode=$("oMode").value, fix=$("oFix").value;
+  let items= mode==="dates" ? M.entries.filter(e=>e.band===fix).sort((a,b)=>a.date<b.date?1:-1)
+                             : M.entries.filter(e=>e.date===fix).sort((a,b)=>bandOrder(a)-bandOrder(b));
+  $("oPicks").innerHTML=items.map((e,i)=>`<label><input type="checkbox" data-k="${key(e)}" ${i<7?"checked":""}> ${mode==="dates"?e.date+" "+e.receiver:bandLabel(e)}</label>`).join("")||"<i>nothing to overlay</i>";
+  $("oPicks").querySelectorAll("input").forEach(c=>c.onchange=drawOverlay);
+  drawOverlay();
+}
+async function getSeries(e){ if(!series[key(e)]) series[key(e)]=await (await fetch(enc(e.json))).json(); return series[key(e)]; }
+function smooth(a,n){ if(n<=1) return a; const o=new Array(a.length).fill(null); for(let i=0;i<a.length;i++){let s=0,c=0;for(let j=i-Math.floor(n/2);j<i-Math.floor(n/2)+n;j++){const v=a[j];if(v!=null&&isFinite(v)){s+=v;c++}} o[i]=c? s/c:null} return o; }
+async function drawOverlay(){
+  const picks=[...$("oPicks").querySelectorAll("input:checked")].map(c=>c.dataset.k);
+  const ents=M.entries.filter(e=>picks.includes(key(e)));
+  const data=await Promise.all(ents.map(getSeries));
+  const n=+$("oSm").value, yl=+$("oYl").value, mode=$("oMode").value;
+  $("oLegend").innerHTML=ents.map((e,i)=>`<span><i style="background:${COLORS[i%10]}"></i>${mode==="dates"?e.date:bandLabel(e)}</span>`).join("");
+  const w=$("cF").clientWidth||1000;
+  const tz=ents[0]?{off:ents[0].utc_offset_h,name:ents[0].local_tz}:null;
+  if(tz&&tz.off!=null) $("oLegend").innerHTML+=`<span style="margin-left:auto;color:#666">lower hour row = local time at server (${tz.name}, UTC${tz.off>=0?"+":""}${tz.off})</span>`;
+  plot($("cF"),w,data.map(d=>smooth(d.freq_hz_series,n)),data[0]?.window_s||10,-yl,yl,"carrier offset (Hz)",true,tz);
+  let all=data.flatMap(d=>d.power_db).filter(v=>v!=null); let lo=all.length?Math.floor(Math.min(...all)/10)*10:-90, hi=all.length?Math.ceil(Math.max(...all)/10)*10:-20;
+  plot($("cP"),w,data.map(d=>smooth(d.power_db,n)),data[0]?.window_s||10,lo,hi,"carrier power (dBFS)",false,tz);
+  let sn=data.flatMap(d=>d.snr_db).filter(v=>v!=null); let shi=sn.length?Math.max(40,Math.ceil(Math.max(...sn)/10)*10):60;
+  plot($("cS"),w,data.map(d=>smooth(d.snr_db,n)),data[0]?.window_s||10,0,shi,"carrier SNR (dB)",false,tz,data[0]?.snr_min_db);
+}
+function plot(cv,w,lines,ws,y0,y1,ylabel,zero,tz,hline){
+  const H=340, dpr=devicePixelRatio||1; cv.width=w*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr);
+  const L=56,R=12,T=10,B=46, pw=w-L-R, ph=H-T-B;
+  g.clearRect(0,0,w,H); g.font="12px system-ui"; g.fillStyle="#333"; g.strokeStyle="#ddd"; g.lineWidth=1;
+  for(let h=0;h<=24;h+=2){const x=L+pw*h/24; g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke(); g.fillStyle="#333"; g.fillText(h,x-4,T+ph+14);
+    if(tz&&tz.off!=null){ const lh=((h+tz.off)%24+24)%24; g.fillStyle="#2a6fb0"; g.fillText(String(Math.round(lh)).padStart(2,"0"),x-7,T+ph+28); } }
+  g.fillStyle="#333";
+  const ny=6; for(let i=0;i<=ny;i++){const v=y0+(y1-y0)*i/ny, y=T+ph-(ph*i/ny); g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke(); g.fillText(v.toFixed(Math.abs(y1-y0)<3?2:0),4,y+4);}
+  if(zero){const y=T+ph*(y1/(y1-y0)); g.strokeStyle="#888";g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke();}
+  if(hline!=null){const y=T+ph-(ph*(hline-y0)/(y1-y0)); g.strokeStyle="#2a9d2a"; g.setLineDash([5,4]); g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke(); g.setLineDash([]); g.fillStyle="#2a9d2a"; g.fillText(hline+" dB freq mask",L+pw-95,y-4);}
+  g.save(); g.translate(12,T+ph/2); g.rotate(-Math.PI/2); g.fillText(ylabel,-40,-2); g.restore(); g.fillStyle="#333"; g.fillText("UTC hour",L+pw/2-60,H-3); if(tz&&tz.off!=null){g.fillStyle="#2a6fb0"; g.fillText("/ local ("+tz.name+")",L+pw/2+5,H-3);}
+  lines.forEach((a,i)=>{ g.strokeStyle=COLORS[i%10]; g.lineWidth=1; g.beginPath(); let pen=false;
+    for(let k=0;k<a.length;k++){const v=a[k]; if(v==null||v<y0||v>y1){pen=false;continue} const x=L+pw*(k*ws/86400), y=T+ph-(ph*(v-y0)/(y1-y0)); pen? g.lineTo(x,y):g.moveTo(x,y); pen=true;}
+    g.stroke(); });
+}
+function renderTable(){
+  const rows=M.entries.map(e=>`<tr><td>${e.date}</td><td>${e.reporter}</td><td>${e.receiver}</td><td>${bandLabel(e)}</td><td>${Math.round(100*e.good_frac)}%</td><td>${e.zero_samples}</td><td${e.boundary_amp_ratio>1.5?' class="warn"':''}>${e.boundary_amp_ratio}</td><td><a href="${enc(e.png)}">png</a> <a href="${enc(e.json)}">json</a></td></tr>`).join("");
+  $("tbl").innerHTML="<tr><th>date</th><th>reporter</th><th>receiver</th><th>band</th><th>carrier visible</th><th>zero samples</th><th>boundary |ΔA| ratio</th><th></th></tr>"+rows;
+}
+for(const [b,s] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]) $(b).onclick=()=>{ for(const [b2,s2] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]){$(s2).hidden=s2!==s;$(b2).classList.toggle("on",b2===b)} if(s==="overlay") drawOverlay(); };
+window.onresize=()=>{ if(!$("overlay").hidden) drawOverlay(); };
+load().catch(e=>{document.querySelector("main").innerHTML="<p class=warn>Could not load manifest.json: "+e+"</p>"});
+</script></body></html>

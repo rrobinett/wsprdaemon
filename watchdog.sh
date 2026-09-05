@@ -65,6 +65,10 @@ if [[ -z "${GRAPE_PSWS_ID-}" ]]; then
 else
     wd_logger 2 "Adding grape_upload_daemon() to the watchdog_daemon_list[] since GRAPE_PSWS_ID is defined in WD.con"
     watchdog_daemon_list+=("grape_upload_daemon     ${GRAPE_WAV_ARCHIVE_ROOT_PATH}")
+    if [[ ${GRAPE_CHARTS_ENABLED-yes} == "yes" ]]; then
+        wd_logger 2 "Adding grape_charts_web_daemon() to the watchdog_daemon_list[] since GRAPE_CHARTS_ENABLED=yes"
+        watchdog_daemon_list+=("grape_charts_web_daemon ${GRAPE_CHARTS_ROOT_DIR}")
+    fi
 fi
 
 ### 
