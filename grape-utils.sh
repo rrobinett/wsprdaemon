@@ -67,6 +67,7 @@ declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare    GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED-yes}                ### Set to "no" in WD.conf to disable chart creation and the web server
 declare    GRAPE_CHARTS_PORT=${GRAPE_CHARTS_PORT-8088}                     ### TCP port of the chart web server
 declare    GRAPE_CHARTS_BIND=${GRAPE_CHARTS_BIND-0.0.0.0}                  ### Set to 127.0.0.1 to make the charts reachable only through an ssh tunnel
+declare    GRAPE_CHARTS_TZ=${GRAPE_CHARTS_TZ-}                             ### IANA zone (e.g. "America/Los_Angeles") for the charts' local-time axis.  Empty => the server's own timezone
 declare -r GRAPE_CHARTS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/grape-charts"      ### Home dir of the web daemon (logs and pid) ...
 declare -r GRAPE_CHARTS_WWW_DIR="${GRAPE_CHARTS_ROOT_DIR}/www"              ### ... and the directory it serves: index.html, manifest.json, <DATE>/<REPORTER>/<RECEIVER>/<BAND>.{png,json}
 declare -r GRAPE_CHART_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/grape-strip-chart.py"
@@ -677,7 +678,7 @@ function grape_create_chart() {
     mkdir -p ${chart_base_path%/*}
     local chart_log_file="${GRAPE_CHARTS_ROOT_DIR}/grape-strip-chart.log"
     wd_logger 1 "Creating chart ${chart_base_path}.png from ${wav_file_path}"
-    nice -n 19 python3 ${GRAPE_CHART_PYTHON_CMD} ${wav_file_path} ${chart_base_path} >> ${chart_log_file} 2>&1
+    GRAPE_CHARTS_TZ="${GRAPE_CHARTS_TZ}" nice -n 19 python3 ${GRAPE_CHART_PYTHON_CMD} ${wav_file_path} ${chart_base_path} >> ${chart_log_file} 2>&1
     local rc=$?
     if (( rc )); then
         wd_logger 1 "ERROR: 'python3 ${GRAPE_CHART_PYTHON_CMD} ${wav_file_path} ${chart_base_path}' => ${rc}:\n$(tail -n 5 ${chart_log_file})"

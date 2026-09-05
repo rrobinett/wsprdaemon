@@ -10,9 +10,12 @@ Pane 1: carrier frequency offset (Hz) from the channel center, estimated as the
         above the window's median spectral bin (no carrier, just noise).
 Pane 2: carrier power (dBFS) = mean power of each 10 s window.
 The JSON holds the same series so the web page can overlay days/bands.
+The local-time axis uses the server's timezone unless the environment variable GRAPE_CHARTS_TZ names an
+IANA zone (e.g. America/Los_Angeles), which WD sets from the GRAPE_CHARTS_TZ line of wsprdaemon.conf.
 """
 import sys, os, json, glob, re
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import warnings; warnings.filterwarnings("ignore")
 import numpy as np, soundfile as sf
 import matplotlib; matplotlib.use("Agg")
@@ -75,17 +78,29 @@ def analyze(wav):
                 good_frac=float(good.mean()), boundary_amp_ratio=boundary_ratio,
                 samples=len(z), zero_samples=int((amp == 0).sum()))
 
+def chart_timezone():
+    """The zone for the local-time axis: GRAPE_CHARTS_TZ (IANA name) if set and valid, else the server's zone (None)."""
+    name = os.environ.get("GRAPE_CHARTS_TZ", "").strip()
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        print(f"WARNING: GRAPE_CHARTS_TZ='{name}' is not a known IANA timezone; using the server's timezone", file=sys.stderr)
+        return None
+
 def local_ticks(date_str):
-    """For each UTC hour 0..24 of the chart date, the local (server timezone) hour label.
+    """For each UTC hour 0..24 of the chart date, the local hour label in the chart timezone.
     Returns (labels, tz_abbrev_at_noon, utc_offset_hours_at_noon); (None, None, None) if the date is unknown."""
     if not date_str:
         return None, None, None
+    tz = chart_timezone()                                    # None => the server's local zone
     d = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=timezone.utc)
     labels = []
     for h in range(25):
-        lt = (d + timedelta(hours=h)).astimezone()          # server's local zone, DST-aware per hour
+        lt = (d + timedelta(hours=h)).astimezone(tz)         # DST-aware per hour
         labels.append(lt.strftime("%H"))
-    noon = (d + timedelta(hours=12)).astimezone()
+    noon = (d + timedelta(hours=12)).astimezone(tz)
     return labels, noon.strftime("%Z"), noon.utcoffset().total_seconds() / 3600.0
 
 def plot(meta, a, png):
@@ -104,7 +119,8 @@ def plot(meta, a, png):
     if labels:
         top = ax[0].secondary_xaxis("top")
         top.set_xticks(range(0, 25, 2)); top.set_xticklabels(labels[0:25:2])
-        top.set_xlabel(f"local time at server ({tzname}, UTC{off:+g})", fontsize=9)
+        where = os.environ.get("GRAPE_CHARTS_TZ", "").strip() or "at server"
+        top.set_xlabel(f"local time {where} ({tzname}, UTC{off:+g})", fontsize=9)
     ax[1].plot(t, pwr, lw=0.6, color="tab:orange", label="carrier power (dBFS)")
     ax[1].set_ylabel("carrier power (dBFS)", color="tab:orange"); ax[1].set_xlabel("UTC hour"); ax[1].grid(alpha=0.3)
     snr_ax = ax[1].twinx()

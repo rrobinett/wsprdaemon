@@ -15,7 +15,7 @@ Each chart covers one UTC day for one band, and has two panes:
 - **Carrier frequency offset (Hz)**, the top pane. This is the Doppler shift of the received carrier relative to the channel center, estimated every 10 seconds from the spectral peak of the 10 sps I/Q data. Ionospheric motion at sunrise and sunset typically shows as excursions of a few tenths of a hertz; the daytime "quiet" trace shows how well your receiver's reference clock tracks WWV's cesium standard. The trace is blanked wherever the carrier is not detectable, so a gap means fade-out rather than a real frequency jump.
 - **Carrier power and SNR**, the bottom pane. Carrier power (dBFS, orange, left axis) is the mean power in the ±5 Hz channel. Carrier SNR (dB, green, right axis) is the spectral peak relative to the median 0.1 Hz bin of the same window, so it separates a weak carrier from a raised noise floor. The dashed green line is the 15 dB threshold below which the frequency trace above is blanked.
 
-The bottom axis is UTC, matching the file, and a second axis across the top of the frequency pane shows **local time at the server**, taken from the machine's timezone setting.
+The bottom axis is UTC, matching the file, and a second axis across the top of the frequency pane shows **local time**. By default that is the server's own timezone; a server whose clock is set to UTC can name the site's zone with `GRAPE_CHARTS_TZ` (see Configuration).
 
 ## The web page
 
@@ -48,7 +48,10 @@ These are the defaults. Uncomment and change them in `wsprdaemon.conf` only if y
 #GRAPE_CHARTS_ENABLED="yes"      # "no" disables chart creation and the web server
 #GRAPE_CHARTS_PORT=8088          # TCP port of the chart web server
 #GRAPE_CHARTS_BIND="0.0.0.0"     # listen on all interfaces; "127.0.0.1" restricts to this machine
+#GRAPE_CHARTS_TZ="America/Los_Angeles"   # IANA zone for the local-time axis; default is the server's own zone
 ```
+
+`GRAPE_CHARTS_TZ` only affects the labels on the charts and the web page; the data and the bottom UTC axis never change. Charts already drawn keep their old labels until they are redrawn: delete that day's directory under `~/wsprdaemon/grape-charts/www/` and run `wdg K`.
 
 If you set the bind address to `127.0.0.1`, view the page through an ssh tunnel from your desktop:
 
