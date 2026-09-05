@@ -161,6 +161,8 @@ OS_CORES=1
 ### Two physical cores per radiod is the default, so fft and proc_rx888 each get their own and do
 ### not contend for one core's execution units / L1 / L2.  A site short of cores -- or one that would
 ### rather give a core back to the decoders -- can set CORES_PER_RADIOD_MAX=1 in /etc/wd-cpu-plan.conf.
+### Measured at KX4AZ-T (5825U, Sept 2026): 1 core costs fft +1 point and proc_rx888 +4, zero drops, as long as
+### the two hot threads sit on SEPARATE SMT siblings (radiod-pin-threads.sh does that); letting them float drops blocks.
 ### At 1 core the two hot threads share an SMT pair, which measurably raises their CPU cost, and with
 ### channel threads running SCHED_FIFO it also concentrates RT time on fewer runqueues -- watch for
 ### "RT throttling activated" in the kernel log.

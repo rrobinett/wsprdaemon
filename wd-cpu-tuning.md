@@ -23,7 +23,9 @@ The last three take their CPU lists from `wd-cpu-plan.sh`. Nothing is hard-coded
 - **Two physical cores per radiod, `fft` and `proc_rx888` on separate ones.** These are the
   two hot threads. Sharing one physical core they contend for its execution units, L1 and
   L2. Separating them cut CPU for *identical* work by 33 points at KJ6MKI (145% → 112%) and
-  took the fft core's worst-case idle from 4.4% to 29%.
+  took the fft core's worst-case idle from 4.4% to 29%. Measured again at KX4AZ-T in Sept 2026
+  the penalty was far smaller (see *One physical core per radiod* below): what matters is that
+  the two hot threads are **pinned to separate SMT siblings**, not that they have separate cores.
 - **Decoders excluded from radiod's cores**, via the WD cgroup cpuset and `WD_CPU_CORES`.
 - **L3 CAT partition**, so decoders cannot evict radiod's FFT working set.
 - **USB IRQs pinned.** The RX888 arrives over USB. Left alone the xhci IRQ was found parked
@@ -164,3 +166,58 @@ decoders' DRAM bandwidth. Testing at KX4AZ on a similar processor showed MBA to 
 control on this silicon: even aggressive settings reduced peak memory bandwidth by at most
 ~50%. Treat it as the last resort, not the next step -- and remember the decoders finishing
 fast also gets them off the memory bus sooner.
+
+## One physical core per radiod (KX4AZ-T, Sept 2026)
+
+`CORES_PER_RADIOD_MAX=1` in `/etc/wd-cpu-plan.conf` gives each radiod one physical core:
+`fft` on the first SMT sibling, `proc_rx888` and the channel threads on the second. Tested
+live at KX4AZ-T (Ryzen 7 5825U, 8c/16t, two RX888s at 129.6 Msps, 45 channels each) by
+re-pinning one running radiod with `taskset` while the other stayed on the 2-core plan as a
+control, then made permanent. All numbers are the thread's own CPU time from
+`/proc/PID/task/TID/stat` (note: `/proc/TID/stat` returns the *whole process*, not the thread).
+
+```
+layout                                        fft     proc_rx888   drops (4 min, 2 decode bursts)
+2 cores: fft@2, proc_rx888@4, channels@3,5    79.9%     24.2%      0
+1 core:  fft@2, proc_rx888+channels@3         81.0%     28.3%      0
+1 core:  everything floating on 2,3           81.2%     28.6%      16 within seconds of the re-pin
+```
+
+- The one-core penalty is 1-4 points per hot thread, not the 33 points seen at KJ6MKI. The
+  busy sibling (proc_rx888 plus 45 channel threads) sits at ~38%, peaks ~52%.
+- **Never let the hot threads float over both siblings.** Both are `SCHED_FIFO`; when the
+  scheduler puts them on the same sibling the front end drops blocks immediately.
+  `radiod-pin-threads.sh` already pins them apart, so the planner's 1-core layout is safe.
+- The two freed cores go to the decoders (or to a third RX888: the planner puts a third
+  instance on the next core automatically).
+
+**How much L3 does a radiod really need?** Shrinking the radiod CAT partition live with both
+radiods running (fft is the only thread on its sibling, so that CPU's busy% is fft's own):
+
+```
+radiod partition        fft dipole   fft ns-bev   radiod DRAM BW   drops (2 min each)
+10 ways = 5 MB each        62%          68%         10.4 GB/s       0
+ 7 ways = 3.5 MB each      66%          73%         11.1 GB/s       0
+ 5 ways = 2.5 MB each      73%          79%         11.6 GB/s       0
+ 3 ways = 1.5 MB each      85%          89%         12.4 GB/s       0
+```
+
+So three radiods sharing the default 10-way partition (3.3 MB each) cost each fft only 4-6
+points; L3 is not what limits a third RX888 on this class of host. USB is: two RX888s at
+129.6 Msps already occupy both SuperSpeed ports of one xHCI controller, so the third must go
+on the second controller.
+
+**64.8 Msps when the antenna feed has a 30 MHz low-pass filter.** At KX4AZ-T the 40.68 MHz and
+50.3 MHz channels showed only the ADC floor (N0 -153 to -155 dB/Hz against -141 at 28 MHz),
+so both RX888s were moved to 64.8 Msps and those channels removed. fft fell from 60-80% to
+20-24% of its CPU, package power from 17-20 W to 8 W, drops stayed 0, and the noise floor at
+14 MHz was unchanged. `wd-cpu-freq.sh` already notes that fft cost rises much faster than
+linearly with sample rate; this is that effect in the other direction.
+
+**The decoder clock cap.** On the 5825U with `amd-pstate` in active (EPP) mode every
+`scaling_max_freq` at or below ~3.19 GHz produces the same 3.19 GHz (the CPPC nominal clock)
+on a fully busy core: 1.4, 2.0, 2.5 and 3.0 GHz caps, `boost=0`, `EPP=power` and the
+`performance` governor all measured 3.19 GHz with `turbostat`; only caps above nominal bite
+(uncapped: 4.06 GHz). This confirms the 5560U observation in `wd-cpu-freq.sh`: the "1.4 GHz"
+decoder cap really means "no boost". The decoders there run 40-54% busy per 10-minute average
+at 3.19 GHz, so a true 1.4 GHz would not finish a cycle anyway.
