@@ -27,11 +27,16 @@ def parse_path(wav):
     band_dir = os.path.dirname(os.path.abspath(wav))
     parts = band_dir.split(os.sep)
     band, rcv, rep, date = parts[-1], parts[-2], parts[-3], parts[-4]
+    # The date dir is normally YYYYMMDD, but operators park days aside under names like hold_20260813
+    m = re.search(r"(20\d{6})", date)
+    if m:
+        date = m.group(1) if date == m.group(1) else date          # keep the odd name for display and paths ...
+    date_yyyymmdd = m.group(1) if m else None                       # ... but chart with the real date
     freq_hz = None
     for f in sorted(glob.glob(os.path.join(band_dir, "*_iq.wv")))[:1]:
         m = re.search(r"_(\d+)_iq\.wv$", f)
         if m: freq_hz = int(m.group(1))
-    return dict(date=date, reporter=rep, receiver=rcv, band=band, freq_hz=freq_hz)
+    return dict(date=date, date_yyyymmdd=date_yyyymmdd, reporter=rep, receiver=rcv, band=band, freq_hz=freq_hz)
 
 def analyze(wav):
     x, fs = sf.read(wav, dtype="float32"); fs = int(fs)
@@ -72,7 +77,9 @@ def analyze(wav):
 
 def local_ticks(date_str):
     """For each UTC hour 0..24 of the chart date, the local (server timezone) hour label.
-    Returns (labels, tz_abbrev_at_noon, utc_offset_hours_at_noon)."""
+    Returns (labels, tz_abbrev_at_noon, utc_offset_hours_at_noon); (None, None, None) if the date is unknown."""
+    if not date_str:
+        return None, None, None
     d = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=timezone.utc)
     labels = []
     for h in range(25):
@@ -93,10 +100,11 @@ def plot(meta, a, png):
     ax[0].set_title(y=1.22, label=f"{meta['reporter']}  {meta['receiver']}  {meta['band']} {fz}   {meta['date']} UTC"
                     f"    ({WINDOW_S} s windows; freq shown only where carrier SNR >= {SNR_MIN_DB:g} dB, "
                     f"{100*a['good_frac']:.0f}% of day)")
-    labels, tzname, off = local_ticks(meta["date"])
-    top = ax[0].secondary_xaxis("top")
-    top.set_xticks(range(0, 25, 2)); top.set_xticklabels(labels[0:25:2])
-    top.set_xlabel(f"local time at server ({tzname}, UTC{off:+g})", fontsize=9)
+    labels, tzname, off = local_ticks(meta["date_yyyymmdd"])
+    if labels:
+        top = ax[0].secondary_xaxis("top")
+        top.set_xticks(range(0, 25, 2)); top.set_xticklabels(labels[0:25:2])
+        top.set_xlabel(f"local time at server ({tzname}, UTC{off:+g})", fontsize=9)
     ax[1].plot(t, pwr, lw=0.6, color="tab:orange", label="carrier power (dBFS)")
     ax[1].set_ylabel("carrier power (dBFS)", color="tab:orange"); ax[1].set_xlabel("UTC hour"); ax[1].grid(alpha=0.3)
     snr_ax = ax[1].twinx()
@@ -119,7 +127,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     plot(meta, a, out + ".png")
     def rl(v, nd): return [None if not np.isfinite(x) else round(float(x), nd) for x in v]
-    _, tzname, off = local_ticks(meta["date"])
+    _, tzname, off = local_ticks(meta["date_yyyymmdd"])
     doc = dict(meta, local_tz=tzname, utc_offset_h=off, window_s=WINDOW_S, snr_min_db=SNR_MIN_DB, n=int(a["n"]),
                samples=a["samples"], zero_samples=a["zero_samples"],
                good_frac=round(a["good_frac"], 3), boundary_amp_ratio=round(a["boundary_amp_ratio"], 2),
