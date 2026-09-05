@@ -93,8 +93,8 @@ async function drawOverlay(){
   const n=+$("oSm").value, yl=+$("oYl").value, mode=$("oMode").value;
   $("oLegend").innerHTML=ents.map((e,i)=>`<span><i style="background:${COLORS[i%10]}"></i>${mode==="dates"?e.date:bandLabel(e)}</span>`).join("");
   const w=$("cF").clientWidth||1000;
-  const tz=ents[0]?{off:ents[0].utc_offset_h,name:ents[0].local_tz}:null;
-  if(tz&&tz.off!=null) $("oLegend").innerHTML+=`<span style="margin-left:auto;color:#666">lower hour row = local time at server (${tz.name}, UTC${tz.off>=0?"+":""}${tz.off})</span>`;
+  const tz=ents[0]?{off:ents[0].utc_offset_h,name:ents[0].local_tz,src:ents[0].local_tz_source||"at server"}:null;
+  if(tz&&tz.off!=null) $("oLegend").innerHTML+=`<span style="margin-left:auto;color:#666">lower hour row = local time ${tz.src} (${tz.name}, UTC${tz.off>=0?"+":""}${tz.off})</span>`;
   plot($("cF"),w,data.map(d=>smooth(d.freq_hz_series,n)),data[0]?.window_s||10,-yl,yl,"carrier offset (Hz)",true,tz);
   let all=data.flatMap(d=>d.power_db).filter(v=>v!=null); let lo=all.length?Math.floor(Math.min(...all)/10)*10:-90, hi=all.length?Math.ceil(Math.max(...all)/10)*10:-20;
   plot($("cP"),w,data.map(d=>smooth(d.power_db,n)),data[0]?.window_s||10,lo,hi,"carrier power (dBFS)",false,tz);

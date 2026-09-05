@@ -10,8 +10,12 @@ Pane 1: carrier frequency offset (Hz) from the channel center, estimated as the
         above the window's median spectral bin (no carrier, just noise).
 Pane 2: carrier power (dBFS) = mean power of each 10 s window.
 The JSON holds the same series so the web page can overlay days/bands.
-The local-time axis uses the server's timezone unless the environment variable GRAPE_CHARTS_TZ names an
-IANA zone (e.g. America/Los_Angeles), which WD sets from the GRAPE_CHARTS_TZ line of wsprdaemon.conf.
+The local-time axis zone is chosen in this order:
+  1. the server's own timezone, unless the server runs on UTC;
+  2. the environment variable GRAPE_CHARTS_TZ (an IANA zone such as America/Los_Angeles), which WD sets
+     from the GRAPE_CHARTS_TZ line of wsprdaemon.conf;
+  3. the zone at the reporter's Maidenhead grid (from the <REPORTER>_<GRID> directory name), via the
+     timezonefinder package, or plain solar time (longitude/15, no DST) if that package is missing.
 """
 import sys, os, json, glob, re
 from datetime import datetime, timezone, timedelta
@@ -39,7 +43,23 @@ def parse_path(wav):
     for f in sorted(glob.glob(os.path.join(band_dir, "*_iq.wv")))[:1]:
         m = re.search(r"_(\d+)_iq\.wv$", f)
         if m: freq_hz = int(m.group(1))
-    return dict(date=date, date_yyyymmdd=date_yyyymmdd, reporter=rep, receiver=rcv, band=band, freq_hz=freq_hz)
+    grid = rep.rsplit("_", 1)[1] if "_" in rep else ""
+    return dict(date=date, date_yyyymmdd=date_yyyymmdd, reporter=rep, receiver=rcv, band=band, freq_hz=freq_hz, grid=grid)
+
+def maidenhead_to_latlon(grid):
+    """Center of a 4- or 6-character Maidenhead locator, or None if it doesn't parse."""
+    g = grid.strip().upper()
+    if not re.fullmatch(r"[A-R]{2}[0-9]{2}([A-X]{2})?", g):
+        return None
+    lon = (ord(g[0]) - ord("A")) * 20 - 180 + int(g[2]) * 2
+    lat = (ord(g[1]) - ord("A")) * 10 - 90 + int(g[3])
+    if len(g) == 6:
+        lon += (ord(g[4]) - ord("A")) * 5 / 60 + 2.5 / 60
+        lat += (ord(g[5]) - ord("A")) * 2.5 / 60 + 1.25 / 60
+    else:
+        lon += 1.0
+        lat += 0.5
+    return lat, lon
 
 def analyze(wav):
     x, fs = sf.read(wav, dtype="float32"); fs = int(fs)
@@ -78,23 +98,40 @@ def analyze(wav):
                 good_frac=float(good.mean()), boundary_amp_ratio=boundary_ratio,
                 samples=len(z), zero_samples=int((amp == 0).sum()))
 
-def chart_timezone():
-    """The zone for the local-time axis: GRAPE_CHARTS_TZ (IANA name) if set and valid, else the server's zone (None)."""
+def chart_timezone(meta):
+    """(tzinfo or None for the server's zone, description of where it came from), in the search order:
+    server zone if not UTC -> GRAPE_CHARTS_TZ -> reporter's grid (timezonefinder, else solar time)."""
+    now = datetime.now().astimezone()
+    if not (now.utcoffset() == timedelta(0) and now.tzname() in ("UTC", "GMT", "Etc/UTC", "Z", "")):
+        return None, "at server"
     name = os.environ.get("GRAPE_CHARTS_TZ", "").strip()
-    if not name:
-        return None
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        print(f"WARNING: GRAPE_CHARTS_TZ='{name}' is not a known IANA timezone; using the server's timezone", file=sys.stderr)
-        return None
+    if name:
+        try:
+            return ZoneInfo(name), f"per GRAPE_CHARTS_TZ {name}"
+        except Exception:
+            print(f"WARNING: GRAPE_CHARTS_TZ='{name}' is not a known IANA timezone; ignoring it", file=sys.stderr)
+    grid = meta.get("grid") or ""
+    latlon = maidenhead_to_latlon(grid)
+    if latlon:
+        lat, lon = latlon
+        try:
+            from timezonefinder import TimezoneFinder
+            zone = TimezoneFinder().timezone_at(lng=lon, lat=lat)
+            if zone:
+                return ZoneInfo(zone), f"at grid {grid} ({zone})"
+        except ImportError:
+            print("NOTE: python package timezonefinder is not installed, so using solar time at the grid (no DST)", file=sys.stderr)
+        except Exception as e:
+            print(f"WARNING: timezonefinder failed for grid {grid}: {e}", file=sys.stderr)
+        hours = int(round(lon / 15.0))
+        return timezone(timedelta(hours=hours), f"UTC{hours:+d}"), f"solar time at grid {grid}, no DST"
+    return None, "at server (UTC)"
 
-def local_ticks(date_str):
-    """For each UTC hour 0..24 of the chart date, the local hour label in the chart timezone.
+def local_ticks(date_str, tz):
+    """For each UTC hour 0..24 of the chart date, the local hour label in timezone tz (None => server's zone).
     Returns (labels, tz_abbrev_at_noon, utc_offset_hours_at_noon); (None, None, None) if the date is unknown."""
     if not date_str:
         return None, None, None
-    tz = chart_timezone()                                    # None => the server's local zone
     d = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=timezone.utc)
     labels = []
     for h in range(25):
@@ -115,12 +152,12 @@ def plot(meta, a, png):
     ax[0].set_title(y=1.22, label=f"{meta['reporter']}  {meta['receiver']}  {meta['band']} {fz}   {meta['date']} UTC"
                     f"    ({WINDOW_S} s windows; freq shown only where carrier SNR >= {SNR_MIN_DB:g} dB, "
                     f"{100*a['good_frac']:.0f}% of day)")
-    labels, tzname, off = local_ticks(meta["date_yyyymmdd"])
+    tz, tz_source = chart_timezone(meta)
+    labels, tzname, off = local_ticks(meta["date_yyyymmdd"], tz)
     if labels:
         top = ax[0].secondary_xaxis("top")
         top.set_xticks(range(0, 25, 2)); top.set_xticklabels(labels[0:25:2])
-        where = os.environ.get("GRAPE_CHARTS_TZ", "").strip() or "at server"
-        top.set_xlabel(f"local time {where} ({tzname}, UTC{off:+g})", fontsize=9)
+        top.set_xlabel(f"local time {tz_source} ({tzname}, UTC{off:+g})", fontsize=9)
     ax[1].plot(t, pwr, lw=0.6, color="tab:orange", label="carrier power (dBFS)")
     ax[1].set_ylabel("carrier power (dBFS)", color="tab:orange"); ax[1].set_xlabel("UTC hour"); ax[1].grid(alpha=0.3)
     snr_ax = ax[1].twinx()
@@ -143,8 +180,9 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     plot(meta, a, out + ".png")
     def rl(v, nd): return [None if not np.isfinite(x) else round(float(x), nd) for x in v]
-    _, tzname, off = local_ticks(meta["date_yyyymmdd"])
-    doc = dict(meta, local_tz=tzname, utc_offset_h=off, window_s=WINDOW_S, snr_min_db=SNR_MIN_DB, n=int(a["n"]),
+    tz, tz_source = chart_timezone(meta)
+    _, tzname, off = local_ticks(meta["date_yyyymmdd"], tz)
+    doc = dict(meta, local_tz=tzname, utc_offset_h=off, local_tz_source=tz_source, window_s=WINDOW_S, snr_min_db=SNR_MIN_DB, n=int(a["n"]),
                samples=a["samples"], zero_samples=a["zero_samples"],
                good_frac=round(a["good_frac"], 3), boundary_amp_ratio=round(a["boundary_amp_ratio"], 2),
                wav=os.path.abspath(wav),

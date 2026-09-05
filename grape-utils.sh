@@ -67,7 +67,8 @@ declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 declare    GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED-yes}                ### Set to "no" in WD.conf to disable chart creation and the web server
 declare    GRAPE_CHARTS_PORT=${GRAPE_CHARTS_PORT-8088}                     ### TCP port of the chart web server
 declare    GRAPE_CHARTS_BIND=${GRAPE_CHARTS_BIND-0.0.0.0}                  ### Set to 127.0.0.1 to make the charts reachable only through an ssh tunnel
-declare    GRAPE_CHARTS_TZ=${GRAPE_CHARTS_TZ-}                             ### IANA zone (e.g. "America/Los_Angeles") for the charts' local-time axis.  Empty => the server's own timezone
+declare    GRAPE_CHARTS_TZ=${GRAPE_CHARTS_TZ-}                             ### IANA zone (e.g. "America/Los_Angeles") for the charts' local-time axis on a server whose clock runs on UTC.
+                                                                            ### Search order: the server's zone if it isn't UTC, then this variable, then the zone at the reporter's grid
 declare -r GRAPE_CHARTS_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/grape-charts"      ### Home dir of the web daemon (logs and pid) ...
 declare -r GRAPE_CHARTS_WWW_DIR="${GRAPE_CHARTS_ROOT_DIR}/www"              ### ... and the directory it serves: index.html, manifest.json, <DATE>/<REPORTER>/<RECEIVER>/<BAND>.{png,json}
 declare -r GRAPE_CHART_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/grape-strip-chart.py"
@@ -1020,7 +1021,7 @@ function grape_init() {
         exit 1
     fi
 
-    local grape_python_package_list=( "digital_rf" "soundfile" "matplotlib" )     ### matplotlib draws the GRAPE carrier strip charts
+    local grape_python_package_list=( "digital_rf" "soundfile" "matplotlib" "timezonefinder" )     ### matplotlib draws the GRAPE carrier strip charts; timezonefinder maps the reporter's grid to its timezone
     local python_package
     for python_package in ${grape_python_package_list[@]}; do
         install_python_package "${python_package}"
