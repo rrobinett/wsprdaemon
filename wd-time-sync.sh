@@ -65,10 +65,13 @@ function wd_time_sync_log()
     fi
     wd_logger ${log_level} "${log_line}"
     (( log_level > 2 )) && return 0                   ### time-sync.log keeps what an operator may need to see, not chatter
+    if [[ ! -d ${WD_TIME_SYNC_LOG%/*} ]]; then        ### nothing else guarantees /var/log/wsprdaemon exists (missing at N8GA-TC-2)
+        sudo install -d -o "$(id -un)" -g "$(id -gn)" "${WD_TIME_SYNC_LOG%/*}" 2>/dev/null || return 0
+    fi
     if [[ -f ${WD_TIME_SYNC_LOG} ]] && (( $(stat -c %s ${WD_TIME_SYNC_LOG} 2>/dev/null || echo 0) > 200000 )); then
         tail -n 200 ${WD_TIME_SYNC_LOG} > ${WD_TIME_SYNC_LOG}.tmp 2>/dev/null && mv ${WD_TIME_SYNC_LOG}.tmp ${WD_TIME_SYNC_LOG}
     fi
-    printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_TIME_SYNC_LOG} 2>/dev/null
+    printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" 2>/dev/null >> ${WD_TIME_SYNC_LOG}
     if [[ ${log_line} =~ ^(ERROR|WARNING) ]] && ! [ -t 2 ]; then
         printf 'wd-time-sync: %b\n' "${log_line}" 1>&2
     fi

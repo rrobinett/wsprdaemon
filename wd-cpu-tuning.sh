@@ -37,7 +37,8 @@ function wd_cpu_tuning_log()
     fi
     wd_logger ${log_level} "${log_line}"
     ### %b so embedded \n render as newlines, matching what wd_logger does with 'echo -e'
-    printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
+    [[ -d ${WD_CPU_TUNING_LOG%/*} ]] || sudo install -d -o "$(id -un)" -g "$(id -gn)" "${WD_CPU_TUNING_LOG%/*}" 2>/dev/null
+    printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" 2>/dev/null >> ${WD_CPU_TUNING_LOG}
 }
 
 ### Expand "0-1,4-6" / "0 1 4" into a canonical sorted "0,1,4,5,6" so the two formats compare.
@@ -305,7 +306,7 @@ function wd_cpu_tuning()
     if [[ -f ${WD_CPU_TUNING_LOG} ]] && (( $(stat -c %s "${WD_CPU_TUNING_LOG}" 2>/dev/null || echo 0) > 200000 )); then
         tail -n 500 "${WD_CPU_TUNING_LOG}" > "${WD_CPU_TUNING_LOG}.tmp" 2>/dev/null && mv "${WD_CPU_TUNING_LOG}.tmp" "${WD_CPU_TUNING_LOG}" 2>/dev/null
     fi
-    printf '%s ---- wd_cpu_tuning run ----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ${WD_CPU_TUNING_LOG} 2>/dev/null
+    printf '%s ---- wd_cpu_tuning run ----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >> ${WD_CPU_TUNING_LOG}
 
     wd_cpu_tuning_report
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
