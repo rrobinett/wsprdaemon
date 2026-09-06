@@ -148,8 +148,8 @@ vim wsprdaemon.conf
 # Network connectivity
 ping -c 3 wsprnet.org
 
-# Time synchronization
-timedatectl status
+# Time synchronization (WD installs chrony and adds public pool servers; see wd-time-sync.md)
+wdt
 
 # USB devices
 lsusb | grep -E "(RTL|RX888|AirSpy)"

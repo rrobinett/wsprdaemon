@@ -48,10 +48,6 @@ CPU_ARCH=$(uname -m)
 
 wd_logger 2 "Installing on Linux '${VERSION_CODENAME}',  OS version = '${VERSION_ID}', CPU_ARCH=${CPU_ARCH}"
 
-if [[ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]]; then
-    wd_logger 1 "WARNING: the system clock is not synchronized"
-fi
-
 ### Ensure this server never puts itself to sleep
 sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
@@ -554,6 +550,11 @@ source ${WSPRDAEMON_CONFIG_FILE}
 ### Additional bands can be defined in the conf file (i.e. WWV, CHU,...)
 WSPR_BAND_LIST+=( ${EXTRA_BAND_LIST[@]- } )
 WSPR_BAND_CENTERS_IN_MHZ+=( ${EXTRA_BAND_CENTERS_IN_MHZ[@]- } )
+
+### Make sure the clock is disciplined by chrony to servers that answer, and complain loudly if it isn't.
+### Runs after the conf file is sourced so WD_TIME_SYNC / WD_NTP_SERVERS from wsprdaemon.conf are honoured.
+source ${WSPRDAEMON_ROOT_DIR}/wd-time-sync.sh
+wd_time_sync_setup "$@"
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
 ### Uploading spots and noise to wsprdaemon.org is a condition of using wsprdaemon, so the old

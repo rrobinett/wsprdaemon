@@ -49,6 +49,7 @@ usage:
     These flags are mostly intended for advanced configuration:
 
     -i                            => list audio and RTL-SDR devices attached to this computer
+    -t                            => show the clock's Time sync state: chronyc tracking + sources + /var/log/wsprdaemon/time-sync.log ('wdt')
     -v                            => Increase verbosity of diagnotic printouts 
     -d                            => Signal all running processes as found in the *.pid files in the current directory to increment the logging verbosity
                                      This permits changes to logging verbosity without restarting WD
