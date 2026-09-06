@@ -225,7 +225,7 @@ function wd_run_in_cgroup() {
     else
         local cpu_core_count=$(grep -c ^processor /proc/cpuinfo)
         if ((  cpu_core_count < 8 )); then
-            wd_logger 1 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
+            wd_logger 2 "This CPU has only ${cpu_core_count} cores, so don't restrict WD to a subset of cores"
             return 0
         fi
         ### Most CPUs seem to have one of its pair of high performance chyperthreaded cores at 0-1
@@ -445,7 +445,7 @@ fi
 declare _wd_toprc="${HOME}/.config/procps/toprc"
 if [[ ! -f ${_wd_toprc} && -f ${WSPRDAEMON_ROOT_DIR}/etc/toprc ]]; then
     if install -D -m 0644 ${WSPRDAEMON_ROOT_DIR}/etc/toprc ${_wd_toprc} 2>/dev/null ; then
-        wd_logger 1 "Seeded ${_wd_toprc} so 'top -H' shows the P (processor) column right of %CPU"
+        wd_logger 2 "Seeded ${_wd_toprc} so 'top -H' shows the P (processor) column right of %CPU"
     fi
 fi
 #(( --verbosity ))

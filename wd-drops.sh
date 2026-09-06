@@ -45,9 +45,19 @@ declare WD_DROPS_DISCOVER_COUNT=${WD_DROPS_DISCOVER_COUNT-40}   ### status packe
 ### "not sampling".  Search both.
 function wd_drops_status_streams()
 {
-    grep -sh -oE '^[[:space:]]*status[[:space:]]*=[[:space:]]*[^[:space:]#]+' \
-            /etc/radio/radiod@*.conf /etc/radio/radiod@*.conf.d/*.conf \
-        | sed -E 's/.*=[[:space:]]*//' | sort -u
+    local conf name
+    {
+        ### radiod@NAME.conf: only when radiod@NAME is running.  A leftover conf for a radio that is not
+        ### there (the rx888 conf on the Airspy-only N8GA-TC-2) otherwise logs 'ERR' on every sample.
+        for conf in /etc/radio/radiod@*.conf ; do
+            [[ -f ${conf} ]] || continue
+            name=${conf##*/radiod@}; name=${name%.conf}
+            systemctl is-active --quiet "radiod@${name}.service" 2>/dev/null || continue
+            grep -sh -oE '^[[:space:]]*status[[:space:]]*=[[:space:]]*[^[:space:]#]+' "${conf}"
+        done
+        ### conf.d layout (udev autostart runs it as ka9q-radio@<serial>, which the conf name cannot predict)
+        grep -sh -oE '^[[:space:]]*status[[:space:]]*=[[:space:]]*[^[:space:]#]+' /etc/radio/radiod@*.conf.d/*.conf
+    } | sed -E 's/.*=[[:space:]]*//' | sort -u
 }
 
 ### Print the multicast group of the first STATIC channel section of the radiod(s) whose

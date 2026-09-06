@@ -2209,6 +2209,53 @@ declare GITHUB_PROJECTS_LIST=(
     "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-c1b92bd9d21614e6cbc5ae781794cdcdd0da589a}"
 )
 ###
+### A site that runs radiod outside WD's control (KA9Q_RUNS_ONLY_REMOTELY=yes) skips the ka9q-radio build, but WD's
+### recorder IS a ka9q-radio program: wd-record with --wd_mode / --jt / -L.  N8GA-TC-2 (2026-09-06) still had the
+### February 2025 wd-record ("invalid option -- 'W'") after upgrading to WD 3.4.6 and recorded nothing, with no hint
+### why beyond the recorder's own log.  So when the installed wd-record does not know --wd_mode, build just that
+### program from the pinned ka9q-radio commit and install it.  radiod itself is left alone.
+function wd_ensure_wd_record() {
+    local cmd=/usr/local/bin/wd-record          ### where 'make install' puts it, and what $(which wd-record) finds next time
+    if [[ -x ${cmd} ]] && ${cmd} -h 2>&1 | grep -q -- "--wd_mode" ; then
+        wd_logger 2 "${cmd} supports --wd_mode, so it is current enough"
+        return 0
+    fi
+    ### The pinned commit and git URL come from the ka9q-radio entry of GITHUB_PROJECTS_LIST
+    local entry=( ${GITHUB_PROJECTS_LIST[0]} )
+    local git_url=${entry[5]} commit=${entry[6]}
+    wd_logger 2 "${cmd} is missing or too old for WD (no --wd_mode), so building wd-record from ka9q-radio ${commit}"
+
+    if [[ ! -d ${KA9Q_RADIO_ROOT_DIR}/.git ]]; then
+        git clone -q "${git_url}" "${KA9Q_RADIO_ROOT_DIR}" > /dev/null 2>&1 || { wd_logger 1 "ERROR: 'git clone ${git_url}' failed, so WD has no usable wd-record and cannot record"; return 1; }
+    fi
+    ( cd "${KA9Q_RADIO_ROOT_DIR}" && git fetch -q origin > /dev/null 2>&1 ; git checkout -q --force "${commit}" ) || { wd_logger 1 "ERROR: 'git checkout ${commit}' failed in ${KA9Q_RADIO_ROOT_DIR}, so WD cannot build wd-record"; return 1; }
+
+    ### The top-level Makefile recurses into src/, where the wd-record rule lives; a stale top-level 'wd-record' left by
+    ### an older ka9q-radio would make 'make wd-record' say "up to date" and rebuild nothing.
+    local make_args=( ${KA9Q_RADIO_DISABLE_MAKE_ARGS-ENABLE_BLADERF=0 ENABLE_FOBOS=0 ENABLE_HYDRASDR=0} )
+    local build_log=${WSPRDAEMON_ROOT_DIR}/wd-record_build.log
+    local built=""
+    rm -f "${KA9Q_RADIO_ROOT_DIR}/wd-record" "${KA9Q_RADIO_ROOT_DIR}/wd-record.o" "${KA9Q_RADIO_ROOT_DIR}/wd-record.d"
+    if [[ -f ${KA9Q_RADIO_ROOT_DIR}/src/Makefile ]] && make -C "${KA9Q_RADIO_ROOT_DIR}/src" "${make_args[@]}" wd-record > "${build_log}" 2>&1 ; then
+        built=${KA9Q_RADIO_ROOT_DIR}/src/wd-record
+    elif make -C "${KA9Q_RADIO_ROOT_DIR}" "${make_args[@]}" wd-record >> "${build_log}" 2>&1 && [[ -x ${KA9Q_RADIO_ROOT_DIR}/wd-record ]]; then
+        built=${KA9Q_RADIO_ROOT_DIR}/wd-record
+    fi
+    if [[ -z ${built} ]]; then
+        wd_logger 1 "ERROR: could not build wd-record from ka9q-radio ${commit}, so WD cannot record.  See ${build_log}:\n$(tail -n 5 "${build_log}")"
+        return 1
+    fi
+    sudo install -m 755 "${built}" "${cmd}" || { wd_logger 1 "ERROR: 'install ${built} ${cmd}' failed"; return 1; }
+    if ! ${cmd} -h 2>&1 | grep -q -- "--wd_mode" ; then
+        wd_logger 1 "ERROR: the freshly built ${cmd} still does not report --wd_mode, so WD cannot record"
+        return 1
+    fi
+    KA9Q_RADIO_WD_RECORD_CMD=${cmd}
+    KA9Q_RADIO_PCMRECORD_CMD=${cmd}
+    wd_logger 2 "Installed ${cmd} built from ka9q-radio ${commit}"
+    return 0
+}
+
 function ka9q-services-setup() {
     local rc
 
@@ -2219,7 +2266,7 @@ function ka9q-services-setup() {
      else
          local  ka9q_runs_only_remotely="${KA9Q_RUNS_ONLY_REMOTELY,,}"     ### force it to lower case
          if [[ "${ka9q_runs_only_remotely:0:1}" == "y" ]]; then
-             wd_logger 1 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which starts with 'y' so ensure that it is set to 'yes'"
+             wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which starts with 'y' so ensure that it is set to 'yes'"
              KA9Q_RUNS_ONLY_REMOTELY="yes"
          else
              wd_logger 2 "KA9Q_RUNS_ONLY_REMOTELY is set to '${KA9Q_RUNS_ONLY_REMOTELY}' which doesn't start with 'y', so change it to 'no'"
@@ -2228,7 +2275,8 @@ function ka9q-services-setup() {
      fi
 
     if [[ "${KA9Q_RUNS_ONLY_REMOTELY}" == "yes" ]]; then
-        wd_logger 1 "Skipping KA9Q setup since KA9Q_RUNS_ONLY_REMOTELY='yes'"
+        wd_logger 2 "Skipping KA9Q setup since KA9Q_RUNS_ONLY_REMOTELY='yes', but WD's recorder still has to be current"
+        wd_ensure_wd_record
         return 0
     fi
     wd_logger 2 "Starting in ${PWD} and checking on ${#GITHUB_PROJECTS_LIST[@]} github projects"
@@ -2270,7 +2318,7 @@ function ka9q-setup() {
             sudo systemctl stop ${full_legacy_service}
         fi
         if systemctl list-unit-files | awk -v svc="${full_legacy_service}" '$1 == svc && $2 == "enabled"' | grep -q .; then
-            wd_logger 1 "Disabling the legacy service ${full_legacy_service}"
+            wd_logger 2 "Disabling the legacy service ${full_legacy_service}"
             sudo systemctl disable ${full_legacy_service}
             sudo systemctl daemon-reload
         fi

@@ -26,7 +26,7 @@ function wd_merge_file_trees()
 
     # set -x
     if [[ "$src_dev" == "$dst_dev" ]]; then
-        wd_logger 1 "'mv'ing files from  '$SRC_ROOT' to  '$DST_ROOT'..."
+        wd_logger 2 "'mv'ing files from  '$SRC_ROOT' to  '$DST_ROOT'..."
         find "$SRC_ROOT" -type f | while read -r src_file; do
             rel_path="${src_file#$SRC_ROOT/}"
             dst_file="$DST_ROOT/$rel_path"
@@ -38,7 +38,7 @@ function wd_merge_file_trees()
         wd_logger 1 "'rsync'ing  files from  '$SRC_ROOT' to  '$DST_ROOT'..."
         rsync -a --info=progress2 --remove-source-files "$SRC_ROOT"/ "$DST_ROOT"/
     fi
-    wd_logger 1 "Merging files into '$DST_ROOT' is complete, so 'rm -r $SRC_ROOT'"
+    wd_logger 2 "Merging files into '$DST_ROOT' is complete, so 'rm -r $SRC_ROOT'"
     rm -r "$SRC_ROOT"
 }
 
@@ -49,7 +49,7 @@ declare -r GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive"     
 mkdir -p ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 declare -r LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH="${WSPRDAEMON_ROOT_DIR}/wav-archive.d"                                          ### Cache all 1440 one minute long, wavpack-compressed, 16000 IQ wav files in this dir tree
 if [[ -d ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ]]; then
-    wd_logger 1 "Transferring the legacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
+    wd_logger 2 "Transferring the legacy files from ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} into ${GRAPE_WAV_ARCHIVE_ROOT_PATH}"
     wd_merge_file_trees ${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH} ${GRAPE_WAV_ARCHIVE_ROOT_PATH}
 else
     wd_logger 2 "There is no legacy file tree '${LEGACY_GRAPE_WAV_ARCHIVE_ROOT_PATH}', so nothing to clean up"

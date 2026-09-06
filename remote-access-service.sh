@@ -155,7 +155,7 @@ function wd_rac_client_fetch() {
         wd_logger 2 "${WD_RAC_CLIENT_DIR} is a tarball install, so it is not updated automatically"
         return 0
     fi
-    wd_logger 1 "Installing the wd-rac-client package into ${WD_RAC_CLIENT_DIR}"
+    wd_logger 2 "Installing the wd-rac-client package into ${WD_RAC_CLIENT_DIR}"
     if command -v git >& /dev/null; then
         if timeout 120 git clone -q ${WD_RAC_CLIENT_REPO_URL}.git ${WD_RAC_CLIENT_DIR} >& /tmp/wd-rac-client-git.txt; then
             return 0
@@ -202,7 +202,7 @@ function wd_rac_client_manager() {
         proxies+=" vm_grape=${GRAPE_CHARTS_PORT-8088}"                          ### WD 3.4.6+: the GRAPE carrier strip-chart page, at gateway port 40800+RAC
     fi
 
-    wd_logger 1 "Configuring wd-rac-client for RAC ${channel}, site '${site}', tunnels '${proxies}' (installer log: ${WD_RAC_CLIENT_LOG})"
+    wd_logger 2 "Configuring wd-rac-client for RAC ${channel}, site '${site}', tunnels '${proxies}' (installer log: ${WD_RAC_CLIENT_LOG})"
     sudo systemctl stop ${WD_RAC_CLIENT_INSTALL_UNIT}.service 2>/dev/null || true
     sudo systemd-run --quiet --collect --unit=${WD_RAC_CLIENT_INSTALL_UNIT} \
         --property=WorkingDirectory=${WD_RAC_CLIENT_DIR} \
@@ -223,8 +223,8 @@ function wd_rac_client_manager() {
         waited=$(( waited + 5 ))
     done
     if grep -q '^SUCCESS' ${WD_RAC_CLIENT_LOG} 2>/dev/null; then
-        wd_logger 1 "wd-rac-client is running: $( grep -E '^Tunnels|^    gw' ${WD_RAC_CLIENT_LOG} | tr '\n' ' ' )"
-        wd_logger 1 "So authorized WD developers can ssh to this server at IP port $(( RAC_IP_PORT_BASE + channel )) and open its KA9Q-web UI at port $(( RAC_IP_PORT_BASE + channel + 10000 )) on either gateway"
+        wd_logger 2 "wd-rac-client is running: $( grep -E '^Tunnels|^    gw' ${WD_RAC_CLIENT_LOG} | tr '\n' ' ' )"
+        wd_logger 2 "So authorized WD developers can ssh to this server at IP port $(( RAC_IP_PORT_BASE + channel )) and open its KA9Q-web UI at port $(( RAC_IP_PORT_BASE + channel + 10000 )) on either gateway"
         if wd_rac_grape_charts_wanted; then
             wd_logger 1 "The GRAPE carrier strip charts of this server are at gateway port $(( RAC_IP_PORT_BASE + RAC_GRAPE_PORT_OFFSET + channel ))"
         fi
@@ -443,8 +443,8 @@ function remote_access_connection_status() {
         wd_logger 1 "The ${WD_REMOTE_ACCESS_SERVICE_NAME} is configured but returns status ${rc}"
         return 5
     fi
-    wd_logger 1 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is configured, enabled and running"
-    wd_logger 1 "So authorized WD developers can ssh to this server at IP port ${wd0_rac_ssh_ip_port} and also open the KA9Q-web UI on this server (if there is a RX888 attached to it) at ${wd0_rac_web_ip_port=}"
+    wd_logger 2 "The Remote Access Connection (RAC) service connected through RAC channel '${wd_conf_rac_channel}' with ID '${wd_conf_rac_id}' is configured, enabled and running"
+    wd_logger 2 "So authorized WD developers can ssh to this server at IP port ${wd0_rac_ssh_ip_port} and also open the KA9Q-web UI on this server (if there is a RX888 attached to it) at ${wd0_rac_web_ip_port=}"
     return 0
 }
 

@@ -72,7 +72,7 @@ function wd_cpu_tuning_install_scripts()
             continue
         fi
         if sudo install -m 755 "${src}" "${dst}" ; then
-            wd_logger 1 "Installed ${dst}"
+            wd_logger 2 "Installed ${dst}"
         else
             wd_logger 1 "ERROR: could not install ${dst}"; rc=1
         fi
@@ -310,7 +310,26 @@ function wd_cpu_tuning()
 
     wd_cpu_tuning_report
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
-        wd_cpu_tuning_apply
+        if [[ "${WD_PLAN_OK:-no}" == "yes" ]]; then
+            wd_cpu_tuning_apply
+        else
+            ### No layout for this host (e.g. the 2-core N8GA-TC-2): applying used to install and enable the boot
+            ### units anyway, and wd-irq-affinity then FAILED at every boot and WD start with "no OS cpu list".
+            wd_cpu_tuning_retire_units
+        fi
     fi
     return 0
+}
+
+### Stop and disable the boot-time units on a host the planner cannot lay out, so nothing fails at boot.
+function wd_cpu_tuning_retire_units()
+{
+    local unit
+    for unit in wd-resctrl wd-irq-affinity wd-cpu-freq ; do
+        if systemctl is-enabled --quiet "${unit}" 2>/dev/null || systemctl is-active --quiet "${unit}" 2>/dev/null; then
+            wd_cpu_tuning_log 1 "CPU tuning: no usable layout here, so disabling ${unit}"
+            sudo systemctl disable --now "${unit}" > /dev/null 2>&1
+        fi
+        sudo systemctl reset-failed "${unit}" > /dev/null 2>&1
+    done
 }
