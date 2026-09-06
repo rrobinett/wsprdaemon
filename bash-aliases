@@ -1626,7 +1626,7 @@ function wd-watch-wsprnet-upload-log()
 {
     local wsprnet_uploads_log_file_path=~/wsprdaemon/uploads/wsprnet/spots/upload_to_wsprnet_daemon.log
     if ! [[ -f ${wsprnet_uploads_log_file_path} ]]; then
-         wsprnet_uploads_log_file_path=~/wspsrdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
+         wsprnet_uploads_log_file_path=~/wsprdaemon/uploads.d/wsprnet.d/spots.d/upload_to_wsprnet_daemon.log
     fi
     echo "To view the full log file execute the command: ' less ${wsprnet_uploads_log_file_path} '"
     tail -F ${wsprnet_uploads_log_file_path}
