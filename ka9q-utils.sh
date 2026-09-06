@@ -1112,6 +1112,31 @@ function wd_boot_unprogrammed_rx888s() {
     return 0
 }
 
+### Apply WD's patches (ka9q-radio-patches/*.patch) to the pinned ka9q-radio checkout before it is built.
+### Idempotent: a patch that is already in (reverse-applies cleanly) is skipped; one that no longer applies
+### is reported and skipped, so an upstream fix or a pin change never breaks the build.  pull_commit()'s
+### 'git restore/reset' undoes them, which is fine: they are re-applied at the next build.
+function wd_apply_ka9q_radio_patches() {
+    local dir=$1
+    local patch name
+    for patch in "${WSPRDAEMON_ROOT_DIR}"/ka9q-radio-patches/*.patch; do
+        [[ -f ${patch} ]] || continue
+        name=${patch##*/}
+        if git -C "${dir}" apply --check --reverse "${patch}" > /dev/null 2>&1; then
+            wd_logger 2 "${name} is already applied to ${dir}"
+        elif git -C "${dir}" apply --check "${patch}" > /dev/null 2>&1; then
+            if git -C "${dir}" apply "${patch}" > /dev/null 2>&1; then
+                wd_logger 2 "Applied ${name} to ${dir}"
+            else
+                wd_logger 1 "ERROR: 'git apply ${name}' failed in ${dir}"
+            fi
+        else
+            wd_logger 1 "WARNING: ${name} does not apply to ka9q-radio $(git -C "${dir}" rev-parse --short HEAD 2>/dev/null); building without it"
+        fi
+    done
+    return 0
+}
+
 function build_ka9q_radio() {
     local project_subdir=$1
     local project_logfile="${project_subdir}_build.log"
@@ -1122,6 +1147,7 @@ function build_ka9q_radio() {
         return 1
     fi
     local rc
+    [[ ${project_subdir} == "ka9q-radio" ]] && wd_apply_ka9q_radio_patches "${project_subdir}"     ### before the timestamp snapshot, so a newly applied patch triggers a rebuild + install
     find ${project_subdir}  -type f -exec stat -c "%Y %n" {} \; | sort -n > before_make.txt
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'find ${project_subdir}  -type... > before_make.txt' => ${rc}"
