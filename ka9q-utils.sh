@@ -67,7 +67,7 @@ declare KA9Q_RADIOD_LIB_DIR="/var/lib/ka9q-radio"
 ### These are the libraries needed by KA9Q, but it is too hard to extract them from the Makefile, so I just copied them here
 declare KA9Q_RADIO_LIBS_NEEDED="curl rsync build-essential libusb-1.0-0-dev libusb-dev libncurses-dev libfftw3-dev libbsd-dev libhackrf-dev \
              libopus-dev libairspy-dev libairspyhf-dev librtlsdr-dev libiniparser-dev libavahi-client-dev portaudio19-dev libopus-dev \
-             libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile"
+             libnss-mdns mdns-scan avahi-utils avahi-discover libogg-dev python3-soundfile libcsv-dev"
 
 declare KA9Q_RADIO_ROOT_DIR="${WSPRDAEMON_ROOT_DIR}/ka9q-radio"     ### Where WD installs KA9Q-radio
 declare KA9Q_RADIO_WISDOM_FILE_PATH="/var/lib/ka9q-radio/wisdom"    ### This is the preferred wisdom file used by KA9Q-radio, and the file created and/or updated each time WD starts
@@ -2342,6 +2342,11 @@ function ka9q-services-setup() {
                     ### running until now (N8UR-BL-1, 2026-09-06: a failed 'git checkout' of a new pin exited WD here
                     ### with radiod already stopped by wd-killall).
                     wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' failed, so continuing with the radiod already installed ($(ls -l --time-style=long-iso /usr/local/sbin/radiod | awk '{print $6}'))"
+                    ### The install path is what normally (re)starts radiod, so do that here or the site stays silent
+                    local _inst
+                    for _inst in ${KA9Q_CONF_NAME:-rx888-wsprdaemon}; do
+                        systemctl is-active --quiet "radiod@${_inst}" || sudo systemctl start "radiod@${_inst}" || wd_logger 1 "ERROR: 'systemctl start radiod@${_inst}' failed"
+                    done
                 else
                     wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' => $?"
                     exit 1
