@@ -893,6 +893,24 @@ function ka9q_web_service_daemon() {
         local daemon_log_file="ka9q_web_service_${server_ip_port}.log"
         wd_logger 1 "Got status_dns_name='${status_dns_name}', IP port = ${server_ip_port}, server description = '${server_description}'"
 
+        ### A ka9q-web left behind by an earlier WD (e.g. one started from a shell, which 'wdz' did not kill before 2026-09-06)
+        ### holds the port, and this loop then spawns a ka9q-web that exits at once, every 6 seconds, forever (N8UR).  ss only
+        ### reports the pid for our own user's processes, so a foreign owner just gets reported.
+        local port_owner_pid port_owner_cmd
+        port_owner_pid=$( ss -ltnpH "sport = :${server_ip_port}" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 )
+        if [[ -n "${port_owner_pid}" ]]; then
+            port_owner_cmd=$( ps -o comm= -p ${port_owner_pid} 2>/dev/null )
+            if [[ "${port_owner_cmd}" == "ka9q-web" ]]; then
+                wd_logger 1 "ERROR: a ka9q-web not started by this WD (pid ${port_owner_pid}) holds IP port ${server_ip_port}, so kill it and start our own"
+                kill ${port_owner_pid}
+                wd_sleep 2
+            else
+                wd_logger 1 "ERROR: IP port ${server_ip_port} is held by '${port_owner_cmd}' (pid ${port_owner_pid}), so ka9q-web can't run on it.  Sleep 60 and check again"
+                wd_sleep 60
+                continue
+            fi
+        fi
+
         # Conditionally add -n "${server_description}" if KA9Q_WEB_TITLE is defined
         if [[ -n "${server_description}" ]]; then
             ${KA9Q_WEB_CMD} -m ${status_dns_name} -p ${server_ip_port} -n "${server_description}" >& ${daemon_log_file}

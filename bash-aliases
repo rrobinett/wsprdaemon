@@ -1344,7 +1344,11 @@ function wd-killall() {
    fi
 
     #ps aux | grep 'wsprdaemon.sh\|pcmrecord\|ka9q-web\|radiod\|psk\|/usr/local/bin/jt-decode\|wd-record' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
-    ps aux | grep 'wsprdaemon.sh\|\wsprdaemon\/ka9q-radio\/pcmrecord' | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
+    local killall_pattern='wsprdaemon.sh\|\wsprdaemon\/ka9q-radio\/pcmrecord'
+    if [[ "${KA9Q_WEB_SYSTEMD-no}" != "yes" ]]; then
+        killall_pattern+='\|/usr/local/sbin/ka9q-web'     ### WD-spawned ka9q-web.  Left running, it holds the port and the next WD's ka9q-web loops every 6 s (N8UR 2026-09-06)
+    fi
+    ps aux | grep "${killall_pattern}" | grep -v 'journalctl\|grep'  > /tmp/wd-killall.log
     local zombie_pid_list=( $( awk '{print $2}'  /tmp/wd-killall.log ) )
     if (( ${#zombie_pid_list[@]} )); then
         printf "Killing ${#zombie_pid_list[@]} zombie PIDs: ${zombie_pid_list[*]}\n$(</tmp/wd-killall.log)\n"

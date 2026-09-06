@@ -51,6 +51,7 @@ declare WD_TIME_SYNC_STATE="unknown"      ### synced | unsynced | no-daemon
 declare WD_TIME_SYNC_SUMMARY=""           ### one human line
 declare WD_TIME_SYNC_LAST_CHECK_EPOCH=0
 declare WD_TIME_SYNC_LAST_STATE=""
+declare WD_TIME_SYNC_RESTARTED="no"      ### set when THIS run (re)started chrony, so even a status-only command gives it a few seconds
 
 ### Log to the WD log, the terminal when there is one, and time-sync.log.  ERROR/WARNING lines also go
 ### to stderr when there is no terminal, so a service start leaves them in 'journalctl -u wsprdaemon'.
@@ -167,6 +168,7 @@ function wd_time_sync_install_chrony()
 function wd_time_sync_ensure_running()
 {
     systemctl is-active --quiet chrony && return 0
+    WD_TIME_SYNC_RESTARTED="yes"
     sudo systemctl restart chrony
     local rc=$?
     if (( rc )); then
@@ -236,6 +238,7 @@ ${sources}" )" ]]; then
     sudo cp ${tmp} ${WD_CHRONY_CONF}
     rm -f ${tmp}
     wd_time_sync_log 1 "Updated the wsprdaemon block at the end of ${WD_CHRONY_CONF} and restarting chrony to load it"
+    WD_TIME_SYNC_RESTARTED="yes"
     if ! sudo systemctl restart chrony; then
         ### Never leave the host with no time daemon because of something WD wrote
         sudo cp -p ${WD_CHRONY_CONF}.wd-bak ${WD_CHRONY_CONF}
@@ -294,6 +297,9 @@ function wd_time_sync_setup()
 
     if [[ ${starting} == "yes" ]]; then
         wd_time_sync_wait ${WD_TIME_SYNC_WAIT_SECS}
+    elif [[ ${WD_TIME_SYNC_RESTARTED} == "yes" ]]; then
+        ### e.g. 'wdt' right after this run repaired chrony.conf: give iburst a few seconds instead of reporting a false ERROR
+        wd_time_sync_wait $(( WD_TIME_SYNC_WAIT_SECS < 15 ? WD_TIME_SYNC_WAIT_SECS : 15 ))
     else
         wd_time_sync_status
     fi
