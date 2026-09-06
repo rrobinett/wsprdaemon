@@ -135,7 +135,8 @@ function wd_time_sync_sources_report()
 function wd_time_sync_install_chrony()
 {
     local rc
-    if ! command -v chronyd > /dev/null; then
+    ### chronyd is in /usr/sbin, which is not on a normal user's PATH, so 'command -v' alone says "missing" on an installed host
+    if ! command -v chronyd > /dev/null && [[ ! -x /usr/sbin/chronyd ]]; then
         wd_time_sync_log 1 "Installing chrony (apt will remove systemd-timesyncd / ntp / ntpsec, which conflict with it)"
         install_debian_package chrony
         rc=$? ; if (( rc )); then
