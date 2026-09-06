@@ -2317,7 +2317,7 @@ function wd_rx888_serials_present() {
     local d
     for d in /sys/bus/usb/devices/*/; do
         [[ -f ${d}/idVendor && $(< ${d}/idVendor) == "04b4" && $(< ${d}/idProduct) == "00f1" ]] || continue
-        tr '[:lower:]' '[:upper:]' < ${d}/serial 2>/dev/null; echo -n " "
+        echo -n "$(tr -d '\n' < ${d}/serial 2>/dev/null | tr '[:lower:]' '[:upper:]') "
     done
 }
 
