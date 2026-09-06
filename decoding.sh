@@ -1008,7 +1008,7 @@ function wait_until_newest_tmp_file_is_closed()
             local receiver_ip=$(get_receiver_ip_from_name  ${receiver_name})
             local pcm_dns_regex
             if [[ "${receiver_name}" =~ ^KA9Q ]]; then
-                pcm_dns_regex="pcmrecord .*${receiver_ip}"
+                pcm_dns_regex="\(pcmrecord\|wd-record\) .*${receiver_ip}"     ### the recorder has been wd-record since 1/2026; 'pcmrecord' alone never matched, so every band logged "couldn't extract a PID" once a second
             else
                 pcm_dns_regex="kiwirecorder.py.*${receiver_ip}"
             fi
