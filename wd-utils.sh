@@ -419,6 +419,7 @@ function setup_systemctl_daemon() {
     Type=forking
     Restart=always
     RestartSec=10
+    TimeoutStartSec=900
 
     [Install]
     WantedBy=multi-user.target
@@ -458,11 +459,28 @@ function stop_systemctl_daemon() {
     return 0
 }
 
+### WD's ExecStart is the whole '-A' start: package installs, ka9q-radio (re)builds, radiod restarts, the mDNS and
+### time-sync checks.  systemd's default TimeoutStartSec of 90 s kills that on any slow step, Restart=always
+### tries again, and a site can sit in that loop for hours (KX4AZ-T 2026-09-06: 150+ restarts after one RX888 was
+### unplugged).  New unit files carry TimeoutStartSec=900; existing installs get it as a drop-in.
+declare WD_SERVICE_TIMEOUT_DROPIN=/etc/systemd/system/wsprdaemon.service.d/start-timeout.conf
+function wd_ensure_service_start_timeout() {
+    [[ -f ${SYSTEMCTL_UNIT_PATH} ]] || return 0
+    grep -q "^TimeoutStartSec=" ${SYSTEMCTL_UNIT_PATH} 2>/dev/null && return 0
+    [[ -f ${WD_SERVICE_TIMEOUT_DROPIN} ]] && return 0
+    sudo mkdir -p "${WD_SERVICE_TIMEOUT_DROPIN%/*}"
+    printf '[Service]\n# Written by WD (wd-utils.sh): the -A start installs packages and rebuilds radiod, so 90 s is not enough\nTimeoutStartSec=900\n' | sudo tee ${WD_SERVICE_TIMEOUT_DROPIN} > /dev/null
+    sudo systemctl daemon-reload
+    wd_logger 2 "Wrote ${WD_SERVICE_TIMEOUT_DROPIN}"
+    return 0
+}
+
 function start_systemctl_daemon() {
     if [[ ! -f ${SYSTEMCTL_UNIT_PATH} ]]; then
         wd_logger 1 "Creating and enabling ${SYSTEMCTL_UNIT_PATH}"
         setup_systemctl_daemon
     fi
+    wd_ensure_service_start_timeout
 
     local rc
     sudo systemctl is-enabled wsprdaemon.service >& /dev/null
