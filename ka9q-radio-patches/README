@@ -1,0 +1,4 @@
+Patches in this directory are applied to WD's pinned ka9q-radio checkout by wd_apply_ka9q_radio_patches()
+(ka9q-utils.sh) before every build.  A patch that no longer applies is reported and skipped.
+
+Empty since 2026-09-06: the SSRC-collision fix WD carried for one day is upstream in 41f31df6.
