@@ -1048,9 +1048,15 @@ function wait_until_newest_tmp_file_is_closed()
             fi
             if (( ${#after_wait_file_list[@]} )); then
                 wd_logger 1 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
+            elif [[ -n "$( find "${wav_file_dir_path}" -maxdepth 1 -name '*.wav*' -mmin -2 2>/dev/null | head -1 )" ]]; then
+                ### The recorder IS writing files for OTHER channels of this stream, so it is not deaf: radiod is simply not
+                ### producing this band's channel (ka9q-radio 2026.08 silently drops 40.68 MHz: 16 of 17 WSPR channels start).
+                ### Killing the shared recorder here truncated every other band's file every few minutes and no 2-minute
+                ### file ever completed (ZD8GB 2026-09-06, band 8).  Complain and wait instead.
+                wd_logger 1 "ERROR: the recorder (pid ${pcmrecord_pid}) writes wav files for other channels but none for ${receiver_band} (${wav_file_regex}): radiod is not producing this channel.  Check the radiod conf and its journal ('N channels started') and remove the band from the WD schedule if radiod cannot make it.  Sleeping 120 seconds"
+                wd_sleep 120
             else
-                wd_logger 1 "ERROR: no wav file appeared after waiting for the next second 59->00 transition, so kill the running pcmrecord ${pcmrecord_pid}"
-                wd_logger 1 "       The deaf pcmrecord may be due to Ubuntu restarting the network services due to a Wifi interface restart"
+                wd_logger 1 "ERROR: no wav file for ANY channel appeared after waiting for the next second 59->00 transition, so kill the deaf pcmrecord ${pcmrecord_pid} and let the recording daemon restart it"
                 sudo kill ${pcmrecord_pid} >& /dev/null
             fi
         fi

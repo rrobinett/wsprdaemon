@@ -484,8 +484,18 @@ function spawn_wav_recording_daemon() {
             wd_logger 2 "Unlocked mutex '${wav_recording_mutex_name}' in ${recording_dir} and returning without spawning new job"
             return 0
         else
+            ### The pid file is stale, but is a recorder for this stream still running under some other daemon?  Spawning a
+            ### second daemon then KILLS that recorder (the daemon's start-up sweep), truncating every band's wav file, and the
+            ### two daemons keep killing each other's recorder (ZD8GB 2026-09-06: every 3-4 min, no complete 2-minute files).
+            ### So adopt what is running and let this spawn be a no-op.
+            local live_recorders=$( ps x | grep -E "(wd-record|pcmrecord) .*${receiver_ip}" | grep -v grep | awk '{print $1}' | tr '\n' ' ' )
+            if [[ -n ${live_recorders} ]]; then
+                wd_logger 1 "WARNING: ${pid_file} holds '${recording_pid}' which is not running, but recorder(s) ${live_recorders} for ${receiver_ip} are, so NOT spawning another recording daemon"
+                wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
+                return 0
+            fi
             wd_rm ${pid_file}
-            wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}', so we need to spawn one"
+            wd_logger 1 "Found a stale recording job '${receiver_name},${receiver_rx_band}' (pid file said '${recording_pid}'), so we need to spawn one"
         fi
     fi
 
