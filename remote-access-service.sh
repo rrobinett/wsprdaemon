@@ -121,6 +121,7 @@ function wd_rac_grape_charts_wanted() {
 ### to do and no registrar round trip is made on this WD start
 function wd_rac_client_is_current() {
     local channel=$1
+    local site=${2:-}          ### registrar site name; when given, the tunnels must carry it (a renamed site re-registers)
     local ssh_port=$(( RAC_IP_PORT_BASE + channel ))
     local grape_port=$(( RAC_IP_PORT_BASE + RAC_GRAPE_PORT_OFFSET + channel ))
     local conf
@@ -130,6 +131,10 @@ function wd_rac_client_is_current() {
     for conf in ${WD_RAC_CLIENT_CONF_DIR}/gateways/*.toml; do
         [[ -f ${conf} ]] || continue
         sudo grep -q "^remotePort = ${ssh_port}$" ${conf} || return 1      ### the RAC number changed in the conf file
+        if [[ -n ${site} ]] && ! sudo grep -q "^name = \"${site}-" ${conf} ; then
+            wd_logger 1 "${conf} still carries the old site name, so the wd-rac-client installer will be re-run as '${site}'"   ### REMOTE_ACCESS_ID changed (N8GA-TC-2 -> N8GA-6M, 2026-09-06)
+            return 1
+        fi
         if wd_rac_grape_charts_wanted && ! sudo grep -q "^remotePort = ${grape_port}$" ${conf} ; then
             wd_logger 1 "${conf} has no tunnel for the GRAPE charts page (gateway port ${grape_port}), so the wd-rac-client installer will be re-run to add it"
             return 1
@@ -181,17 +186,17 @@ function wd_rac_client_manager() {
     local rac_id=$2
     local rc
 
-    if wd_rac_client_is_current ${channel}; then
-        wd_logger 2 "wd-rac-client $(< ${WD_RAC_CLIENT_CONF_DIR}/VERSION) already serves RAC ${channel} on every gateway"
+    ### The registrar wants site names of A-Z 0-9 _ - (3-32 chars), so 'KFS/OMNI' becomes 'KFS-OMNI'
+    local site=$( echo "${rac_id}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_-]/-/g' )
+
+    if wd_rac_client_is_current ${channel} "${site}"; then
+        wd_logger 2 "wd-rac-client $(< ${WD_RAC_CLIENT_CONF_DIR}/VERSION) already serves RAC ${channel} as '${site}' on every gateway"
         return 0
     fi
     wd_rac_client_fetch
     rc=$? ; if (( rc )); then
         return ${rc}
     fi
-
-    ### The registrar wants site names of A-Z 0-9 _ - (3-32 chars), so 'KFS/OMNI' becomes 'KFS-OMNI'
-    local site=$( echo "${rac_id}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_-]/-/g' )
     local ssh_port=22
     local sshd_config_port=$( awk '/^Port /{print $2}' /etc/ssh/sshd_config 2>/dev/null )
     if [[ -n "${sshd_config_port}" ]]; then
