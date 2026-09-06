@@ -664,7 +664,12 @@ function ka9q_get_current_status_value() {
     local value_found
     ka9q_parse_status_value "value_found"  ${status_log_file} "${search_val}"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: failed to get new status"
+        ### The cached freq->SSRC map is only "stable for the life of radiod": after a radiod restart a channel whose
+        ### frequency is listed in several sections (8 m in [WSPR]/[FT8]/[FT4]) can come back under a different SSRC
+        ### (40680 -> 40682 at ZD8GB, 2026-09-06), and every status poll then fails until the map ages out.  Drop the
+        ### map so the next poll re-resolves the SSRC from radiod's status stream.
+        rm -f ${KA9Q_SSRC_MAP_CACHE_FILE_NAME}
+        wd_logger 1 "ERROR: failed to get new status for ssrc ${ssrc:-?}; dropped ${KA9Q_SSRC_MAP_CACHE_FILE_NAME} so the SSRC is re-resolved on the next poll"
         return ${rc}
     fi
     
