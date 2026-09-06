@@ -786,8 +786,9 @@ function install_dpkg_list() {
     for package_needed in ${dpkg_list[@]}; do
         wd_logger 2 "Checking for package ${package_needed}"
         if ! install_debian_package ${package_needed} ; then
-            wd_logger 1 "ERROR: 'install_debian_package ${package_needed}' => $?"
-            exit 1
+            ### Used to 'exit 1'.  On a site with no DNS every WD start then died on the first package added to the list
+            ### since its last start (K9TRV, 2026-09-06), although everything it actually needs was already installed.
+            wd_logger 1 "WARNING: could not install package '${package_needed}' (no network or DNS?).  Continuing; if WD later fails for lack of it, install it by hand"
         fi
     done
     return 0

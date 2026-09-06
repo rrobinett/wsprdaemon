@@ -515,9 +515,9 @@ function wd_remote_access_service_manager() {
         local frp_tar_url=https://github.com/fatedier/frp/releases/download/v${FRP_REQUIRED_VERSION}/${frp_tar_file}
         wget ${frp_tar_url} > /dev/null 2>&1
         if [[ ! -f ${frp_tar_file} ]] ; then
-            wd_logger 1 "ERROR: failed to download wget http://physics.princeton.edu/pulsar/K1JT/${frp_tar_file}"
+            wd_logger 1 "ERROR: failed to download ${frp_tar_url} (no network or DNS?), so the legacy Remote Access Connection is not set up.  WD continues without it"
             cd - > /dev/null
-            exit 1
+            return 1
         fi
         wd_logger 1 "Got FRP tar file"
         tar xf ${frp_tar_file}

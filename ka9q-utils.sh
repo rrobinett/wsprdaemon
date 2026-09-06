@@ -95,9 +95,11 @@ function pull_commit(){
         (
         cd "${git_directory}" || exit 2
 
-        # Fetch from origin
+        # Fetch from origin.  With no DNS / no network this fails: keep the copy already on disk
+        # rather than aborting the whole WD start (K9TRV, 2026-09-06).
         if ! git fetch origin; then
-            exit 2
+            echo "git fetch origin failed (no network or DNS?), so keeping the installed ${git_project} as it is"
+            exit 3
         fi
 
         # Check if update is needed
@@ -119,6 +121,10 @@ function pull_commit(){
                 ;;
             1)
                 wd_logger 2 "Git successfully updated this project"
+                ;;
+            3)
+                wd_logger 1 "WARNING: could not fetch ${git_project} from github (no network or DNS?), so running with the copy already installed"
+                rc=0
                 ;;
             *)
                 wd_logger 1 "ERROR: rc=${rc}, so failed to update to latest commit:\n$(< git.log)"
@@ -143,19 +149,22 @@ function pull_commit(){
         wd_logger 2 "Current git COMMIT in ${git_directory} is the expected ${current_commit_sha}"
         return 0
     fi
-    wd_logger 1 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
-    wd_logger 2 "First 'git checkout ${git_root}'"
-    ( cd ${git_directory}; git restore . ; git checkout ${git_root} )  >& git.log
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
-        exit
-        return 4
-    fi
-    wd_logger 2 "Then 'git pull' to be sure the code is current"
-    ( cd ${git_directory}; git pull ) >& git.log
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'git pull' => ${rc}. git.log:\n$(< git.log)"
-        return 5
+    wd_logger 2 "Current git commit COMMIT in ${git_directory} is ${current_commit_sha}, not the desired COMMIT ${desired_git_sha}, so update the code from git"
+    ### The desired commit is often already in the local clone (a WD update moved the pin to an older or already
+    ### fetched commit).  Then no network is needed, which matters on a site without DNS (K9TRV, 2026-09-06).
+    if ! ( cd ${git_directory} && git cat-file -e "${desired_git_sha}^{commit}" 2>/dev/null ); then
+        wd_logger 2 "First 'git checkout ${git_root}'"
+        ( cd ${git_directory}; git restore . ; git checkout ${git_root} )  >& git.log
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'git checkout ${git_root}' => ${rc}.  git.log:\n $(< git.log)"
+            return 4
+        fi
+        wd_logger 2 "Then 'git pull' to be sure the code is current"
+        ( cd ${git_directory}; git pull ) >& git.log
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'git pull' in ${git_directory} => ${rc} (no network or DNS?), and commit ${desired_git_sha} is not in the local clone, so ${git_project} stays at ${current_commit_sha}. git.log:\n$(< git.log)"
+            return 5
+        fi
     fi
     wd_logger 2 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
     ( cd ${git_directory}; git clean -fdx; git checkout ${desired_git_sha} ) >& git.log
