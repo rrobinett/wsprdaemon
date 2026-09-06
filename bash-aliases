@@ -1392,6 +1392,7 @@ function wd-killall() {
             (( verbosity ))  && printf "Cgroup ${cgroup_path} is not configured\n"
         fi
     done
+    return 0      ### Without this the exit status is that of the '(( verbosity )) && ...' above, i.e. 1 at verbosity 0, which breaks 'wdz && git pull && wda'
 }
 
 function wd-flush-hashtables() {
