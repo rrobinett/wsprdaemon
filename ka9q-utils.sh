@@ -167,7 +167,10 @@ function pull_commit(){
         fi
     fi
     wd_logger 2 "Finally 'git checkout ${desired_git_sha}, which is the COMMIT we want"
-    ( cd ${git_directory}; git clean -fdx; git checkout ${desired_git_sha} ) >& git.log
+    ### 'git restore .' first: a WD patch applied to the previous pin (ka9q-radio-patches/) leaves modified files,
+    ### and 'git checkout <sha>' refuses to overwrite them (N8UR-BL-1, 2026-09-06: the pin bump failed and, worse,
+    ### WD then refused to start at all).  Patches are re-applied to the new checkout at build time.
+    ( cd ${git_directory}; git restore . ; git clean -fdx; git checkout ${desired_git_sha} ) >& git.log
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'git checkout ${desired_git_sha}' => ${rc} git.log:\n$(< git.log)"
         return 6
@@ -2334,8 +2337,15 @@ function ka9q-services-setup() {
         else
             wd_logger 2 "Setup project '${project_info}'"
             if ! install_github_project ${project_info} ; then
-                wd_logger 1 "ERROR: 'install_dpkg_list ${project_info}' => $?"
-                exit 1
+                if [[ ${project_info_list[0]} == "ka9q-radio" && -x /usr/local/sbin/radiod ]]; then
+                    ### Do not take the site off the air over a failed update: the radiod already installed kept it
+                    ### running until now (N8UR-BL-1, 2026-09-06: a failed 'git checkout' of a new pin exited WD here
+                    ### with radiod already stopped by wd-killall).
+                    wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' failed, so continuing with the radiod already installed ($(ls -l --time-style=long-iso /usr/local/sbin/radiod | awk '{print $6}'))"
+                else
+                    wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' => $?"
+                    exit 1
+                fi
             fi
         fi
     done
