@@ -758,9 +758,9 @@ function install_debian_package(){
         wd_logger 2 "Package ${package_name} has already been installed"
         return 0
     fi
-    wd_logger 1 "Package ${package_name} needs to be installed since ' dpkg -L ${package_name}' => $?:\n$(</tmp/dpkg.log)"
+    wd_logger 2 "Package ${package_name} needs to be installed since ' dpkg -L ${package_name}' => $?:\n$(</tmp/dpkg.log)"
     if [[ ${APT_GET_UPDATE_HAS_RUN} == "no" ]]; then
-        wd_logger 1 "'apt-get update' needs to be run"
+        wd_logger 2 "'apt-get update' needs to be run"
         sudo apt-get update --allow-releaseinfo-change
         ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
@@ -775,7 +775,7 @@ function install_debian_package(){
         wd_logger 1 "ERROR: 'sudo apt-get install ${package_name}' => ${ret_code}"
         return ${ret_code}
     fi
-    wd_logger 1 "Installed ${package_name}"
+    wd_logger 2 "Installed ${package_name}"
     return 0
 }
 

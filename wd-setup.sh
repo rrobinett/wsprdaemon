@@ -215,7 +215,7 @@ function wd_run_in_cgroup() {
     ### applies.  (The drop-in does win, because it resets with an empty CPUAffinity= first -- but that
     ### is a detail nobody should have to know, and it breaks silently if the reset is ever dropped.)
     if [[ "${WD_CPU_TUNING-yes}" == "yes" ]]; then
-        wd_logger 1 "WD_CPU_TUNING=yes, so the CPU layout comes from wd-cpu-plan.sh; not setting CPUAffinity from WD_CPU_CORES"
+        wd_logger 2 "WD_CPU_TUNING=yes, so the CPU layout comes from wd-cpu-plan.sh; not setting CPUAffinity from WD_CPU_CORES"
         return 0
     fi
 

@@ -27,9 +27,14 @@ declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-s
 ### set -- wd_logger() returns without writing anything when that is true, and there is no terminal
 ### to echo to either.  So the report would be silently discarded.  Write it to a file the operator
 ### can simply read instead.  Truncated at the start of each run: this is current status, not history.
+### At the default verbosity only ERROR / WARNING / REFUSING / RESTART REQUIRED / NOT restricting lines reach the
+### terminal: a 'wda' should print nothing when all is well.  ${WD_CPU_TUNING_LOG} still gets every line.
 function wd_cpu_tuning_log()
 {
     local log_level=$1 log_line=$2
+    if (( log_level == 1 )) && ! [[ ${log_line} =~ ERROR|WARNING|REFUSING|RESTART\ REQUIRED|NOT\ restricting ]]; then
+        log_level=2
+    fi
     wd_logger ${log_level} "${log_line}"
     ### %b so embedded \n render as newlines, matching what wd_logger does with 'echo -e'
     printf '%s %b\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${log_line}" >> ${WD_CPU_TUNING_LOG} 2>/dev/null

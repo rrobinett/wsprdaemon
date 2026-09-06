@@ -59,8 +59,12 @@ declare WD_TIME_SYNC_RESTARTED="no"      ### set when THIS run (re)started chron
 function wd_time_sync_log()
 {
     local log_level=$1 log_line=$2
+    ### At the default verbosity only ERROR / WARNING lines reach the terminal: a 'wda' prints nothing when all is well
+    if (( log_level == 1 )) && ! [[ ${log_line} =~ ^(ERROR|WARNING) ]]; then
+        log_level=2
+    fi
     wd_logger ${log_level} "${log_line}"
-    (( log_level > 1 )) && return 0                   ### time-sync.log keeps what an operator needs to see, not chatter
+    (( log_level > 2 )) && return 0                   ### time-sync.log keeps what an operator may need to see, not chatter
     if [[ -f ${WD_TIME_SYNC_LOG} ]] && (( $(stat -c %s ${WD_TIME_SYNC_LOG} 2>/dev/null || echo 0) > 200000 )); then
         tail -n 200 ${WD_TIME_SYNC_LOG} > ${WD_TIME_SYNC_LOG}.tmp 2>/dev/null && mv ${WD_TIME_SYNC_LOG}.tmp ${WD_TIME_SYNC_LOG}
     fi
