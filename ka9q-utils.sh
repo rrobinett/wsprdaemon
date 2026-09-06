@@ -1535,16 +1535,21 @@ function build_ka9q_radio() {
     ### Other instances are only RESTARTED, never started: do not bring up a receiver the site has
     ### chosen to leave stopped.
     local -a radiod_restart_list=( "${ka9q_conf_name}" )
-    local other_conf other_inst
-    for other_conf in ${KA9Q_RADIOD_CONF_DIR}/radiod@*.conf ; do
-        [[ -f ${other_conf} ]] || continue
-        other_inst=${other_conf##*/radiod@}
-        other_inst=${other_inst%.conf}
-        [[ ${other_inst} == "${ka9q_conf_name}" ]] && continue
-        if sudo systemctl is-active --quiet "radiod@${other_inst}" ; then
-            radiod_restart_list+=( "${other_inst}" )
-        fi
-    done
+    ### The OTHER running radiods only need a restart when the radiod binary/config was rebuilt.  When the managed
+    ### instance is merely down (its RX888 unplugged at KX4AZ-T) every wd command used to bounce the healthy
+    ### radiod@ns-bev too, costing it a decode cycle each time.
+    if [[ ${radio_restart_needed} != "no" ]]; then
+        local other_conf other_inst
+        for other_conf in ${KA9Q_RADIOD_CONF_DIR}/radiod@*.conf ; do
+            [[ -f ${other_conf} ]] || continue
+            other_inst=${other_conf##*/radiod@}
+            other_inst=${other_inst%.conf}
+            [[ ${other_inst} == "${ka9q_conf_name}" ]] && continue
+            if sudo systemctl is-active --quiet "radiod@${other_inst}" ; then
+                radiod_restart_list+=( "${other_inst}" )
+            fi
+        done
+    fi
     wd_rx888_usb_report
     local radiod_instance restart_rc=0
     for radiod_instance in "${radiod_restart_list[@]}" ; do
