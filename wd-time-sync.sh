@@ -117,6 +117,11 @@ function wd_time_sync_status()
 function wd_time_sync_sources_report()
 {
     if command -v chronyc > /dev/null; then
+        if ! systemctl is-active --quiet chrony; then
+            echo "    chrony is NOT running ($(systemctl is-active chrony)).  'sudo journalctl -u chrony' says:"
+            sudo journalctl -u chrony -n 6 --no-pager 2>/dev/null | grep -v '^--' | cut -c1-160 | sed 's/^/    /'
+            return 0
+        fi
         chronyc -n sources 2>&1 | sed 's/^/    /'
     else
         timedatectl timesync-status 2>&1 | sed 's/^/    /'
@@ -190,7 +195,9 @@ function wd_time_sync_configure_chrony()
         sources+="pool ${server} iburst"$'\n'
     done
     sources=${sources%$'\n'}
-    local policy="makestep 1 -1    # step the clock for any offset over 1 s at any time, not only during the first 3 updates"
+    ### chrony.conf has NO inline comments (chronyd: "Too many arguments for makestep directive"), so the comment is its own line
+    local policy="# step the clock for any offset over 1 s at any time, not only during chrony's first 3 updates
+makestep 1 -1"
 
     local block="${WD_CHRONY_MARK_BEGIN}"$'\n'
     if grep -qE '^[[:space:]]*sourcedir[[:space:]]+/etc/chrony/sources\.d' ${WD_CHRONY_CONF}; then
@@ -215,10 +222,17 @@ ${sources}" )" ]]; then
     awk -v b="${WD_CHRONY_MARK_BEGIN}" -v e="${WD_CHRONY_MARK_END}" '$0 == b { skip = 1 } ! skip { print } $0 == e { skip = 0 }' ${WD_CHRONY_CONF} \
         | awk '{ l[NR] = $0 } END { n = NR; while (n > 0 && l[n] == "") n--; for (i = 1; i <= n; i++) print l[i] }' > ${tmp}     ### drop trailing blank lines
     printf '\n%s\n' "${block}" >> ${tmp}
+    sudo cp -p ${WD_CHRONY_CONF} ${WD_CHRONY_CONF}.wd-bak
     sudo cp ${tmp} ${WD_CHRONY_CONF}
     rm -f ${tmp}
     wd_time_sync_log 1 "Updated the wsprdaemon block at the end of ${WD_CHRONY_CONF} and restarting chrony to load it"
-    sudo systemctl restart chrony || { wd_time_sync_log 1 "ERROR: 'systemctl restart chrony' => $?"; return 1; }
+    if ! sudo systemctl restart chrony; then
+        ### Never leave the host with no time daemon because of something WD wrote
+        sudo cp -p ${WD_CHRONY_CONF}.wd-bak ${WD_CHRONY_CONF}
+        sudo systemctl restart chrony
+        wd_time_sync_log 1 "ERROR: chrony refused the updated ${WD_CHRONY_CONF}, so it was restored from ${WD_CHRONY_CONF}.wd-bak and chrony restarted (now $(systemctl is-active chrony)).  chronyd said:\n$(sudo journalctl -u chrony -n 5 --no-pager 2>/dev/null | grep -i 'error\|fail\|directive' | sed 's/^/    /')"
+        return 1
+    fi
     return 0
 }
 
@@ -241,7 +255,7 @@ function wd_time_sync_wait()
 function wd_time_sync_complain()
 {
     local why=$1
-    wd_time_sync_log 1 "ERROR: the system clock is NOT synchronised: ${why}.\n    WSPR decoding needs the clock within a second of UTC, so spots will be missed or mis-timed until this is fixed.\n    Sources and what they answered ('wdt' shows this at any time):\n$(wd_time_sync_sources_report)\n    Fix: make sure this host can reach UDP port 123 on the servers above (firewall?), or set WD_NTP_SERVERS in wsprdaemon.conf to servers it can reach, then 'wda' again."
+    wd_time_sync_log 1 "ERROR: the system clock is NOT synchronised: ${why}.\n    WSPR decoding needs the clock within a second of UTC, so spots will be missed or mis-timed until this is fixed.\n    Sources and what they answered ('wdt' shows this at any time):\n$(wd_time_sync_sources_report)\n    Fix: if chrony is not running, fix what the journal complains about and 'sudo systemctl restart chrony'; otherwise make sure this host can reach UDP port 123 on the servers above (firewall?), or set WD_NTP_SERVERS in wsprdaemon.conf to servers it can reach.  Then 'wda' again."
 }
 
 ### Runs at every WD start (sourced from wd-setup.sh).  Only the real starts ('-a' from wda, '-A' from
