@@ -91,6 +91,11 @@ function wd_mdns_ensure_running()
         missing=( $( wd_mdns_unresolved "${names[@]}" ) )
     fi
     if (( ${#missing[@]} )); then
+        if ! pgrep -x radiod > /dev/null; then
+            ### e.g. right after wd-killall: radiod is down and WD is about to start it, which publishes the names
+            wd_logger 2 "${missing[*]} do not resolve, but no radiod is running yet to publish them"
+            return 0
+        fi
         wd_logger 1 "ERROR: KA9Q stream name(s) ${missing[*]} do not resolve, so WD cannot record from them.  Check 'avahi-browse -art', 'sudo journalctl -u avahi-daemon' and that radiod is running and publishing them"
         return 1
     fi

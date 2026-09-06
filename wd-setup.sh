@@ -559,7 +559,8 @@ wd_time_sync_setup "$@"
 ### mDNS must work or nothing records; a stuck avahi silenced two N8GA stations for days (2026-09-06).
 ### Only the real starts (-a/-A) repair; other wd commands just report.
 source ${WSPRDAEMON_ROOT_DIR}/wd-mdns.sh
-if [[ " $* " =~ " -a " || " $* " =~ " -A " ]]; then wd_mdns_ensure_running repair; else wd_mdns_ensure_running report; fi
+### '|| true': a non-zero return here would trip WD's ERR trap while this file is being sourced
+if [[ " $* " =~ " -a " || " $* " =~ " -A " ]]; then wd_mdns_ensure_running repair || true; else wd_mdns_ensure_running report || true; fi
 
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
 ### Uploading spots and noise to wsprdaemon.org is a condition of using wsprdaemon, so the old
