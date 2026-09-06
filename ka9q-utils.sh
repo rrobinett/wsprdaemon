@@ -1551,7 +1551,7 @@ function build_ka9q_radio() {
         ### A radiod whose conf names an RX888 serial that is not on the USB bus exits 66 at once; starting it anyway
         ### only produces a restart loop and blocks here.  Say what is missing and move on to the other radios.
         local _want _have
-        _want=$( awk -F= '/^[[:space:]]*serial[[:space:]]*=/{gsub(/[[:space:]#].*$/,"",$2); print toupper($2); exit}' "${KA9Q_RADIOD_CONF_DIR}/radiod@${radiod_instance}.conf" 2>/dev/null )
+        _want=$( awk -F= '/^[[:space:]]*serial[[:space:]]*=/{v=$2; sub(/^[[:space:]]+/,"",v); sub(/[[:space:]#].*$/,"",v); print toupper(v); exit}' "${KA9Q_RADIOD_CONF_DIR}/radiod@${radiod_instance}.conf" 2>/dev/null )
         if [[ -n ${_want} && ${_want} != FILL_IN* ]]; then
             _have=$( wd_rx888_serials_present )
             if [[ " ${_have} " != *" ${_want} "* ]]; then
@@ -2330,7 +2330,7 @@ function wd_rx888_usb_report() {
     local d pid serial speed
     for d in /sys/bus/usb/devices/*/; do
         [[ -f ${d}/idVendor && $(< ${d}/idVendor) == "04b4" ]] || continue
-        pid=$(< ${d}/idProduct); serial=$(< ${d}/serial 2>/dev/null); speed=$(< ${d}/speed 2>/dev/null)
+        pid=$(cat ${d}/idProduct); serial=$(cat ${d}/serial 2>/dev/null); speed=$(cat ${d}/speed 2>/dev/null); d=${d%/}
         if (( ${speed:-0} < 5000 )); then
             wd_logger 1 "ERROR: RX888 (usb ${d##*/devices/}, id 04b4:${pid}, serial '${serial}') is on a ${speed} Mb/s USB 2 port.  It needs a USB 3 (SuperSpeed, blue) port; on USB 2 its firmware load fails and repeats forever"
         elif [[ ${pid} == "00f3" ]]; then

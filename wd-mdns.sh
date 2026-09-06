@@ -60,16 +60,28 @@ function wd_mdns_unit_for_stream()
 ### Names owned by a radiod that is dead or missing are logged and dropped: restarting avahi and the OTHER
 ### radiods for them does nothing except take the healthy radios down for a minute at every WD start
 ### (KX4AZ-T 2026-09-06: dipole's RX888 unplugged, radiod@dipole exit 66, and every start restarted radiod@ns-bev).
+### Echoes only the names whose radiod is running; stdout is captured by the caller, so NO logging in here
 function wd_mdns_names_with_live_radiod()
 {
     local name unit
     for name in "$@"; do
         unit=$( wd_mdns_unit_for_stream "${name}" )
         if [[ -n ${unit} ]] && ! systemctl is-active --quiet "${unit}" 2>/dev/null; then
-            wd_logger 1 "ERROR: ${name} does not resolve because ${unit} is not running ($(systemctl is-active "${unit}" 2>/dev/null), last exit status $(systemctl show "${unit}" -p ExecMainStatus --value 2>/dev/null)); fix that radiod (is its RX888 on the USB bus?), this is not an avahi problem"
             continue
         fi
         echo "${name}"
+    done
+}
+
+### Logs one ERROR per unresolved name whose radiod is NOT running (called outside any capture)
+function wd_mdns_report_dead_radiods()
+{
+    local name unit
+    for name in "$@"; do
+        unit=$( wd_mdns_unit_for_stream "${name}" )
+        if [[ -n ${unit} ]] && ! systemctl is-active --quiet "${unit}" 2>/dev/null; then
+            wd_logger 1 "ERROR: ${name} does not resolve because ${unit} is not running ($(systemctl is-active "${unit}" 2>/dev/null), last exit status $(systemctl show "${unit}" -p ExecMainStatus --value 2>/dev/null)); fix that radiod (is its RX888 on the USB bus?), this is not an avahi problem"
+        fi
     done
 }
 
@@ -110,7 +122,9 @@ function wd_mdns_ensure_running()
     systemctl is-active --quiet avahi-daemon 2>/dev/null || { wd_logger 1 "ERROR: avahi-daemon is not running, so the KA9Q stream names ${names[*]} cannot resolve and WD cannot record"; return 1; }
 
     local state=$( wd_mdns_avahi_state )
-    local -a missing=( $( wd_mdns_names_with_live_radiod $( wd_mdns_unresolved "${names[@]}" ) ) )
+    local -a unresolved=( $( wd_mdns_unresolved "${names[@]}" ) )
+    wd_mdns_report_dead_radiods "${unresolved[@]}"
+    local -a missing=( $( wd_mdns_names_with_live_radiod "${unresolved[@]}" ) )
     if [[ -n ${state} && ${state} != 2 ]]; then
         [[ ${mode} == "repair" ]] && wd_mdns_repair "avahi-daemon is stuck in state ${state} (2 = RUNNING) and nothing published on this host resolves" || wd_logger 1 "ERROR: avahi-daemon is stuck in state ${state} (2 = RUNNING), so no .local name resolves (WD_MDNS_CHECK=no, not repairing)"
         missing=( $( wd_mdns_unresolved "${names[@]}" ) )
