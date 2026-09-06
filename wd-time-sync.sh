@@ -128,7 +128,10 @@ function wd_time_sync_sources_report()
     fi
 }
 
-### Install chrony and retire the daemons it replaces.  Returns 0 when chrony is active afterwards.
+### Install chrony and retire the daemons it replaces.  Does NOT start chrony: chrony.conf may still hold
+### a block that chronyd refuses (which is exactly how N8UR got stuck on 2026-09-06), so the config is
+### written/repaired first by wd_time_sync_configure_chrony() and the start comes after that.
+### Returns 0 when chronyd is installed.
 function wd_time_sync_install_chrony()
 {
     local rc
@@ -156,12 +159,18 @@ function wd_time_sync_install_chrony()
     if ! systemctl is-enabled --quiet chrony 2>/dev/null; then
         sudo systemctl enable chrony > /dev/null 2>&1
     fi
-    if ! systemctl is-active --quiet chrony; then
-        sudo systemctl start chrony
-        rc=$? ; if (( rc )); then
-            wd_time_sync_log 1 "ERROR: 'systemctl start chrony' => ${rc}.  See 'journalctl -u chrony'"
-            return ${rc}
-        fi
+    return 0
+}
+
+### After the config is in place: make sure chronyd is running.  Returns 0 when it is.
+function wd_time_sync_ensure_running()
+{
+    systemctl is-active --quiet chrony && return 0
+    sudo systemctl restart chrony
+    local rc=$?
+    if (( rc )); then
+        wd_time_sync_log 1 "ERROR: 'systemctl restart chrony' => ${rc}"
+        return ${rc}
     fi
     return 0
 }
@@ -279,7 +288,8 @@ function wd_time_sync_setup()
         wd_time_sync_status || wd_time_sync_complain "${WD_TIME_SYNC_SUMMARY}, and WD could not install chrony to fix that"
         return 0
     fi
-    wd_time_sync_configure_chrony
+    wd_time_sync_configure_chrony      ### writes/repairs the config and restarts chrony when it changed
+    wd_time_sync_ensure_running        ### first start after the install, or a retry after a failed one
 
     if [[ ${starting} == "yes" ]]; then
         wd_time_sync_wait ${WD_TIME_SYNC_WAIT_SECS}
