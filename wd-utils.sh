@@ -470,13 +470,16 @@ function start_systemctl_daemon() {
         wd_logger 1 "wsprdaemon.service is not enabled, so enabled it"
         sudo systemctl enable wsprdaemon.service
     fi
-    sudo systemctl start wsprdaemon.service >& /dev/null
-    rc=$? ; if (( rc )); then
+    if sudo systemctl is-active --quiet wsprdaemon.service; then
         wd_logger 1 "wsprdaemon.service is already running, so nothing to do"
-    else
-        wd_logger 1 "wsprdaemon.service is not running, so start the watchdog daemon"
-        sudo systemctl enable wsprdaemon.service
+        return 0
     fi
+    sudo systemctl start wsprdaemon.service
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'systemctl start wsprdaemon.service' => ${rc}.  Run 'wdj' (journalctl -u wsprdaemon) to see why"
+        return ${rc}
+    fi
+    wd_logger 1 "Started wsprdaemon.service.  Follow its stdout/stderr with 'wdj' (journalctl -u wsprdaemon -f)"
     return 0
 }
 

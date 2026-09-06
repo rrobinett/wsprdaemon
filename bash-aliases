@@ -1988,7 +1988,9 @@ function kiwi-stats(){
 alias wd='~/wsprdaemon/wsprdaemon.sh'
 alias wdl='wd -l'
 alias wdle='wd -l e'
-alias wda='wd -A'       ### If WD isn't running, start it in this terminal session.
+alias wda='wd -a'       ### Install/enable wsprdaemon.service if needed and 'systemctl start' it.  WD must run as the service (CPU affinity drop-ins, Restart=always), never as 'wd -A' from a shell.
+alias wd-journal='journalctl -u wsprdaemon -n 100 -f'   ### Follow the stdout/stderr of the running service (what a shell-started 'wd -A' used to print to the terminal)
+alias wdj='wd-journal'
 alias wds='wd -s'
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
@@ -2976,6 +2978,7 @@ wd-help       wd-h wd-                   Prints this help message
 wd-start      wd-a wda                   Start or keep running WD
 wd-stop       wd-z wdz                   Stop WD if it is running
 wd-status     wd-s wds                   Show the status of a running WD 
+wd-journal    wdj                        Follow the stdout/stderr of wsprdaemon.service (journalctl -u wsprdaemon -f)
 wd-upload-wn  wd-un wdln                 Watch the 'upload to wsprnet' log
 wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
 wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines

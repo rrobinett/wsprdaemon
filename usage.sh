@@ -38,8 +38,8 @@ This is VERSION = ${VERSION}
 
 usage:
     ${WSPRDAEMON_ROOT_PATH} -[asz] Start,Show Status, or Stop the watchdog daemon
-    -a                            => stArt watchdog daemon which will start all scheduled jobs ( -w a )
-    -A                            => install wsprdaemon as a service started at linux boot/reboot/powerup time and then stArt it
+    -a                            => install/enable wsprdaemon.service if needed and stArt it (this is what 'wda' runs)
+    -A                            => run the watchdog daemon in this shell (used by the service's ExecStart; don't run it by hand, use -a)
     -z                            => stop watchdog daemon and all jobs it is currently running (-w z )   (i.e.zzzz => go to sleep)
     -Z                            => stop any running WD and also remove it from being run by Linux at boot/reboot/powerup time
     -s                            => show Status of watchdog and jobs it is currently running  (-w s ; -j s )
