@@ -1545,9 +1545,22 @@ function build_ka9q_radio() {
             radiod_restart_list+=( "${other_inst}" )
         fi
     done
+    wd_rx888_usb_report
     local radiod_instance restart_rc=0
     for radiod_instance in "${radiod_restart_list[@]}" ; do
-        if sudo systemctl restart "radiod@${radiod_instance}" > /dev/null ; then
+        ### A radiod whose conf names an RX888 serial that is not on the USB bus exits 66 at once; starting it anyway
+        ### only produces a restart loop and blocks here.  Say what is missing and move on to the other radios.
+        local _want _have
+        _want=$( awk -F= '/^[[:space:]]*serial[[:space:]]*=/{gsub(/[[:space:]#].*$/,"",$2); print toupper($2); exit}' "${KA9Q_RADIOD_CONF_DIR}/radiod@${radiod_instance}.conf" 2>/dev/null )
+        if [[ -n ${_want} && ${_want} != FILL_IN* ]]; then
+            _have=$( wd_rx888_serials_present )
+            if [[ " ${_have} " != *" ${_want} "* ]]; then
+                wd_logger 1 "ERROR: radiod@${radiod_instance} wants RX888 serial ${_want}, which is NOT on the USB bus (programmed RX888s present: ${_have:-none}).  Plug it in / move it, then 'sudo systemctl restart radiod@${radiod_instance}'.  Not starting it now"
+                restart_rc=1
+                continue
+            fi
+        fi
+        if timeout 60 sudo systemctl restart "radiod@${radiod_instance}" > /dev/null ; then
             wd_logger 2 "radiod@${radiod_instance} was started"
         else
             wd_logger 1 "ERROR: radiod@${radiod_instance} failed to start"
@@ -2296,6 +2309,36 @@ function wd_ensure_wd_record() {
     KA9Q_RADIO_WD_RECORD_CMD=${cmd}
     KA9Q_RADIO_PCMRECORD_CMD=${cmd}
     wd_logger 2 "Installed ${cmd} built from ka9q-radio ${commit}"
+    return 0
+}
+
+### Serials (upper case) of the programmed RX888s (04b4:00f1) on the USB bus, space separated
+function wd_rx888_serials_present() {
+    local d
+    for d in /sys/bus/usb/devices/*/; do
+        [[ -f ${d}/idVendor && $(< ${d}/idVendor) == "04b4" && $(< ${d}/idProduct) == "00f1" ]] || continue
+        tr '[:lower:]' '[:upper:]' < ${d}/serial 2>/dev/null; echo -n " "
+    done
+}
+
+### One line per RX888 on the USB bus, and an ERROR for the two ways a plugged-in RX888 does not work:
+###  - 04b4:00f3 "WestBridge" = FX3 bootloader, no firmware yet (the udev rule / rx888_boot should load it)
+###  - on a 480 Mb/s link = a USB 2 port: the RX888mk2 needs SuperSpeed; on USB 2 the firmware loads, the
+###    device fails 'set config' (error -71), drops back to the bootloader and the cycle repeats forever
+###    (KX4AZ-T 2026-09-06: 296 firmware loads per hour, radio never usable)
+function wd_rx888_usb_report() {
+    local d pid serial speed
+    for d in /sys/bus/usb/devices/*/; do
+        [[ -f ${d}/idVendor && $(< ${d}/idVendor) == "04b4" ]] || continue
+        pid=$(< ${d}/idProduct); serial=$(< ${d}/serial 2>/dev/null); speed=$(< ${d}/speed 2>/dev/null)
+        if (( ${speed:-0} < 5000 )); then
+            wd_logger 1 "ERROR: RX888 (usb ${d##*/devices/}, id 04b4:${pid}, serial '${serial}') is on a ${speed} Mb/s USB 2 port.  It needs a USB 3 (SuperSpeed, blue) port; on USB 2 its firmware load fails and repeats forever"
+        elif [[ ${pid} == "00f3" ]]; then
+            wd_logger 1 "WARNING: RX888 at usb ${d##*/devices/} is in FX3 bootloader mode (04b4:00f3, no firmware loaded yet); if it stays that way run: sudo udevadm trigger --action=add --subsystem-match=usb --attr-match=idVendor=04b4 --attr-match=idProduct=00f3"
+        else
+            wd_logger 2 "RX888 serial ${serial} at usb ${d##*/devices/} (${speed} Mb/s)"
+        fi
+    done
     return 0
 }
 

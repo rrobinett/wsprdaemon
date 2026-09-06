@@ -47,6 +47,12 @@ for _ in $(seq 1 30); do
     pid=$(systemctl show "$unit" -p MainPID --value 2>/dev/null)
     [ -n "$pid" ] && [ "$pid" != "0" ] && [ -d "/proc/$pid/task" ] && break
     [ "$DRY" = "1" ] && break
+    # radiod already gone (e.g. exit 66: its RX888 is not on the USB bus)?  Then there is nothing to wait for.
+    # Waiting the full 30 s here held every failed start in 'activating (start-post)' and, with the unit
+    # auto-restarting, kept WD's own start blocked past its timeout (KX4AZ-T, 2026-09-06, 150+ WD restarts).
+    if [ "$(systemctl show "$unit" -p ExecMainCode --value 2>/dev/null)" != "0" ]; then
+        log "radiod exited (status $(systemctl show "$unit" -p ExecMainStatus --value 2>/dev/null)) before it could be pinned; nothing to pin"; exit 0
+    fi
     sleep 1
 done
 if [ -z "$pid" ] || [ "$pid" = "0" ] || [ ! -d "/proc/$pid/task" ]; then
