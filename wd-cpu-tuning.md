@@ -20,12 +20,14 @@ The last three take their CPU lists from `wd-cpu-plan.sh`. Nothing is hard-coded
 
 - **radiod off core 0.** Core 0 carries the kernel's IRQ/housekeeping load. Moving radiod
   off it was the single most effective change.
-- **Two physical cores per radiod, `fft` and `proc_rx888` on separate ones.** These are the
-  two hot threads. Sharing one physical core they contend for its execution units, L1 and
-  L2. Separating them cut CPU for *identical* work by 33 points at KJ6MKI (145% → 112%) and
-  took the fft core's worst-case idle from 4.4% to 29%. Measured again at KX4AZ-T in Sept 2026
-  the penalty was far smaller (see *One physical core per radiod* below): what matters is that
-  the two hot threads are **pinned to separate SMT siblings**, not that they have separate cores.
+- **`fft` and `proc_rx888` on separate hardware threads.** These are the two hot threads.
+  Time-slicing one hardware thread they contend for its execution units, L1 and L2: separating
+  them cut CPU for *identical* work by 33 points at KJ6MKI (145% → 112%) and took the fft
+  core's worst-case idle from 4.4% to 29%. Measured again at KX4AZ-T in Sept 2026 the penalty
+  for sharing a physical core on **separate SMT siblings** was only 1-4 points, so since
+  2026-09-06 the default on SMT hosts is **one physical core per radiod** (see *One physical
+  core per radiod* below) and the saved core goes to the decoders. Hosts without SMT keep two
+  cores per radiod. `CORES_PER_RADIOD_MAX=2` in `/etc/wd-cpu-plan.conf` restores two cores.
 - **Decoders excluded from radiod's cores**, via the WD cgroup cpuset and `WD_CPU_CORES`.
 - **L3 CAT partition**, so decoders cannot evict radiod's FFT working set.
 - **USB IRQs pinned.** The RX888 arrives over USB. Left alone the xhci IRQ was found parked
@@ -169,7 +171,8 @@ fast also gets them off the memory bus sooner.
 
 ## One physical core per radiod (KX4AZ-T, Sept 2026)
 
-`CORES_PER_RADIOD_MAX=1` in `/etc/wd-cpu-plan.conf` gives each radiod one physical core:
+This is the default on SMT hosts since 2026-09-06 (`CORES_PER_RADIOD_MAX=2` in
+`/etc/wd-cpu-plan.conf` restores two cores): each radiod gets one physical core,
 `fft` on the first SMT sibling, `proc_rx888` and the channel threads on the second. Tested
 live at KX4AZ-T (Ryzen 7 5825U, 8c/16t, two RX888s at 129.6 Msps, 45 channels each) by
 re-pinning one running radiod with `taskset` while the other stayed on the 2-core plan as a
