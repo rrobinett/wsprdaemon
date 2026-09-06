@@ -992,6 +992,16 @@ function wait_until_newest_tmp_file_is_closed()
                 return 1
             fi
 
+            ### Is anybody still writing it?  When the recorder died (killed by the mDNS repair, or crashed) the newest file
+            ### is an orphan that never gets a close_write, this wait timed out, the caller retried, and the band sat idle
+            ### for good while the stale files kept it out of the "no wav files, spawn a recorder" branch (N8GA-6M 2026-09-06).
+            local _rec_ip; _rec_ip=$( get_receiver_ip_from_name ${receiver_name} )
+            if [[ ${receiver_name} =~ ^KA9Q ]] && ! ps aux | grep -E "(wd-record|pcmrecord) .*${_rec_ip}" | grep -v grep > /dev/null; then
+                wd_logger 1 "ERROR: no recorder for ${_rec_ip} is running, so ${newest_tmp_wav_file} is an orphan: deleting it and spawning a recorder"
+                rm -f "${newest_tmp_wav_file}"
+                spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
+                return 1
+            fi
             inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} >& inotifywait.log # /dev/null
             rc=$? ; if (( rc == 0 )); then
                 ### I expect this is the normal path through this function
