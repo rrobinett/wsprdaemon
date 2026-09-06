@@ -90,8 +90,12 @@ resolve_unit(){   # $1 = plan index -> echoes the systemd unit, empty when there
 ### then restricted anyway.  That is the ON5KQ half-apply, reached down a different road.
 for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
     if [ -z "$(resolve_unit $i)" ]; then
-        echo "wd-cpu-apply: REFUSING to apply -- the plan found no radiod@ or ka9q-radio@ unit to pin."
-        echo "  Restricting the decoders while radiod floats free is worse than doing nothing."
+        ### Reached when radiod is stopped and nothing named an instance (no /etc/radio/radiod@*.conf,
+        ### or a ka9q-radio@ host whose SDR is unplugged).  Harmless: nothing is changed, and the next
+        ### WD start applies the layout once a radiod exists.  Say so, rather than alarming the operator.
+        echo "wd-cpu-apply: no radiod@ or ka9q-radio@ unit is running or configured, so there is nothing to pin yet."
+        echo "  Leaving the CPU layout as it is (restricting the decoders while radiod floats free would be worse)."
+        echo "  This is normal while radiod is stopped; the layout is applied at the next WD start once radiod exists."
         exit 1
     fi
 done

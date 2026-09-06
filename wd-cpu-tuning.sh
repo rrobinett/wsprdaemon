@@ -250,7 +250,10 @@ function wd_cpu_tuning_apply()
     local out
     ### Write the drop-ins first: this does its own daemon-reload, which would otherwise reset the
     ### oneshot units' RemainAfterExit state and leave them reporting "inactive" after we start them.
-    out=$( sudo ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
+    ### 'sudo env ...' because sudoers env_reset strips exported variables: the boot-time RADIOD_NAMES
+    ### hint (ka9q-utils.sh) reached the report's planner but never this one, so at every 'wda' with
+    ### radiod stopped, wd-cpu-apply re-planned blind and printed "REFUSING to apply" (N8UR 2026-09-06).
+    out=$( sudo env RADIOD_NAMES="${RADIOD_NAMES:-}" RADIOD_UNITS="${RADIOD_UNITS:-}" ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
     wd_cpu_tuning_log 1 "CPU tuning: systemd affinity:\n${out}"
 
     ### Only now that the planner's layout is actually written: retire any hand-set core

@@ -363,6 +363,15 @@ function remote_access_connection_status() {
     eval ${__remote_access_id_var}=\${wd_conf_rac_id}
     wd_logger 2 "Found REMOTE_ACCESS_ID=${wd_conf_rac_id}" 
 
+    ### Channels the WD registrar serves run the dual-gateway wd-rac-client (wd-remote-access@<gw>.service on
+    ### per-gateway toml files), not the legacy single-tunnel frpc.ini below, so that file's absence means nothing
+    ### there and used to be announced at every WD start on a perfectly healthy site (N8UR, 2026-09-06).
+    ### wd_remote_access_service_manager() hands these channels to wd_rac_client_manager() regardless of our rc.
+    if wd_rac_client_channel_ok ${wd_conf_rac_channel}; then
+        wd_logger 2 "RAC ${wd_conf_rac_channel} is served by the wd-rac-client, so the legacy ${FRPC_INI_FILE} is not needed"
+        return 0
+    fi
+
     ### The RAC is enabled and configured in the WD.conf file. Check to see if it and the ID match the frpc_wd.ini
     ### Get the last REMOTE_ACCESS_ID or SIGNAL_LEVEL_UPLOAD_ID in the conf file and strip out any '"' characters in it
     if [[ ! -f ${FRPC_INI_FILE} ]]; then
