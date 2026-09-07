@@ -1111,8 +1111,13 @@ function wd_boot_unprogrammed_rx888s() {
             (( ++timeout ))
         done
         if lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
-            wd_logger 1 "ERROR: a RX888 is still in FX3 bootloader mode after running rx888_boot directly"
-            return 1
+            ### Last resort: power cycle the port(s) the stuck device(s) sit on, if the hub can (wd-usb-power.sh)
+            if wd_usb_power_recover_bootloader_stuck ; then
+                wd_logger 1 "WARNING: a power cycle of its hub port got the bootloader-mode RX888 to load its firmware"
+            else
+                wd_logger 1 "ERROR: a RX888 is still in FX3 bootloader mode after running rx888_boot directly (and a power cycle of its port, if its hub allows one)"
+                return 1
+            fi
         fi
     fi
     local programmed_count=$( lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_PROGRAMMED_PRODUCT_ID} 2>/dev/null | wc -l )
@@ -1560,7 +1565,14 @@ function build_ka9q_radio() {
         if [[ -n ${_want} && ${_want} != FILL_IN* ]]; then
             _have=$( wd_rx888_serials_present )
             if [[ " ${_have} " != *" ${_want} "* ]]; then
-                wd_logger 1 "ERROR: radiod@${radiod_instance} wants RX888 serial ${_want}, which is NOT on the USB bus (programmed RX888s present: ${_have:-none}).  Plug it in / move it, then 'sudo systemctl restart radiod@${radiod_instance}'.  Not starting it now"
+                ### Before giving up, pull its plug from software: if the radio sits on a hub port uhubctl can switch
+                ### (or did when WD last saw it), a power cycle brings a hung RX888 back.  See wd-usb-power.sh
+                if wd_usb_power_recover_rx888 "${_want}"; then
+                    _have=$( wd_rx888_serials_present )
+                fi
+            fi
+            if [[ " ${_have} " != *" ${_want} "* ]]; then
+                wd_logger 1 "ERROR: radiod@${radiod_instance} wants RX888 serial ${_want}, which is NOT on the USB bus (programmed RX888s present: ${_have:-none}).  Plug it in / move it, then 'sudo systemctl restart radiod@${radiod_instance}'.  Not starting it now.  'wd -u' shows what WD knows about that radio's port"
                 restart_rc=1
                 continue
             fi

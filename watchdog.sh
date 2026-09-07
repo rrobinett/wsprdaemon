@@ -36,6 +36,7 @@ function watchdog_daemon()
             log_decode_backlog         ### Self-throttling; FT8/FT4/WSPR decode backlog
             wd_time_sync_check         ### Self-throttling; logs an ERROR every WD_TIME_SYNC_CHECK_MINUTES while the clock is not synchronised
             wd_mdns_check              ### Self-throttling; repairs a stuck avahi / lost radiod mDNS records every WD_MDNS_CHECK_MINUTES
+            wd_usb_power_check        ### Self-throttling; power cycles the hub port of an enabled radiod whose RX888 has vanished, then restarts it
             wd_logger 2 "Finished odd minute processing"
         fi
         last_minute=${current_minute}

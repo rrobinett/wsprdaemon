@@ -151,7 +151,7 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZsg:hij:l:pvVw:dDr:t opt ; do
+while getopts :aAzZsg:hij:l:pvVw:dDr:tuU: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
@@ -185,6 +185,12 @@ while getopts :aAzZsg:hij:l:pvVw:dDr:t opt ; do
             ;;
         t)
             wd_time_sync_show
+            ;;
+        u)
+            wd_usb_power_show
+            ;;
+        U)
+            wd_usb_power_cycle_cmd $OPTARG
             ;;
         w)
             watchdog_cmd $OPTARG

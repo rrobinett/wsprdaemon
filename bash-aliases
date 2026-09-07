@@ -1998,6 +1998,9 @@ alias wd-journal='journalctl -u wsprdaemon -n 100 -f'   ### Follow the stdout/st
 alias wdj='wd-journal'
 alias wd-time='wd -t'    ### Is the clock synchronised?  chronyc tracking + sources + time-sync.log
 alias wdt='wd-time'
+alias wd-usb='wd -u'     ### RX888s on the USB bus, their hub ports, and which ports WD can power cycle (uhubctl)
+alias wdu='wd-usb'
+alias wd-usb-cycle='wd -U'   ### wd-usb-cycle SERIAL|HUB:PORT|all  => power cycle that RX888 / port
 alias wds='wd -s'
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
@@ -2987,6 +2990,8 @@ wd-stop       wd-z wdz                   Stop WD if it is running
 wd-status     wd-s wds                   Show the status of a running WD 
 wd-journal    wdj                        Follow the stdout/stderr of wsprdaemon.service (journalctl -u wsprdaemon -f)
 wd-time       wdt                        Show whether the clock is synchronised (chronyc tracking + sources)
+wd-usb        wdu                        Show the RX888s on the USB bus, their hub ports and which WD can power cycle
+wd-usb-cycle  wd -U SERIAL|HUB:PORT|all  Power cycle an RX888 / hub port through uhubctl
 wd-upload-wn  wd-un wdln                 Watch the 'upload to wsprnet' log
 wd-upload-wd  wd-uw wdlw                 Watch the 'upload to wsprdaemon' log
 wd-errors     wd-e wdle                  Each 10 seconds, search all the log files and print newly logged 'ERROR' lines
@@ -3058,8 +3063,5 @@ function wd-no-capslock() {
 
 alias cdb='cd ~/wsprdaemon/ka9q-web'
 alias cdu='cd /srv/wd_data/uploads/wsprdaemon'
-alias wdua='wd -u a'
-alias wduz='wd -u z'
-alias wdus='wd -u s'
 alias r='reset'
 

@@ -50,6 +50,8 @@ usage:
 
     -i                            => list audio and RTL-SDR devices attached to this computer
     -t                            => show the clock's Time sync state: chronyc tracking + sources + /var/log/wsprdaemon/time-sync.log ('wdt')
+    -u                            => show the RX888s on the USB bus, their hub ports, which ports WD can power cycle, and /var/log/wsprdaemon/usb-power.log ('wdu')
+    -U     SERIAL|HUB:PORT|all   => power cycle that RX888 / hub port through uhubctl (needs a hub that switches power per port, see wd-usb-power.md)
     -v                            => Increase verbosity of diagnotic printouts 
     -d                            => Signal all running processes as found in the *.pid files in the current directory to increment the logging verbosity
                                      This permits changes to logging verbosity without restarting WD

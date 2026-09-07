@@ -562,6 +562,11 @@ source ${WSPRDAEMON_ROOT_DIR}/wd-mdns.sh
 ### '|| true': a non-zero return here would trip WD's ERR trap while this file is being sourced
 if [[ " $* " =~ " -a " || " $* " =~ " -A " ]]; then wd_mdns_ensure_running repair || true; else wd_mdns_ensure_running report || true; fi
 
+### Remember which hub port each RX888 sits on, and install uhubctl on -a/-A, so a radio that later hangs or vanishes can be
+### power cycled from software instead of by a site visit (KX4AZ-T 2026-09-06).  See wd-usb-power.md
+source ${WSPRDAEMON_ROOT_DIR}/wd-usb-power.sh
+wd_usb_power_setup "$@" || true
+
 ### Check the variables which should (or might) be defined in the wsprdaemon.conf file
 ### Uploading spots and noise to wsprdaemon.org is a condition of using wsprdaemon, so the old
 ### SIGNAL_LEVEL_UPLOAD="no" opt-out is retired.  Forcing the variable here is NOT sufficient on
