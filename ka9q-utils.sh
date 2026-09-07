@@ -1573,7 +1573,8 @@ function build_ka9q_radio() {
             fi
             if [[ " ${_have} " != *" ${_want} "* ]]; then
                 wd_logger 1 "ERROR: radiod@${radiod_instance} wants RX888 serial ${_want}, which is NOT on the USB bus (programmed RX888s present: ${_have:-none}).  Plug it in / move it, then 'sudo systemctl restart radiod@${radiod_instance}'.  Not starting it now.  'wd -u' shows what WD knows about that radio's port"
-                restart_rc=1
+                ### Deliberately not started is not a failed build: returning 1 here made install_github_project() report the
+                ### build as failed and ka9q-services-setup() then tried to start the very same radiod anyway (KX4AZ-T)
                 continue
             fi
         fi
@@ -2251,11 +2252,14 @@ function install_github_project() {
     esac
 
     wd_logger 2 "Run ${project_build_function}() in ${project_subdir}"
-    if ${project_build_function} ${project_subdir} ; then
-        wd_logger 2 "Success: '${project_build_function} ${project_subdir}' => $?"
+    local build_rc
+    ${project_build_function} ${project_subdir}
+    build_rc=$?
+    if (( build_rc == 0 )); then
+        wd_logger 2 "Success: '${project_build_function} ${project_subdir}' => 0"
         return 0
     fi
-    wd_logger 1 "ERROR: ${project_build_function} ${project_subdir} => $?"
+    wd_logger 1 "ERROR: ${project_build_function} ${project_subdir} => ${build_rc}"     ### used to print $? of the wd_logger call before it, i.e. always 0
     return 1
 }
 
@@ -2403,9 +2407,16 @@ function ka9q-services-setup() {
                     ### with radiod already stopped by wd-killall).
                     wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' failed, so continuing with the radiod already installed ($(ls -l --time-style=long-iso /usr/local/sbin/radiod | awk '{print $6}'))"
                     ### The install path is what normally (re)starts radiod, so do that here or the site stays silent
-                    local _inst
+                    local _inst _serial
                     for _inst in ${KA9Q_CONF_NAME:-rx888-wsprdaemon}; do
-                        systemctl is-active --quiet "radiod@${_inst}" || sudo systemctl start "radiod@${_inst}" || wd_logger 1 "ERROR: 'systemctl start radiod@${_inst}' failed"
+                        systemctl is-active --quiet "radiod@${_inst}" && continue
+                        ### Not if its RX888 is not on the bus: radiod would exit 66 at once (wd-usb-power.sh already tried a power cycle)
+                        _serial=$( wd_usb_power_serial_of_instance "${_inst}" )
+                        if [[ -n ${_serial} ]] && ! wd_usb_power_dev_of_serial "${_serial}" > /dev/null ; then
+                            wd_logger 1 "ERROR: not starting radiod@${_inst}: its RX888 ${_serial} is not on the USB bus"
+                            continue
+                        fi
+                        sudo systemctl start "radiod@${_inst}" 2>/dev/null || wd_logger 1 "ERROR: 'systemctl start radiod@${_inst}' failed: $(systemctl status radiod@${_inst} --no-pager -n 2 2>&1 | tail -n 2)"
                     done
                 else
                     wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' => $?"

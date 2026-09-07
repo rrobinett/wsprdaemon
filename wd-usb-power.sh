@@ -368,7 +368,8 @@ function wd_usb_power_show()
         [[ -n ${serial} ]] || continue
         wd_usb_power_dev_of_serial "${serial}" > /dev/null && continue
         any=1
-        echo "  radiod@${inst} ($(systemctl is-active radiod@${inst} 2>/dev/null)) wants ${serial}; last seen: $(wd_usb_power_remembered "${serial}" || echo never)  [HUB PORT Mb/s WHEN]"
+        local seen; seen=$( wd_usb_power_remembered "${serial}" || true )
+        echo "  radiod@${inst} ($(systemctl is-active radiod@${inst} 2>/dev/null)) wants ${serial}; last seen: ${seen:-never}${seen:+  [HUB PORT Mb/s WHEN]}"
     done
     (( any )) || echo "  none"
     echo
