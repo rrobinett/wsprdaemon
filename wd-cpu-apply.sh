@@ -216,6 +216,24 @@ if [ "$DRY" = "1" ]; then
 else
     sudo systemctl daemon-reload
 fi
+
+### ---- step 4: move what is ALREADY running off the radiod cores ----
+### The [Manager] CPUAffinity above only governs services started from now on; everything that was running
+### when the plan was applied keeps its old mask.  At N8GA-1 (2026-09-07) avahi-publish, postgres, chronyd,
+### frpc and gdbus threads were still waking up on the fft core after the apply.  Kernel threads are left
+### alone (per-CPU ones cannot move), and so are the radiod and wsprdaemon cgroups, which carry their own masks.
+if [ "$DRY" != "1" ]; then
+    everyone=$(cpu_list_normalise "${WD_OS_CPUS},${WD_DECODER_CPUS}")
+    moved=0
+    for d in /proc/[0-9]*; do
+        pid=${d#/proc/}
+        [ -s "$d/cmdline" ] || continue
+        cg=$(cat "$d/cgroup" 2>/dev/null)
+        case "$cg" in *radiod@*|*ka9q-radio@*|*wsprdaemon.service*) continue ;; esac
+        sudo taskset -apc "$everyone" "$pid" >/dev/null 2>&1 && moved=$((moved+1))
+    done
+    echo "  moved ${moved} already-running process(es) onto CPUs ${everyone}, off the radiod cores"
+fi
 if [ ${#NEEDS_RESTART[@]} -eq 0 ]; then
     echo "wd-cpu-apply: no changes; nothing needs restarting"
 else
