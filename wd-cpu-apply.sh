@@ -120,6 +120,8 @@ fi
 echo "wd-cpu-apply: ${WD_TOPO_CORES} cores, ${WD_TOPO_SIBLING_STYLE} SMT, ${WD_CORES_PER_RADIOD} core(s)/radiod"
 [ "${WD_DECODER_FLOOR_APPLIED:-no}" = "yes" ] && \
     echo "  note: cores per radiod reduced to keep ${WD_MIN_DECODER_CORES} core(s) for the decoders"
+[ "${WD_RX_ON_OS_CORE:-no}" = "yes" ] && \
+    echo "  note: no SMT and one core per radiod, so fft gets that core alone; proc_rx888 and radiod's other threads share the OS/IRQ core (CPU ${WD_OS_CPUS%%,*}); decoders on ${WD_DECODER_CPUS}"
 
 ### ---- step 0: refuse if a foreign drop-in would win the alphabetical ordering ----
 conflict=0

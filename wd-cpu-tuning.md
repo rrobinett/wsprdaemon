@@ -224,3 +224,18 @@ on a fully busy core: 1.4, 2.0, 2.5 and 3.0 GHz caps, `boost=0`, `EPP=power` and
 (uncapped: 4.06 GHz). This confirms the 5560U observation in `wd-cpu-freq.sh`: the "1.4 GHz"
 decoder cap really means "no boost". The decoders there run 40-54% busy per 10-minute average
 at 3.19 GHz, so a true 1.4 GHz would not finish a cycle anyway.
+
+## Small hosts without SMT: FFT alone on its core
+
+On a host with no SMT that can spare only one core per radiod (a 4-core i5 like
+N8GA-1), the old plan put both of radiod's hot threads, fft and proc_rx888, on that
+one hardware thread, and the drop counter climbed 40 to 50 per ten minutes whenever
+the decoders burst.  Since 2026-09-07 the planner lays such a host out differently:
+fft is alone on the radiod core, proc_rx888 and radiod's remaining threads sit on the
+OS core next to the interrupts (wd-irq-affinity already steers the USB IRQ there),
+and the decoders are kept off both.  On a 4-core box that is CPU 0 = OS + IRQs +
+proc_rx888, CPU 1 = fft only, CPUs 2-3 = decoders.
+
+It is automatic for a single radiod.  `RADIOD_RX_ON_OS_CORE=yes` in
+/etc/wd-cpu-plan.conf forces it (also with several radiods), `=no` disables it.  The
+plan reports it as `WD_RX_ON_OS_CORE=yes`.

@@ -285,6 +285,27 @@ for _ in $(seq 1 "$RADIOD_INSTANCES"); do
     RADIOD_FFT+=("$first_cpu"); RADIOD_RX+=("$second_cpu")
     RADIOD_OTHER+=("$( [ ${#others[@]} -gt 0 ] && join "${others[@]}" || echo "$first_cpu" )")
 done
+### ---- 3b. "FFT alone" layout for hosts WITHOUT SMT that can spare only ONE core per radiod ----
+### With one hardware thread per radiod, fft and proc_rx888 time-slice it (the 33-point penalty measured at
+### KJ6MKI) and radiod drops blocks whenever the decoders burst (N8GA-1, i5-6500T 4 cores: +40-50 drops per
+### 10 min).  The OS core carries every interrupt already (wd-irq-affinity), and the RX888 USB stream is
+### interrupt work, so on such a host put proc_rx888 and radiod's other threads ON the OS core next to the
+### IRQs, leave fft ALONE on the radiod core, and keep the decoders off both.  Automatic for a single radiod;
+### RADIOD_RX_ON_OS_CORE=yes in /etc/wd-cpu-plan.conf forces it (also for several radiods), =no disables it.
+RADIOD_RX_ON_OS_CORE=${RADIOD_RX_ON_OS_CORE:-auto}
+RX_ON_OS_CORE="no"
+if [ "$RADIOD_RX_ON_OS_CORE" != "no" ] && [ "$SMT" -eq 1 ] && [ "$CORES_PER_RADIOD" -eq 1 ] \
+   && { [ "$RADIOD_RX_ON_OS_CORE" = "yes" ] || [ "$RADIOD_INSTANCES" -eq 1 ]; }; then
+    os_primary=${os_list%%,*}
+    for i in $(seq 0 $((RADIOD_INSTANCES-1))); do
+        RADIOD_RX[$i]="$os_primary"
+        RADIOD_OTHER[$i]="$os_primary"
+        RADIOD_LISTS[$i]="$os_primary,${RADIOD_LISTS[$i]}"      # the cpuset must include the OS core for those threads
+    done
+    RX_ON_OS_CORE="yes"
+    DECODERS_USE_OS_CORE=no        # a decoder on the OS core would run proc_rx888 late: the very thing this layout avoids
+fi
+
 dec=(); for i in $(seq "$idx" $((NCORES-1))); do dec+=("$(cpus_of "$i")"); done
 ### The decoders may also use the OS core.  Reserving a whole physical core for the OS wastes real
 ### capacity -- it measured 94-99% idle on one host -- and WSPR decoding is throughput work, not
@@ -391,6 +412,7 @@ WD_DEGRADED="$DEGRADED"
 WD_RECEIVER_COUNT=$WD_RECEIVER_COUNT
 WD_MIN_DECODER_CORES=$MIN_DECODER_CORES
 WD_DECODER_FLOOR_APPLIED="$DECODER_FLOOR_APPLIED"
+WD_RX_ON_OS_CORE="$RX_ON_OS_CORE"
 EOF
 for i in $(seq 0 $((RADIOD_INSTANCES-1))); do
     echo "WD_RADIOD${i}_NAME=\"${_names[$i]:-}\""
