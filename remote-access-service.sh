@@ -48,6 +48,10 @@ fi
 
 declare RAC_IP_PORT_BASE=35800    ### Don't change this!  As of 7/9/24 many WD servers have IDs which start here
 declare RAC_GRAPE_PORT_OFFSET=5000    ### The registrar's vm_grape band: the GRAPE strip-chart web page of RAC n is at gateway port 40800+n (WD 3.4.6+)
+declare RAC_WEB_PORT_OFFSET=10000     ### The registrar's vm_web band: the (first) ka9q-web page of RAC n is at gateway port 45800+n
+declare RAC_WEB2_PORT_OFFSET=11000    ### The registrar's vm_web2 band (registrar 1.5.0): ka9q-web of a site's 2nd RX888 is at gateway port 46800+n
+declare RAC_WEB3_PORT_OFFSET=12000    ### vm_web3: ka9q-web of the 3rd RX888 at 47800+n.  Both follow vm_web's 45800+n
+declare RAC_KA9Q_WEB_MAX_TUNNELS=3    ### the registrar has bands for three ka9q-web pages per site
 declare RAC_IP_PORT_MAX=39999
 declare WSPRSONDE_IP_PORT_BASE=$(( ${RAC_IP_PORT_BASE} - (  ${RAC_IP_PORT_BASE} % 1000 )  + 3000 ))    ## The WS gateways RAC_IDs start at 3000
 
@@ -117,6 +121,26 @@ function wd_rac_grape_charts_wanted() {
     [[ -n "${GRAPE_PSWS_ID-}" ]] || [[ -n "${PSWS_STATION_ID-}" && -n "${PSWS_DEVICE_ID-}" ]]
 }
 
+### The local ports of the ka9q-web pages this site publishes, lowest first.  With KA9Q_WEB_SYSTEMD=yes a
+### multi-RX888 site runs one ka9q-web@<instance> per radiod (PORT= in /etc/radio/ka9q-web@<instance>.conf), and
+### the RAC publishes up to RAC_KA9Q_WEB_MAX_TUNNELS of them as vm_web, vm_web2, vm_web3.  Otherwise it is the single
+### WD-managed ka9q-web on KA9Q_WEB_SERVICE_PORT (default 8081), exactly as before.
+function wd_rac_ka9q_web_ports() {
+    local ports=()
+    if [[ "${KA9Q_WEB_SYSTEMD-no}" == "yes" ]]; then
+        local conf
+        for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/ka9q-web@*.conf; do
+            [[ -f ${conf} ]] || continue
+            local port=$( sed -n 's/^[[:space:]]*PORT=[[:space:]]*\([0-9]*\).*/\1/p' ${conf} | head -1 )
+            [[ -n ${port} ]] && ports+=( ${port} )
+        done
+    fi
+    if (( ${#ports[@]} == 0 )); then
+        ports=( ${KA9Q_WEB_SERVICE_PORT-8081} )
+    fi
+    printf '%s\n' "${ports[@]}" | sort -n -u | head -n ${RAC_KA9Q_WEB_MAX_TUNNELS}
+}
+
 ### True when the installed wd-rac-client already serves this channel on every gateway: then there is nothing
 ### to do and no registrar round trip is made on this WD start
 function wd_rac_client_is_current() {
@@ -139,6 +163,21 @@ function wd_rac_client_is_current() {
             wd_logger 1 "${conf} has no tunnel for the GRAPE charts page (gateway port ${grape_port}), so the wd-rac-client installer will be re-run to add it"
             return 1
         fi
+        ### A 2nd/3rd RX888's ka9q-web page (vm_web2/vm_web3) that is not yet tunnelled, or whose local port changed
+        local web_ports=( $(wd_rac_ka9q_web_ports) )
+        local i
+        for (( i=0; i < ${#web_ports[@]}; ++i )); do
+            local web_remote_port
+            case ${i} in
+                0) web_remote_port=$(( RAC_IP_PORT_BASE + RAC_WEB_PORT_OFFSET + channel )) ;;
+                1) web_remote_port=$(( RAC_IP_PORT_BASE + RAC_WEB2_PORT_OFFSET + channel )) ;;
+                *) web_remote_port=$(( RAC_IP_PORT_BASE + RAC_WEB3_PORT_OFFSET + channel )) ;;
+            esac
+            if ! sudo grep -q "^remotePort = ${web_remote_port}$" ${conf} || ! sudo grep -q "^localPort = ${web_ports[${i}]}$" ${conf} ; then
+                wd_logger 1 "${conf} has no tunnel for ka9q-web page #$(( i + 1 )) (local port ${web_ports[${i}]} -> gateway port ${web_remote_port}), so the wd-rac-client installer will be re-run to add it"
+                return 1
+            fi
+        done
         local gw=${conf##*/}
         gw=${gw%.toml}
         systemctl is-active --quiet wd-remote-access@${gw}.service || return 1
@@ -202,7 +241,13 @@ function wd_rac_client_manager() {
     if [[ -n "${sshd_config_port}" ]]; then
         ssh_port=${sshd_config_port}
     fi
-    local proxies="vm_ssh=${ssh_port} vm_web=${KA9Q_WEB_SERVICE_PORT-8081}"    ### the same two tunnels the legacy .ini published
+    local proxies="vm_ssh=${ssh_port}"
+    local web_ports=( $(wd_rac_ka9q_web_ports) )                                 ### one ka9q-web tunnel per RX888, up to three
+    local web_bands=( vm_web vm_web2 vm_web3 )
+    local i
+    for (( i=0; i < ${#web_ports[@]}; ++i )); do
+        proxies+=" ${web_bands[${i}]}=${web_ports[${i}]}"
+    done
     if wd_rac_grape_charts_wanted; then
         proxies+=" vm_grape=${GRAPE_CHARTS_PORT-8088}"                          ### WD 3.4.6+: the GRAPE carrier strip-chart page, at gateway port 40800+RAC
     fi
