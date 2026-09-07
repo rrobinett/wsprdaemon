@@ -193,6 +193,28 @@ if [ "$DRY" != "1" ]; then
     done
 fi
 
+### ---- step 2b: re-pin the hot threads of every radiod that is ALREADY RUNNING ----
+### daemon-reload applies a changed AllowedCPUs= (cpuset) to the live cgroup at once.  When the set
+### changes, the kernel moves every thread of that radiod onto the new set and DISCARDS the per-thread
+### masks radiod-pin-threads.sh had set -- fft and proc_rx888 then float over both SMT siblings, the
+### layout that drops blocks within seconds.  Seen at KX4AZ-T 2026-09-07 when a third RX888 was added:
+### the plan moved ns-bev from CPUs 4,5 to 6,7 without a restart and its fft came up with mask 6-7.
+### The pin script is idempotent and reads the same plan, so run it for each live instance now.
+if [ "$DRY" != "1" ]; then
+    declare -a _pin_pids=()
+    for (( i=0; i < ${WD_RADIOD_INSTANCES:-0}; ++i )); do
+        unit=$(resolve_unit $i)
+        [ -n "${unit}" ] || continue
+        systemctl is-active --quiet "${unit}" || continue
+        eval "inst=\${WD_RADIOD${i}_NAME:-}"
+        [ -n "${inst}" ] && [ "${inst}" != "unknown" ] || continue
+        echo "  re-pinning threads of running ${unit} (cpuset may have moved them)"
+        sudo "${PIN_SCRIPT}" "${inst}" >/dev/null 2>&1 &
+        _pin_pids+=($!)
+    done
+    [ ${#_pin_pids[@]} -gt 0 ] && wait "${_pin_pids[@]}"
+fi
+
 ### ---- step 3: only now is it safe to confine the decoders ----
 if systemctl cat wsprdaemon.service >/dev/null 2>&1 ; then
     write_dropin "/etc/systemd/system/wsprdaemon.service.d/${DROPIN_NAME}" \
