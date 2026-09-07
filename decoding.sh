@@ -1000,6 +1000,7 @@ function wait_until_newest_tmp_file_is_closed()
                 wd_logger 1 "ERROR: no recorder for ${_rec_ip} is running, so ${newest_tmp_wav_file} is an orphan: deleting it and spawning a recorder"
                 rm -f "${newest_tmp_wav_file}"
                 spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
+                (( $? == WD_RECORDER_RADIOD_DOWN_RC )) && wd_sleep 60       ### its radiod is down; do not spin
                 return 1
             fi
             inotifywait --timeout ${INOTIFYWAIT_TIMEOUT_SECS-62} --event close_write,delete_self,move_self ${newest_tmp_wav_file} >& inotifywait.log # /dev/null
@@ -1028,7 +1029,11 @@ function wait_until_newest_tmp_file_is_closed()
             if [[ -z "${ps_output}" ]]; then
                 wd_logger 1 "Found no '${wav_file_regex}' file and there is no pcmrecord running, so spawn a new pcmrecord"
                 spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
-                rc=$? ; if (( rc )); then
+                rc=$? ; if (( rc == WD_RECORDER_RADIOD_DOWN_RC )); then
+                    wd_logger 2 "The radiod publishing ${receiver_ip} is not running (spawn_wav_recording_daemon already said so), so wait a minute before looking again"
+                    wd_sleep 60
+                    return 1
+                elif (( rc )); then
                     wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
                     sleep 2
                     return 1
@@ -1101,7 +1106,11 @@ function get_wav_file_list() {
     else
         wd_logger 2 "Execute 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' to be sure the wav file recorder is running"
         spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
-        rc=$? ; if (( rc )); then
+        rc=$? ; if (( rc == WD_RECORDER_RADIOD_DOWN_RC )); then
+            wd_logger 2 "The radiod for ${receiver_name} is not running, so there will be no wav files; wait a minute"
+            wd_sleep 60
+            return ${rc}
+        elif (( rc )); then
             wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
             sleep 1
             return ${rc}
@@ -1138,10 +1147,14 @@ function get_wav_file_list() {
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: wait_until_newest_tmp_file_is_closed() found no *tmp file, so make sure pcmrecord is running"
                 spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
-                rc=$? ; if (( rc )); then
+                rc=$? ; if (( rc == WD_RECORDER_RADIOD_DOWN_RC )); then
+                    wd_logger 2 "The radiod for ${receiver_name} is not running; wait a minute before checking for wav files again"
+                    wd_sleep 50
+                elif (( rc )); then
                     wd_logger 1 "ERROR: 'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}"
+                else
+                    wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder.  So sleep 10 and check again"
                 fi
-                wd_logger 1 "'spawn_wav_recording_daemon ${receiver_name} ${receiver_band}' has checked and spawned the wav file recorder.  So sleep 10 and check again"
             else
                 wd_logger 1 "Done waiting.  So sleep 10 and check again"
             fi

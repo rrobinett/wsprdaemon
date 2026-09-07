@@ -435,6 +435,28 @@ function get_ka9q_rx_channel_report(){
 }
 
 ### 
+### spawn_wav_recording_daemon() returns this when the LOCAL radiod that publishes the receiver's stream is not running.
+### Callers back off instead of retrying every second: with radiod@dipole down at KX4AZ-T (RX888 unplugged) each of its
+### 13 band decoders spawned a recorder, wd-record found no stream and died (=> 143), the decoder logged "couldn't extract
+### a PID" and did it all again one second later: ~1200 ERROR lines per 20 minutes that said nothing new.
+declare WD_RECORDER_RADIOD_DOWN_RC=2
+declare WD_RECORDER_RADIOD_DOWN_LOG_SECS=${WD_RECORDER_RADIOD_DOWN_LOG_SECS-600}     ### one ERROR line per receiver per this many seconds
+
+### Is the local radiod that publishes stream $1 (e.g. dipole-wspr-pcm.local) NOT running?  Echoes "unit state" and returns 0 if so.
+### Returns 1 when it is running, or when no local radiod conf publishes the stream (remote radiod: nothing to check here).
+function wd_radiod_down_for_stream()
+{
+    local stream=$1 unit state
+    [[ ${stream} == *.local ]] || return 1
+    declare -F wd_mdns_unit_for_stream > /dev/null || return 1
+    unit=$( wd_mdns_unit_for_stream "${stream}" )
+    [[ -n ${unit} ]] || return 1
+    state=$( systemctl is-active "${unit}" 2>/dev/null )
+    [[ ${state} == "active" ]] && return 1
+    echo "${unit} ${state:-unknown}"
+    return 0
+}
+
 function spawn_wav_recording_daemon() {
     source ${WSPRDAEMON_CONFIG_FILE}   ### Get RECEIVER_LIST[*]
     local receiver_name=$1
@@ -447,6 +469,25 @@ function spawn_wav_recording_daemon() {
     if [[ -z "${receiver_list_index}" ]]; then
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"
         exit 1
+    fi
+    ### receiver_ip is needed BEFORE the mutex section below: the stale-pid-file "adopt a live recorder" test there used it
+    ### while it was still unset, so its regex matched ANY recorder on the host (ns-bev's, at KX4AZ-T) and the dipole's
+    ### dead recorder was never respawned
+    local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
+    local receiver_ip=${receiver_list_element[1]}
+
+    if [[ ${receiver_name} =~ ^KA9Q ]]; then
+        local radiod_down
+        if radiod_down=$( wd_radiod_down_for_stream "${receiver_ip}" ); then
+            mkdir -p ${recording_dir}
+            local stamp="${recording_dir}/radiod-down.stamp" log_level=2
+            if [[ ! -f ${stamp} ]] || (( $(printf "%(%s)T") - $(stat -c %Y "${stamp}" 2>/dev/null || echo 0) >= WD_RECORDER_RADIOD_DOWN_LOG_SECS )); then
+                log_level=1; touch "${stamp}"
+            fi
+            wd_logger ${log_level} "ERROR: not spawning a recorder for ${receiver_name} (${receiver_ip}): ${radiod_down% *} is ${radiod_down#* }, so that stream does not exist.  Is its RX888 on the USB bus?  ('wd -u').  Decoders for it will wait and retry every minute"
+            return ${WD_RECORDER_RADIOD_DOWN_RC}
+        fi
+        rm -f "${recording_dir}/radiod-down.stamp"
     fi
     wd_logger 2 "Ensure there is a recording daemon running for receiver name '${receiver_name}' on band ${receiver_rx_band} in ${recording_dir}"
     
@@ -500,8 +541,6 @@ function spawn_wav_recording_daemon() {
     fi
 
     ### No wav_recording daemon is running
-    local receiver_list_element=( ${RECEIVER_LIST[${receiver_list_index}]} )
-    local receiver_ip=${receiver_list_element[1]}
     local receiver_rx_freq_khz=$(get_wspr_band_freq_khz ${receiver_rx_band})
     local wav_record_daemon_log_filename="wav-record-daemon-${receiver_rx_band}.log"
     local rc1
