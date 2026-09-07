@@ -42,6 +42,17 @@ declare WD_USB_RX888_VENDOR="04b4"
 declare WD_USB_RX888_PROGRAMMED="00f1"
 declare WD_USB_RX888_BOOTLOADER="00f3"
 
+### Debian 13 installs uhubctl in /usr/sbin, which is not on the wsprdaemon user's PATH (the chronyd trap again), so
+### never rely on 'command -v uhubctl' alone.  Echoes the binary's path, or nothing.
+function wd_usb_power_uhubctl_path()
+{
+    local p
+    for p in "$(command -v uhubctl 2>/dev/null)" /usr/sbin/uhubctl /usr/local/sbin/uhubctl /usr/local/bin/uhubctl /usr/bin/uhubctl; do
+        [[ -n ${p} && -x ${p} ]] && { echo "${p}"; return 0; }
+    done
+    return 1
+}
+
 function wd_usb_power_log()
 {
     local log_level=$1 log_line=$2
@@ -78,7 +89,7 @@ function wd_usb_power_rx888_present()
 ### Install uhubctl (Debian/Ubuntu package) once, only on hosts that have an RX888.  Failure is a WARNING, not fatal.
 function wd_usb_power_install()
 {
-    command -v uhubctl > /dev/null 2>&1 && return 0
+    wd_usb_power_uhubctl_path > /dev/null && return 0
     wd_usb_power_rx888_present || return 0
     [[ ${WD_USB_POWER_CYCLE} == "no" ]] && return 0
     if install_debian_package uhubctl > /dev/null 2>&1 ; then
@@ -96,8 +107,9 @@ declare WD_USB_POWER_HUBS_CACHED="no"
 function wd_usb_power_switchable_hubs()
 {
     if [[ ${WD_USB_POWER_HUBS_CACHED} == "no" ]]; then
-        if command -v uhubctl > /dev/null 2>&1 ; then
-            WD_USB_POWER_HUBS_CACHE=$( timeout 20 sudo uhubctl 2>/dev/null | sed -n 's/^Current status for hub \([^ ]*\) .*/\1/p' )
+        local uhubctl; uhubctl=$( wd_usb_power_uhubctl_path || true )
+        if [[ -n ${uhubctl} ]]; then
+            WD_USB_POWER_HUBS_CACHE=$( timeout 20 sudo "${uhubctl}" 2>/dev/null | sed -n 's/^Current status for hub \([^ ]*\) .*/\1/p' )
         fi
         WD_USB_POWER_HUBS_CACHED="yes"
     fi
@@ -183,7 +195,8 @@ function wd_usb_power_cycle_port()
         wd_usb_power_log 1 "WARNING: not power cycling usb hub ${hub} port ${port} (${why}): WD_USB_POWER_CYCLE=no"
         return 2
     fi
-    if ! command -v uhubctl > /dev/null 2>&1 ; then
+    local uhubctl; uhubctl=$( wd_usb_power_uhubctl_path || true )
+    if [[ -z ${uhubctl} ]]; then
         wd_usb_power_log 1 "ERROR: can not power cycle usb hub ${hub} port ${port} (${why}): uhubctl is not installed ('sudo apt install uhubctl')"
         return 2
     fi
@@ -198,7 +211,7 @@ function wd_usb_power_cycle_port()
     wd_usb_power_ensure_dir && touch "${WD_USB_POWER_LOG_DIR}/usb-power.last.${hub}-${port}"
     wd_usb_power_log 1 "WARNING: power cycling usb hub ${hub} port ${port} for ${WD_USB_POWER_OFF_SECS} seconds: ${why}"
     local out rc
-    out=$( timeout 60 sudo uhubctl -l "${hub}" -p "${port}" -a cycle -d "${WD_USB_POWER_OFF_SECS}" -r 3 2>&1 ); rc=$?
+    out=$( timeout 60 sudo "${uhubctl}" -l "${hub}" -p "${port}" -a cycle -d "${WD_USB_POWER_OFF_SECS}" -r 3 2>&1 ); rc=$?
     if (( rc )); then
         wd_usb_power_log 1 "ERROR: 'sudo uhubctl -l ${hub} -p ${port} -a cycle -d ${WD_USB_POWER_OFF_SECS}' => ${rc}:\n${out}"
         return 1
@@ -331,7 +344,7 @@ function wd_usb_power_show()
 {
     local hubs d pid serial speed dev hp hub port sw inst conf state
     hubs=$( wd_usb_power_switchable_hubs | tr '\n' ' ' )
-    if ! command -v uhubctl > /dev/null 2>&1 ; then
+    if ! wd_usb_power_uhubctl_path > /dev/null ; then
         echo "uhubctl is not installed, so WD can not power cycle any port ('sudo apt install uhubctl')"
     elif [[ -z ${hubs} ]]; then
         echo "No hub on this host switches power per port, so WD can not power cycle a hung RX888."
@@ -355,6 +368,17 @@ function wd_usb_power_show()
             state=$( systemctl is-active "radiod@${inst}" 2>/dev/null ); inst="${inst} (${state})"
             break
         done
+        if [[ -z ${inst} && ${pid} == "${WD_USB_RX888_PROGRAMMED}" ]]; then
+            ### No conf names this serial.  If exactly one radiod conf has no serial= line, that one gets whatever RX888 is there
+            local -a noserial=()
+            for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
+                [[ -f ${conf} ]] || continue
+                [[ -z $( wd_usb_power_serial_of_instance "$( basename ${conf#*radiod@} .conf )" ) ]] && noserial+=( "$( basename ${conf#*radiod@} .conf )" )
+            done
+            if (( ${#noserial[@]} == 1 )); then
+                inst="${noserial[0]} ($(systemctl is-active radiod@${noserial[0]} 2>/dev/null), no serial= in its conf)"
+            fi
+        fi
         (( ${speed:-0} < 5000 )) && inst="${inst} USB 2 PORT: move to USB 3"
         printf "%-18s %-8s %-6s %-8s %-6s %-12s %s\n" "${serial}" "${dev}" "${speed}" "${hub}" "${port}" "${sw}" "${inst}"
     done
