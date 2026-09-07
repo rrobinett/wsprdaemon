@@ -227,7 +227,8 @@ if [ "$DRY" != "1" ]; then
     moved=0
     for d in /proc/[0-9]*; do
         pid=${d#/proc/}
-        [ -s "$d/cmdline" ] || continue
+        ### /proc/PID/cmdline has st_size 0 for every process, so '-s' is useless here: read a byte instead
+        [ -n "$(head -c1 "$d/cmdline" 2>/dev/null)" ] || continue
         cg=$(cat "$d/cgroup" 2>/dev/null)
         case "$cg" in *radiod@*|*ka9q-radio@*|*wsprdaemon.service*) continue ;; esac
         sudo taskset -apc "$everyone" "$pid" >/dev/null 2>&1 && moved=$((moved+1))
