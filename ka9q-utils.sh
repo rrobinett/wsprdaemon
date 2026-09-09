@@ -282,7 +282,7 @@ function get_conf_section_variable() {
         local files_list=( $(find ${conf_dir_name} -maxdepth 1 -type f ! -name '*~' ) )
         if (( ${#files_list[@]} == 0 )); then
             wd_logger 1 "ERROR: can't find any files in ${conf_dir_name}"
-            echo ${force_abort}
+            return 1
         fi
         if [[ ${conf_section:0:3} == "FT8" ]]; then
             wd_logger 2 "Perform special search for FT8 sections since there are multiple sections which start '[FT8-....]'"
@@ -292,7 +292,7 @@ function get_conf_section_variable() {
         case ${#files_with_section_list[@]} in
             0)
                 wd_logger 1 "ERROR: can't find a file with section '${conf_section}' in ${conf_dir_name}"
-                echo ${force_abort}
+                return 1
                 ;;
             1)
                 conf_file_name=${files_with_section_list[0]}
@@ -300,19 +300,23 @@ function get_conf_section_variable() {
                 ;;
             *)
                  wd_logger 1 "ERROR: found ${#files_with_section_list[@]} files with a section '${conf_section}': ${files_with_section_list[*]}"
-                echo ${force_abort}
+                return 1
                 ;;
         esac
         ### conf_file_name has been changed to that of the conf_file_name.d/NNN file which contans the desired section/variable
     fi
     if [[ ! -f ${conf_file_name} ]] ; then
         wd_logger 1 "ERROR: config file '${conf_file_name}' doesn't exist"
-         echo ${force_abort}
+         return 1
     fi
-    local section_lines=$( grep -i -A 40 "\[.*${conf_section}\]"  ${conf_file_name} | awk '/^\[/ {++count} count == 2 {exit} {print}' )
+    ### Only a line that is JUST a section header (optionally followed by a comment) starts a section.  The unanchored
+    ### "\[.*FT8\]" matched the stray prose line "[FT8] and [FT4] only the section that starts first ..." that two
+    ### 2026-09-06 template edits left behind, so the 'section' had no 'data =' line and WD died with the cryptic
+    ### "force_abort: unbound variable" instead of reporting the broken conf file (OE3GBB, 2026-09-09).
+    local section_lines=$( grep -i -E -A 40 "^[[:space:]]*\[[^]]*${conf_section}\][[:space:]]*(#.*)?$" ${conf_file_name} | awk '/^[[:space:]]*\[/ {++count} count == 2 {exit} {print}' )
     if [[ -z "${section_lines}" ]]; then
         wd_logger 1 "ERROR:  couldn't find section '\[${conf_section}\]' in  ${conf_file_name}"
-        echo ${force_abort}
+        return 1
     fi
     wd_logger 2 "Got section '\[.*${conf_section}\]' in  ${conf_file_name}:\n${section_lines}"
     ### Anchor to line start so a COMMENTED example line (e.g. "# data = ft8-pcm.local") is not
@@ -321,7 +325,7 @@ function get_conf_section_variable() {
     local section_variable_value=$( echo "${section_lines}" | awk "/^[[:space:]]*${conf_variable_name}[[:space:]]*=/ { print \$3 }" )
     if [[ -z "${section_variable_value}" ]]; then
         wd_logger 1 "ERROR: couldn't find variable ${conf_variable_name} in ${conf_section} section of config file  ${conf_file_name}"
-        echo ${force_abort}
+        return 1
     fi
         
     eval ${__return_variable_name}="\${section_variable_value}"
@@ -1743,8 +1747,9 @@ function ka9q-ft-setup()
     local dns_name
     get_conf_section_variable "dns_name" ${radiod_conf_file_name} ${ft_type^^} "data"
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: can't find section ${ft_type^^} 'data =' line 'radiod_conf_file_name, so force an abort'"
-        echo ${force_abort}
+        ### Don't take WD down over the FT8/FT4 sections: WSPR recording doesn't depend on them.  -1 => also print to the terminal
+        wd_logger -1 "ERROR: can't find a 'data = ...' line in the [${ft_type^^}] section of ${radiod_conf_file_name}, so ${ft_type} recording isn't set up.  Check that file for a malformed or missing [${ft_type^^}] section ('sudo journalctl -u radiod@' names any line radiod itself rejects)"
+        return 1
     fi
     wd_logger 2 "Found the multicast DNS name of the ${ft_type^^} stream is '${dns_name}'"
 
