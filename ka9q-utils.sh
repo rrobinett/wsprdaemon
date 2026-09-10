@@ -1720,14 +1720,18 @@ function ka9q-ft-setup()
     ### fails to parse and the uploader reports "Uploaded 0 spots total" forever -- decoding looks
     ### perfectly healthy the whole time.  OE3GBB (LANG=de_AT.UTF-8) had never uploaded a single FT4 or
     ### FT8 spot for this reason.  A log two programs exchange must not depend on the operator's
-    ### language, so pin the decoder's numeric locale.  LC_ALL=C only affects number and date
-    ### formatting inside this daemon; nothing else on the station sees it.
+    ### language, so pin the decoder's numeric locale.  It must be LANG: ka9q-radio's jt-decoded.c does
+    ###     char const * locale = getenv("LANG"); setlocale(LC_ALL,locale);
+    ### so it reads $LANG and hands it straight to setlocale, and LC_ALL alone is IGNORED -- setting only
+    ### LC_ALL=C looks right, survives a restart, shows up in /proc/PID/environ, and changes nothing at
+    ### all.  Set both, and LANG is the one doing the work.  This affects only number and date
+    ### formatting inside this daemon; the operator's own shell is untouched.
     local ft_decode_dropin_dir="/etc/systemd/system/${ft_decode_service_file_name}.d"
     local ft_decode_locale_dropin="${ft_decode_dropin_dir}/locale.conf"
-    if [[ ! -f ${ft_decode_locale_dropin} ]] || ! grep -q 'LC_ALL=C' ${ft_decode_locale_dropin} ; then
+    if [[ ! -f ${ft_decode_locale_dropin} ]] || ! grep -q 'LANG=C' ${ft_decode_locale_dropin} ; then
         wd_logger 1 "Pinning ${ft_decode_service_file_name} to the C numeric locale so ${ft_type}.log stays machine-readable for pskreporter-sender"
         sudo mkdir -p ${ft_decode_dropin_dir}
-        echo -e '[Service]\nEnvironment="LC_ALL=C"' | sudo tee ${ft_decode_locale_dropin} > /dev/null
+        printf '[Service]\nEnvironment="LANG=C"\nEnvironment="LC_ALL=C"\n' | sudo tee ${ft_decode_locale_dropin} > /dev/null
         sudo systemctl daemon-reload
         service_restart_needed="yes"
     fi
