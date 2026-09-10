@@ -115,12 +115,24 @@ cpb_fast=1
 w(){ if [ "$DRY" = "1" ]; then echo "    would: echo '$1' > $2"; else echo "$1" > "$2" 2>/dev/null; fi; }
 
 n_fast=0 n_capped=0 n_skipped=0
+minf=""; hw_min=""
 for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
     [ -d "$d" ] || continue
     cpu=$(basename "$(dirname "$d")"); cpu=${cpu#cpu}
     maxf="$d/scaling_max_freq"
     gov="$d/scaling_governor"
     if [ ! -w "$maxf" ] && [ "$DRY" != "1" ]; then n_skipped=$((n_skipped+1)); continue; fi
+    ### Put scaling_min_freq back to the driver's own floor before touching the ceiling.  This
+    ### service only ever wrote scaling_max_freq, so anything that had set a min stayed set
+    ### forever and survived a restart of this unit: a min == max pin left behind by a tuning
+    ### experiment kept those cores nailed to one frequency, and only a hand edit cleared it
+    ### (hit at OE3GBB, 2026-09-10).  Writing the floor first also guarantees min <= max, so the
+    ### ceiling write below can never be rejected for crossing a stale min.
+    minf="$d/scaling_min_freq"
+    if [ -w "$minf" ] || [ "$DRY" = "1" ]; then
+        hw_min=$(cat "$d/amd_pstate_lowest_nonlinear_freq" 2>/dev/null || cat "$d/cpuinfo_min_freq" 2>/dev/null || echo "")
+        [ -n "$hw_min" ] && [ "$(cat "$minf" 2>/dev/null)" != "$hw_min" ] && w "$hw_min" "$minf"
+    fi
     if is_fast "$cpu"; then
         w "$RADIOD_KHZ" "$maxf"
         ### performance keeps fft off the low P-states between decode cycles; it is the thread
