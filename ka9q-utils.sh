@@ -1177,11 +1177,13 @@ function build_ka9q_radio() {
         if [[ -f "${project_subdir}/Makefile.linux" ]]; then
             makefile_name="Makefile.linux"
         fi
-        ### ka9q-radio's Makefile defaults every SDR driver to ENABLE_*=1, but these three need dev
-        ### libraries WD does not install (libbladeRF.h, fobos.h, libhydrasdr/hydrasdr.h), so the build
-        ### would fail.  Disable them; the radios WD supports (RX888, RTL-SDR, Airspy, AirspyHF, HackRF,
-        ### Funcube) still build unchanged.  Override via KA9Q_RADIO_DISABLE_MAKE_ARGS if needed.
-        local ka9q_radio_disable_make_args="${KA9Q_RADIO_DISABLE_MAKE_ARGS-ENABLE_BLADERF=0 ENABLE_FOBOS=0 ENABLE_HYDRASDR=0}"
+        ### ka9q-radio's Makefile defaults every SDR driver to ENABLE_*=1, but these four need dev
+        ### libraries WD does not install (libbladeRF.h, fobos.h, libhydrasdr/hydrasdr.h, SoapySDR/Device.h),
+        ### so the build would fail.  ENABLE_SOAPY joined that list in 2026.09.09-1: the new soapy.c driver is
+        ### on by default and needs libsoapysdr-dev.  WD drives no SoapySDR hardware, so disable it rather than
+        ### add an apt dependency to every site.  Disable them; the radios WD supports (RX888, RTL-SDR, Airspy,
+        ### AirspyHF, HackRF, Funcube) still build unchanged.  Override via KA9Q_RADIO_DISABLE_MAKE_ARGS if needed.
+        local ka9q_radio_disable_make_args="${KA9Q_RADIO_DISABLE_MAKE_ARGS-ENABLE_BLADERF=0 ENABLE_FOBOS=0 ENABLE_HYDRASDR=0 ENABLE_SOAPY=0}"
         make_args+=( ${ka9q_radio_disable_make_args} )
     fi
     ( cd  ${project_subdir} ; make -f ${makefile_name} "${make_args[@]}" ) >&  ${project_logfile}
@@ -2284,7 +2286,7 @@ fi
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
-    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-033005ce1411daf9b99e0ded8d847adb683084c8}"
+    "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-6a4fe1bfb2a1d3d86b793a9bdd8c29671c84122f}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-93a7d06f9b74735c3c6108eb1bdbecb481c56d1d}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
