@@ -374,13 +374,22 @@ function ka9q-get-configured-radiod() {
         return 0
     fi
 
-    local _radiod_conf_file_list=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}')
+    local _radiod_conf_file_list=$( ps aux | awk '!/awk/ && /\/sbin\/radiod /{print $NF}' | sort -u )
     if [[ -n "${_radiod_conf_file_list}" ]]; then
         local _radiod_conf_file_count=$(wc -l <<< "${_radiod_conf_file_list}")
+        local _radiod_conf_file_name
         if (( _radiod_conf_file_count > 1 )); then
-            wd_logger 1 "WARNING: found ${_radiod_conf_file_count} running radiod instances:\n${_radiod_conf_file_list}\nUsing only the first one"
+            ### ka9q-radio decodes FT8/FT4 from ONE stream, so a multi-RX888 site must always resolve to the same
+            ### radiod.  'ps' lists processes in start order, so the old 'head -1' followed whichever instance came
+            ### up first and could silently move FT8/FT4 from one receiver to the other across a restart.  Prefer
+            ### WD's own default conf name when that radiod is running, else the alphabetically first, which puts
+            ### on5kq-rx1 ahead of on5kq-rx2.  A site that wants another one sets KA9Q_CONF_NAME in wsprdaemon.conf.
+            _radiod_conf_file_name=$( grep -m1 "/radiod@rx888-wsprdaemon\.conf$" <<< "${_radiod_conf_file_list}" )
+            [[ -z "${_radiod_conf_file_name}" ]] && _radiod_conf_file_name=$( head -1 <<< "${_radiod_conf_file_list}" )
+            wd_logger 1 "WARNING: found ${_radiod_conf_file_count} running radiod instances:\n${_radiod_conf_file_list}\nOnly the FT4/FT8 streams of '${_radiod_conf_file_name}' are decoded.  Set KA9Q_CONF_NAME in wsprdaemon.conf to choose a different one."
+        else
+            _radiod_conf_file_name="${_radiod_conf_file_list}"
         fi
-        local _radiod_conf_file_name=$(head -1 <<< "${_radiod_conf_file_list}")
         wd_logger 2 "Found radiod is running and configured by ${_radiod_conf_file_name}"
         __return_radio_conf_file_name="${_radiod_conf_file_name}"
         return 0
@@ -1680,6 +1689,25 @@ function ka9q-ft-setup()
         service_restart_needed="yes"
     fi
     ### We have its conf file
+
+    ### ka9q-radio decodes each mode from ONE spool directory, and the ftX-decode@.service template shares
+    ### /etc/radio/ftX-decode.conf and /var/lib/ka9q-radio/ftX with the plain ftX-decode.service.  So an enabled
+    ### instance is not a second receiver's decoder, it is a duplicate racing the real one over the same wav files:
+    ### "Attempt to open existing lockfile ... No such file or directory", and decodes lost to whichever process
+    ### deletes the file first.  ON5KQ ran ft4-decode@1 and ft8-decode@1 next to the real pair for a year.  Only the
+    ### first RX888's FT4/FT8 are decoded, so retire any instance unit, whether it is merely enabled or running.
+    local -a ft_decode_instance_list=()
+    mapfile -t ft_decode_instance_list < <(
+        { systemctl list-units --all --no-legend "${ft_type}-decode@*.service" 2>/dev/null | awk '{print $1}'
+          ls /etc/systemd/system/multi-user.target.wants/${ft_type}-decode@*.service 2>/dev/null | xargs -r -n1 basename
+        } | grep "^${ft_type}-decode@" | sort -u )
+    if (( ${#ft_decode_instance_list[@]} )); then
+        wd_logger 1 "Retiring duplicate FT decoder instance(s) which race ${ft_decode_service_file_name} over the same spool directory: ${ft_decode_instance_list[*]}"
+        local ft_decode_instance
+        for ft_decode_instance in "${ft_decode_instance_list[@]}"; do
+            sudo systemctl disable --now "${ft_decode_instance}" >& /dev/null
+        done
+    fi
 
     ### Start it up
     local ft_service_file_instance_name=${ft_decode_service_file_name}
