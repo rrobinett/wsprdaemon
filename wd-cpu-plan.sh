@@ -30,12 +30,17 @@ RADIOD_L3_FRACTION="${RADIOD_L3_FRACTION:-0.62}" # ~5/8; tune per site
 MIN_DECODER_WAYS="${MIN_DECODER_WAYS:-4}"
 ### Clock cap for every cpu that is NOT radiod's.  1.4 GHz is the efficient point on the
 ### Zen3 mobile parts most WD sites run.
+### A site sets this from wsprdaemon.conf as WD_CPU_FREQ_OTHER_MHZ (or WD_CPU_FREQ_MAX_MHZ);
+### wd-cpu-tuning.sh converts it to kHz here so the boot-time wd-cpu-freq.service sees it too.
 FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"
 ### radiod's cores default to the hardware maximum.  Override it on a thermally constrained
 ### host: at KX4AZ-T, taking the two fft cores to 4.44 GHz cut the busiest fft from 86% to 52%
 ### of a core but pushed the package from 78 C to 84.8 C against a 94.8 C limit, on a chassis
 ### whose fan cannot be controlled from Linux at all.  Trading a little of that clock back
 ### keeps most of the margin for meaningfully less heat.
+### The same is true of any site whose RX888s run at less than 129.6 Msps: fft costs
+### 0.54 Gcycle/s at 64.8 Msps, so the hardware maximum there is heat for nothing.  Set from
+### wsprdaemon.conf as WD_CPU_FREQ_RADIOD_MHZ (or WD_CPU_FREQ_MAX_MHZ).
 FREQ_RADIOD_KHZ="${FREQ_RADIOD_KHZ:-}"
 ### Which radiod cpus get the fast clock.  "radiod" (default) = every radiod cpu.  "fft-pair"
 ### = only the physical core(s) running fft, i.e. the fft cpu and its SMT sibling; the other
@@ -45,6 +50,7 @@ FREQ_RADIOD_KHZ="${FREQ_RADIOD_KHZ:-}"
 ### honours.  Measured at K6FOD (Ryzen 5 5500U, one RX888 at 64.8 Msps, 12 FT8/FT4 channels):
 ### all-radiod-fast ran the package at 84-87 C; fft-pair alone at 4.0 GHz with the other ten
 ### cpus hard-capped ran 61-64 C with fft at 53% of its core, zero drops, backlog clear.
+### Set from wsprdaemon.conf as WD_CPU_FREQ_FAST_MODE.
 FREQ_FAST_MODE="${FREQ_FAST_MODE:-radiod}"
 
 # ---- 1. group logical CPUs by physical core (socket-aware) ----

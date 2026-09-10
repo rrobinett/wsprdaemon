@@ -94,6 +94,12 @@ is_fast(){ case " $fast_cpus " in *" $1 "*) return 0;; *) return 1;; esac; }
 ### 2.1 GHz, 86 -> 73 C).  amd-pstate / intel_pstate hosts have no cpb file and are untouched.
 have_cpb="no"; [ -e /sys/devices/system/cpu/cpu0/cpufreq/cpb ] && have_cpb="yes"
 n_cpb=0
+### Boost on the fast cpus ONLY while they are meant to run at the hardware maximum.  A site that
+### asked for a lower ceiling (WD_CPU_FREQ_RADIOD_MHZ in wsprdaemon.conf) means it, and on
+### acpi-cpufreq everything above the top P-state is turbo, which scaling_max_freq cannot cap --
+### so leaving cpb=1 there would quietly ignore the very setting the operator came to set.
+cpb_fast=1
+[ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ] || cpb_fast=0
 
 w(){ if [ "$DRY" = "1" ]; then echo "    would: echo '$1' > $2"; else echo "$1" > "$2" 2>/dev/null; fi; }
 
@@ -113,7 +119,7 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
            { [ "$DRY" = "1" ] || [ -w "$gov" ]; }; then
             w "performance" "$gov"
         fi
-        if [ "$have_cpb" = "yes" ] && { [ "$DRY" = "1" ] || [ -w "$d/cpb" ]; }; then w 1 "$d/cpb"; n_cpb=$((n_cpb+1)); fi
+        if [ "$have_cpb" = "yes" ] && { [ "$DRY" = "1" ] || [ -w "$d/cpb" ]; }; then w "$cpb_fast" "$d/cpb"; n_cpb=$((n_cpb+1)); fi
         n_fast=$((n_fast+1))
     else
         w "$OTHER_KHZ" "$maxf"
@@ -137,10 +143,13 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
 done
 
 ### say which it is, so a site running FREQ_RADIOD_KHZ is not misreported as at the maximum
-if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by FREQ_RADIOD_KHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
+if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by WD_CPU_FREQ_RADIOD_MHZ/WD_CPU_FREQ_MAX_MHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
 label="radiod cpus"; [ "$FAST_MODE" = "fft-pair" ] && label="fft pair(s)"
 printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz'"\n" \
        "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
-[ "$n_cpb" -gt 0 ] && echo "wd-cpu-freq: acpi-cpufreq host: per-core boost (cpb) set on $n_cpb cpu(s) -- boost ON for the fast set, OFF (hard top P-state) for the rest"
+if [ "$n_cpb" -gt 0 ]; then
+    if [ "$cpb_fast" = "1" ]; then fast_boost="ON for the fast set"; else fast_boost="OFF everywhere, because the fast set is capped below the hardware maximum"; fi
+    echo "wd-cpu-freq: acpi-cpufreq host: per-core boost (cpb) set on $n_cpb cpu(s) -- boost ${fast_boost}, OFF (hard top P-state) for the rest"
+fi
 [ "$n_skipped" -gt 0 ] && echo "wd-cpu-freq: $n_skipped cpu(s) had no writable scaling_max_freq and were left alone"
 exit 0

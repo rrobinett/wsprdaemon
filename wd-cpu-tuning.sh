@@ -22,6 +22,25 @@ declare WD_CPU_TUNING=${WD_CPU_TUNING-yes}                    ### "yes" (the def
 declare WD_CPU_TUNING_SBIN=${WD_CPU_TUNING_SBIN-/usr/local/sbin}
 declare WD_CPU_TUNING_SCRIPTS="wd-cpu-plan.sh radiod-pin-threads.sh wd-resctrl-setup.sh wd-irq-affinity.sh wd-cpu-freq.sh wd-cpu-apply.sh"
 
+### ---- the site's own clock ceiling ------------------------------------------------------
+### Before the planner, a site capped its CPU clocks with CPU_CORE_KHZ in wsprdaemon.conf.  The
+### planner took the clock policy over and gives radiod's cores the HARDWARE MAXIMUM -- 4.55 GHz
+### on a Ryzen 7 5825U -- while wd_cpu_tuning_retire_manual_cores() commented CPU_CORE_KHZ out.
+### That left the operator with no knob at all: FREQ_RADIOD_KHZ / FREQ_OTHER_KHZ existed only in
+### /etc/wd-cpu-plan.conf, which nothing writes and no site owner has ever been told about.
+### ON5KQ (2026-09-09), on a box he had deliberately run at 2.6 GHz for years: "The cpu is at its
+### limit and the blower runs at full speed ... I tried to limit the clock rate again, but it
+### doesn't seem to work anymore."  He was right, and a receiver whose fan is unbearable gets
+### switched off.  radiod needs clock only in proportion to the RX888 sample rate (fft is
+### 0.54 Gcycle/s at 64.8 Msps, 2.75 at 129.6), so on a slow-sampling site most of that 4.55 GHz
+### is heat for nothing.  These four settings, in MHz, are the knob; they are propagated to
+### /etc/wd-cpu-plan.conf so the boot-time wd-cpu-freq.service applies the same policy.
+declare WD_CPU_FREQ_MAX_MHZ=${WD_CPU_FREQ_MAX_MHZ-}          ### ceiling for EVERY core; the simple knob
+declare WD_CPU_FREQ_RADIOD_MHZ=${WD_CPU_FREQ_RADIOD_MHZ-}    ### ceiling for radiod's cores; unset => hardware max
+declare WD_CPU_FREQ_OTHER_MHZ=${WD_CPU_FREQ_OTHER_MHZ-}      ### ceiling for the decoder/OS cores; unset => 1400
+declare WD_CPU_FREQ_FAST_MODE=${WD_CPU_FREQ_FAST_MODE-}      ### "radiod" (every radiod cpu fast) or "fft-pair"
+declare WD_CPU_PLAN_CONF=${WD_CPU_PLAN_CONF-/etc/wd-cpu-plan.conf}
+
 ### Log a line to BOTH the normal WD log and ${WD_CPU_TUNING_LOG}.
 ### This report runs while ka9q-utils.sh is being sourced, and at that point WD_LOGFILE is not yet
 ### set -- wd_logger() returns without writing anything when that is true, and there is no terminal
@@ -58,6 +77,161 @@ function wd_cpu_list_normalise()
     done
     (( ${#out[@]} == 0 )) && return 0
     printf '%s\n' "${out[@]}" | sort -n -u | paste -sd, -
+}
+
+### Validate one of the WD_CPU_FREQ_*_MHZ settings and leave it in kHz in ${wd_cpu_freq_khz},
+### which is what the cpufreq sysfs files and the planner speak.  Returns 1 when the value is
+### unusable, so a typo leaves the default in place rather than pinning the host at some absurd
+### clock.  kHz is accepted as well: this replaces CPU_CORE_KHZ, which was in kHz for a decade,
+### so "2600000" here is a mistake waiting to happen and is worth reading charitably.
+### The answer comes back in a variable rather than on stdout BECAUSE this function logs: called
+### as $(wd_cpu_freq_validate ...) its own warning text would be captured as part of the value.
+declare wd_cpu_freq_khz=0
+function wd_cpu_freq_validate()
+{
+    local var_name=$1 value="$2"
+
+    wd_cpu_freq_khz=0
+    [[ -z ${value} ]] && return 1
+    if ! [[ ${value} =~ ^[0-9]+$ ]]; then
+        wd_cpu_tuning_log 1 "ERROR: ${var_name}=\"${value}\" is not a whole number of MHz, so it is ignored"
+        return 1
+    fi
+    if (( value >= 100000 )); then
+        wd_cpu_tuning_log 1 "WARNING: ${var_name}=\"${value}\" is in kHz, not MHz; reading it as $(( value / 1000 )) MHz"
+        value=$(( value / 1000 ))
+    fi
+    if (( value < 400 || value > 9999 )); then
+        wd_cpu_tuning_log 1 "ERROR: ${var_name}=\"${value}\" MHz is outside the sane 400..9999 MHz range, so it is ignored"
+        return 1
+    fi
+    wd_cpu_freq_khz=$(( value * 1000 ))
+    return 0
+}
+
+### Propagate the wsprdaemon.conf clock settings into ${WD_CPU_PLAN_CONF} as the FREQ_* variables
+### wd-cpu-plan.sh and wd-cpu-freq.sh already understand.  It has to land in that file rather than
+### merely in this shell: wd-cpu-freq.service runs at BOOT, long before WD starts, and reads
+### nothing else.  Only the block between the markers is ours -- a site's hand-written
+### RADIOD_L3_FRACTION and friends in the same file are preserved untouched -- and it is written
+### LAST so it wins over any FREQ_* the site set there by hand before this knob existed.
+function wd_cpu_tuning_write_freq_policy()
+{
+    local radiod_khz="" other_khz="" fast_mode=""
+
+    ### WD_CPU_FREQ_MAX_MHZ is the both-halves shorthand; the specific settings refine it.
+    ### Each variable is emitted at most ONCE: a file that assigns FREQ_OTHER_KHZ twice and
+    ### relies on the second winning is correct and unreadable, which is how a config file
+    ### stops being believed.
+    if wd_cpu_freq_validate WD_CPU_FREQ_MAX_MHZ "${WD_CPU_FREQ_MAX_MHZ}" ; then
+        radiod_khz=${wd_cpu_freq_khz}
+        other_khz=${wd_cpu_freq_khz}
+    fi
+    wd_cpu_freq_validate WD_CPU_FREQ_RADIOD_MHZ "${WD_CPU_FREQ_RADIOD_MHZ}" && radiod_khz=${wd_cpu_freq_khz}
+    wd_cpu_freq_validate WD_CPU_FREQ_OTHER_MHZ  "${WD_CPU_FREQ_OTHER_MHZ}"  && other_khz=${wd_cpu_freq_khz}
+    case "${WD_CPU_FREQ_FAST_MODE}" in
+        "")                 ;;
+        radiod|fft-pair)    fast_mode=${WD_CPU_FREQ_FAST_MODE} ;;
+        *)                  wd_cpu_tuning_log 1 "ERROR: WD_CPU_FREQ_FAST_MODE=\"${WD_CPU_FREQ_FAST_MODE}\" is neither 'radiod' nor 'fft-pair', so it is ignored" ;;
+    esac
+
+    local -a lines=()
+    [[ -n ${radiod_khz} ]] && lines+=( "FREQ_RADIOD_KHZ=${radiod_khz}" )
+    [[ -n ${other_khz}  ]] && lines+=( "FREQ_OTHER_KHZ=${other_khz}" )
+    [[ -n ${fast_mode}  ]] && lines+=( "FREQ_FAST_MODE=${fast_mode}" )
+
+    local begin_marker="### ---- BEGIN clock policy from wsprdaemon.conf -- written by WD, edit wsprdaemon.conf not this file ----"
+    local end_marker="### ---- END clock policy from wsprdaemon.conf ----"
+
+    ### Everything in the file that is NOT our block, in order.  Fixed-string comparison, so a
+    ### marker containing '.' and '(' cannot be misread as a regex.
+    local rest=""
+    if [[ -r ${WD_CPU_PLAN_CONF} ]]; then
+        rest=$(awk -v b="${begin_marker}" -v e="${end_marker}" '$0==b{skip=1} skip==0{print} $0==e{skip=0}' "${WD_CPU_PLAN_CONF}")
+    fi
+
+    local new_content="${rest}"
+    if (( ${#lines[@]} )); then
+        [[ -n ${new_content} ]] && new_content+=$'\n'
+        new_content+="${begin_marker}"$'\n'"$(printf '%s\n' "${lines[@]}")"$'\n'"${end_marker}"
+    fi
+
+    ### $(cat) strips trailing newlines and so does the $(awk) above, so the two sides compare cleanly
+    if [[ "$(cat "${WD_CPU_PLAN_CONF}" 2>/dev/null)" == "${new_content}" ]]; then
+        (( ${#lines[@]} )) && wd_cpu_tuning_log 2 "CPU tuning: ${WD_CPU_PLAN_CONF} already carries ${lines[*]}"
+        return 0
+    fi
+
+    if [[ -z ${new_content} ]]; then
+        ### Nothing of ours and nothing of theirs left: do not leave an empty file behind
+        sudo rm -f "${WD_CPU_PLAN_CONF}"
+        wd_cpu_tuning_log 1 "CPU tuning: no WD_CPU_FREQ_* setting in ${WSPRDAEMON_CONFIG_FILE}, so ${WD_CPU_PLAN_CONF} was removed and the default clock policy applies"
+        return 0
+    fi
+    if ! printf '%s\n' "${new_content}" | sudo tee "${WD_CPU_PLAN_CONF}" >/dev/null ; then
+        wd_cpu_tuning_log 1 "ERROR: CPU tuning: could not write ${WD_CPU_PLAN_CONF}, so the WD_CPU_FREQ_* settings will not survive a reboot"
+        return 1
+    fi
+    if (( ${#lines[@]} )); then
+        wd_cpu_tuning_log 1 "CPU tuning: clock policy from ${WSPRDAEMON_CONFIG_FILE} => ${lines[*]} (in ${WD_CPU_PLAN_CONF})"
+    else
+        wd_cpu_tuning_log 1 "CPU tuning: no WD_CPU_FREQ_* setting in ${WSPRDAEMON_CONFIG_FILE}, so the default clock policy applies"
+    fi
+    return 0
+}
+
+### Carry a legacy CPU_CORE_KHZ="DEFAULT:<khz>[,<core>:<khz>...]" forward into WD_CPU_FREQ_MAX_MHZ.
+### Retiring CPU_CORE_KHZ without this is exactly how ON5KQ's box ended up running radiod at
+### 4.55 GHz with the fan flat out on hardware its owner had deliberately held to 2.6 GHz: WD
+### disabled his setting and offered nothing in its place.  A cap the operator wrote down is a
+### decision, not noise, so it survives the migration.
+### The per-core fields are dropped, and only DEFAULT is carried: the planner decides which core
+### does what now, so a list keyed by core number has no meaning once the layout moves.
+function wd_cpu_tuning_migrate_cpu_core_khz()
+{
+    local conf=${WSPRDAEMON_CONFIG_FILE}
+
+    [[ -f ${conf} ]] || return 0
+    ### Already said in the new form, here or in the file: leave it alone
+    [[ -n "${WD_CPU_FREQ_MAX_MHZ}${WD_CPU_FREQ_RADIOD_MHZ}${WD_CPU_FREQ_OTHER_MHZ}" ]] && return 0
+    grep -qE "^[[:space:]]*WD_CPU_FREQ_(MAX|RADIOD|OTHER)_MHZ=" "${conf}" && return 0
+
+    local legacy
+    legacy=$(grep -E "^[[:space:]]*CPU_CORE_KHZ=" "${conf}" | tail -1)
+    [[ -n ${legacy} ]] || return 0
+
+    local khz=${legacy#*DEFAULT:}
+    khz=${khz%%[^0-9]*}
+    if [[ -z ${khz} ]]; then
+        wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} has ${legacy} with no usable 'DEFAULT:<khz>', so no clock ceiling was carried forward.  Set WD_CPU_FREQ_MAX_MHZ instead."
+        return 0
+    fi
+    local mhz=$(( khz / 1000 ))
+    if (( mhz < 400 || mhz > 9999 )); then
+        wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} has ${legacy}, whose ${mhz} MHz is outside the sane 400..9999 MHz range, so no clock ceiling was carried forward"
+        return 0
+    fi
+    if [[ ! -w ${conf} ]]; then
+        wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} caps the clocks at ${mhz} MHz with CPU_CORE_KHZ, which the planner ignores, but the file is not writable so WD_CPU_FREQ_MAX_MHZ=\"${mhz}\" could not be added for you"
+        return 0
+    fi
+
+    local stamp; stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    if ! cp -a "${conf}" "${conf}.bak-cpu-tuning-${stamp}" ; then
+        wd_cpu_tuning_log 1 "ERROR: CPU tuning: could not back up ${conf}, so CPU_CORE_KHZ was not carried forward"
+        return 1
+    fi
+    cat >> "${conf}" <<EOF
+
+### Carried forward from CPU_CORE_KHZ by WD CPU tuning ${stamp}.  With WD_CPU_TUNING="yes" the
+### planner owns the clock policy, and this is the knob that caps it: MHz, applied to every core.
+### WD_CPU_FREQ_RADIOD_MHZ and WD_CPU_FREQ_OTHER_MHZ cap radiod's cores and the rest separately;
+### unset, radiod runs at the hardware maximum and the other cores at 1400 MHz.  See wd-cpu-tuning.md.
+WD_CPU_FREQ_MAX_MHZ="${mhz}"
+EOF
+    WD_CPU_FREQ_MAX_MHZ=${mhz}      ### take effect on THIS run, not only the next one
+    wd_cpu_tuning_log 1 "CPU tuning: carried the ${mhz} MHz ceiling from CPU_CORE_KHZ forward into WD_CPU_FREQ_MAX_MHZ in ${conf} (backup: ${conf}.bak-cpu-tuning-${stamp})"
+    return 0
 }
 
 ### Copy the helper scripts to ${WD_CPU_TUNING_SBIN} when they are missing or out of date.
@@ -103,7 +277,12 @@ function wd_cpu_tuning_report()
         wd_cpu_tuning_log 1 "CPU tuning: radiod instance(s) identified from ${WD_RADIOD_DISCOVERY}"
     fi
     if [[ "${WD_FREQ_AVAILABLE:-no}" == "yes" ]]; then
-        wd_cpu_tuning_log 1 "CPU tuning: planned clocks => radiod $(( ${WD_FREQ_RADIOD_KHZ:-0} / 1000 )) MHz (hardware max), other cores $(( ${WD_FREQ_OTHER_KHZ:-0} / 1000 )) MHz"
+        ### Say which it is.  Reporting a site-set ceiling as "hardware max" is how an operator
+        ### who capped his clocks concludes, correctly, that WD ignored him.
+        local radiod_why="hardware max"
+        (( ${WD_FREQ_RADIOD_KHZ:-0} < ${WD_FREQ_HW_MAX_KHZ:-0} )) && \
+            radiod_why="capped by wsprdaemon.conf, hardware max $(( ${WD_FREQ_HW_MAX_KHZ:-0} / 1000 )) MHz"
+        wd_cpu_tuning_log 1 "CPU tuning: planned clocks => radiod $(( ${WD_FREQ_RADIOD_KHZ:-0} / 1000 )) MHz (${radiod_why}), other cores $(( ${WD_FREQ_OTHER_KHZ:-0} / 1000 )) MHz"
     else
         wd_cpu_tuning_log 1 "CPU tuning: no cpufreq driver on this host, so the clock cannot be managed (BIOS EIST/SpeedStep disabled?)"
     fi
@@ -240,8 +419,14 @@ function wd_cpu_tuning_retire_manual_cores()
 
     local note="### Commented out by WD CPU tuning ${stamp}: WD_CPU_TUNING=\"yes\" means wd-cpu-plan.sh decides"
     local note2="### the CPU layout AND the clock policy, so this setting is IGNORED.  Restore it only if you set WD_CPU_TUNING=\"no\"."
+    ### Never comment a clock setting out without saying what replaced it: the operator came here
+    ### to cap his clocks, and a bare "IGNORED" leaves him with a hot box and no knob.
+    local note3="### To cap the clocks under the planner use WD_CPU_FREQ_MAX_MHZ (every core), or"
+    local note4="### WD_CPU_FREQ_RADIOD_MHZ / WD_CPU_FREQ_OTHER_MHZ separately.  See wd-cpu-tuning.md."
     for var in "${found[@]}" ; do
-        sed -i -E "s|^([[:space:]]*)(${var}=.*)$|\1${note}\n\1${note2}\n\1#\2|" "${conf}"
+        local why="${note}\n\1${note2}"
+        [[ ${var} == "CPU_CORE_KHZ" ]] && why="${note}\n\1${note2}\n\1${note3}\n\1${note4}"
+        sed -i -E "s|^([[:space:]]*)(${var}=.*)$|\1${why}\n\1#\2|" "${conf}"
     done
     wd_cpu_tuning_log 1 "CPU tuning: commented out ${found[*]} in ${conf} -- the planner owns placement now (backup: ${conf}.bak-cpu-tuning-${stamp})"
     return 0
@@ -307,6 +492,15 @@ function wd_cpu_tuning()
         tail -n 500 "${WD_CPU_TUNING_LOG}" > "${WD_CPU_TUNING_LOG}.tmp" 2>/dev/null && mv "${WD_CPU_TUNING_LOG}.tmp" "${WD_CPU_TUNING_LOG}" 2>/dev/null
     fi
     printf '%s ---- wd_cpu_tuning run ----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >> ${WD_CPU_TUNING_LOG}
+
+    ### Both of these run BEFORE the report, because the report runs the planner and the planner
+    ### sources ${WD_CPU_PLAN_CONF}: written afterwards, a site's clock ceiling would be reported
+    ### one WD start late.  Only when we own the policy -- with WD_CPU_TUNING="no" the site drives
+    ### the clocks itself through CPU_CORE_KHZ in wd-setup.sh and /etc is none of our business.
+    if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
+        wd_cpu_tuning_migrate_cpu_core_khz
+        wd_cpu_tuning_write_freq_policy
+    fi
 
     wd_cpu_tuning_report
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then

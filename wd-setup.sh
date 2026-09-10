@@ -430,7 +430,7 @@ CPU_CORE_KHZ="${CPU_CORE_KHZ-DEFAULT:3200000}" ### defaults to 3.2 GHz
 ### hand-written per-core list must not fight it -- and note its unset default caps EVERY core
 ### at 3.2 GHz, which on a Ryzen 7 5825U silently hides 0.86 GHz of headroom from fft.
 if [[ "${WD_CPU_TUNING-yes}" == "yes" ]]; then
-    wd_logger 2 "WD_CPU_TUNING=yes, so wd-cpu-freq.sh sets the CPU clocks from the plan; not applying CPU_CORE_KHZ"
+    wd_logger 2 "WD_CPU_TUNING=yes, so wd-cpu-freq.sh sets the CPU clocks from the plan; not applying CPU_CORE_KHZ.  Cap them with WD_CPU_FREQ_MAX_MHZ / WD_CPU_FREQ_RADIOD_MHZ / WD_CPU_FREQ_OTHER_MHZ instead"
 else
 #(( ++verbosity ))
 wd-set-cpu-speed "${CPU_CORE_KHZ}"

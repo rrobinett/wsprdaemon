@@ -62,6 +62,61 @@ traffic that saturates the DRAM bus and hurts everything, radiod included — ob
 KX4AZ-T when a stale hard-coded `cpus_list` left one radiod inside the decoders' 3 MB
 partition: identical work, 86.9% CPU vs 75.0% for its twin.
 
+## Clock speed: how fast is fast enough
+
+By default radiod's cores run at the **hardware maximum** and every other core is capped at
+**1400 MHz**. That default is right for a host running RX888s at 129.6 Msps and wrong for a
+host running them at 64.8 Msps, where it buys nothing but heat and fan noise — `fft` needs
+0.54 Gcycle/s at 64.8 Msps but 2.75 Gcycle/s at 129.6, so the clock a receiver actually needs
+scales with its sample rate, not with what the silicon can do.
+
+Four settings in `wsprdaemon.conf`, all in **MHz**, all optional:
+
+```sh
+WD_CPU_FREQ_MAX_MHZ="2600"       # ceiling for every core; the simple knob
+WD_CPU_FREQ_RADIOD_MHZ="2600"    # ceiling for radiod's cores       (unset: hardware maximum)
+WD_CPU_FREQ_OTHER_MHZ="2400"     # ceiling for the decoder/OS cores (unset: 1400)
+WD_CPU_FREQ_FAST_MODE="fft-pair" # only the fft core(s) run fast    (unset: every radiod cpu)
+```
+
+The specific settings override `WD_CPU_FREQ_MAX_MHZ`. Values are clamped to the hardware's own
+min and max, so an impossible number cannot brick the host, and a value that looks like kHz
+(≥ 100000, the units the old `CPU_CORE_KHZ` used) is read as kHz with a warning.
+
+WD writes them into `/etc/wd-cpu-plan.conf` as `FREQ_RADIOD_KHZ` / `FREQ_OTHER_KHZ` /
+`FREQ_FAST_MODE`, inside a marked block that leaves the rest of that file alone. That is what
+makes them survive a reboot: `wd-cpu-freq.service` runs at boot, long before WD starts, and
+reads nothing else.
+
+**Choosing a ceiling.** Start from what `fft` costs at your sample rate (0.54 Gcycle/s at
+64.8 Msps, 2.75 at 129.6 on Zen3), add `proc_rx888` at roughly 0.24 Gcycle/s plus 3.6 cycles
+per sample, and leave a factor of two. A 64.8 Msps receiver is comfortable at 2.6 GHz; a
+129.6 Msps receiver is not, and should stay at or near the hardware maximum. The decoders are
+throughput work with ~85 s of slack in each 120 s cycle, so their ceiling is the one to lower
+first — but watch the decode backlog on a site with many receivers, where that slack is
+already spent.
+
+**Does the cap actually bite?** It depends on the driver, so measure rather than trust
+`scaling_cur_freq`, which lies. Time a fixed workload on a capped core against an uncapped
+one:
+
+```sh
+time taskset -c 8 bash -c 'x=0; for ((i=0;i<3000000;i++)); do ((x+=i)); done'
+```
+
+On ON5KQ-BL (Ryzen 7 5825U, `amd-pstate-epp`) that ran 12.56 s at a 1400 MHz cap against
+4.26 s at 4546 MHz — a 2.95x slowdown against a 3.25x ratio, so there the ceiling is real. On
+the older `amd-pstate` host measured in 2026-08 it was advisory, worth only 1.3x. On
+`acpi-cpufreq` hosts the hard lever is per-core boost (`cpb`), which WD turns **off** on every
+core whenever the fast set is capped below the hardware maximum, because everything above the
+top P-state there is turbo and `scaling_max_freq` cannot reach it.
+
+**Migrating from `CPU_CORE_KHZ`.** That setting predates the planner and is ignored while
+`WD_CPU_TUNING="yes"`. On its first run WD copies its `DEFAULT:<khz>` value into
+`WD_CPU_FREQ_MAX_MHZ` in `wsprdaemon.conf` (backing the file up first) and then comments the
+old line out. The per-core fields are dropped: the planner decides which core does what, so a
+list keyed by core number no longer means anything.
+
 ## Checking it
 
 `DRY_RUN=1` on any of the three consumers prints what would change and touches nothing.
