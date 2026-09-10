@@ -154,7 +154,14 @@ for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq; do
 done
 
 ### say which it is, so a site running FREQ_RADIOD_KHZ is not misreported as at the maximum
-if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by WD_CPU_FREQ_RADIOD_MHZ/WD_CPU_FREQ_MAX_MHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
+### Name the ACTUAL source of the number.  It used to credit the operator's wsprdaemon.conf even
+### when nothing there set it, which now matters: a single-receiver amd-pstate host gets 3.0 GHz
+### from WD itself, and a site owner reading this needs to know it was not their doing.
+if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then
+    why="hardware max"
+else
+    why="${WD_FREQ_RADIOD_SOURCE:-capped}, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"
+fi
 label="radiod cpus"; [ "$FAST_MODE" = "fft-pair" ] && label="fft pair(s)"
 printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz requested'"\n" \
        "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"

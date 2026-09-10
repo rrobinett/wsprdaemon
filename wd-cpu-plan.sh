@@ -377,19 +377,49 @@ if [ -r "$FREQ_DIR/cpuinfo_max_freq" ]; then
     ### lower max would wrongly cap radiod.  Uniform chips are unaffected (PCORE_MAXKHZ=0).
     [ "$HYBRID" = "yes" ] && [ "${PCORE_MAXKHZ:-0}" -gt 0 ] && FREQ_HW_MAX=$PCORE_MAXKHZ
     FREQ_HW_MIN=$(cat "$FREQ_DIR/cpuinfo_min_freq" 2>/dev/null || echo 0)
+    FREQ_RADIOD_SOURCE="hardware max"
     if [ -n "${FREQ_RADIOD_KHZ}" ] && [ "${FREQ_RADIOD_KHZ}" -gt 0 ] 2>/dev/null; then
+        FREQ_RADIOD_SOURCE="set by this site"
         FREQ_RADIOD=${FREQ_RADIOD_KHZ}
         [ "${FREQ_RADIOD}" -gt "${FREQ_HW_MAX}" ] && FREQ_RADIOD=${FREQ_HW_MAX}
         [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_RADIOD}" -lt "${FREQ_HW_MIN}" ] && FREQ_RADIOD=${FREQ_HW_MIN}
     else
         FREQ_RADIOD=${FREQ_HW_MAX}
+        ### A standard one-RX888 site does not need the hardware maximum and pays a lot of heat for
+        ### it.  Measured at OE3GBB (Ryzen 7 5825U, one RX888 at 129.6 Msps, 2026-09-10): ceiling
+        ### 4546000 gave 4.46 GHz, fft 46%, package 60 C; ceiling 3000000 gave 3.30 GHz, fft 44%,
+        ### package 44 C, with zero block drops.  fft did not rise AT ALL, so that clock was simply
+        ### being burned as heat.  The package returned to 61-64 C within a minute of restoring the
+        ### ceiling, which is the control that says the setting caused it and not some drift.
+        ### Note 4000000 was a no-op there -- the core still ran 4.44 GHz -- so this has to be set
+        ### below the silicon's non-boost floor to mean anything; see wd-cpu-freq.sh's header.
+        ###
+        ### It holds on a MULTI-receiver host too.  KX4AZ-T runs three RX888s on the same part and
+        ### was measured the same afternoon: ceiling 4000000 -> fft cores 20/22/24%, package 69 C;
+        ### 3400000 -> 21/23/24%, 52 C; 3000000 -> 23/25/26%, 49 C.  Zero drops at every step, all
+        ### three radiods up, so 20 C came off that package for about two points of fft.  Unlike
+        ### OE3GBB the ceiling bites exactly there (measured 3.99, 3.41, 2.98 GHz).
+        ###
+        ### The caveat is band conditions, not receiver count: fft's cost tracks what the band is
+        ### doing, and a 2026-09-05 note on this same host recorded its fft at 62-89% where this
+        ### run saw 20-26%.  At the high end of that range a 3 GHz core would be marginal.  A site
+        ### that sees block drops after this raises WD_CPU_FREQ_RADIOD_MHZ in wsprdaemon.conf, and
+        ### an explicit setting always wins over this default.
+        case "$(cat "$FREQ_DIR/scaling_driver" 2>/dev/null)" in
+            amd-pstate*)
+                if [ "${FREQ_HW_MAX}" -gt 3000000 ]; then
+                    FREQ_RADIOD=3000000
+                    FREQ_RADIOD_SOURCE="WD default for an amd-pstate host"
+                fi
+                ;;
+        esac
     fi
     FREQ_OTHER=${FREQ_OTHER_KHZ}
     [ "${FREQ_OTHER}" -gt "${FREQ_HW_MAX}" ] && FREQ_OTHER=${FREQ_HW_MAX}
     [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_OTHER}" -lt "${FREQ_HW_MIN}" ] && FREQ_OTHER=${FREQ_HW_MIN}
 else
     ### No cpufreq driver at all: BIOS EIST/SpeedStep disabled, or a VM that hides the MSRs.
-    FREQ_AVAILABLE="no"; FREQ_HW_MAX=0; FREQ_HW_MIN=0; FREQ_RADIOD=0; FREQ_OTHER=0
+    FREQ_AVAILABLE="no"; FREQ_HW_MAX=0; FREQ_HW_MIN=0; FREQ_RADIOD=0; FREQ_OTHER=0; FREQ_RADIOD_SOURCE="no cpufreq driver"
 fi
 
 # ---- 5. emit ----
@@ -412,6 +442,7 @@ WD_FREQ_AVAILABLE="$FREQ_AVAILABLE"
 WD_FREQ_HW_MAX_KHZ=$FREQ_HW_MAX
 WD_FREQ_HW_MIN_KHZ=$FREQ_HW_MIN
 WD_FREQ_RADIOD_KHZ=$FREQ_RADIOD
+WD_FREQ_RADIOD_SOURCE="${FREQ_RADIOD_SOURCE:-hardware max}"
 WD_FREQ_OTHER_KHZ=$FREQ_OTHER
 WD_L3_KB_PER_WAY=$KB_PER_WAY
 # --- plan ---
