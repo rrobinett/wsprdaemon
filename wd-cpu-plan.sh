@@ -28,8 +28,15 @@ RADIOD_INSTANCES="${RADIOD_INSTANCES:-}"        # override; else auto-detect
 RADIOD_NAMES="${RADIOD_NAMES:-}"                # override; else auto-detect (sorted)
 RADIOD_L3_FRACTION="${RADIOD_L3_FRACTION:-0.62}" # ~5/8; tune per site
 MIN_DECODER_WAYS="${MIN_DECODER_WAYS:-4}"
-### Clock cap for every cpu that is NOT radiod's.  1.4 GHz is the efficient point on the
-### Zen3 mobile parts most WD sites run.
+### Clock cap for every cpu that is NOT radiod's.  This is a REQUEST, not a ceiling.  On the
+### amd-pstate parts most WD sites run, any value below the silicon's non-boost ceiling behaves
+### identically: the core settles around 2.7-3.2 GHz, roughly 1.5x slower than uncapped, and never
+### anywhere near this number (measured at KX4AZ-T on a Ryzen 7 5825U, 2026-09-10; see
+### wd-cpu-freq.sh's header for the full measurements).  1.4 GHz is kept as the default precisely
+### BECAUSE it is safely below every part's floor.  Do not "correct" it upward to the ~3.2 GHz the
+### cores actually reach: FREQ_OTHER is clamped to the hardware maximum below, so on a part whose
+### maximum is lower than that the cap would become a no-op and the decoders would get their boost
+### back, which is the opposite of what this setting is for.
 ### A site sets this from wsprdaemon.conf as WD_CPU_FREQ_OTHER_MHZ (or WD_CPU_FREQ_MAX_MHZ);
 ### wd-cpu-tuning.sh converts it to kHz here so the boot-time wd-cpu-freq.service sees it too.
 FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"

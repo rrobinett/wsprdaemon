@@ -18,12 +18,23 @@
 # every core at 3.2 GHz -- hiding 0.86 GHz of headroom on a 5825U at every site that never set it.
 #
 # HOW WELL THE CAP ACTUALLY BITES, measured on a Ryzen 5560U (amd-pstate, 2026-08-31):
-#   setting scaling_max_freq is ADVISORY on amd-pstate, not a hard ceiling.  A fixed workload
-#   timed on an idle core took 1.11 s capped at 1.4 GHz versus 0.85 s uncapped -- a 1.3x
-#   slowdown, not the 2.9x a real 1.4 GHz ceiling would give.  In practice the cap takes the
-#   core off boost down to roughly its nominal clock and no further, and amd_pstate=passive
-#   behaves the same.  Do not trust scaling_cur_freq to check this: it kept reporting 3.2 GHz
-#   regardless of the setting.  Time a fixed workload instead.
+#   setting scaling_max_freq is ADVISORY on amd-pstate, not a hard ceiling.  The cap takes the
+#   core off boost and no further.  Time a fixed workload to check this; do not trust
+#   scaling_cur_freq, which on a 5560U kept reporting 3.2 GHz regardless of the setting.
+#   Re-measured on KX4AZ-T (Ryzen 7 5825U, amd-pstate-epp) on 2026-09-10, three conditions
+#   INTERLEAVED over six rounds so the site's 2-minute decode bursts could not bias one of them
+#   -- an earlier sequential run was worthless, giving 1.84 s and 1.12 s for the SAME settings as
+#   background load fell.  Medians: capped 1.4 GHz 1.09 s, uncapped 0.73 s, i.e. 1.49x, where a
+#   real 1.4 GHz ceiling against 4.0 GHz would be 2.9x.  So the cap buys a genuine ~1.5x, and the
+#   cores land near 2.7-3.2 GHz, never at the number asked for.
+#   TWO THINGS THAT DO NOT HELP, both tested on that host and both dead ends:
+#     amd_pstate=passive: identical.  Capped/uncapped 1.35x in passive vs 1.37x in active.
+#     per-core boost=0 (the amd-pstate analogue of cpb): no effect at all, 1.13 s against the
+#       production setting's 1.09 s.  amd-pstate exposes a per-policy "boost" file but, unlike
+#       cpb on acpi-cpufreq, clearing it does not pin the core to a lower ceiling.
+#   The frequency lever is therefore exhausted on this silicon.  Cutting decoder heat further
+#   means cutting cycles consumed (a cgroup cpu.max quota on the decoder slice) or capping
+#   package power (BIOS cTDP / ryzenadj), not asking for a lower clock.
 #   The radiod half of the policy is unambiguous and does work: performance governor plus the
 #   hardware maximum moved those cores from 3.14 to 4.02 GHz, measured.
 #
@@ -145,11 +156,26 @@ done
 ### say which it is, so a site running FREQ_RADIOD_KHZ is not misreported as at the maximum
 if [ "$RADIOD_KHZ" = "${WD_FREQ_HW_MAX_KHZ:-}" ]; then why="hardware max"; else why="capped by WD_CPU_FREQ_RADIOD_MHZ/WD_CPU_FREQ_MAX_MHZ, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"; fi
 label="radiod cpus"; [ "$FAST_MODE" = "fft-pair" ] && label="fft pair(s)"
-printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz'"\n" \
+printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz requested'"\n" \
        "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
 if [ "$n_cpb" -gt 0 ]; then
     if [ "$cpb_fast" = "1" ]; then fast_boost="ON for the fast set"; else fast_boost="OFF everywhere, because the fast set is capped below the hardware maximum"; fi
     echo "wd-cpu-freq: acpi-cpufreq host: per-core boost (cpb) set on $n_cpb cpu(s) -- boost ${fast_boost}, OFF (hard top P-state) for the rest"
 fi
+
+### Do not let the line above be read as "the decoders run at OTHER_KHZ".  On amd-pstate they do
+### not, and a site chasing temperature deserves to know the cap is advisory rather than believing
+### its decoders sit at 1.4 GHz.  Measured effect is ~1.5x slower than uncapped, near 2.7-3.2 GHz.
+case "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null)" in
+    amd-pstate*) echo "wd-cpu-freq: amd-pstate: that cap is ADVISORY -- those cpus come off boost to roughly 2.7-3.2 GHz (~1.5x slower than uncapped), NOT to ${OTHER_KHZ} kHz.  Neither amd_pstate=passive nor per-core boost=0 lowers it further." ;;
+esac
+
+### Report the package temperature, the thing the cap exists to hold down, so the effect of any
+### change to it is visible instead of guessed at.  k10temp on AMD, coretemp on Intel.
+for h in /sys/class/hwmon/hwmon*/; do
+    case "$(cat "$h/name" 2>/dev/null)" in
+        k10temp|coretemp) [ -r "$h/temp1_input" ] && echo "wd-cpu-freq: package temperature $(( $(cat "$h/temp1_input") / 1000 )) C" && break ;;
+    esac
+done
 [ "$n_skipped" -gt 0 ] && echo "wd-cpu-freq: $n_skipped cpu(s) had no writable scaling_max_freq and were left alone"
 exit 0
