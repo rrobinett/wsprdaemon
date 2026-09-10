@@ -1329,7 +1329,12 @@ function build_ka9q_radio() {
             "${ka9q_conf_file_path}  WWV-IQ  encoding float"
         )
 
-    if [[ "${RX888_64_MSPS-no}" ==  "yes" ]]; then
+    ### Case-INSENSITIVE, and "starts with y", matching how KA9Q_RUNS_ONLY_REMOTELY is normalised below.
+    ### ON5KQ had RX888_64_MSPS="YES" and both his RX888s at 64.8 Msps.  The old test compared against a
+    ### lower-case "yes", so "YES" failed it and WD would have rewritten his conf to 129600000 the moment it
+    ### managed that radiod -- taking fft from 0.54 to 2.75 Gcycle/s on a box whose owner had just shut it
+    ### down for running over 70 C.  A config value's capitalisation must never decide that.
+    if [[ "${RX888_64_MSPS:-no}" =~ ^[Yy] ]]; then
         init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate     64800000")
     else
         ### The default is to run the RX888 at 129.6 Msps
@@ -1424,7 +1429,7 @@ function build_ka9q_radio() {
     local tmp_wisdom_file_path="/tmp/wisdom"
 
     local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
-    if [[ "${RX888_64_MSPS-no}" != "yes" ]]; then
+    if [[ ! "${RX888_64_MSPS:-no}" =~ ^[Yy] ]]; then      ### same case-insensitive test; "YES" here cost hours of needless wisdom computation
         fft_129_Msps="rof3240000"
     fi
 
