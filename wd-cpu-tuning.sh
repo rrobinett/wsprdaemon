@@ -109,13 +109,19 @@ function wd_cpu_freq_validate()
     return 0
 }
 
-### Propagate the wsprdaemon.conf clock settings into ${WD_CPU_PLAN_CONF} as the FREQ_* variables
-### wd-cpu-plan.sh and wd-cpu-freq.sh already understand.  It has to land in that file rather than
-### merely in this shell: wd-cpu-freq.service runs at BOOT, long before WD starts, and reads
-### nothing else.  Only the block between the markers is ours -- a site's hand-written
-### RADIOD_L3_FRACTION and friends in the same file are preserved untouched -- and it is written
-### LAST so it wins over any FREQ_* the site set there by hand before this knob existed.
-function wd_cpu_tuning_write_freq_policy()
+### Propagate what only WD knows into ${WD_CPU_PLAN_CONF}, as the variables wd-cpu-plan.sh and
+### wd-cpu-freq.sh already understand.  It has to land in that file rather than merely in this
+### shell: wd-cpu-freq.service runs at BOOT, long before WD starts, and reads nothing else.
+### Only the block between the markers is ours -- a site's hand-written RADIOD_L3_FRACTION and
+### friends in the same file are preserved untouched -- and it is written LAST so it wins over
+### any FREQ_* the site set there by hand before this knob existed.
+###
+### Two kinds of fact live here.  The clock ceilings come from wsprdaemon.conf.  RADIOD_INSTANCES=0
+### comes from WD having read the receiver list and found no KA9Q receiver: the boot-time scripts
+### cannot work that out for themselves -- they re-plan from scratch, discover no radiod, and fall
+### back to the placeholder instance -- so without persisting it a Kiwi-only host got its phantom
+### radiod cores back at every boot, complete with the performance governor.  Observed on PD0OHW-1.
+function wd_cpu_tuning_write_plan_conf()
 {
     local radiod_khz="" other_khz="" fast_mode=""
 
@@ -136,6 +142,9 @@ function wd_cpu_tuning_write_freq_policy()
     esac
 
     local -a lines=()
+    ### ka9q-utils.sh exports this as 0 when the conf holds no KA9Q receiver.  Anything else --
+    ### unset, or a real count -- means "let the planner discover it", which is the normal path.
+    [[ "${RADIOD_INSTANCES:-}" == "0" ]] && lines+=( "RADIOD_INSTANCES=0" )
     [[ -n ${radiod_khz} ]] && lines+=( "FREQ_RADIOD_KHZ=${radiod_khz}" )
     [[ -n ${other_khz}  ]] && lines+=( "FREQ_OTHER_KHZ=${other_khz}" )
     [[ -n ${fast_mode}  ]] && lines+=( "FREQ_FAST_MODE=${fast_mode}" )
@@ -165,7 +174,7 @@ function wd_cpu_tuning_write_freq_policy()
     if [[ -z ${new_content} ]]; then
         ### Nothing of ours and nothing of theirs left: do not leave an empty file behind
         sudo rm -f "${WD_CPU_PLAN_CONF}"
-        wd_cpu_tuning_log 1 "CPU tuning: no WD_CPU_FREQ_* setting in ${WSPRDAEMON_CONFIG_FILE}, so ${WD_CPU_PLAN_CONF} was removed and the default clock policy applies"
+        wd_cpu_tuning_log 1 "CPU tuning: nothing for WD to pin down in ${WD_CPU_PLAN_CONF} (no WD_CPU_FREQ_* setting, and this host runs radiod), so it was removed and the defaults apply"
         return 0
     fi
     if ! printf '%s\n' "${new_content}" | sudo tee "${WD_CPU_PLAN_CONF}" >/dev/null ; then
@@ -173,7 +182,7 @@ function wd_cpu_tuning_write_freq_policy()
         return 1
     fi
     if (( ${#lines[@]} )); then
-        wd_cpu_tuning_log 1 "CPU tuning: clock policy from ${WSPRDAEMON_CONFIG_FILE} => ${lines[*]} (in ${WD_CPU_PLAN_CONF})"
+        wd_cpu_tuning_log 1 "CPU tuning: wrote ${lines[*]} to ${WD_CPU_PLAN_CONF} so the boot-time units see it too"
     else
         wd_cpu_tuning_log 1 "CPU tuning: no WD_CPU_FREQ_* setting in ${WSPRDAEMON_CONFIG_FILE}, so the default clock policy applies"
     fi
@@ -506,12 +515,13 @@ function wd_cpu_tuning()
     printf '%s ---- wd_cpu_tuning run ----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >> ${WD_CPU_TUNING_LOG}
 
     ### Both of these run BEFORE the report, because the report runs the planner and the planner
-    ### sources ${WD_CPU_PLAN_CONF}: written afterwards, a site's clock ceiling would be reported
+    ### sources ${WD_CPU_PLAN_CONF}: written afterwards, a site's clock ceiling (and a Kiwi-only
+    ### host's RADIOD_INSTANCES=0) would be reported
     ### one WD start late.  Only when we own the policy -- with WD_CPU_TUNING="no" the site drives
     ### the clocks itself through CPU_CORE_KHZ in wd-setup.sh and /etc is none of our business.
     if [[ "${WD_CPU_TUNING}" == "yes" ]]; then
         wd_cpu_tuning_migrate_cpu_core_khz
-        wd_cpu_tuning_write_freq_policy
+        wd_cpu_tuning_write_plan_conf
     fi
 
     wd_cpu_tuning_report
