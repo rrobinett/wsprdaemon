@@ -279,9 +279,9 @@ function wd_cpu_tuning_report()
     if [[ "${WD_FREQ_AVAILABLE:-no}" == "yes" ]]; then
         ### Say which it is.  Reporting a site-set ceiling as "hardware max" is how an operator
         ### who capped his clocks concludes, correctly, that WD ignored him.
-        local radiod_why="hardware max"
+        local radiod_why="${WD_FREQ_RADIOD_SOURCE:-hardware max}"
         (( ${WD_FREQ_RADIOD_KHZ:-0} < ${WD_FREQ_HW_MAX_KHZ:-0} )) && \
-            radiod_why="capped by wsprdaemon.conf, hardware max $(( ${WD_FREQ_HW_MAX_KHZ:-0} / 1000 )) MHz"
+            radiod_why="${radiod_why}, hardware max $(( ${WD_FREQ_HW_MAX_KHZ:-0} / 1000 )) MHz"
         wd_cpu_tuning_log 1 "CPU tuning: planned clocks => radiod $(( ${WD_FREQ_RADIOD_KHZ:-0} / 1000 )) MHz (${radiod_why}), other cores $(( ${WD_FREQ_OTHER_KHZ:-0} / 1000 )) MHz"
     else
         wd_cpu_tuning_log 1 "CPU tuning: no cpufreq driver on this host, so the clock cannot be managed (BIOS EIST/SpeedStep disabled?)"
@@ -317,7 +317,9 @@ function wd_cpu_tuning_report()
             wd_cpu_tuning_log 2 "CPU tuning: ${unit} CPUAffinity=${actual} matches the plan"
         fi
     done
-    if [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
+    if [[ "${WD_NO_RADIOD:-no}" == "yes" ]]; then
+        wd_cpu_tuning_log 1 "CPU tuning: no radiod on this host, so every core is a decoder core and only the clock ceiling is applied"
+    elif [[ -r /sys/fs/resctrl/radiod/cpus_list ]]; then
         wd_cpu_tuning_log 2 "CPU tuning: L3 partition radiod=$(cat /sys/fs/resctrl/radiod/cpus_list) decoders=$(cat /sys/fs/resctrl/decoders/cpus_list 2>/dev/null)"
     else
         wd_cpu_tuning_log 1 "CPU tuning: no L3 cache partition configured; the decoders can evict radiod's FFT working set"
@@ -355,7 +357,12 @@ function wd_cpu_tuning_install_units()
 {
     local unit desc script path content
     local -i changed=0
-    for unit in wd-resctrl wd-irq-affinity wd-cpu-freq ; do
+    ### With no radiod there is nothing to isolate: an L3 partition would only fence the decoders
+    ### out of a cache no one else is using, and steering the USB IRQs away from them buys nothing
+    ### when no RX888 is feeding those interrupts.  The clock ceiling is the whole of the work.
+    local units="wd-resctrl wd-irq-affinity wd-cpu-freq"
+    [[ "${WD_NO_RADIOD:-no}" == "yes" ]] && units="wd-cpu-freq"
+    for unit in ${units} ; do
         case ${unit} in
             wd-resctrl)      desc="L3 CAT partition for radiod vs the WD decoders" ; script="wd-resctrl-setup.sh" ;;
             wd-irq-affinity) desc="Pin USB (xhci) IRQs off the radiod and decoder cores" ; script="wd-irq-affinity.sh" ;;
@@ -380,7 +387,7 @@ WantedBy=multi-user.target"
         fi
     done
     (( changed )) && sudo systemctl daemon-reload
-    sudo systemctl enable wd-resctrl wd-irq-affinity wd-cpu-freq >/dev/null 2>&1
+    sudo systemctl enable ${units} >/dev/null 2>&1
     wd_cpu_tuning_log 1 "CPU tuning: boot-time units enabled: wd-resctrl=$(systemctl is-enabled wd-resctrl 2>/dev/null) wd-irq-affinity=$(systemctl is-enabled wd-irq-affinity 2>/dev/null)"
     return 0
 }
@@ -444,7 +451,10 @@ function wd_cpu_tuning_apply()
     ### 'sudo env ...' because sudoers env_reset strips exported variables: the boot-time RADIOD_NAMES
     ### hint (ka9q-utils.sh) reached the report's planner but never this one, so at every 'wda' with
     ### radiod stopped, wd-cpu-apply re-planned blind and printed "REFUSING to apply" (N8UR 2026-09-06).
-    out=$( sudo env RADIOD_NAMES="${RADIOD_NAMES:-}" RADIOD_UNITS="${RADIOD_UNITS:-}" ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
+    ### RADIOD_INSTANCES rides along for the same reason RADIOD_NAMES does: without it wd-cpu-apply
+    ### re-plans blind, rediscovers nothing on a Kiwi-only host and falls back to the placeholder
+    ### instance -- reserving a core for a radiod that does not exist, which is the whole bug.
+    out=$( sudo env RADIOD_NAMES="${RADIOD_NAMES:-}" RADIOD_UNITS="${RADIOD_UNITS:-}" RADIOD_INSTANCES="${RADIOD_INSTANCES:-}" ${WD_CPU_TUNING_SBIN}/wd-cpu-apply.sh 2>&1 )
     wd_cpu_tuning_log 1 "CPU tuning: systemd affinity:\n${out}"
 
     ### Only now that the planner's layout is actually written: retire any hand-set core
@@ -455,7 +465,9 @@ function wd_cpu_tuning_apply()
     ### directly.  Same code path systemd uses at boot, and it leaves the units genuinely active
     ### instead of enabled-but-inactive, which reads as broken in 'systemctl is-active'.
     local unit
-    for unit in wd-resctrl wd-irq-affinity wd-cpu-freq ; do
+    local units="wd-resctrl wd-irq-affinity wd-cpu-freq"
+    [[ "${WD_NO_RADIOD:-no}" == "yes" ]] && units="wd-cpu-freq"
+    for unit in ${units} ; do
         if sudo systemctl restart "${unit}" 2>/dev/null ; then
             wd_cpu_tuning_log 1 "CPU tuning: ${unit} => $(systemctl is-active ${unit} 2>/dev/null)/$(systemctl is-enabled ${unit} 2>/dev/null)"
         else

@@ -129,7 +129,14 @@ fi
 # A RADIOD_NAMES override still means radiod@NAME; RADIOD_UNITS overrides with full unit names.
 RADIOD_UNITS="${RADIOD_UNITS:-}"
 RADIOD_DISCOVERY='systemctl'        ### how the instances were found; see the stages below
-if [ -z "$RADIOD_UNITS" ]; then
+### RADIOD_INSTANCES=0 is the caller stating this host runs NO radiod at all -- a Kiwi-only site,
+### where WD decodes streams from KiwiSDRs and there is no RX888 and no fft thread anywhere.
+### That is NOT the same as "radiod is configured but currently stopped", which still wants its
+### cores reserved; only ka9q-utils.sh sets 0, and only when the conf holds no KA9Q receiver.
+### Skip discovery outright: an inactive leftover radiod@ unit must not resurrect a phantom.
+if [ "${RADIOD_INSTANCES}" = "0" ]; then
+    RADIOD_UNITS=""; RADIOD_NAMES=""; RADIOD_DISCOVERY='caller says this host runs no radiod'
+elif [ -z "$RADIOD_UNITS" ]; then
     if [ -n "$RADIOD_NAMES" ]; then
         for _n in $RADIOD_NAMES; do RADIOD_UNITS="${RADIOD_UNITS}radiod@${_n}.service "; done
     else
@@ -166,8 +173,14 @@ for _u in "${_units[@]}"; do _n="${_u#*@}"; _names+=("${_n%.service}"); done
 RADIOD_NAMES="${_names[*]-}"
 if [ -z "$RADIOD_INSTANCES" ]; then
     RADIOD_INSTANCES=${#_names[@]}
+    ### The placeholder keeps a host whose radiod is merely STOPPED from having its radiod cores
+    ### handed to the decoders; wd-cpu-apply then refuses, which is the harmless outcome.
     [ "$RADIOD_INSTANCES" -eq 0 ] && { RADIOD_INSTANCES=1; _names=("unknown"); _units=(""); RADIOD_NAMES="unknown"; RADIOD_UNITS=""; }
 fi
+### A host with no radiod at all gets no reservation: every core is a decoder core, and the only
+### part of this plan that means anything is the clock ceiling.
+NO_RADIOD="no"
+[ "$RADIOD_INSTANCES" = "0" ] && { NO_RADIOD="yes"; _names=(); _units=(); }
 
 # ---- 3. allocate physical cores ----
 OS_CORES=1
@@ -351,7 +364,10 @@ else
 fi
 ### radiod owns a whole L3 domain: no CAT -- the physical cache split already isolates it.
 if [ "$RADIOD_L3_RESERVED" = "yes" ]; then L3_CAT="reserved-domain"; RADIOD_MASK=""; OTHER_MASK=""; fi
-if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ]; then
+### No radiod, nothing to protect: partitioning the L3 here would only fence the decoders out of
+### part of a cache that nothing else is using.
+if [ "$NO_RADIOD" = "yes" ]; then L3_CAT="no radiod on this host"; fi
+if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ] && [ "$NO_RADIOD" = "no" ]; then
     rw=$(awk -v w="$WAYS" -v f="$RADIOD_L3_FRACTION" 'BEGIN{printf "%d", int(w*f+0.5)}')
     [ $(( WAYS - rw )) -lt "$MIN_DECODER_WAYS" ] && rw=$(( WAYS - MIN_DECODER_WAYS ))
     [ "$rw" -lt 1 ] && rw=1
@@ -417,6 +433,13 @@ if [ -r "$FREQ_DIR/cpuinfo_max_freq" ]; then
     FREQ_OTHER=${FREQ_OTHER_KHZ}
     [ "${FREQ_OTHER}" -gt "${FREQ_HW_MAX}" ] && FREQ_OTHER=${FREQ_HW_MAX}
     [ "${FREQ_HW_MIN}" -gt 0 ] && [ "${FREQ_OTHER}" -lt "${FREQ_HW_MIN}" ] && FREQ_OTHER=${FREQ_HW_MIN}
+    ### With no radiod there are no "fast" cores, so a separate radiod ceiling would be reported
+    ### but never applied to anything.  Say the one ceiling that actually governs this host,
+    ### unless the site named a radiod ceiling itself and we would be contradicting it.
+    if [ "$NO_RADIOD" = "yes" ] && [ "${FREQ_RADIOD_SOURCE}" != "set by this site" ]; then
+        FREQ_RADIOD=${FREQ_OTHER}
+        FREQ_RADIOD_SOURCE="no radiod on this host; every core uses the decoder ceiling"
+    fi
 else
     ### No cpufreq driver at all: BIOS EIST/SpeedStep disabled, or a VM that hides the MSRs.
     FREQ_AVAILABLE="no"; FREQ_HW_MAX=0; FREQ_HW_MIN=0; FREQ_RADIOD=0; FREQ_OTHER=0; FREQ_RADIOD_SOURCE="no cpufreq driver"
@@ -448,6 +471,7 @@ WD_L3_KB_PER_WAY=$KB_PER_WAY
 # --- plan ---
 WD_OS_CPUS="$os_list"
 WD_RADIOD_INSTANCES=$RADIOD_INSTANCES
+WD_NO_RADIOD="$NO_RADIOD"
 WD_RADIOD_NAMES="$RADIOD_NAMES"
 WD_RADIOD_UNITS="$RADIOD_UNITS"
 WD_RADIOD_DISCOVERY="$RADIOD_DISCOVERY"
@@ -471,6 +495,10 @@ if [ "$L3_CAT" = "yes" ] && [ "$WAYS" -gt 0 ]; then
     echo "WD_L3_RADIOD_MASK=\"$RADIOD_MASK\"   # $rw ways = $(( rw * KB_PER_WAY / 1024 )) MB"
     echo "WD_L3_OTHER_MASK=\"$OTHER_MASK\"   # $(( WAYS - rw )) ways = $(( (WAYS-rw) * KB_PER_WAY / 1024 )) MB"
 else
-    echo "WD_L3_RADIOD_MASK=\"\"   # no CAT on this CPU: the L3 cannot be partitioned"
-    echo "WD_L3_OTHER_MASK=\"\"   # no CAT on this CPU: the L3 cannot be partitioned"
+    ### Say which reason it is.  "no CAT on this CPU" on a host that simply has no radiod sends
+    ### the next reader hunting for a missing hardware feature that is present and fine.
+    if [ "$NO_RADIOD" = "yes" ]; then _why="no radiod on this host: nothing to partition the L3 against"
+    else                             _why="no CAT on this CPU: the L3 cannot be partitioned"; fi
+    echo "WD_L3_RADIOD_MASK=\"\"   # ${_why}"
+    echo "WD_L3_OTHER_MASK=\"\"   # ${_why}"
 fi

@@ -175,8 +175,16 @@ else
     why="${WD_FREQ_RADIOD_SOURCE:-capped}, hardware max ${WD_FREQ_HW_MAX_KHZ:-?}"
 fi
 label="radiod cpus"; [ "$FAST_MODE" = "fft-pair" ] && label="fft pair(s)"
-printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz requested'"\n" \
-       "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
+if [ "$n_fast" -eq 0 ]; then
+    ### A host with no radiod at all (a Kiwi-only site): there is no fast set, and printing
+    ### "radiod cpus  -> 1400000 kHz" with an empty cpu list invites the reader to go looking
+    ### for the radiod whose cores went missing.
+    printf 'wd-cpu-freq: no radiod on this host, so all %d cpu(s) -> %d kHz requested'"\n" \
+           "$n_capped" "$OTHER_KHZ"
+else
+    printf 'wd-cpu-freq: %s %s -> %d kHz (%s), %d other cpu(s) -> %d kHz requested'"\n" \
+           "$label" "$(echo $fast_cpus | tr ' ' ',')" "$RADIOD_KHZ" "$why" "$n_capped" "$OTHER_KHZ"
+fi
 if [ "$n_cpb" -gt 0 ]; then
     if [ "$cpb_fast" = "1" ]; then fast_boost="ON for the fast set"; else fast_boost="OFF everywhere, because the fast set is capped below the hardware maximum"; fi
     echo "wd-cpu-freq: acpi-cpufreq host: per-core boost (cpb) set on $n_cpb cpu(s) -- boost ${fast_boost}, OFF (hard top P-state) for the rest"
