@@ -27,7 +27,7 @@
 <main>
  <section id="daily">
   <div class="ctl"><label>Date <select id="dDate"></select></label><label>Band <select id="dBand"><option value="">all</option></select></label>
-   <span style="font-size:13px;color:#666">Top pane: carrier offset from channel center (Hz), shown only where a carrier is detectable. Bottom: carrier power (dBFS, orange) and carrier SNR (dB, green; peak spectral bin over the median 0.1 Hz bin in the ±5 Hz channel). Click an image to open it full size.</span></div>
+   <span style="font-size:13px;color:#666">Top pane: carrier offset from channel center (Hz). Grey is every 10 s spectrum, so each path the station arrives over &mdash; ground wave, one or more hops, and WWV plus WWVH on the shared bands &mdash; shows as its own trace at its own Doppler shift, however weak. The line follows the strongest carrier and the dots the weaker ones that could be tracked. Bottom: carrier power (dBFS, orange) and the strongest carrier's SNR (dB, green; peak spectral bin over the median 0.1 Hz bin in the ±5 Hz channel). Click an image to open it full size.</span></div>
   <div id="dCharts"></div>
  </section>
  <section id="overlay" hidden>
@@ -36,6 +36,7 @@
    <label id="oFixLbl">Band <select id="oFix"></select></label>
    <label>Freq range ±<select id="oYl"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option><option>5</option></select> Hz</label>
    <label>Smooth <select id="oSm"><option value="1">10 s</option><option value="6" selected>1 min</option><option value="30">5 min</option><option value="90">15 min</option></select></label>
+   <label><input type="checkbox" id="oExtra" checked> weaker carriers as dots</label>
   </div>
   <div class="ctl picks" id="oPicks"></div>
   <div class="chart"><div class="legend" id="oLegend"></div><canvas id="cF"></canvas><canvas id="cP"></canvas><canvas id="cS"></canvas></div>
@@ -59,7 +60,7 @@ async function load(){
   $("dBand").innerHTML='<option value="">all</option>'+bands.map(e=>`<option value="${e.band}">${bandLabel(e)}</option>`).join("");
   $("dDate").onchange=$("dBand").onchange=renderDaily; renderDaily();
   $("oMode").onchange=setupOverlay; $("oFix").onchange=setupPicks;
-  $("oYl").onchange=$("oSm").onchange=drawOverlay;
+  $("oYl").onchange=$("oSm").onchange=$("oExtra").onchange=drawOverlay;
   window.oDates=dates; window.oBands=bands; setupOverlay(); renderTable();
 }
 function renderDaily(){
@@ -67,7 +68,7 @@ function renderDaily(){
   const list=M.entries.filter(e=>e.date===d&&(!b||e.band===b)).sort((x,y)=>bandOrder(x)-bandOrder(y));
   $("dCharts").innerHTML=list.map(e=>`<div class="chart"><a href="${enc(e.png)}" target="_blank"><img src="${enc(e.png)}" loading="lazy" alt="${key(e)}"></a>
    <div class="cap"><span><b>${bandLabel(e)}</b> — ${e.reporter} ${e.receiver} — ${e.date}</span>
-   <span>local ${e.local_tz||""} UTC${e.utc_offset_h>=0?"+":""}${e.utc_offset_h} · carrier visible ${Math.round(100*e.good_frac)}% of day · zero samples ${e.zero_samples} · boundary |ΔA| ratio ${e.boundary_amp_ratio}${e.boundary_amp_ratio>1.5?' <span class="warn">(minute-join artifact?)</span>':''} · <a href="${enc(e.json)}">json</a></span></div></div>`).join("")||"<p>No charts for that selection.</p>";
+   <span>local ${e.local_tz||""} UTC${e.utc_offset_h>=0?"+":""}${e.utc_offset_h} · carrier visible ${Math.round(100*e.good_frac)}% of day · 2nd path ${e.multipath_frac==null?"n/a":Math.round(100*e.multipath_frac)+"%"} · zero samples ${e.zero_samples} · boundary |ΔA| ratio ${e.boundary_amp_ratio}${e.boundary_amp_ratio>1.5?' <span class="warn">(minute-join artifact?)</span>':''} · <a href="${enc(e.json)}">json</a></span></div></div>`).join("")||"<p>No charts for that selection.</p>";
 }
 const enc=p=>p.split("/").map(encodeURIComponent).join("/");
 function setupOverlay(){
@@ -95,13 +96,14 @@ async function drawOverlay(){
   const w=$("cF").clientWidth||1000;
   const tz=ents[0]?{off:ents[0].utc_offset_h,name:ents[0].local_tz,src:ents[0].local_tz_source||"at server"}:null;
   if(tz&&tz.off!=null) $("oLegend").innerHTML+=`<span style="margin-left:auto;color:#666">lower hour row = local time ${tz.src} (${tz.name}, UTC${tz.off>=0?"+":""}${tz.off})</span>`;
-  plot($("cF"),w,data.map(d=>smooth(d.freq_hz_series,n)),data[0]?.window_s||10,-yl,yl,"carrier offset (Hz)",true,tz);
+  const dots=$("oExtra").checked ? data.map(d=>(d.extra_carriers||[]).flatMap(c=>c.window.map((k,j)=>[k,c.freq_hz[j]]))) : null;
+  plot($("cF"),w,data.map(d=>smooth(d.freq_hz_series,n)),data[0]?.window_s||10,-yl,yl,"carrier offset (Hz)",true,tz,null,dots);
   let all=data.flatMap(d=>d.power_db).filter(v=>v!=null); let lo=all.length?Math.floor(Math.min(...all)/10)*10:-90, hi=all.length?Math.ceil(Math.max(...all)/10)*10:-20;
   plot($("cP"),w,data.map(d=>smooth(d.power_db,n)),data[0]?.window_s||10,lo,hi,"carrier power (dBFS)",false,tz);
   let sn=data.flatMap(d=>d.snr_db).filter(v=>v!=null); let shi=sn.length?Math.max(40,Math.ceil(Math.max(...sn)/10)*10):60;
   plot($("cS"),w,data.map(d=>smooth(d.snr_db,n)),data[0]?.window_s||10,0,shi,"carrier SNR (dB)",false,tz,data[0]?.snr_min_db);
 }
-function plot(cv,w,lines,ws,y0,y1,ylabel,zero,tz,hline){
+function plot(cv,w,lines,ws,y0,y1,ylabel,zero,tz,hline,dots){
   const H=340, dpr=devicePixelRatio||1; cv.width=w*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr);
   const L=56,R=12,T=10,B=46, pw=w-L-R, ph=H-T-B;
   g.clearRect(0,0,w,H); g.font="12px system-ui"; g.fillStyle="#333"; g.strokeStyle="#ddd"; g.lineWidth=1;
@@ -112,13 +114,15 @@ function plot(cv,w,lines,ws,y0,y1,ylabel,zero,tz,hline){
   if(zero){const y=T+ph*(y1/(y1-y0)); g.strokeStyle="#888";g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke();}
   if(hline!=null){const y=T+ph-(ph*(hline-y0)/(y1-y0)); g.strokeStyle="#2a9d2a"; g.setLineDash([5,4]); g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke(); g.setLineDash([]); g.fillStyle="#2a9d2a"; g.fillText(hline+" dB freq mask",L+pw-95,y-4);}
   g.save(); g.translate(12,T+ph/2); g.rotate(-Math.PI/2); g.fillText(ylabel,-40,-2); g.restore(); g.fillStyle="#333"; g.fillText("UTC hour",L+pw/2-60,H-3); if(tz&&tz.off!=null){g.fillStyle="#2a6fb0"; g.fillText("/ local ("+tz.name+")",L+pw/2+5,H-3);}
+  (dots||[]).forEach((d,i)=>{ g.fillStyle=COLORS[i%10]; g.globalAlpha=.5;
+    for(const [k,v] of d){ if(v<y0||v>y1) continue; const x=L+pw*(k*ws/86400), y=T+ph-(ph*(v-y0)/(y1-y0)); g.fillRect(x-.6,y-.6,1.2,1.2);} g.globalAlpha=1; });
   lines.forEach((a,i)=>{ g.strokeStyle=COLORS[i%10]; g.lineWidth=1; g.beginPath(); let pen=false;
     for(let k=0;k<a.length;k++){const v=a[k]; if(v==null||v<y0||v>y1){pen=false;continue} const x=L+pw*(k*ws/86400), y=T+ph-(ph*(v-y0)/(y1-y0)); pen? g.lineTo(x,y):g.moveTo(x,y); pen=true;}
     g.stroke(); });
 }
 function renderTable(){
-  const rows=M.entries.map(e=>`<tr><td>${e.date}</td><td>${e.reporter}</td><td>${e.receiver}</td><td>${bandLabel(e)}</td><td>${Math.round(100*e.good_frac)}%</td><td>${e.zero_samples}</td><td${e.boundary_amp_ratio>1.5?' class="warn"':''}>${e.boundary_amp_ratio}</td><td><a href="${enc(e.png)}">png</a> <a href="${enc(e.json)}">json</a></td></tr>`).join("");
-  $("tbl").innerHTML="<tr><th>date</th><th>reporter</th><th>receiver</th><th>band</th><th>carrier visible</th><th>zero samples</th><th>boundary |ΔA| ratio</th><th></th></tr>"+rows;
+  const rows=M.entries.map(e=>`<tr><td>${e.date}</td><td>${e.reporter}</td><td>${e.receiver}</td><td>${bandLabel(e)}</td><td>${Math.round(100*e.good_frac)}%</td><td>${e.multipath_frac==null?"":Math.round(100*e.multipath_frac)+"%"}</td><td>${e.zero_samples}</td><td${e.boundary_amp_ratio>1.5?' class="warn"':''}>${e.boundary_amp_ratio}</td><td><a href="${enc(e.png)}">png</a> <a href="${enc(e.json)}">json</a></td></tr>`).join("");
+  $("tbl").innerHTML="<tr><th>date</th><th>reporter</th><th>receiver</th><th>band</th><th>carrier visible</th><th>2nd path</th><th>zero samples</th><th>boundary |ΔA| ratio</th><th></th></tr>"+rows;
 }
 for(const [b,s] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]) $(b).onclick=()=>{ for(const [b2,s2] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]){$(s2).hidden=s2!==s;$(b2).classList.toggle("on",b2===b)} if(s==="overlay") drawOverlay(); };
 window.onresize=()=>{ if(!$("overlay").hidden) drawOverlay(); };

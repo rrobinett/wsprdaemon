@@ -61,8 +61,9 @@ declare -r HOURS_LIST=( $(seq -f "%02g" 0 23) )
 declare -r MINUTES_LIST=( $(seq -f "%02g" 0 59) )
 declare -r GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME="24_hour_10sps_iq.wav"
 
-### GRAPE carrier strip charts (WD 3.4.6+).  Each time a 24_hour_10sps_iq.wav is created, a PNG strip chart (carrier frequency offset,
-### carrier power and SNR vs UTC and local time) plus a JSON copy of the series is written under ~/wsprdaemon/grape-charts/www/...
+### GRAPE carrier strip charts (WD 3.4.6+).  Each time a 24_hour_10sps_iq.wav is created, a PNG strip chart (a Doppler spectrogram of
+### the channel with the carrier of each path the station arrives over tracked on it, plus carrier power and SNR, vs UTC and local
+### time) and a JSON copy of the series are written under ~/wsprdaemon/grape-charts/www/...
 ### A tiny web server (python3 -m http.server) publishes that directory so the station owner can browse and overlay the charts.
 declare    GRAPE_CHARTS_ENABLED=${GRAPE_CHARTS_ENABLED-yes}                ### Set to "no" in WD.conf to disable chart creation and the web server
 declare    GRAPE_CHARTS_PORT=${GRAPE_CHARTS_PORT-8088}                     ### TCP port of the chart web server
