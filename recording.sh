@@ -723,10 +723,16 @@ function purge_stale_recordings()
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
         return 0
     fi
-    wd_logger 1 "ERROR: Found ${#old_wav_file_list[@]} wav files older than MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN} minutes.  A wav file only gets this old when nothing decoded it, so deleting it loses that cycle.  Run 'wsprdaemon.sh -b' to see how far behind the decoders are"
+    wd_logger 1 "Found ${#old_wav_file_list[@]} wav files older than MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN} minutes"
     local old_file
+    local lost_cycles=0
     for old_file in ${old_wav_file_list[@]} ; do
-        wd_decode_health_record_drop ${old_file}          ### One lost cycle; logs its own ERROR line naming the receiver, band and cycle
+        ### Most of these have already been decoded: a band running F15/F30 keeps each long packet's one
+        ### minute files until the next long packet is assembled, which takes longer than this purge
+        ### allows.  Only the ones the decoder never reached are lost cycles, and only those log an ERROR.
+        if wd_decode_health_record_drop ${old_file} ; then
+            (( ++lost_cycles ))
+        fi
         wd_rm ${old_file}
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then
@@ -735,7 +741,10 @@ function purge_stale_recordings()
              wd_logger 1 "INFO: deleted ${old_file}"
         fi
     done
-    wd_logger 1 "Done flushing ${#old_wav_file_list[@]} old files"
+    if (( lost_cycles )); then
+        wd_logger 1 "ERROR: ${lost_cycles} of those ${#old_wav_file_list[@]} files had not been decoded when they were deleted, so those cycles are lost.  Run 'wsprdaemon.sh -b' to see how far behind the decoders are"
+    fi
+    wd_logger 1 "Done flushing ${#old_wav_file_list[@]} old files, ${lost_cycles} of which were undecoded cycles"
     return 0
 }
 

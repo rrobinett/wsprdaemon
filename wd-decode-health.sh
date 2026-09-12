@@ -213,9 +213,10 @@ function wd_decode_health_record()
 
 ### Record a cycle whose wav file was deleted before anything decoded it.  $1 is the full path of the
 ### wav file purge_stale_recordings() is about to remove.
+### Returns 0 when the cycle really was lost, 1 when the file had already been decoded.
 function wd_decode_health_record_drop()
 {
-    [[ "${WD_DECODE_HEALTH_ENABLED}" != "yes" ]] && return 0
+    [[ "${WD_DECODE_HEALTH_ENABLED}" != "yes" ]] && return 1
     local wav_file_path=$1
     local wav_file_name=${wav_file_path##*/}
 
@@ -233,12 +234,36 @@ function wd_decode_health_record_drop()
     fi
     local cycle_epoch
     cycle_epoch=$( wd_decode_health_epoch_from_filename "${wav_file_name}" )
-    [[ -z "${cycle_epoch}" ]] && return 0
+    [[ -z "${cycle_epoch}" ]] && return 1
     local age_secs=$(( EPOCHSECONDS - cycle_epoch ))
+
+    ### Being purged does NOT by itself mean the cycle was lost.  A band running F15/F30 holds each long
+    ### packet's one minute files until the NEXT long packet is assembled -- up to an hour -- so on those
+    ### bands purge_stale_recordings() routinely deletes files whose 2 minute cycle was decoded half an
+    ### hour earlier (KJ6MKI 2026-09-12: '2200' and '8' run W2:F2:F5:F15:F30, and every one of their
+    ### purged files had been decoded at the time; this used to claim each one as a lost cycle).
+    ### get_wav_file_list() touches '<first wav of the packet>.<seconds>-secs' every time it hands a
+    ### packet to the decoder, so the newest of those markers says how far the decoder has got on this
+    ### band.  A file older than that marker has already been through the decoder.
+    local wav_dir=${wav_file_path%/*}
+    local freq_field=${wav_file_name#*_}
+    freq_field=${freq_field%%_*}
+    local newest_marker_epoch=0 marker marker_epoch
+    for marker in ${wav_dir}/*_${freq_field}_*.wav.*-secs ; do
+        [[ -e "${marker}" ]] || continue            ### nullglob is not set here, so an unmatched glob comes back literally
+        marker_epoch=$( wd_decode_health_epoch_from_filename "${marker##*/}" )
+        if [[ -n "${marker_epoch}" ]] && (( marker_epoch > newest_marker_epoch )); then
+            newest_marker_epoch=${marker_epoch}
+        fi
+    done
+    if (( newest_marker_epoch > cycle_epoch )); then
+        wd_logger 2 "Purged ${wav_file_name} after $(( age_secs / 60 )) minutes, but the decoder had already worked past it (its newest packet marker is $(TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T' ${newest_marker_epoch})), so no cycle was lost"
+        return 1
+    fi
 
     wd_decode_health_write "DROPPED" "${receiver_name}" "${receiver_band}" "-" "${cycle_epoch}" \
         "${age_secs}" "-1" "-" "purged at MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35} min before it was decoded"
-    wd_logger 1 "ERROR: CYCLE DROPPED: ${receiver_name} ${receiver_band} wav file '${wav_file_name}' recorded $(( age_secs / 60 )) minutes ago was deleted before it was decoded, so that cycle is lost.  See 'wsprdaemon.sh -b'"
+    wd_logger 1 "ERROR: CYCLE DROPPED: ${receiver_name} ${receiver_band} wav file '${wav_file_name}' recorded $(( age_secs / 60 )) minutes ago was deleted and the decoder never reached it, so that cycle is lost.  See 'wsprdaemon.sh -b'"
     return 0
 }
 
