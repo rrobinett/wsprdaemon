@@ -11,11 +11,14 @@ for j in glob.glob(os.path.join(www, "*", "*", "*", "*.json")):
     except Exception as e:
         print("skip", j, e, file=sys.stderr); continue
     rel = os.path.relpath(j, www)
+    # The chart's mtime, for the page to hang on its URLs.  http.server sends no ETag or Cache-Control, so
+    # without it a browser keeps showing the copy it cached before the chart was rebuilt.
+    ver = int(os.path.getmtime(j))
     entries.append(dict(date=d["date"], reporter=d["reporter"], receiver=d["receiver"], band=d["band"],
                         freq_hz=d.get("freq_hz") or 0, good_frac=d.get("good_frac"), multipath_frac=d.get("multipath_frac"),
                         boundary_amp_ratio=d.get("boundary_amp_ratio"), zero_samples=d.get("zero_samples"),
                         local_tz=d.get("local_tz"), utc_offset_h=d.get("utc_offset_h"), local_tz_source=d.get("local_tz_source"),
-                        json=rel, png=rel[:-5] + ".png"))
+                        json=rel, png=rel[:-5] + ".png", v=ver))
 entries.sort(key=lambda e: (e["date"], e["reporter"], e["receiver"], e["freq_hz"]), reverse=True)
 out = dict(generated_utc=__import__("time").strftime("%Y-%m-%d %H:%M:%S", __import__("time").gmtime()),
            host=os.uname().nodename, entries=entries)

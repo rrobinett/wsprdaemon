@@ -66,11 +66,13 @@ async function load(){
 function renderDaily(){
   const d=$("dDate").value,b=$("dBand").value;
   const list=M.entries.filter(e=>e.date===d&&(!b||e.band===b)).sort((x,y)=>bandOrder(x)-bandOrder(y));
-  $("dCharts").innerHTML=list.map(e=>`<div class="chart"><a href="${enc(e.png)}" target="_blank"><img src="${enc(e.png)}" loading="lazy" alt="${key(e)}"></a>
+  $("dCharts").innerHTML=list.map(e=>`<div class="chart"><a href="${url(e.png,e)}" target="_blank"><img src="${url(e.png,e)}" loading="lazy" alt="${key(e)}"></a>
    <div class="cap"><span><b>${bandLabel(e)}</b> — ${e.reporter} ${e.receiver} — ${e.date}</span>
-   <span>local ${e.local_tz||""} UTC${e.utc_offset_h>=0?"+":""}${e.utc_offset_h} · carrier visible ${Math.round(100*e.good_frac)}% of day · 2nd path ${e.multipath_frac==null?"n/a":Math.round(100*e.multipath_frac)+"%"} · zero samples ${e.zero_samples} · boundary |ΔA| ratio ${e.boundary_amp_ratio}${e.boundary_amp_ratio>1.5?' <span class="warn">(minute-join artifact?)</span>':''} · <a href="${enc(e.json)}">json</a></span></div></div>`).join("")||"<p>No charts for that selection.</p>";
+   <span>local ${e.local_tz||""} UTC${e.utc_offset_h>=0?"+":""}${e.utc_offset_h} · carrier visible ${Math.round(100*e.good_frac)}% of day · 2nd path ${e.multipath_frac==null?"n/a":Math.round(100*e.multipath_frac)+"%"} · zero samples ${e.zero_samples} · boundary |ΔA| ratio ${e.boundary_amp_ratio}${e.boundary_amp_ratio>1.5?' <span class="warn">(minute-join artifact?)</span>':''} · <a href="${url(e.json,e)}">json</a></span></div></div>`).join("")||"<p>No charts for that selection.</p>";
 }
 const enc=p=>p.split("/").map(encodeURIComponent).join("/");
+// ?v=<chart mtime>: the chart server sends no ETag, so a rebuilt chart would keep showing from cache
+const url=(p,e)=>enc(p)+(e.v?"?v="+e.v:"");
 function setupOverlay(){
   const mode=$("oMode").value;
   if(mode==="dates"){ $("oFixLbl").firstChild.textContent="Band "; $("oFix").innerHTML=oBands.map(e=>`<option value="${e.band}">${bandLabel(e)}</option>`).join(""); }
@@ -85,7 +87,7 @@ function setupPicks(){
   $("oPicks").querySelectorAll("input").forEach(c=>c.onchange=drawOverlay);
   drawOverlay();
 }
-async function getSeries(e){ if(!series[key(e)]) series[key(e)]=await (await fetch(enc(e.json))).json(); return series[key(e)]; }
+async function getSeries(e){ if(!series[key(e)]) series[key(e)]=await (await fetch(url(e.json,e))).json(); return series[key(e)]; }
 function smooth(a,n){ if(n<=1) return a; const o=new Array(a.length).fill(null); for(let i=0;i<a.length;i++){let s=0,c=0;for(let j=i-Math.floor(n/2);j<i-Math.floor(n/2)+n;j++){const v=a[j];if(v!=null&&isFinite(v)){s+=v;c++}} o[i]=c? s/c:null} return o; }
 async function drawOverlay(){
   const picks=[...$("oPicks").querySelectorAll("input:checked")].map(c=>c.dataset.k);
@@ -121,7 +123,7 @@ function plot(cv,w,lines,ws,y0,y1,ylabel,zero,tz,hline,dots){
     g.stroke(); });
 }
 function renderTable(){
-  const rows=M.entries.map(e=>`<tr><td>${e.date}</td><td>${e.reporter}</td><td>${e.receiver}</td><td>${bandLabel(e)}</td><td>${Math.round(100*e.good_frac)}%</td><td>${e.multipath_frac==null?"":Math.round(100*e.multipath_frac)+"%"}</td><td>${e.zero_samples}</td><td${e.boundary_amp_ratio>1.5?' class="warn"':''}>${e.boundary_amp_ratio}</td><td><a href="${enc(e.png)}">png</a> <a href="${enc(e.json)}">json</a></td></tr>`).join("");
+  const rows=M.entries.map(e=>`<tr><td>${e.date}</td><td>${e.reporter}</td><td>${e.receiver}</td><td>${bandLabel(e)}</td><td>${Math.round(100*e.good_frac)}%</td><td>${e.multipath_frac==null?"":Math.round(100*e.multipath_frac)+"%"}</td><td>${e.zero_samples}</td><td${e.boundary_amp_ratio>1.5?' class="warn"':''}>${e.boundary_amp_ratio}</td><td><a href="${url(e.png,e)}">png</a> <a href="${url(e.json,e)}">json</a></td></tr>`).join("");
   $("tbl").innerHTML="<tr><th>date</th><th>reporter</th><th>receiver</th><th>band</th><th>carrier visible</th><th>2nd path</th><th>zero samples</th><th>boundary |ΔA| ratio</th><th></th></tr>"+rows;
 }
 for(const [b,s] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]) $(b).onclick=()=>{ for(const [b2,s2] of [["tabDaily","daily"],["tabOverlay","overlay"],["tabTable","table"]]){$(s2).hidden=s2!==s;$(b2).classList.toggle("on",b2===b)} if(s==="overlay") drawOverlay(); };
