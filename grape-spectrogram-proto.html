@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>GRAPE Doppler spectrogram (prototype)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{font-family:system-ui,sans-serif;margin:0;background:#f5f6f8;color:#222}
+ header{background:#243447;color:#fff;padding:10px 18px;display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+ header h1{font-size:17px;margin:0} header small{opacity:.8}
+ nav a{color:#fff;border:1px solid #fff5;padding:4px 10px;border-radius:5px;margin-left:6px;text-decoration:none;font-size:13px}
+ nav a.on{background:#fff;color:#243447;font-weight:600}
+ main{padding:14px 18px;max-width:1600px;margin:auto}
+ .ctl{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:12px;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 3px #0002}
+ .ctl label{font-size:13px;color:#555;display:flex;gap:6px;align-items:center}
+ .ctl input[type=range]{width:150px} select{padding:3px 6px;font-size:13px}
+ .val{font-variant-numeric:tabular-nums;color:#222;min-width:46px;display:inline-block}
+ .wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px #0002;padding:8px 10px}
+ canvas{width:100%;display:block;cursor:crosshair}
+ .foot{font-size:12px;color:#666;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 2px}
+ #read{font-variant-numeric:tabular-nums}
+ b.k{font-weight:600;color:#222}
+</style></head><body>
+<header><h1>GRAPE Doppler spectrogram <small>prototype</small></h1><small id="hdr"></small>
+ <nav id="links"></nav></header>
+<main>
+ <div class="ctl">
+  <label>Shading <select id="mode">
+    <option value="rel" selected>dB below the strongest carrier</option>
+    <option value="abs">dB over the noise floor</option></select></label>
+  <label>Floor <input type="range" id="lo"><span class="val" id="loV"></span>dB</label>
+  <label>Ceiling <input type="range" id="hi"><span class="val" id="hiV"></span>dB</label>
+  <label>Contrast <input type="range" id="gam" min="30" max="250" value="100"><span class="val" id="gamV"></span></label>
+  <label>Palette <select id="pal"><option value="grey">grey on white</option><option value="inferno" selected>inferno</option><option value="viridis">viridis</option></select></label>
+ </div>
+ <div class="ctl">
+  <label>Columns <select id="agg"><option value="avg" selected>averaged</option><option value="max">peak held</option></select></label>
+  <label>Offset range ±<select id="fz"><option>0.5</option><option>1</option><option selected>2</option><option>2.5</option></select> Hz</label>
+  <label><input type="checkbox" id="notch"> hide the strongest carrier</label>
+  <label><input type="checkbox" id="over" checked> mark the tracked carriers</label>
+  <button id="reset">reset zoom</button>
+  <span style="font-size:13px;color:#666">drag across the chart to zoom in time, double-click to zoom out</span>
+ </div>
+ <div class="ctl" style="font-size:13px;color:#666;display:block;line-height:1.5">
+  <b class="k">dB below the strongest carrier</b> re-references every 10 s column to its own peak, so a path
+  stays at its true level relative to the main one however the main one fades &mdash; that is the shading that
+  makes the weak paths visible. <b class="k">dB over the noise floor</b> is the absolute scale the static PNG uses.
+  <b class="k">Columns</b>: more windows fall in one screen column than there are pixels, so each column is either
+  averaged (steady weak lines survive, noise averages away) or peak held (transients survive).
+ </div>
+ <div class="wrap"><canvas id="c"></canvas>
+  <div class="foot"><span id="read">&nbsp;</span><span id="note"></span></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const L=60,R=16,T=14,B=60, H=456;            // plot margins and canvas height
+let M=null, col=null, nT=0, nF=0, step=1, off=null, view=null, drag=null;
+const C1="#1f77b4", CX=["","#d62728","#9467bd","#8c564b"];
+
+const STOPS={ grey:[[0,245,245,245],[1,0,0,0]],
+  inferno:[[0,0,0,4],[.25,87,16,110],[.5,188,55,84],[.75,249,142,9],[1,252,255,164]],
+  viridis:[[0,68,1,84],[.33,49,104,142],[.66,53,183,121],[1,253,231,37]] };
+function palette(name){                       // 256 packed RGBA entries, for writing straight into ImageData
+  const s=STOPS[name], t=new Uint32Array(256);
+  for(let i=0;i<256;i++){ const x=i/255; let k=0; while(k<s.length-2&&x>s[k+1][0]) k++;
+    const a=s[k],b=s[k+1],u=(x-a[0])/(b[0]-a[0]||1);
+    t[i]=(255<<24)|((a[3]+(b[3]-a[3])*u)<<16)|((a[2]+(b[2]-a[2])*u)<<8)|(a[1]+(b[1]-a[1])*u); }
+  return t;
+}
+const fOf=r=>M.f_top_hz-r*M.f_bin_hz;         // row -> offset in Hz, row 0 is the top of the image
+const rOf=f=>Math.round((M.f_top_hz-f)/M.f_bin_hz);
+
+async function load(){
+  M=await (await fetch("meta.json",{cache:"no-store"})).json();
+  nT=M.n_t; nF=M.n_f; step=(M.db_hi-M.db_lo)/255;
+  $("hdr").textContent=`${M.reporter} ${M.receiver} ${M.band}`+(M.freq_hz?` ${M.freq_hz/1e6} MHz`:"")+
+    ` — ${M.date} UTC — ${M.window_s} s windows, ${M.f_bin_hz.toFixed(3)} Hz bins`;
+  $("links").innerHTML=(M.links||[]).map(l=>
+    `<a href="${l.href}" ${l.href==="."?'class="on"':""}>${l.label}</a>`).join("");
+  $("note").textContent=`carrier ${Math.round(100*M.good_frac)}% of day, a second path ${Math.round(100*M.multipath_frac)}%`;
+  // onload, not decode(): a browser defers decoding in a background tab, and the page would sit blank there
+  const img=new Image();
+  await new Promise((ok,bad)=>{ img.onload=ok; img.onerror=()=>bad(Error("spec.png")); img.src="spec.png"; });
+  const cv=document.createElement("canvas"); cv.width=nT; cv.height=nF;
+  const g=cv.getContext("2d",{willReadFrequently:true}); g.drawImage(img,0,0);
+  const px=g.getImageData(0,0,nT,nF).data;
+  col=new Uint8Array(nT*nF);                  // column major: one carrier's worth of rows is contiguous
+  for(let r=0;r<nF;r++) for(let t=0;t<nT;t++) col[t*nF+r]=px[(r*nT+t)*4];
+  off=new Int16Array(nT);                     // strongest carrier, as a pixel value, for the relative mode
+  const s1=M.carriers[0].snr_db;
+  for(let t=0;t<nT;t++) off[t]=s1[t]==null?0:Math.round((s1[t]-M.db_lo)/step);
+  view={t0:0,t1:nT};
+  for(const id of ["mode","pal","fz","notch","over","agg"]) $(id).onchange=id==="mode"?setMode:draw;
+  for(const id of ["lo","hi","gam"]) $(id).oninput=draw;
+  $("reset").onclick=()=>{view={t0:0,t1:nT};draw()};
+  setMode();
+}
+function setMode(){                           // the two shadings want different slider ranges
+  const rel=$("mode").value==="rel";
+  $("lo").min=rel?-90:-10; $("lo").max=rel?-5:60;  $("lo").value=rel?-28:10;
+  $("hi").min=rel?-85:0;   $("hi").max=rel?0:80;   $("hi").value=rel?0:45;
+  draw();
+}
+function draw(){
+  if(!M||!view) return;
+  const cv=$("c"), dpr=devicePixelRatio||1, W=Math.max(400,cv.clientWidth);
+  cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+  const pw=Math.floor(W-L-R), ph=H-T-B;
+  const rel=$("mode").value==="rel", lo=+$("lo").value, hi=+$("hi").value, gam=+$("gam").value/100;
+  $("loV").textContent=lo; $("hiV").textContent=hi; $("gamV").textContent=gam.toFixed(2);
+  const fz=+$("fz").value, r0=Math.max(0,rOf(fz)), r1=Math.min(nF,rOf(-fz)), rows=Math.max(1,r1-r0);
+  const pal=palette($("pal").value), bg=pal[0];
+  // dB -> palette entry, precomputed over every value a pixel can take (abs) or every difference (rel)
+  const lut=new Uint32Array(511);
+  for(let i=0;i<511;i++){ const db=rel?(i-255)*step:M.db_lo+(i-255)*step;
+    let x=(db-lo)/(hi-lo||1); x=x<0?0:x>1?1:x; lut[i]=pal[Math.round(255*Math.pow(x,gam))]; }
+  const shift=rel?255:255;                    // both tables are centred so the index can go negative
+  const {t0,t1}=view, span=t1-t0;
+  const id=g.createImageData(pw,rows), out=new Uint32Array(id.data.buffer);
+  const avg=$("agg").value==="avg";
+  const best=new Int16Array(rows), sum=new Float32Array(rows), cnt=new Int32Array(rows);
+  const notch=$("notch").checked, c1=M.carriers[0].freq_hz, gap=Math.round(M.peak_sep_hz/M.f_bin_hz);
+  for(let x=0;x<pw;x++){
+    const ta=t0+Math.floor(x*span/pw), tb=Math.max(ta+1,t0+Math.floor((x+1)*span/pw));
+    if(avg){ sum.fill(0); cnt.fill(0); } else best.fill(-4096);
+    for(let t=ta;t<tb;t++){
+      const base=t*nF, o=rel?off[t]:0;
+      let ka=-1,kb=-1;
+      if(notch&&c1[t]!=null){ const rc=rOf(c1[t]); ka=rc-gap-r0; kb=rc+gap-r0; }
+      for(let r=0;r<rows;r++){ if(r>=ka&&r<=kb) continue;
+        const v=col[base+r0+r]-o;
+        if(avg){ sum[r]+=v; cnt[r]++; } else if(v>best[r]) best[r]=v; }
+    }
+    for(let r=0;r<rows;r++){
+      const v=avg?(cnt[r]?Math.round(sum[r]/cnt[r]):-4096):best[r];
+      out[r*pw+x]=v===-4096?bg:lut[v+shift]; }
+  }
+  const off2=document.createElement("canvas"); off2.width=pw; off2.height=rows;
+  off2.getContext("2d").putImageData(id,0,0);
+  g.imageSmoothingEnabled=true; g.drawImage(off2,0,0,pw,rows,L,T,pw,ph);
+  axes(g,W,pw,ph,fz,t0,t1);
+  if($("over").checked) overlay(g,pw,ph,fz,t0,t1);
+  g.strokeStyle="#888"; g.strokeRect(L+.5,T+.5,pw,ph);
+}
+function axes(g,W,pw,ph,fz,t0,t1){
+  g.font="12px system-ui"; g.textAlign="center"; g.fillStyle="#333"; g.strokeStyle="#bbb"; g.lineWidth=1;
+  const h0=t0*M.window_s/3600, h1=t1*M.window_s/3600, span=h1-h0;
+  const stepH=[.25,.5,1,2,3,6].find(s=>span/s<=13)||6;
+  for(let h=Math.ceil(h0/stepH)*stepH;h<=h1+1e-9;h+=stepH){
+    const x=L+pw*(h-h0)/span; g.globalAlpha=.35; g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke(); g.globalAlpha=1;
+    g.fillStyle="#333"; g.fillText(span<=3?fmt(h):h.toFixed(0),x,T+ph+15);
+    if(M.utc_offset_h!=null){ g.fillStyle="#2a6fb0"; g.fillText(fmt((h+M.utc_offset_h+24)%24,span>3),x,T+ph+29); } }
+  g.textAlign="right";
+  for(let k=-4;k<=4;k++){ const f=fz*k/4, y=T+ph*(1-(f+fz)/(2*fz));
+    g.globalAlpha=.35; g.beginPath();g.moveTo(L,y);g.lineTo(L+pw,y);g.stroke(); g.globalAlpha=1;
+    g.fillStyle="#333"; g.fillText(f.toFixed(2),L-6,y+4); }
+  g.textAlign="center"; g.save(); g.translate(14,T+ph/2); g.rotate(-Math.PI/2);
+  g.fillText("carrier offset (Hz)",0,0); g.restore();
+  g.fillText("UTC hour",L+pw/2-52,H-6);
+  if(M.utc_offset_h!=null){ g.fillStyle="#2a6fb0"; g.fillText(`/ local ${M.local_tz||""}`,L+pw/2+34,H-6); }
+}
+const fmt=(h,hourOnly)=>hourOnly?String(Math.floor(h)).padStart(2,"0")
+  :String(Math.floor(h)).padStart(2,"0")+":"+String(Math.round((h%1)*60)).padStart(2,"0");
+function overlay(g,pw,ph,fz,t0,t1){
+  const X=t=>L+pw*(t-t0)/(t1-t0), Y=f=>T+ph*(1-(f+fz)/(2*fz));
+  M.carriers.forEach((c,i)=>{
+    if(i===0){ g.strokeStyle=C1; g.lineWidth=1; g.beginPath(); let pen=false;
+      for(let t=t0;t<t1;t++){ const v=c.freq_hz[t];
+        if(v==null||Math.abs(v)>fz){pen=false;continue} const x=X(t),y=Y(v); pen?g.lineTo(x,y):g.moveTo(x,y); pen=true; }
+      g.stroke(); return; }
+    g.fillStyle=CX[i]||"#555";
+    for(let t=t0;t<t1;t++){ const v=c.freq_hz[t]; if(v==null||Math.abs(v)>fz) continue;
+      g.fillRect(X(t)-1,Y(v)-1,2,2); } });
+}
+function at(e){
+  const cv=$("c"), b=cv.getBoundingClientRect(), W=cv.clientWidth;
+  const pw=Math.floor(W-L-R), ph=H-T-B, x=e.clientX-b.left, y=e.clientY-b.top;
+  if(x<L||x>L+pw||y<T||y>T+ph) return null;
+  const {t0,t1}=view, fz=+$("fz").value;
+  return {t:Math.min(nT-1,t0+Math.floor((x-L)/pw*(t1-t0))), f:fz-(y-T)/ph*2*fz, x:x, pw:pw};
+}
+$("c").onmousemove=e=>{
+  const p=at(e); if(!p){ $("read").innerHTML="&nbsp;"; return; }
+  const r=rOf(p.f), v=(r>=0&&r<nF)?col[p.t*nF+r]:null, db=v==null?null:M.db_lo+v*step;
+  const c1=M.carriers[0].snr_db[p.t];
+  $("read").innerHTML=`<b class="k">${fmt(p.t*M.window_s/3600)}</b> UTC &nbsp; offset <b class="k">${p.f.toFixed(3)}</b> Hz`+
+    (db==null?"":` &nbsp; <b class="k">${db.toFixed(1)}</b> dB over the noise floor`)+
+    (db==null||c1==null?"":` &nbsp; <b class="k">${(db-c1).toFixed(1)}</b> dB below the strongest carrier`);
+  if(drag!=null) { view.pending=p.t; draw(); mark(drag,p.t); }
+};
+function mark(a,b){ const g=$("c").getContext("2d"), {t0,t1}=view, cv=$("c"), pw=Math.floor(cv.clientWidth-L-R);
+  const X=t=>L+pw*(t-t0)/(t1-t0); g.fillStyle="#2a6fb033"; g.fillRect(X(Math.min(a,b)),T,Math.abs(X(b)-X(a)),H-T-B); }
+$("c").onmousedown=e=>{ const p=at(e); if(p) drag=p.t; };
+$("c").onmouseup=e=>{ const p=at(e);
+  if(p&&drag!=null&&Math.abs(p.t-drag)>3) view={t0:Math.min(drag,p.t),t1:Math.max(drag,p.t)};
+  drag=null; draw(); };
+$("c").ondblclick=()=>{ const {t0,t1}=view, c=(t0+t1)/2, w=Math.min(nT,(t1-t0)*2);
+  view={t0:Math.max(0,Math.round(c-w/2)),t1:Math.min(nT,Math.round(c+w/2))}; draw(); };
+window.onresize=draw;
+load().catch(e=>{document.querySelector("main").innerHTML="<p>Could not load: "+e+"</p>"});
+</script></body></html>
