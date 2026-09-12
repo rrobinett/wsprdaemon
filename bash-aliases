@@ -1996,6 +1996,8 @@ alias wdle='wd -l e'
 alias wda='wd -a'       ### Install/enable wsprdaemon.service if needed and 'systemctl start' it.  WD must run as the service (CPU affinity drop-ins, Restart=always), never as 'wd -A' from a shell.
 alias wd-journal='journalctl -u wsprdaemon -n 100 -f'   ### Follow the stdout/stderr of the running service (what a shell-started 'wd -A' used to print to the terminal)
 alias wdj='wd-journal'
+alias wd-decode-health='wd -b'   ### Bands whose decodes have fallen permanently behind, decodes killed by their timeout, and cycles purged before being decoded
+alias wdb='wd-decode-health'
 alias wd-time='wd -t'    ### Is the clock synchronised?  chronyc tracking + sources + time-sync.log
 alias wdt='wd-time'
 alias wd-usb='wd -u'     ### RX888s on the USB bus, their hub ports, and which ports WD can power cycle (uhubctl)
@@ -2989,6 +2991,7 @@ wd-start      wd-a wda                   Start or keep running WD
 wd-stop       wd-z wdz                   Stop WD if it is running
 wd-status     wd-s wds                   Show the status of a running WD 
 wd-journal    wdj                        Follow the stdout/stderr of wsprdaemon.service (journalctl -u wsprdaemon -f)
+wd-decode-health wdb                    Show bands whose decodes have fallen permanently behind, and any cycles lost to a decoder timeout or a purge
 wd-time       wdt                        Show whether the clock is synchronised (chronyc tracking + sources)
 wd-usb        wdu                        Show the RX888s on the USB bus, their hub ports and which WD can power cycle
 wd-usb-cycle  wd -U SERIAL|HUB:PORT|all  Power cycle an RX888 / hub port through uhubctl

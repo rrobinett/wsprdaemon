@@ -429,6 +429,14 @@ declare WSPRD_ARM_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.arm
 declare AWK_FIND_BEST_SPOT_LINES=${WSPRDAEMON_ROOT_DIR}/best_spots.awk
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
+### WSPRD_TIMEOUT_SECS (110) is the right wall-clock kill for a 2 minute packet.  It is the WRONG one for
+### an F5/F15/F30 packet: those have their own 5, 15 and 30 minute cycles, they all come due together at
+### :00 and :30, and killing a jt9 at 110 seconds throws away a decode that had minutes of headroom --
+### silently, since a killed decoder reports no spots.  So scale the kill with the packet length instead,
+### still bounded, so a wedged jt9 can never hold a band until its wav files age out and are purged.  The
+### 2 minute work which piles up behind a long decode is not lost: get_wav_file_list() hands it back as
+### soon as the daemon asks again, so the band catches up by itself.
+declare WD_LONG_DECODE_TIMEOUT_SECS="${WD_LONG_DECODE_TIMEOUT_SECS-300}"
 
 declare WSPRD_STDOUT_FILE=wsprd_stdout.txt               ### wsprd stdout goes into this file, but we use wspr_spots.txt
 declare MAX_ALL_WSPR_SIZE=200000                         ### Truncate the ALL_WSPR.TXT file once it reaches this size..  Stops wsprdaemon from filling ${WSPRDAEMON_TMP_DIR}/..
@@ -2367,12 +2375,20 @@ function decoding_daemon() {
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
                 local start_time=${SECONDS}
+                local decode_start_epoch=${EPOCHSECONDS}
                 decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}" "${wsprd_spreading_flags}"
                 rc=$?
 
                 rm  ${decoder_input_wav_filename}
                 cd - >& /dev/null
                 ### Back to recording directory
+
+                ### File the outcome with the decode-health ledger.  rc=124 means the 'timeout' killed
+                ### wsprd, so this cycle reported no spots; a merely slow decode is not a fault by itself
+                ### -- wd-decode-health.sh only reports a band which stays behind cycle after cycle.
+                wd_decode_health_record "${receiver_name}" "${receiver_band}" "W_${returned_seconds}" \
+                    "$( wd_decode_health_epoch_from_filename ${wav_files_list[0]} )" "${returned_seconds}" \
+                    "${decode_start_epoch}" "$(( SECONDS - start_time ))" "${rc}"
 
                 if (( rc )); then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds. For mode W_${returned_seconds}: 'decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt' => ${rc}"
@@ -2541,13 +2557,16 @@ function decoding_daemon() {
                 fi
 
                 local start_time=${SECONDS}
+                local decode_start_epoch=${EPOCHSECONDS}
                 ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc}"   ### This will be logged in the './F_xxx' sub directory
                 else
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
-                    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    local jt9_timeout_secs=${WSPRD_TIMEOUT_SECS-110}
+                    (( returned_seconds > 120 )) && jt9_timeout_secs=${WD_LONG_DECODE_TIMEOUT_SECS}     ### An F5/F15/F30 packet is not racing a 2 minute cycle
+                    timeout ${jt9_timeout_secs} nice -n ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
@@ -2557,6 +2576,12 @@ function decoding_daemon() {
                 rc1=$? ; if (( rc1 )); then
                     wd_logger 1 "ERROR: 'wd_rm ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc1}"
                 fi
+
+                ### File the outcome with the decode-health ledger.  rc=124 means the 'timeout' killed jt9
+                ### before it finished, so this cycle reported no spots (see WD_LONG_DECODE_TIMEOUT_SECS).
+                wd_decode_health_record "${receiver_name}" "${receiver_band}" "F_${returned_seconds}" \
+                    "$( wd_decode_health_epoch_from_filename ${wav_files_list[0]} )" "${returned_seconds}" \
+                    "${decode_start_epoch}" "$(( SECONDS - start_time ))" "${rc}"
 
                 if (( rc )); then
                     wd_logger 1 "ERROR: After $(( SECONDS - start_time )) seconds: cmd '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 '${decoder_input_wav_filename}' >& jt9_output.txt' => ${rc}"

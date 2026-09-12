@@ -147,11 +147,12 @@ source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-drops.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-decode-backlog.sh   ### FT8/FT4/WSPR decode backlog monitor
+source ${WSPRDAEMON_ROOT_DIR}/wd-decode-health.sh    ### Records every decode which didn't finish inside its cycle
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAzZsg:hij:l:pvVw:dDr:tuU: opt ; do
+while getopts :aAbzZsg:hij:l:pvVw:dDr:tuU: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
@@ -182,6 +183,9 @@ while getopts :aAzZsg:hij:l:pvVw:dDr:tuU: opt ; do
             ;;
         i)
             list_devices 
+            ;;
+        b)
+            wd_decode_health_show
             ;;
         t)
             wd_time_sync_show

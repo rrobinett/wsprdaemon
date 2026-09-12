@@ -723,9 +723,10 @@ function purge_stale_recordings()
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
         return 0
     fi
-    wd_logger 1 "Found ${#old_wav_file_list[@]} old files"
+    wd_logger 1 "ERROR: Found ${#old_wav_file_list[@]} wav files older than MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN} minutes.  A wav file only gets this old when nothing decoded it, so deleting it loses that cycle.  Run 'wsprdaemon.sh -b' to see how far behind the decoders are"
     local old_file
     for old_file in ${old_wav_file_list[@]} ; do
+        wd_decode_health_record_drop ${old_file}          ### One lost cycle; logs its own ERROR line naming the receiver, band and cycle
         wd_rm ${old_file}
         local rc=$?
         if [[ ${rc} -ne 0 ]]; then

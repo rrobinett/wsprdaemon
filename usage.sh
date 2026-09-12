@@ -49,6 +49,9 @@ usage:
     These flags are mostly intended for advanced configuration:
 
     -i                            => list audio and RTL-SDR devices attached to this computer
+    -b                            => show decode health: bands which have fallen permanently Behind, decodes killed by their
+                                     timeout, and wav files purged before they were decoded.  A decode which simply runs
+                                     long is not a fault -- the band catches up by itself ('wdb')
     -t                            => show the clock's Time sync state: chronyc tracking + sources + /var/log/wsprdaemon/time-sync.log ('wdt')
     -u                            => show the RX888s on the USB bus, their hub ports, which ports WD can power cycle, and /var/log/wsprdaemon/usb-power.log ('wdu')
     -U     SERIAL|HUB:PORT|all   => power cycle that RX888 / hub port through uhubctl (needs a hub that switches power per port, see wd-usb-power.md)
