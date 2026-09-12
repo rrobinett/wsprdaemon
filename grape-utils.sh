@@ -731,7 +731,11 @@ function grape_create_all_charts() {
             (( ++new_chart_count ))
         fi
     done
-    if (( new_chart_count )) || [[ ! -s ${GRAPE_CHARTS_WWW_DIR}/manifest.json ]]; then
+    ### Charts are also created one at a time by grape_create_chart() as each 24 hour wav is finished, and that path doesn't touch the
+    ### manifest.  So refresh the manifest whenever a chart is newer than it, not just when this sweep is the one which created it.
+    local manifest_file="${GRAPE_CHARTS_WWW_DIR}/manifest.json"
+    if (( new_chart_count )) || [[ ! -s ${manifest_file} ]] \
+       || [[ -n $( find ${GRAPE_CHARTS_WWW_DIR} -mindepth 4 -maxdepth 4 -name '*.json' -newer ${manifest_file} -print -quit 2>/dev/null ) ]]; then
         grape_charts_update_manifest
     fi
     wd_logger 1 "Created ${new_chart_count} new charts"
