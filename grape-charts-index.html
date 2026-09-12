@@ -7,6 +7,7 @@
  header h1{font-size:18px;margin:0} header small{opacity:.75}
  nav button{background:none;border:1px solid #fff5;color:#fff;padding:5px 12px;border-radius:5px;cursor:pointer;margin-right:6px}
  nav button.on{background:#fff;color:#243447;font-weight:600}
+ nav a{background:none;border:1px solid #fff5;color:#fff;padding:5px 12px;border-radius:5px;margin-right:6px;text-decoration:none;font-size:13px}
  main{padding:14px 18px;max-width:1500px;margin:auto}
  .ctl{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 3px #0002}
  .ctl label{font-size:13px;color:#555;display:flex;gap:6px;align-items:center}
@@ -22,7 +23,7 @@
  table{border-collapse:collapse;font-size:13px;background:#fff} td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left}
 </style></head><body>
 <header><h1>GRAPE carrier strip charts</h1><small id="host"></small>
- <nav><button id="tabDaily" class="on">Daily charts</button><button id="tabOverlay">Overlay</button><button id="tabTable">Table</button></nav>
+ <nav><button id="tabDaily" class="on">Daily charts</button><button id="tabOverlay">Overlay</button><button id="tabTable">Table</button><span id="protoLink"></span></nav>
  <small id="gen"></small></header>
 <main>
  <section id="daily">
@@ -59,9 +60,18 @@ async function load(){
   $("dDate").innerHTML=dates.map(d=>`<option>${d}</option>`).join("");
   $("dBand").innerHTML='<option value="">all</option>'+bands.map(e=>`<option value="${e.band}">${bandLabel(e)}</option>`).join("");
   $("dDate").onchange=$("dBand").onchange=renderDaily; renderDaily();
+  showProtoLink();
   $("oMode").onchange=setupOverlay; $("oFix").onchange=setupPicks;
   $("oYl").onchange=$("oSm").onchange=$("oExtra").onchange=drawOverlay;
   window.oDates=dates; window.oBands=bands; setupOverlay(); renderTable();
+}
+// The interactive Doppler spectrogram pages are generated separately by grape-spectrogram-proto.py, so
+// link to them only on a host where someone has actually generated them.
+async function showProtoLink(){
+  for(const href of ["proto30/","proto/"]){
+    try{ if((await fetch(href,{method:"HEAD"})).ok){
+      $("protoLink").innerHTML=`<a href="${href}">Spectrogram (prototype)</a>`; return; } }catch(e){}
+  }
 }
 function renderDaily(){
   const d=$("dDate").value,b=$("dBand").value;
