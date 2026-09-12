@@ -50,6 +50,7 @@ declare WD_DECODE_LATE_SECS=${WD_DECODE_LATE_SECS-120}            ### Starting a
 declare WD_DECODE_SUSTAIN_CYCLES=${WD_DECODE_SUSTAIN_CYCLES-5}    ### ...but only a run of them with no progress is a fault
 declare WD_DECODE_HEALTH_MAX_BYTES=${WD_DECODE_HEALTH_MAX_BYTES-1000000}
 declare WD_DECODE_OK_HEARTBEAT_SECS=${WD_DECODE_OK_HEARTBEAT_SECS-3600}   ### Log one healthy decode per band per hour, so 'wdb' can show a good band as good
+declare WD_DECODE_OK_SETTLE_SECS=${WD_DECODE_OK_SETTLE_SECS-300}          ### ...but not the first decodes after a restart, which are always catching up
 
 declare WD_DECODE_HEALTH_LOG_CHECKED=""     ### Set once the log path has been resolved
 
@@ -158,7 +159,14 @@ function wd_decode_health_record()
             ### 10,000 lines a day and would push the episodes that matter out of the capped log.
             ### One heartbeat per band per hour is enough for 'wsprdaemon.sh -b' to show a good band
             ### as good, and to say when it was last heard from.
-            if (( EPOCHSECONDS - WD_DECODE_LAST_OK_EPOCH >= WD_DECODE_OK_HEARTBEAT_SECS )); then
+            if (( WD_DECODE_LAST_OK_EPOCH == 0 )); then
+                ### First healthy decode since this daemon started.  Do NOT log it: a restart leaves
+                ### a few minutes of recorded audio waiting, so the first decodes are catching up and
+                ### report a lateness the band will not show again for an hour (KJ6MKI 2026-09-12:
+                ### every band read "65 s behind" all hour from one restart-transient heartbeat).
+                ### Hold the first heartbeat until the band has settled, so 'wdb' shows steady state.
+                WD_DECODE_LAST_OK_EPOCH=$(( EPOCHSECONDS - WD_DECODE_OK_HEARTBEAT_SECS + WD_DECODE_OK_SETTLE_SECS ))
+            elif (( EPOCHSECONDS - WD_DECODE_LAST_OK_EPOCH >= WD_DECODE_OK_HEARTBEAT_SECS )); then
                 WD_DECODE_LAST_OK_EPOCH=${EPOCHSECONDS}
                 wd_decode_health_write "OK" "${receiver_name}" "${receiver_band}" "${mode}" "${cycle_epoch}" \
                     "${late_secs}" "${elapsed_secs}" "${decode_rc}" "keeping up"
@@ -308,7 +316,8 @@ function wd_decode_health_show()
     fi
 
     echo ""
-    echo "  Where each band stood at its most recent decode (seconds behind, and its slowest decode today):"
+    echo "  Where each band stood when it last wrote to this log (a healthy band writes once an hour, so"
+    echo "  a reading here can be up to an hour old -- the timestamp says how old):"
     awk -F'\t' -v late_warn="${WD_DECODE_LATE_SECS}" '
         NF >= 8 && $2 != "DROPPED" {
             late = $7 ; sub("late=", "", late) ; late += 0
