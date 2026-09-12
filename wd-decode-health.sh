@@ -253,7 +253,12 @@ function wd_decode_health_show()
     echo ""
     if [[ ! -f "${log_file}" ]]; then
         echo "No decode events have been recorded yet (there is no ${WD_DECODE_HEALTH_LOG})."
-        echo "Either WD has not decoded anything since this version was installed, or WD_DECODE_HEALTH_ENABLED='${WD_DECODE_HEALTH_ENABLED}'."
+        if [[ "${WD_DECODE_HEALTH_ENABLED}" != "yes" ]]; then
+            echo "Recording is turned off: WD_DECODE_HEALTH_ENABLED='${WD_DECODE_HEALTH_ENABLED}' in wsprdaemon.conf."
+        else
+            echo "WD has not finished a decode since this version was installed.  The decoding daemons load"
+            echo "decoding.sh when they start, so after a 'git pull' this stays empty until WD is restarted."
+        fi
         return 0
     fi
     echo "Event log: ${log_file}"
