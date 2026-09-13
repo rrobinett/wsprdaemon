@@ -1996,7 +1996,17 @@ alias wdle='wd -l e'
 alias wda='wd -a'       ### Install/enable wsprdaemon.service if needed and 'systemctl start' it.  WD must run as the service (CPU affinity drop-ins, Restart=always), never as 'wd -A' from a shell.
 alias wd-journal='journalctl -u wsprdaemon -n 100 -f'   ### Follow the stdout/stderr of the running service (what a shell-started 'wd -A' used to print to the terminal)
 alias wdj='wd-journal'
-alias wd-decode-health='wd -b'   ### Bands whose decodes have fallen permanently behind, decodes killed by their timeout, and cycles purged before being decoded
+### Bands whose decodes have fallen permanently behind, decodes killed by their timeout, and cycles purged before being decoded.
+### This was 'wd -b', which took ~60 s to print a report it computes in 0.15 s: sourcing ka9q-utils.sh runs ka9q-setup at
+### source time, which calls wd_cpu_tuning -> wd-cpu-apply.sh (twice, ~38 s) and restarts wd-resctrl/wd-irq-affinity/wd-cpu-freq.
+### The report needs none of it -- wd_decode_health_show only reads ${WD_DECODE_HEALTH_LOG} -- so source that one file instead.
+### Asking for a health report should not re-apply the CPU plan on a host that is busy decoding.
+function wd-decode-health() (
+    local wd_root=${WSPRDAEMON_ROOT_DIR:-${HOME}/wsprdaemon}
+    source ${wd_root}/wsprdaemon.conf 2>/dev/null      ### only for a site which overrides WD_DECODE_HEALTH_LOG
+    source ${wd_root}/wd-decode-health.sh || return 1
+    LC_ALL=C wd_decode_health_show                     ### LC_ALL=C or the BAND column collates differently per locale
+)
 alias wdb='wd-decode-health'
 alias wd-time='wd -t'    ### Is the clock synchronised?  chronyc tracking + sources + time-sync.log
 alias wdt='wd-time'
