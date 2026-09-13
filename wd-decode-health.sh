@@ -261,9 +261,21 @@ function wd_decode_health_record_drop()
         return 1
     fi
 
+    ### Two very different faults end up here, and the operator fixes them in different places.  No
+    ### marker at all means no decoding job has EVER handed back a packet for this band: the audio is
+    ### being recorded and thrown away, which is a configuration problem, not a slow CPU.  (KJ6MKI
+    ### 2026-09-12: radiod publishes 8m since it became a default band, wd-record records it, but the
+    ### station's schedule never listed band 8 -- 37 wav files piling up and purged, cycle after cycle.)
+    if (( newest_marker_epoch == 0 )); then
+        wd_decode_health_write "DROPPED" "${receiver_name}" "${receiver_band}" "-" "${cycle_epoch}" \
+            "${age_secs}" "-1" "-" "no decoding job has ever returned a packet for this band"
+        wd_logger 1 "ERROR: BAND NOT BEING DECODED: ${receiver_name} ${receiver_band} wav file '${wav_file_name}' was recorded $(( age_secs / 60 )) minutes ago and purged without ever being decoded, and no decoding job has EVER returned a packet for this band.  Its audio is being recorded and thrown away.  Either add ${receiver_band} to the schedule in wsprdaemon.conf or stop recording it.  See 'wsprdaemon.sh -b'"
+        return 0
+    fi
+
     wd_decode_health_write "DROPPED" "${receiver_name}" "${receiver_band}" "-" "${cycle_epoch}" \
         "${age_secs}" "-1" "-" "purged at MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35} min before it was decoded"
-    wd_logger 1 "ERROR: CYCLE DROPPED: ${receiver_name} ${receiver_band} wav file '${wav_file_name}' recorded $(( age_secs / 60 )) minutes ago was deleted and the decoder never reached it, so that cycle is lost.  See 'wsprdaemon.sh -b'"
+    wd_logger 1 "ERROR: CYCLE DROPPED: ${receiver_name} ${receiver_band} wav file '${wav_file_name}' recorded $(( age_secs / 60 )) minutes ago was deleted and the decoder never reached it, so that cycle is lost.  The decoder last returned a packet at $(TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T' ${newest_marker_epoch}).  See 'wsprdaemon.sh -b'"
     return 0
 }
 
@@ -279,7 +291,9 @@ function wd_decode_health_show()
     echo "    are on disk, so a band catches up by itself.  These are the cases where that did not happen:"
     echo "    BEHIND  = at least ${WD_DECODE_SUSTAIN_CYCLES} cycles in a row started >= ${WD_DECODE_LATE_SECS} s late with no net progress: this band will not recover"
     echo "    KILLED  = wsprd/jt9 was killed by its timeout, so that cycle reported no spots"
-    echo "    DROPPED = a recorded wav file was purged before anything decoded it: that cycle is lost"
+    echo "    DROPPED = a recorded wav file was purged before anything decoded it: that cycle is lost."
+    echo "              A band whose note says 'no decoding job has ever returned a packet' is being recorded"
+    echo "              and thrown away -- it is missing from the schedule in wsprdaemon.conf"
     echo "    LATE    = one decode started a cycle or more late.  Normal after the :00/:30 F5+F15+F30 wave"
     echo "    CAUGHT_UP = a late run ended by itself, which is the design working"
     echo "    OK        = an hourly heartbeat from a band that is keeping up"
