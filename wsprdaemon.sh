@@ -125,6 +125,34 @@ fi
 
 cd ${WSPRDAEMON_ROOT_DIR}
 
+### Read-only status reports, answered before the sourcing below and then gone.
+### Each of these prints from one file and needs nothing else, but they used to take ~60 s because
+### sourcing ka9q-utils.sh runs its bare 'ka9q-setup' AT SOURCE TIME, which calls wd_cpu_tuning ->
+### wd-cpu-apply.sh (twice) and restarts wd-resctrl, wd-irq-affinity and wd-cpu-freq.  A bash -x
+### profile of 'wd -b' on ON5KQ put 41.3 s of 64 s in wd-cpu-tuning.sh.  Asking a host how its
+### decoders, its clock or its USB bus are doing must not re-apply its CPU plan and bounce those
+### units first, so answer here and exit.
+### Only when the flag is the whole command line: anything else falls through and is handled by the
+### getopts loop below exactly as before, so 'wd -b' keeps working in every combination.
+if (( $# == 1 )); then
+    declare -A WD_STATUS_REPORTS=(
+        ["-b"]="wd-decode-health.sh wd_decode_health_show"
+        ["-t"]="wd-time-sync.sh wd_time_sync_show"
+        ["-u"]="wd-usb-power.sh wd_usb_power_show"
+    )
+    if [[ -n "${WD_STATUS_REPORTS[$1]-}" ]]; then
+        declare wd_report_file wd_report_func
+        read -r wd_report_file wd_report_func <<< "${WD_STATUS_REPORTS[$1]}"
+        ### These reports, and a site's wsprdaemon.conf, are written to be read by a normal shell.
+        ### Only the full load below declares everything 'nounset' needs, so drop it for this path.
+        set +o nounset
+        source ${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf 2>/dev/null   ### only for a site which overrides a log path or KA9Q_RADIOD_CONF_DIR
+        source ${WSPRDAEMON_ROOT_DIR}/${wd_report_file}
+        LC_ALL=C ${wd_report_func}      ### LC_ALL=C or sorted columns and globs collate differently per locale
+        exit $?
+    fi
+fi
+
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/config-utils.sh
