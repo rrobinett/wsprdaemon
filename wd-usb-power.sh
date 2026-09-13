@@ -288,7 +288,7 @@ function wd_usb_power_recover_bootloader_stuck()
 function wd_usb_power_serial_of_instance()
 {
     local s
-    s=$( awk -F= '/^[[:space:]]*serial[[:space:]]*=/{v=$2; sub(/^[[:space:]]+/,"",v); sub(/[[:space:]#].*$/,"",v); print toupper(v); exit}' "${KA9Q_RADIOD_CONF_DIR}/radiod@${1}.conf" 2>/dev/null )
+    s=$( awk -F= '/^[[:space:]]*serial[[:space:]]*=/{v=$2; sub(/^[[:space:]]+/,"",v); sub(/[[:space:]#].*$/,"",v); print toupper(v); exit}' "${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@${1}.conf" 2>/dev/null )
     [[ -n ${s} && ${s} != FILL_IN* ]] && echo "${s}"
     return 0
 }
