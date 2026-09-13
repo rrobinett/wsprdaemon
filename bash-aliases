@@ -1996,21 +1996,28 @@ alias wdle='wd -l e'
 alias wda='wd -a'       ### Install/enable wsprdaemon.service if needed and 'systemctl start' it.  WD must run as the service (CPU affinity drop-ins, Restart=always), never as 'wd -A' from a shell.
 alias wd-journal='journalctl -u wsprdaemon -n 100 -f'   ### Follow the stdout/stderr of the running service (what a shell-started 'wd -A' used to print to the terminal)
 alias wdj='wd-journal'
-### Bands whose decodes have fallen permanently behind, decodes killed by their timeout, and cycles purged before being decoded.
-### This was 'wd -b', which took ~60 s to print a report it computes in 0.15 s: sourcing ka9q-utils.sh runs ka9q-setup at
-### source time, which calls wd_cpu_tuning -> wd-cpu-apply.sh (twice, ~38 s) and restarts wd-resctrl/wd-irq-affinity/wd-cpu-freq.
-### The report needs none of it -- wd_decode_health_show only reads ${WD_DECODE_HEALTH_LOG} -- so source that one file instead.
-### Asking for a health report should not re-apply the CPU plan on a host that is busy decoding.
-function wd-decode-health() (
+### The three status reports below were 'wd -b', 'wd -t' and 'wd -u', and each took ~60 s to print something it
+### computes in well under a second.  None of that was the report: wsprdaemon.sh sources ka9q-utils.sh, whose bare
+### 'ka9q-setup' call runs AT SOURCE TIME and calls wd_cpu_tuning -> wd-cpu-apply.sh (twice, ~38 s), then restarts
+### wd-resctrl, wd-irq-affinity and wd-cpu-freq.  A bash -x profile of 'wd -b' put 41.3 s of 64 s in wd-cpu-tuning.sh.
+### Each of these reports needs only the one file that defines it, so source that and call it: asking a host how its
+### decoders, its clock or its USB bus are doing must not re-apply the CPU plan and bounce the tuning units first.
+### 'wd -b', 'wd -t' and 'wd -u' still work and are unchanged.
+function wd-status-report() (
+    local wd_file=$1 wd_func=$2
     local wd_root=${WSPRDAEMON_ROOT_DIR:-${HOME}/wsprdaemon}
-    source ${wd_root}/wsprdaemon.conf 2>/dev/null      ### only for a site which overrides WD_DECODE_HEALTH_LOG
-    source ${wd_root}/wd-decode-health.sh || return 1
-    LC_ALL=C wd_decode_health_show                     ### LC_ALL=C or the BAND column collates differently per locale
+    source ${wd_root}/wsprdaemon.conf 2>/dev/null      ### only for a site which overrides a log path or KA9Q_RADIOD_CONF_DIR
+    source ${wd_root}/${wd_file} || return 1
+    LC_ALL=C ${wd_func}                                ### LC_ALL=C or sorted columns and globs collate differently per locale
 )
+### Bands whose decodes have fallen permanently behind, decodes killed by their timeout, and cycles purged before being decoded
+function wd-decode-health() { wd-status-report wd-decode-health.sh wd_decode_health_show ; }
 alias wdb='wd-decode-health'
-alias wd-time='wd -t'    ### Is the clock synchronised?  chronyc tracking + sources + time-sync.log
+### Is the clock synchronised?  chronyc tracking + sources + time-sync.log
+function wd-time() { wd-status-report wd-time-sync.sh wd_time_sync_show ; }
 alias wdt='wd-time'
-alias wd-usb='wd -u'     ### RX888s on the USB bus, their hub ports, and which ports WD can power cycle (uhubctl)
+### RX888s on the USB bus, their hub ports, and which ports WD can power cycle (uhubctl)
+function wd-usb() { wd-status-report wd-usb-power.sh wd_usb_power_show ; }
 alias wdu='wd-usb'
 alias wd-usb-cycle='wd -U'   ### wd-usb-cycle SERIAL|HUB:PORT|all  => power cycle that RX888 / port
 alias wds='wd -s'
