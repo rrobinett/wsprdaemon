@@ -260,6 +260,78 @@ declare TARGET_WSPR_WAV_SECONDS=120
 declare MIN_VALID_WSPR_WAV_SECONDS=${MIN_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} - ${WAV_SECOND_RANGE} )) }
 declare MAX_VALID_WSPR_WAV_SECONDS=${MAX_VALID_WSPR_WAV_SECONDS-$(( ${TARGET_WSPR_WAV_SECONDS} + ${WAV_SECOND_RANGE} )) }
 
+### How long is this wav file, in seconds?
+###
+### This used to be 'sox FILE -n stats', which DECODES every sample to produce fifteen statistics of which
+### exactly one, Length, was kept.  That is affordable on a 12 kHz WSPR file and ruinous on the 60 second
+### 16 kHz stereo 32-bit-float IQ files a GRAPE/PSWS site records: measured at KI4AFE 2026-09-14, one call
+### cost 1.88 s of wall clock at 615% CPU -- about 11 CPU seconds -- and with seven WWV channels each
+### validating a new file every minute it was most of the machine, starving the decoders it runs alongside.
+###
+### The length is in the file's own header, with one wrinkle which is presumably why sox was used: wd-record
+### writes a STREAMING wav whose data chunk size field stays 0 until the file is closed, so 'soxi -D' answers
+### 0.000000 and is useless here.  The fmt chunk is complete though, so take the sample rate, channel count
+### and sample width from it and recover the sample count from the file size:
+###
+###     secs = (file_bytes - bytes_before_the_audio) / (rate * channels * (bits / 8))
+###
+### Verified against 'sox -n stats' at KI4AFE on complete WWV IQ files (60.000 vs 60.000) and on WSPR wav
+### files.  A file still being written measures slightly differently from one instant to the next, which is
+### true of the sox reading as well and is what the min/max bounds in is_valid_wav_file() are there to catch.
+### Echo "<audio_bytes> <rate> <channels> <bits>" for a wav file, reading only its header and its size.
+### Everything the length and sample-count probes need, in one place.
+function wav_file_format_info()
+{
+    local wav_filename=$1
+    local rate channels bits data_offset file_bytes
+
+    rate=$(     soxi -r "${wav_filename}" 2>/dev/null )
+    channels=$( soxi -c "${wav_filename}" 2>/dev/null )
+    bits=$(     soxi -b "${wav_filename}" 2>/dev/null )
+    if [[ ! ${rate} =~ ^[0-9]+$ || ! ${channels} =~ ^[0-9]+$ || ! ${bits} =~ ^[0-9]+$ ]] || (( rate == 0 || channels == 0 || bits == 0 )); then
+        wd_logger 1 "ERROR: 'soxi' could not read the format of '${wav_filename}': rate='${rate}' channels='${channels}' bits='${bits}'"
+        return 1
+    fi
+    ### The audio begins after the 'data' chunk's 4 byte id and its 4 byte size.  Search only the header, so
+    ### that a 'data' which happens to occur in the samples of a long file can never be taken for the chunk.
+    data_offset=$( head -c 65536 "${wav_filename}" 2>/dev/null | grep -a -b -o 'data' | head -n 1 | cut -d: -f1 )
+    if [[ ! ${data_offset} =~ ^[0-9]+$ ]]; then
+        wd_logger 1 "ERROR: '${wav_filename}' has no 'data' chunk in its first 64 KB, so it is not a wav file this can measure"
+        return 1
+    fi
+    file_bytes=$( stat -c %s "${wav_filename}" 2>/dev/null )
+    if [[ ! ${file_bytes} =~ ^[0-9]+$ ]]; then
+        wd_logger 1 "ERROR: 'stat' could not size '${wav_filename}'"
+        return 1
+    fi
+    local audio_bytes=$(( file_bytes - data_offset - 8 ))
+    (( audio_bytes < 0 )) && audio_bytes=0
+    echo "${audio_bytes} ${rate} ${channels} ${bits}"
+    return 0
+}
+
+function wav_file_length_secs()
+{
+    local info_list
+    info_list=( $( wav_file_format_info "$1" ) ) || return 1
+    (( ${#info_list[@]} == 4 )) || return 1
+    awk -v bytes="${info_list[0]}" -v rate="${info_list[1]}" -v channels="${info_list[2]}" -v bits="${info_list[3]}" \
+        'BEGIN { printf "%.3f", bytes / (rate * channels * (bits / 8)) }'
+    return 0
+}
+
+### How many samples does this wav file hold?  'sox FILE -n stat' reports this as "Samples read" at the
+### cost of decoding the whole file; the header and the file size give the same integer for nothing.
+### Like sox, this counts every channel: a 60 second 16000 sps stereo IQ file is 1920000, not 960000.
+function wav_file_sample_count()
+{
+    local info_list
+    info_list=( $( wav_file_format_info "$1" ) ) || return 1
+    (( ${#info_list[@]} == 4 )) || return 1
+    echo $(( ${info_list[0]} / ( ${info_list[3]} / 8 ) ))
+    return 0
+}
+
 function is_valid_wav_file()
 {
     local wav_filename=$1
@@ -275,32 +347,20 @@ function is_valid_wav_file()
         wd_logger 1 "ERROR: zero length wav file ${wav_filename}"
         return 1
     fi
-    local wav_stats=$(sox ${wav_filename} -n stats 2>&1 )    ### Don't add ' --keep-foreign-metadata"
+    local wav_length_float
+    wav_length_float=$( wav_file_length_secs ${wav_filename} )
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' => ${rc}"
+        wd_logger 1 "ERROR: can't measure the length of wav file ${wav_filename}"
         return 1
     fi
-    wd_logger 2 "'sox ${wav_filename} -n stats 2>&1' =>\n${wav_stats}"
-    local wav_length_line_list=( $(grep '^Length' <<< "${wav_stats}") )
-    if (( ! ${#wav_length_line_list[@]} )); then
-         wd_logger 1 "ERROR: can't find wav file 'Length' line in output of 'sox ${wav_filename} -n stats'"
-        return 1
-    fi
-    if (( ${#wav_length_line_list[@]} != 3 )); then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' ouput 'Length' line has ${#wav_length_line_list[@]} fields in it instead of the expected 3 fields"
-        return 1
-    fi
-    local wav_length_secs=${wav_length_line_list[2]/.*}
-    if [[ -z "${wav_length_secs}" ]]; then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length '${wav_length_line_list[2]}'"
-        return 1
-    fi
+    wd_logger 2 "'${wav_filename}' is ${wav_length_float} seconds long"
+    local wav_length_secs=${wav_length_float/.*}
     if [[ ! ${wav_length_secs} =~ ^[0-9]+$ ]]; then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports wav file length ${wav_length_line_list[2]} which doesn't contain an integer number"
+        wd_logger 1 "ERROR: measured an invalid length '${wav_length_float}' for wav file ${wav_filename}"
         return 1
     fi
     if (( ( wav_length_secs < min_valid_secs ) || ( wav_length_secs > max_valid_secs) )); then
-        wd_logger 1 "ERROR: 'sox ${wav_filename} -n stats' reports invalid wav file length of ${wav_length_secs} seconds. valid min=${min_valid_secs}, valid max=${max_valid_secs}"
+        wd_logger 1 "ERROR: wav file ${wav_filename} is ${wav_length_secs} seconds long. valid min=${min_valid_secs}, valid max=${max_valid_secs}"
         return 1
     fi
     return 0
@@ -1997,8 +2057,28 @@ function decoding_daemon() {
 
             local sox_peak_dBFS_value=0
             local sox_channel_level_adjust=0
+            ### sox_channel_level_adjust is read in exactly one place, below: the branch which needs it is
+            ### reached only for an INTEGER wav file, on a band which is not WWV/CHU, with
+            ### KA9Q_PEAK_LEVEL_SOURCE="WAV".  Everywhere else the value is computed and then thrown away.
+            ### Working it out costs a full 'sox -n stats' decode of the file, which on a GRAPE/PSWS site's
+            ### 60 second IQ recordings is ~11 CPU seconds per channel per minute (KI4AFE, 2026-09-14: seven
+            ### WWV channels doing this kept six cores busy and pushed the FT8/FT4 decoders a cycle behind).
+            ### radiod's own 32 bit float output is the modern default, so on most sites today this was pure
+            ### waste.  Decide whether the answer can be used BEFORE paying for it.  The 'soxi' here reads
+            ### only the header and is the same test the branch below makes.
+            local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} 2>/dev/null | grep "Sample Encoding: 32-bit Floating Point PCM" )
+            local sox_peak_level_is_used="yes"
+            if [[ -n "${wav_file_is_float}" ]]; then
+                sox_peak_level_is_used="no"        ### float files leave the channel gain at 0 dB
+            elif [[ ${receiver_band} =~ ^WWV|^CHU ]]; then
+                sox_peak_level_is_used="no"        ### gain changes are disabled on WWV/CHU channels
+            elif [[ ${KA9Q_PEAK_LEVEL_SOURCE} != "WAV" ]]; then
+                sox_peak_level_is_used="no"        ### this site steers the gain from 'metadump', not from the wav
+            fi
             if [[ ! -f ${newest_one_minute_wav_file} ]]; then
                 wd_logger 1 "ERROR: The newest file '${newest_one_minute_wav_file}' in the list of files in '${mode_wav_file_list[*]}' doesn't exist"
+            elif [[ "${sox_peak_level_is_used}" == "no" ]]; then
+                wd_logger 2 "The peak level of '${newest_one_minute_wav_file##*/}' cannot change this channel's gain, so not running 'sox -n stats' over it"
             else
                 sox ${newest_one_minute_wav_file} -n stats >& sox-stats.log
                 rc=$? ; if (( rc )); then
@@ -2028,7 +2108,7 @@ function decoding_daemon() {
             else
                 wd_logger 2 "ka9q_get_current_status_value() => ka9q_status_ip=${ka9q_status_ip}, so we have the IP address for executing a channel gain adjustment with 'tune' if it is needed"
                 local ka9q_channel_level_adjust=$( echo "scale=0; (${KA9Q_OUTPUT_DBFS_TARGET} - ${ka9q_channel_output_float})/1" | bc )
-                local wav_file_is_float=$(soxi ${newest_one_minute_wav_file} | grep "Sample Encoding: 32-bit Floating Point PCM" )
+                ### wav_file_is_float was read above, where it decides whether the peak level is worth measuring
                 local channel_level_adjust
                 if (( last_adc_overloads_count == -1 )); then
                     ### We are processing the first WSPR packet
@@ -2193,14 +2273,26 @@ function decoding_daemon() {
                 else
                     iq_file_name="${wav_files_list[0]}"
                 fi
-                local wav_file_stat_list=( $(sox ${iq_file_name} -n stat |&  awk '/Samples read/{printf "%s ", $3};  /Maximum amplitude/{printf "%s ", $3};  /Minimum amplitude/{printf "%s\n", $3}' ) )
-                local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
-                local wav_file_samples=${wav_file_stat_list[0]}            ### Always an integer which should be 1920000
-                local wav_file_peak_dBFS_value=${wav_file_stats_list[0]}   ### Always a float less than 1 with the format '0.xxxx', so chop off the '0.' to convert it to an integer for easy bash compmarisons
-                local wav_file_RMS_dBFS_value=${wav_file_stats_list[1]}    ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
-                local wav_file_RMS_Trough_value=${wav_file_stats_list[2]}  ### Always a float greatthan -1 with the format '-0.xxxx', so chop off the '-0.' to convert it to an integer for easy bash compmarison   
-
-                wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} samples. dbFS peak value = ${wav_file_peak_dBFS_value}, RMS_dBFS = ${wav_file_RMS_dBFS_value}, RMS Trough dB = ${wav_file_RMS_Trough_value}"
+                ### This ran TWO full 'sox' decodes of every IQ file, once a minute for every WWV/CHU channel.
+                ### On a GRAPE/PSWS site that was the single largest consumer of the machine: at KI4AFE on
+                ### 2026-09-14, seven WWV channels here and in the gain-adjust code above held the load average
+                ### at 80-85 on a 16 thread Ryzen and pushed the FT8/FT4 decoders a cycle behind, which is what
+                ### 'wdb' was reporting as BEHIND.  Of the six numbers they produced, only 'Samples read' was
+                ### ever acted on -- the completeness test below -- and the file's header and size give that
+                ### exact integer for free.  The three dB values only ever reached the log line below, so they
+                ### are now measured solely when someone has actually turned the verbosity up to ask for them.
+                local wav_file_samples
+                wav_file_samples=$( wav_file_sample_count ${iq_file_name} )
+                rc=$? ; if (( rc )); then
+                    wd_logger 1 "ERROR: can't count the samples in IQ file '${iq_file_name}'"
+                    wav_file_samples=0
+                fi
+                if (( verbosity >= 2 )); then
+                    local wav_file_stats_list=( $(sox ${iq_file_name} -n stats |&  awk '/Pk lev dB/{printf "%s ", $4};  /RMS Pk dB/{printf "%s ", $4};  /RMS Tr dB/{printf "%s\n", $4}' ) )
+                    wd_logger 2 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} samples. dbFS peak value = ${wav_file_stats_list[0]-?}, RMS_dBFS = ${wav_file_stats_list[1]-?}, RMS Trough dB = ${wav_file_stats_list[2]-?}"
+                else
+                    wd_logger 1 "IQ file INFO: '${iq_file_name}' contains ${wav_file_samples} samples"
+                fi
 
                 local expected_samples
                 case ${receiver_modes_list[0]} in
