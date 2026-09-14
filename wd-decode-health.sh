@@ -353,9 +353,11 @@ function wd_decode_health_show()
         heartbeat_cutoff=$(TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T' $(( now_epoch - WD_DECODE_OK_HEARTBEAT_SECS )) )
         local job band modes
         local -a silent_bands=()
+        local -a checked_bands=()
         for job in "${RUNNING_JOBS[@]}"; do
             modes=${job##*,}
             [[ "${modes}" =~ ^[IJK] ]] && continue        ### IQ / WWV / GRAPE recordings are never decoded
+            checked_bands+=( "${job%,*}" )
             band=${job#*,}
             band=${band%,*}
             if ! awk -F'\t' -v b="${band}" -v c="${silent_cutoff}" \
@@ -365,7 +367,7 @@ function wd_decode_health_show()
         done
         echo ""
         if (( ${#silent_bands[@]} == 0 )); then
-            echo "  All ${#RUNNING_JOBS[@]} configured jobs have decoded within the last $(( silent_window_secs / 60 )) minutes."
+            echo "  All ${#checked_bands[@]} configured decode jobs have decoded within the last $(( silent_window_secs / 60 )) minutes."
         elif [[ -z "${oldest_event}" || "${oldest_event}" > "${heartbeat_cutoff}" ]]; then
             echo "  ${#silent_bands[@]} configured band(s) have not decoded yet: ${silent_bands[*]}"
             echo "  This log only starts at ${oldest_event:-now} and a healthy band writes one line an hour,"
