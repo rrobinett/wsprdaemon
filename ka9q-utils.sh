@@ -1601,8 +1601,18 @@ function build_ka9q_radio() {
         if timeout 60 sudo systemctl restart "radiod@${radiod_instance}" > /dev/null ; then
             wd_logger 2 "radiod@${radiod_instance} was started"
         else
-            wd_logger 1 "ERROR: radiod@${radiod_instance} failed to start"
-            restart_rc=1
+            ### The RX888 is on the bus (checked above) but radiod still will not run.  The usual reason is the wedge
+            ### described at the top of wd-usb-power.sh: the radio enumerates and answers control traffic but delivers no
+            ### samples, so radiod exits with "No rx888 data" and aborts in libusb, which systemd reports here as a core
+            ### dump.  Re-enumerating the device clears that; radiod's own libusb_reset_device() does not.  One attempt,
+            ### throttled inside wd_usb_power_recover_wedged_rx888, before reporting the failure (N6GN3, 2026-09-14).
+            if wd_usb_power_radiod_is_wedged "${radiod_instance}" \
+                && wd_usb_power_recover_wedged_rx888 "${radiod_instance}" "${_want}" ; then
+                wd_logger 1 "WARNING: radiod@${radiod_instance} would not start until WD re-enumerated its RX888${_want:+ ${_want}}; it is running now"
+            else
+                wd_logger 1 "ERROR: radiod@${radiod_instance} failed to start"
+                restart_rc=1
+            fi
         fi
     done
     return ${restart_rc}

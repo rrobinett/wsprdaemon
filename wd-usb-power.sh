@@ -23,6 +23,11 @@
 ###  - the watchdog (wd_usb_power_check) cycles the port of any radiod@ instance that is not running because its
 ###    RX888 is missing, and restarts that radiod when the radio comes back.  Never more often than
 ###    WD_USB_POWER_CYCLE_MIN_MINUTES per port, so a dead radio is not hammered.
+###  - the watchdog also recovers the OPPOSITE case: a radiod@ that is down while its RX888 IS on the bus, wedged so
+###    that it enumerates but never streams.  wd_usb_power_recover_wedged_rx888 stops radiod (so it releases the
+###    device), re-enumerates the device through sysfs 'authorized', starts radiod, and only then falls back to a
+###    uhubctl power cycle.  Throttled to one attempt per device per WD_USB_REENUM_MIN_MINUTES.
+###  - build_ka9q_radio() makes the same attempt when a radiod it just rebuilt will not start.
 ###  - 'wd -u' (wd-usb / wdu) shows the RX888s, their ports, which are switchable, and the log;
 ###    'wd -U SERIAL|PORT|all' cycles by hand.
 ### A radio on a 480 Mb/s USB 2 port is NEVER cycled: it can not work there, and that is what the operator must fix.
@@ -41,6 +46,29 @@ declare WD_USB_POWER_HUB_HINT="see wd-usb-power.md for hubs that really switch p
 declare WD_USB_RX888_VENDOR="04b4"
 declare WD_USB_RX888_PROGRAMMED="00f1"
 declare WD_USB_RX888_BOOTLOADER="00f3"
+
+### A DIFFERENT failure from the missing/bootloader radios above, and the one uhubctl can not help with: the RX888 is
+### enumerated and answers control traffic (radiod logs its hardware/firmware rev and programs the Si5351 sample rate)
+### but never delivers bulk samples, so radiod prints "No rx888 data for 5 seconds, quitting" and then aborts inside
+### libusb teardown (SIGABRT/core dump, which systemd reports as "a fatal signal was delivered causing the control
+### process to dump core" and build_ka9q_radio() reports as a failed start).  radiod restarts, and fails the same way
+### forever -- N6GN3 sat like that for ~30 hours on 2026-09-12/14, ~1600 cycles.
+###
+### radiod's own recovery can not clear it.  rx888.c calls libusb_reset_device(), which is a USB PORT RESET: the device
+### re-enumerates and the kernel RESTORES the previous configuration, deliberately preserving kernel-side state.  On
+### N6GN3 that restore itself failed -- "usb 2-1: can't restore configuration #1 (error=-110)" (ETIMEDOUT) -- leaving
+### the device half-configured.  De-authorizing it instead makes the kernel tear the usbdev down completely and
+### enumerate again from nothing, which cleared the wedge on the first try.  This needs no switchable hub, so it is
+### also the ONLY software recovery available on a host whose RX888 sits on a root hub port (N6GN3 again: 'sudo uhubctl'
+### there says "No compatible devices detected!").  WD therefore tries re-enumeration FIRST and falls back to a uhubctl
+### power cycle only if the radio still will not stream.
+### radiod must NOT be holding the device while this happens, hence the stop/toggle/start order below.
+declare WD_USB_REENUMERATE=${WD_USB_REENUMERATE-yes}                          ### "no" turns this recovery off
+declare WD_USB_REENUM_OFF_SECS=${WD_USB_REENUM_OFF_SECS-3}                    ### how long the device stays de-authorized
+declare WD_USB_REENUM_MIN_MINUTES=${WD_USB_REENUM_MIN_MINUTES-10}             ### never re-enumerate one device more often than this
+declare WD_USB_REENUM_LOOKBACK_MINUTES=${WD_USB_REENUM_LOOKBACK_MINUTES-15}   ### how far back to look for the wedge signature
+declare WD_USB_REENUM_WEDGE_MIN_HITS=${WD_USB_REENUM_WEDGE_MIN_HITS-2}        ### 1 hit is a transient; a wedge repeats every ~12 s
+declare WD_USB_REENUM_WEDGE_REGEX="No rx888 data for|usbi_mutex_lock: Assertion"
 
 ### Debian 13 installs uhubctl in /usr/sbin, which is not on the wsprdaemon user's PATH (the chronyd trap again), so
 ### never rely on 'command -v uhubctl' alone.  Echoes the binary's path, or nothing.
@@ -293,6 +321,139 @@ function wd_usb_power_serial_of_instance()
     return 0
 }
 
+### Echoes the sysfs usb device ("2-1") of the RX888 that radiod@$1 uses, or nothing.
+### Most confs name a serial, but a single-radio site often has no 'serial =' line at all and that instance then gets
+### whatever RX888 is on the bus (N6GN3, 2026-09-14 -- keying recovery off the serial alone skipped that host entirely).
+### Only resolve the serial-less case when it is unambiguous: exactly one conf without a serial AND exactly one
+### programmed RX888 present.  Otherwise WD would be guessing which radio belongs to which radiod.
+function wd_usb_power_dev_of_instance()
+{
+    local inst=$1 serial conf other d
+    serial=$( wd_usb_power_serial_of_instance "${inst}" )
+    if [[ -n ${serial} ]]; then
+        wd_usb_power_dev_of_serial "${serial}"
+        return
+    fi
+    local -a noserial=() present=()
+    for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
+        [[ -f ${conf} ]] || continue
+        other=${conf##*/radiod@}; other=${other%.conf}
+        [[ -z $( wd_usb_power_serial_of_instance "${other}" ) ]] && noserial+=( "${other}" )
+    done
+    (( ${#noserial[@]} == 1 )) || return 1
+    for d in /sys/bus/usb/devices/*/; do
+        [[ -f ${d}/idVendor && $(cat ${d}/idVendor) == "${WD_USB_RX888_VENDOR}" && $(cat ${d}/idProduct) == "${WD_USB_RX888_PROGRAMMED}" ]] || continue
+        d=${d%/}; present+=( "${d##*/}" )
+    done
+    (( ${#present[@]} == 1 )) || return 1
+    echo "${present[0]}"
+}
+
+### Has this usb device been re-enumerated in the last WD_USB_REENUM_MIN_MINUTES?  0 = yes (too soon)
+function wd_usb_power_reenum_recently()
+{
+    local stamp="${WD_USB_POWER_LOG_DIR}/usb-reenum.last.${1//\//_}"
+    [[ -f ${stamp} ]] || return 1
+    local age=$(( $(printf "%(%s)T") - $(stat -c %Y "${stamp}" 2>/dev/null || echo 0) ))
+    (( age < WD_USB_REENUM_MIN_MINUTES * 60 ))
+}
+
+### Force a full re-enumeration of sysfs usb device $1 ("2-1") by de-authorizing and re-authorizing it.  $2 = what for the log.
+### NOTHING may have the device open while this runs.  0 = done, 1 = a sysfs write failed, 2 = can not / turned off.
+function wd_usb_power_reenumerate_dev()
+{
+    local dev=$1 why=${2:-} authorized="/sys/bus/usb/devices/${1}/authorized" out rc
+    if [[ ${WD_USB_REENUMERATE} == "no" ]]; then
+        wd_usb_power_log 1 "WARNING: not re-enumerating usb device ${dev} (${why}): WD_USB_REENUMERATE=no"
+        return 2
+    fi
+    if [[ ! -f ${authorized} ]]; then
+        wd_usb_power_log 1 "ERROR: can not re-enumerate usb device ${dev} (${why}): ${authorized} does not exist"
+        return 2
+    fi
+    wd_usb_power_ensure_dir && touch "${WD_USB_POWER_LOG_DIR}/usb-reenum.last.${dev//\//_}"   ### also stamped by the caller; harmless, and covers a direct call
+    wd_usb_power_log 1 "WARNING: re-enumerating usb device ${dev}: de-authorizing it for ${WD_USB_REENUM_OFF_SECS} seconds, then re-authorizing: ${why}"
+    out=$( echo 0 | timeout 20 sudo tee "${authorized}" 2>&1 >/dev/null ); rc=$?
+    if (( rc )); then
+        wd_usb_power_log 1 "ERROR: 'echo 0 | sudo tee ${authorized}' => ${rc}: ${out}"
+        return 1
+    fi
+    sleep ${WD_USB_REENUM_OFF_SECS}
+    out=$( echo 1 | timeout 20 sudo tee "${authorized}" 2>&1 >/dev/null ); rc=$?
+    if (( rc )); then
+        ### Leaving a device de-authorized takes it off the bus until someone re-authorizes it or the host reboots, so say so loudly
+        wd_usb_power_log 1 "ERROR: 'echo 1 | sudo tee ${authorized}' => ${rc}: ${out}.  usb device ${dev} is still DE-AUTHORIZED and will stay off the bus: run 'echo 1 | sudo tee ${authorized}' by hand"
+        return 1
+    fi
+    return 0
+}
+
+### Is radiod@$1 failing with the wedged-RX888 signature (enumerated, but no samples) rather than for some other reason?
+function wd_usb_power_radiod_is_wedged()
+{
+    local inst=$1 hits
+    hits=$( journalctl -u "radiod@${inst}" --since "-${WD_USB_REENUM_LOOKBACK_MINUTES} minutes" --no-pager 2>/dev/null | grep -c -E "${WD_USB_REENUM_WEDGE_REGEX}" )
+    (( ${hits:-0} >= WD_USB_REENUM_WEDGE_MIN_HITS ))
+}
+
+### radiod@$1 can not get samples out of RX888 $2, which IS on the bus.  Stop radiod so it releases the device, force a full
+### re-enumeration, then start radiod again.  Falls back to a uhubctl power cycle if the radio still will not stream.
+### 0 = radiod is running again, 3 = throttled, 1 = still broken.
+function wd_usb_power_recover_wedged_rx888()
+{
+    local inst=$1 serial=${2^^} dev
+    dev=$( wd_usb_power_dev_of_instance "${inst}" || true )
+    if [[ -z ${dev} ]]; then
+        wd_usb_power_log 2 "radiod@${inst} has no RX888 WD can point at on this bus, so this is the missing-radio case, not a wedged one"
+        return 1
+    fi
+    [[ -n ${serial} ]] || serial=$( tr -d '\n' < /sys/bus/usb/devices/${dev}/serial 2>/dev/null )
+    serial=${serial:-unknown}
+    if wd_usb_power_reenum_recently "${dev}"; then
+        wd_usb_power_log 2 "usb device ${dev} (RX888 ${serial}) was re-enumerated less than ${WD_USB_REENUM_MIN_MINUTES} minutes ago, not again yet"
+        return 3
+    fi
+    ### Stamp the ATTEMPT, not the successful re-enumeration: an attempt that bails out early (WD_USB_REENUMERATE=no, no
+    ### 'authorized' file, radiod will not stop) must still be throttled, or the watchdog repeats it -- and repeats its
+    ### ERROR line -- every WD_USB_POWER_CHECK_MINUTES.
+    wd_usb_power_ensure_dir && touch "${WD_USB_POWER_LOG_DIR}/usb-reenum.last.${dev//\//_}"
+    ### radiod holds an open libusb handle on the device, and its own libusb_reset_device() on that handle is exactly what
+    ### fails to clear this.  Stop the unit first -- and stop, not restart, so systemd's Restart=always does not race us
+    ### back onto the device while it is de-authorized.
+    if ! timeout 60 sudo systemctl stop "radiod@${inst}" > /dev/null 2>&1 ; then
+        wd_usb_power_log 1 "ERROR: 'systemctl stop radiod@${inst}' failed, so WD will not de-authorize ${dev} underneath it"
+        return 1
+    fi
+    local waited=0
+    while (( waited < 20 )) && ! [[ $(systemctl is-active "radiod@${inst}" 2>/dev/null) == "inactive" || $(systemctl is-active "radiod@${inst}" 2>/dev/null) == "failed" ]]; do
+        sleep 1
+        (( ++waited ))
+    done
+    wd_usb_power_reenumerate_dev "${dev}" "radiod@${inst} gets no samples from RX888 ${serial}, which is enumerated on ${dev}"
+    local reenum_rc=$?
+    if (( reenum_rc == 0 )) && wd_usb_power_wait_for_serial "${serial}"; then
+        wd_usb_power_learn_ports
+        if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
+            wd_usb_power_log 1 "WARNING: restarted radiod@${inst} after re-enumerating RX888 ${serial} on ${dev}"
+            return 0
+        fi
+        wd_usb_power_log 1 "ERROR: radiod@${inst} still will not start after RX888 ${serial} was re-enumerated on ${dev}"
+    elif (( reenum_rc == 0 )); then
+        wd_usb_power_log 1 "ERROR: RX888 ${serial} did not come back within ${WD_USB_POWER_REENUM_SECS} seconds of being re-authorized on ${dev}"
+    fi
+    ### Re-enumeration was not enough (or could not be done).  Now really pull the plug, if this radio is on a hub that switches power.
+    if [[ ${serial} != "unknown" ]] && wd_usb_power_recover_rx888 "${serial}" hung ; then
+        if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
+            wd_usb_power_log 1 "WARNING: restarted radiod@${inst} after power cycling RX888 ${serial}"
+            return 0
+        fi
+    fi
+    ### Do not leave the receiver stopped just because WD could not fix it: put it back under systemd's Restart=always
+    timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 || true
+    wd_usb_power_log 1 "ERROR: RX888 ${serial} (radiod@${inst}, usb ${dev}) is enumerated but delivers no samples, and neither re-enumerating it nor power cycling its port fixed that.  Its cable, its power, or the radio itself needs a look"
+    return 1
+}
+
 ### Watchdog: a radiod@ instance that is enabled but not running because its RX888 is missing gets its port cycled and is restarted.
 function wd_usb_power_check()
 {
@@ -308,8 +469,17 @@ function wd_usb_power_check()
         systemctl is-active --quiet "radiod@${inst}" 2>/dev/null && continue
         systemctl is-enabled --quiet "radiod@${inst}" 2>/dev/null || continue     ### never bring up a receiver the site chose to leave stopped
         serial=$( wd_usb_power_serial_of_instance "${inst}" )
-        [[ -n ${serial} ]] || continue
-        wd_usb_power_dev_of_serial "${serial}" > /dev/null && continue          ### the radio is there; radiod being down is something else
+        ### The radio IS on the bus.  Until 2026-09-14 WD stopped here ("radiod being down is something else") -- but the
+        ### commonest way for a present radio to keep radiod down is the wedge described at the top of this file, and that
+        ### is precisely the case uhubctl can not reach on a root-hub host.  Recover it, and only it: any OTHER reason
+        ### radiod is down is still none of this file's business.
+        if wd_usb_power_dev_of_instance "${inst}" > /dev/null ; then
+            if wd_usb_power_radiod_is_wedged "${inst}" ; then
+                wd_usb_power_recover_wedged_rx888 "${inst}" "${serial}"
+            fi
+            continue
+        fi
+        [[ -n ${serial} ]] || continue     ### no serial in its conf and no radio WD can attribute to it: nothing to power cycle
         ### One attempt (and one ERROR line if it can not be done) per serial per WD_USB_POWER_CYCLE_MIN_MINUTES, not every 2 minutes
         local stamp="${WD_USB_POWER_LOG_DIR}/usb-power.tried.${serial}"
         if [[ -f ${stamp} ]] && (( $(printf "%(%s)T") - $(stat -c %Y "${stamp}" 2>/dev/null || echo 0) < WD_USB_POWER_CYCLE_MIN_MINUTES * 60 )); then
@@ -394,6 +564,26 @@ function wd_usb_power_show()
         any=1
         local seen; seen=$( wd_usb_power_remembered "${serial}" || true )
         echo "  radiod@${inst} ($(systemctl is-active radiod@${inst} 2>/dev/null)) wants ${serial}; last seen: ${seen:-never}${seen:+  [HUB PORT Mb/s WHEN]}"
+    done
+    (( any )) || echo "  none"
+    echo
+    echo "Configured radiod instances whose RX888 IS on the bus but which are not running:"
+    any=0
+    for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
+        [[ -f ${conf} ]] || continue
+        inst=${conf##*/radiod@}; inst=${inst%.conf}
+        systemctl is-active --quiet "radiod@${inst}" 2>/dev/null && continue
+        dev=$( wd_usb_power_dev_of_instance "${inst}" || true )
+        [[ -n ${dev} ]] || continue
+        serial=$( wd_usb_power_serial_of_instance "${inst}" )
+        serial=${serial:-$( tr -d '\n' < /sys/bus/usb/devices/${dev}/serial 2>/dev/null )}
+        any=1
+        if wd_usb_power_radiod_is_wedged "${inst}" ; then
+            echo "  radiod@${inst} ($(systemctl is-active radiod@${inst} 2>/dev/null)): RX888 ${serial} is enumerated on ${dev} but delivers no samples."
+            echo "      WD recovers this by re-enumerating ${dev}; by hand: sudo systemctl stop radiod@${inst} && echo 0 | sudo tee /sys/bus/usb/devices/${dev}/authorized && sleep 3 && echo 1 | sudo tee /sys/bus/usb/devices/${dev}/authorized && sudo systemctl start radiod@${inst}"
+        else
+            echo "  radiod@${inst} ($(systemctl is-active radiod@${inst} 2>/dev/null)): RX888 ${serial} is on the bus at ${dev}, so radiod is down for some other reason; 'journalctl -u radiod@${inst} -n 50'"
+        fi
     done
     (( any )) || echo "  none"
     echo
