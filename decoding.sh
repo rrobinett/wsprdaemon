@@ -2931,101 +2931,139 @@ function get_decoding_status() {
     return 0
 }
 
-### Stores the number of CPUs currently running decode jobs
+### Tracks which decode jobs are currently running, so no more than a configured number run at once.
+###
+### A decoder claims a slot by creating a file named for its own PID and releases it by removing that file.
+### Keying the slot to the holder's PID is what makes this self-healing: a decoder that is killed or exits
+### between claim_cpu() and free_cpu() leaves a slot behind, and the next claim_cpu() reclaims it because
+### the PID is gone.  The earlier design kept a single integer in ACTIVE_DECODING_CPU_COUNT_FILE, which only
+### free_cpu() could decrement and only a holder could call -- so once the count reached the maximum nothing
+### could ever be granted, nothing could ever be freed, and the throttle stayed wedged until the zombie
+### killer in wd_kill_all_jobs() happened to call active_decoding_cpus_init().
 declare ACTIVE_DECODING_CPU_DIR="${WSPRDAEMON_TMP_DIR}/recording.d"
 mkdir -p ${ACTIVE_DECODING_CPU_DIR}   ### Just to be sure
 
 declare ACTIVE_DECODING_CPU_SEMAPHORE_NAME="active_cpus"
-declare ACTIVE_DECODING_CPU_COUNT_FILE="${ACTIVE_DECODING_CPU_DIR}/active_cpus_count"
+declare ACTIVE_DECODING_CPU_COUNT_FILE="${ACTIVE_DECODING_CPU_DIR}/active_cpus_count"    ### Kept up to date for humans and 'wd' status; the slot files are what count
+declare ACTIVE_DECODING_CPU_SLOT_DIR="${ACTIVE_DECODING_CPU_DIR}/active_cpus.d"          ### One file per running decode, named for the decoder's PID
+declare ACTIVE_DECODING_CPU_SLOT_MAX_AGE=${ACTIVE_DECODING_CPU_SLOT_MAX_AGE-600}         ### Reclaim a slot held this long even if its PID is still alive, so PID reuse can't wedge the throttle
+declare WD_CLAIMED_CPU_SLOT_FILE=""                                                      ### Set by claim_cpu() to the slot this process holds, cleared by free_cpu()
 
 function active_decoding_cpus_init()
 {
+    rm -rf ${ACTIVE_DECODING_CPU_SLOT_DIR}
+    mkdir -p ${ACTIVE_DECODING_CPU_SLOT_DIR}
     echo "0" > ${ACTIVE_DECODING_CPU_COUNT_FILE}
 }
 
-### 
-### This waits until it gets the semaphore and then tests and increments the value in 'active_count' which is the number of running decodes
+### Reclaims the slots of decoders which are no longer running and returns the number still held.
+### Call this only while holding the ACTIVE_DECODING_CPU_SEMAPHORE_NAME mutex.
+function active_decoding_cpus_prune()
+{
+    local __return_active_count_variable=$1
+    local __live_slot_count=0
+    local slot_file slot_pid slot_age
+
+    mkdir -p ${ACTIVE_DECODING_CPU_SLOT_DIR}
+    for slot_file in ${ACTIVE_DECODING_CPU_SLOT_DIR}/* ; do
+        [[ -f ${slot_file} ]] || continue                ### The glob didn't match, so no slots are held
+        slot_pid=${slot_file##*/}
+        if ! kill -0 ${slot_pid} 2> /dev/null; then
+            wd_logger 2 "Reclaiming decode slot ${slot_pid} whose decoder is no longer running"
+            rm -f ${slot_file}
+            continue
+        fi
+        slot_age=$(( EPOCHSECONDS - $(stat -c %Y ${slot_file} 2>/dev/null || echo ${EPOCHSECONDS}) ))
+        if (( slot_age > ACTIVE_DECODING_CPU_SLOT_MAX_AGE )); then
+            wd_logger 1 "WARNING: reclaiming decode slot ${slot_pid} held for ${slot_age} seconds, longer than ACTIVE_DECODING_CPU_SLOT_MAX_AGE=${ACTIVE_DECODING_CPU_SLOT_MAX_AGE}"
+            rm -f ${slot_file}
+            continue
+        fi
+        (( ++__live_slot_count ))
+    done
+    echo "${__live_slot_count}" > ${ACTIVE_DECODING_CPU_COUNT_FILE}
+    eval ${__return_active_count_variable}=${__live_slot_count}
+}
+
+###
+### Waits for one of 'semaphore_max_count' decode slots to come free and claims it.
+### Returns 0 having claimed a slot, or 1 if 'semaphore_timeout' seconds passed without one coming free.
 function claim_cpu()
 {
     local semaphore_max_count=$1
     local semaphore_timeout=$2        ### How many seconds to wait
     local rc
 
-    local start_epoch=${EPOCHSECONDS}
-    local end_epoch=$(( ${start_epoch} + ${semaphore_timeout} ))
+    local end_epoch=$(( EPOCHSECONDS + semaphore_timeout ))
 
-    local semaphore_count_filename=${ACTIVE_DECODING_CPU_COUNT_FILE}
+    WD_CLAIMED_CPU_SLOT_FILE=""
 
-    wd_logger 1 "Starting an attempt to get one of the ${semaphore_max_count} semaphores in ${ACTIVE_DECODING_CPU_DIR}. Timeout after ${semaphore_timeout} seconds"
+    wd_logger 2 "Starting an attempt to claim one of the ${semaphore_max_count} decode slots in ${ACTIVE_DECODING_CPU_SLOT_DIR}. Timeout after ${semaphore_timeout} seconds"
 
     while (( EPOCHSECONDS < end_epoch )); do
         wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
         rc=$? ; if (( rc )) ; then
-            wd_logger 1 "ERROR: timeout after waiting to get mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, but try again"
+            wd_logger 2 "Timeout waiting for the ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} mutex within its default ${MUTEX_DEFAULT_TIMEOUT} seconds, so try again"
         else
-            wd_logger 1 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
-            if [[ ! -f ${semaphore_count_filename} ]]; then
-                wd_logger 1 "Creating ${semaphore_count_filename} with count of 0" 
-                echo "0" > ${semaphore_count_filename}
+            local active_count=0
+            active_decoding_cpus_prune active_count
+
+            local claimed_slot_file=""
+            if (( active_count < semaphore_max_count )); then
+                claimed_slot_file=${ACTIVE_DECODING_CPU_SLOT_DIR}/${BASHPID}
+                touch ${claimed_slot_file}
+                echo "$(( active_count + 1 ))" > ${ACTIVE_DECODING_CPU_COUNT_FILE}
             fi
-            local current_semaphore_count=$(< ${semaphore_count_filename})
-            local new_semaphore_count=-1
-            if (( current_semaphore_count < semaphore_max_count )); then
-                new_semaphore_count=$(( current_semaphore_count + 1 ))
-                echo ${new_semaphore_count} > ${semaphore_count_filename}
-            fi
+
             wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
             rc=$? ; if (( rc )) ; then
-                wd_logger 1 "ERROR: When freeing ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} muxtex, got unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}"
-            else
-                wd_logger 1 "Freed ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
+                wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}"
             fi
-            if (( new_semaphore_count > 0 )); then
-                wd_logger 1 "Current semaphone count ${current_semaphore_count} was less than max value ${semaphore_max_count}, so saved new count ${new_semaphore_count} and returning to caller"
+
+            if [[ -n "${claimed_slot_file}" ]]; then
+                WD_CLAIMED_CPU_SLOT_FILE=${claimed_slot_file}
+                wd_logger 2 "Claimed decode slot ${BASHPID}, since only ${active_count} of the ${semaphore_max_count} slots were in use"
                 return 0
-            else
-                wd_logger 1 "Current semaphone count ${current_semaphore_count} is greater than or equal to the max value ${semaphore_max_count}. So sleep and try again"
             fi
+            wd_logger 2 "All ${semaphore_max_count} decode slots are in use, so sleep and try again"
         fi
         wd_logger 2 "Sleeping 1 second"
         sleep 1
     done
-    wd_logger 1 "ERROR: timeout after ${semaphore_timeout} seconds while waiting to get semaphore"
+    wd_logger 2 "Timeout after ${semaphore_timeout} seconds while waiting for a free decode slot"
     return 1
 }
 
-### Decrements the semaphore count and returns
+### Releases the decode slot claimed by this process.
 function free_cpu()
 {
-    local semaphore_count_filename=${ACTIVE_DECODING_CPU_COUNT_FILE}
-
     local rc
-    wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR} 
-    rc=$? ; if (( rc )) ; then
-        wd_logger 1 "ERROR: timeout after waiting to get mutex since we should get it within its default ${MUTEX_DEFAULT_TIMEOUT} seconds"
+
+    if [[ -z "${WD_CLAIMED_CPU_SLOT_FILE}" ]]; then
+        wd_logger 1 "ERROR: called without holding a decode slot, so there is nothing to free"
         return 1
-    else
-        wd_logger 1 "Got ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} in dir ${ACTIVE_DECODING_CPU_DIR} mutex"
-        if [[ ! -f ${semaphore_count_filename} ]]; then
-            wd_logger 1 "ERROR: expected count file ${semaphore_count_filename} does not exist, so wd_semaphore_pget() never ran" 
-        else
-            local current_semaphore_count=$(< ${semaphore_count_filename})
-            wd_logger 1 "current_semaphore_count=${current_semaphore_count}"
-            if (( current_semaphore_count )); then
-                (( --current_semaphore_count ))
-                echo ${current_semaphore_count} > ${semaphore_count_filename}
-                wd_logger 1 "Decremented and wrote new current_semaphore_count=${current_semaphore_count} to ${semaphore_count_filename}"
-            else
-                wd_logger 1 "ERROR: found current count ${current_semaphore_count} is less than the expected >= 1"
-            fi
-        fi
-        wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
-        rc=$? ; if (( rc )); then
-            wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}, but anyway decremented semaphore count to ${current_semaphore_count} and returning"
-        else
-            wd_logger 1 "Decremented semaphore count to ${current_semaphore_count} and returning"
-        fi
-        return 0
     fi
-    ### Should neveer get here
+    local slot_file=${WD_CLAIMED_CPU_SLOT_FILE}
+    WD_CLAIMED_CPU_SLOT_FILE=""
+
+    wd_mutex_lock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
+    rc=$? ; if (( rc )) ; then
+        ### No other process ever touches a slot file named for this PID, so it is safe to drop it without the
+        ### mutex.  Stranding it here is what the old code did, and that is how the throttle used to wedge.
+        rm -f ${slot_file}
+        wd_logger 1 "WARNING: timeout waiting for the ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} mutex, so freed decode slot ${slot_file##*/} without it"
+        return 1
+    fi
+
+    rm -f ${slot_file}
+    local active_count=0
+    active_decoding_cpus_prune active_count
+
+    wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: unexpected error from 'wd_mutex_unlock ${ACTIVE_DECODING_CPU_SEMAPHORE_NAME} ${ACTIVE_DECODING_CPU_DIR}' => ${rc}, but the decode slot was freed"
+        return 1
+    fi
+    wd_logger 2 "Freed decode slot ${slot_file##*/}, leaving ${active_count} slots in use"
+    return 0
 }
