@@ -28,6 +28,10 @@
 ###    device), re-enumerates the device through sysfs 'authorized', starts radiod, and only then falls back to a
 ###    uhubctl power cycle.  Throttled to one attempt per device per WD_USB_REENUM_MIN_MINUTES.
 ###  - build_ka9q_radio() makes the same attempt when a radiod it just rebuilt will not start.
+###  - every restart WD has to perform is recorded in ${WD_USB_RECOVERY_HISTORY_FILE} and reported with a running
+###    24 hour / 7 day count, as a WARNING at first and an ERROR once it passes WD_USB_RECOVERY_WARN_PER_DAY a day.
+###    A recovery that works is still a fault report: a radio needing one that often has a hardware problem, and
+###    silently rescuing it every ten minutes would hide exactly the thing an operator needs to see.  'wd -u' lists it.
 ###  - 'wd -u' (wd-usb / wdu) shows the RX888s, their ports, which are switchable, and the log;
 ###    'wd -U SERIAL|PORT|all' cycles by hand.
 ### A radio on a 480 Mb/s USB 2 port is NEVER cycled: it can not work there, and that is what the operator must fix.
@@ -69,6 +73,13 @@ declare WD_USB_REENUM_MIN_MINUTES=${WD_USB_REENUM_MIN_MINUTES-10}             ##
 declare WD_USB_REENUM_LOOKBACK_MINUTES=${WD_USB_REENUM_LOOKBACK_MINUTES-15}   ### how far back to look for the wedge signature
 declare WD_USB_REENUM_WEDGE_MIN_HITS=${WD_USB_REENUM_WEDGE_MIN_HITS-2}        ### 1 hit is a transient; a wedge repeats every ~12 s
 declare WD_USB_REENUM_WEDGE_REGEX="No rx888 data for|usbi_mutex_lock: Assertion"
+
+### A recovery that works is still a fault report: the radio should not have needed one.  WD records every restart it had
+### to perform and says how often it is having to do it, so a radio that quietly needs rescuing twice an hour is not
+### mistaken for a healthy one.  Rising counts here mean the cable, the power or the radio itself -- not WD.
+declare WD_USB_RECOVERY_HISTORY_FILE=${WD_USB_RECOVERY_HISTORY_FILE-${WD_USB_POWER_LOG_DIR}/rx888-recoveries.log}
+declare WD_USB_RECOVERY_HISTORY_MAX_LINES=${WD_USB_RECOVERY_HISTORY_MAX_LINES-500}
+declare WD_USB_RECOVERY_WARN_PER_DAY=${WD_USB_RECOVERY_WARN_PER_DAY-3}      ### at or above this in 24 h, the WARNING becomes an ERROR
 
 ### Debian 13 installs uhubctl in /usr/sbin, which is not on the wsprdaemon user's PATH (the chronyd trap again), so
 ### never rely on 'command -v uhubctl' alone.  Echoes the binary's path, or nothing.
@@ -396,6 +407,36 @@ function wd_usb_power_radiod_is_wedged()
     (( ${hits:-0} >= WD_USB_REENUM_WEDGE_MIN_HITS ))
 }
 
+### Record that WD had to restart radiod@$1 to get its RX888 working, and say how often that is now happening.
+### $1 instance, $2 sysfs dev, $3 serial, $4 method ("re-enumerate"/"power cycle"), $5 outcome ("recovered"/"failed").
+### Counts are per INSTANCE, over the last 24 hours and 7 days, so one loud radio does not hide behind a quiet one.
+function wd_usb_power_record_recovery()
+{
+    local inst=$1 dev=$2 serial=$3 method=$4 outcome=$5
+    local now; now=$(printf "%(%s)T")
+    wd_usb_power_ensure_dir || return 0
+    ### TAB separated: 'method' is a phrase ("power cycle", "re-enumerate and power cycle"), so whitespace fields would split it
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${now}" "${inst}" "${dev}" "${serial}" "${method}" "${outcome}" \
+        >> "${WD_USB_RECOVERY_HISTORY_FILE}" 2>/dev/null || return 0
+    if (( $(wc -l < "${WD_USB_RECOVERY_HISTORY_FILE}" 2>/dev/null || echo 0) > WD_USB_RECOVERY_HISTORY_MAX_LINES )); then
+        tail -n "${WD_USB_RECOVERY_HISTORY_MAX_LINES}" "${WD_USB_RECOVERY_HISTORY_FILE}" > "${WD_USB_RECOVERY_HISTORY_FILE}.tmp" 2>/dev/null \
+            && mv "${WD_USB_RECOVERY_HISTORY_FILE}.tmp" "${WD_USB_RECOVERY_HISTORY_FILE}"
+    fi
+    local day week first
+    day=$(  awk -F'\t' -v s=$(( now - 86400  )) -v i="${inst}" '$3 == i && $2 >= s' "${WD_USB_RECOVERY_HISTORY_FILE}" 2>/dev/null | wc -l )
+    week=$( awk -F'\t' -v s=$(( now - 604800 )) -v i="${inst}" '$3 == i && $2 >= s' "${WD_USB_RECOVERY_HISTORY_FILE}" 2>/dev/null | wc -l )
+    first=$( awk -F'\t' -v i="${inst}" '$3 == i {print $1; exit}' "${WD_USB_RECOVERY_HISTORY_FILE}" 2>/dev/null )
+    local what="WD had to ${method} RX888 ${serial} (usb ${dev}) and restart radiod@${inst}"
+    [[ ${outcome} == "recovered" ]] || what="WD tried to ${method} RX888 ${serial} (usb ${dev}) to get radiod@${inst} running and could not"
+    if (( day >= WD_USB_RECOVERY_WARN_PER_DAY )); then
+        ### Loud on purpose: at this rate the radio is not working, WD is just papering over it between decode cycles
+        wd_usb_power_log 1 "ERROR: ${what}.  That is ${day} restarts in the last 24 hours (${week} in 7 days, first recorded ${first:-now}).  A radio needing this often has a hardware fault -- check its USB cable, its power supply and which port it is on; 'wd -u' lists the history"
+    else
+        wd_usb_power_log 1 "WARNING: ${what}.  Restarts needed so far: ${day} in the last 24 hours, ${week} in 7 days.  If this keeps rising the radio's cable, power or port is the thing to fix, not WD"
+    fi
+    return 0
+}
+
 ### radiod@$1 can not get samples out of RX888 $2, which IS on the bus.  Stop radiod so it releases the device, force a full
 ### re-enumeration, then start radiod again.  Falls back to a uhubctl power cycle if the radio still will not stream.
 ### 0 = radiod is running again, 3 = throttled, 1 = still broken.
@@ -434,7 +475,7 @@ function wd_usb_power_recover_wedged_rx888()
     if (( reenum_rc == 0 )) && wd_usb_power_wait_for_serial "${serial}"; then
         wd_usb_power_learn_ports
         if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
-            wd_usb_power_log 1 "WARNING: restarted radiod@${inst} after re-enumerating RX888 ${serial} on ${dev}"
+            wd_usb_power_record_recovery "${inst}" "${dev}" "${serial}" "re-enumerate" "recovered"
             return 0
         fi
         wd_usb_power_log 1 "ERROR: radiod@${inst} still will not start after RX888 ${serial} was re-enumerated on ${dev}"
@@ -444,12 +485,13 @@ function wd_usb_power_recover_wedged_rx888()
     ### Re-enumeration was not enough (or could not be done).  Now really pull the plug, if this radio is on a hub that switches power.
     if [[ ${serial} != "unknown" ]] && wd_usb_power_recover_rx888 "${serial}" hung ; then
         if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
-            wd_usb_power_log 1 "WARNING: restarted radiod@${inst} after power cycling RX888 ${serial}"
+            wd_usb_power_record_recovery "${inst}" "${dev}" "${serial}" "power cycle" "recovered"
             return 0
         fi
     fi
     ### Do not leave the receiver stopped just because WD could not fix it: put it back under systemd's Restart=always
     timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 || true
+    wd_usb_power_record_recovery "${inst}" "${dev}" "${serial}" "re-enumerate and power cycle" "failed"
     wd_usb_power_log 1 "ERROR: RX888 ${serial} (radiod@${inst}, usb ${dev}) is enumerated but delivers no samples, and neither re-enumerating it nor power cycling its port fixed that.  Its cable, its power, or the radio itself needs a look"
     return 1
 }
@@ -488,8 +530,9 @@ function wd_usb_power_check()
         wd_usb_power_ensure_dir && touch "${stamp}"
         if wd_usb_power_recover_rx888 "${serial}"; then
             if timeout 60 sudo systemctl restart "radiod@${inst}" > /dev/null 2>&1 ; then
-                wd_usb_power_log 1 "WARNING: restarted radiod@${inst} now that RX888 ${serial} is back"
+                wd_usb_power_record_recovery "${inst}" "$( wd_usb_power_dev_of_serial "${serial}" || echo "-" )" "${serial}" "power cycle" "recovered"
             else
+                wd_usb_power_record_recovery "${inst}" "$( wd_usb_power_dev_of_serial "${serial}" || echo "-" )" "${serial}" "power cycle" "failed"
                 wd_usb_power_log 1 "ERROR: radiod@${inst} failed to start after RX888 ${serial} came back: $(systemctl status radiod@${inst} --no-pager -n 3 2>&1 | tail -n 3)"
             fi
         fi
@@ -586,6 +629,19 @@ function wd_usb_power_show()
         fi
     done
     (( any )) || echo "  none"
+    echo
+    echo "Restarts WD has had to perform to keep a radio working:"
+    if [[ -s ${WD_USB_RECOVERY_HISTORY_FILE} ]]; then
+        local now; now=$(printf "%(%s)T")
+        awk -F'\t' -v d=$(( now - 86400 )) -v w=$(( now - 604800 )) '
+            { n[$3]++; if ($2 >= w) week[$3]++; if ($2 >= d) day[$3]++; if (!($3 in first)) first[$3] = $1; last[$3] = $1 " (" $6 ", " $7 ")" }
+            END { for (i in n) printf "  radiod@%-22s %3d in 24 h  %3d in 7 d  %4d total since %s   last: %s\n", i, day[i], week[i], n[i], first[i], last[i] }
+        ' "${WD_USB_RECOVERY_HISTORY_FILE}" | sort
+        echo "  A radio that needs these repeatedly has a hardware fault -- its USB cable, its power supply, or the port it is on."
+        echo "  Full history: ${WD_USB_RECOVERY_HISTORY_FILE}"
+    else
+        echo "  none -- no radio on this host has ever needed WD to restart it"
+    fi
     echo
     if [[ -f ${WD_USB_POWER_LOG_FILE} ]]; then
         echo "Last lines of ${WD_USB_POWER_LOG_FILE}:"
