@@ -333,6 +333,52 @@ function wd_decode_health_show()
             printf "\n  (cycles actually lost = KILLED + DROPPED.  A healthy band logs one OK line an hour, not one per decode)\n"
         }' ${events_file}
 
+    ### Which configured bands produced no decode at all?  A band that is recorded but never decoded
+    ### writes no rows of its own -- it only surfaces later as DROPPED, once its audio ages out
+    ### MAX_WAV_FILE_AGE_MIN minutes on.  (ON5KQ 2026-09-13: band 22 was silent on both RX888s for 14
+    ### hours, and the first evidence of it was 36 minutes late.)  So compare what WD is configured to
+    ### run against what this log has actually seen.  Compare BANDS, not receiver+band: running.jobs
+    ### names the MERG receiver at a site that merges two SDRs, while the log names the real ones.
+    local running_jobs_file=${WSPRDAEMON_ROOT_DIR:-${HOME}/wsprdaemon}/running.jobs
+    if [[ -f ${running_jobs_file} ]]; then
+        local -a RUNNING_JOBS=()
+        source ${running_jobs_file} 2>/dev/null
+        local silent_window_secs=$(( WD_DECODE_OK_HEARTBEAT_SECS * 2 ))    ### a healthy band writes once an hour
+        local silent_cutoff
+        silent_cutoff=$(TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T' $(( now_epoch - silent_window_secs )) )
+        ### "Has this log seen a full heartbeat interval yet?" is a plain string compare on the
+        ### ISO-8601 Zulu timestamps -- no date parsing, so nothing to get wrong across platforms.
+        local oldest_event heartbeat_cutoff
+        oldest_event=$( head -n 1 ${events_file} | cut -f1 )
+        heartbeat_cutoff=$(TZ=UTC printf '%(%Y-%m-%dT%H:%M:%SZ)T' $(( now_epoch - WD_DECODE_OK_HEARTBEAT_SECS )) )
+        local job band modes
+        local -a silent_bands=()
+        for job in "${RUNNING_JOBS[@]}"; do
+            modes=${job##*,}
+            [[ "${modes}" =~ ^[IJK] ]] && continue        ### IQ / WWV / GRAPE recordings are never decoded
+            band=${job#*,}
+            band=${band%,*}
+            if ! awk -F'\t' -v b="${band}" -v c="${silent_cutoff}" \
+                 'NF >= 8 && $4 == b && $1 >= c { found = 1; exit } END { exit !found }' ${events_file} ; then
+                silent_bands+=( "${band}" )
+            fi
+        done
+        echo ""
+        if (( ${#silent_bands[@]} == 0 )); then
+            echo "  All ${#RUNNING_JOBS[@]} configured jobs have decoded within the last $(( silent_window_secs / 60 )) minutes."
+        elif [[ -z "${oldest_event}" || "${oldest_event}" > "${heartbeat_cutoff}" ]]; then
+            echo "  ${#silent_bands[@]} configured band(s) have not decoded yet: ${silent_bands[*]}"
+            echo "  This log only starts at ${oldest_event:-now} and a healthy band writes one line an hour,"
+            echo "  so shortly after a WD restart this is expected.  Look again in an hour."
+        else
+            echo "  BANDS CONFIGURED BUT NOT DECODING: ${silent_bands[*]}"
+            echo "  Nothing has decoded these in the last $(( silent_window_secs / 60 )) minutes, so their audio is being"
+            echo "  recorded and then purged undecoded.  This is a configuration or a stuck-daemon problem, NOT a"
+            echo "  slow CPU: check each band is in the schedule in wsprdaemon.conf, and that WD is running a"
+            echo "  decoding job for it.  Every cycle on these bands is being lost."
+        fi
+    fi
+
     local lost_bands
     lost_bands=$( awk -F'\t' -v day_ago="${day_ago}" '
         NF >= 8 && $1 >= day_ago && ($2 == "BEHIND" || $2 == "KILLED" || $2 == "DROPPED") {
