@@ -117,6 +117,52 @@ declare MAX_SPOTS_FILES=1000                                  ### Limit our sear
 declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-999}  ### Limit of number of spots to upload in one curl MEPT upload transaction
 declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
 
+### wsprnet.org can reject an upload with a message this code does not recognize -- an invalid grid is one --
+### and until now that "I can't parse the response" case was treated as success and the spot files were
+### deleted.  A site with one bad conf line therefore threw away every spot it decoded and said only
+### WARNING about it (KI4AFE, 2026-09-14: a 10 character REPORTER_GRID lost every spot for as long as it
+### was set).  Those files are now kept and retried instead, but a site nobody is watching must not fill
+### /dev/shm with them either: each file is offered at most WSPRNET_MAX_UPLOAD_ATTEMPTS times and then
+### dropped with an ERROR which quotes what the server actually said.
+declare WSPRNET_MAX_UPLOAD_ATTEMPTS=${WSPRNET_MAX_UPLOAD_ATTEMPTS-10}
+declare UPLOAD_ATTEMPTS_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_attempts.txt
+
+### Record one more failed upload attempt against each of the spot files just offered, and echo the ones
+### which have now been tried WSPRNET_MAX_UPLOAD_ATTEMPTS times and should be given up on.  The counts live
+### in a file so that a daemon restart does not reset them -- a permanently rejected site would otherwise
+### retry for ever -- and every call prunes the entries whose file is gone, so it cannot grow without bound.
+function wsprnet_bump_upload_attempts()
+{
+    local spot_files_list=( ${@} )
+    local -A attempts_count=()
+    local spot_file attempt_count
+
+    if [[ -f ${UPLOAD_ATTEMPTS_FILE} ]]; then
+        while read -r attempt_count spot_file ; do
+            [[ -z "${spot_file}" ]] && continue
+            [[ -f "${spot_file}" ]] && attempts_count[${spot_file}]=${attempt_count}    ### Drop files which have since been uploaded or purged
+        done < ${UPLOAD_ATTEMPTS_FILE}
+    fi
+
+    local exhausted_files_list=()
+    for spot_file in ${spot_files_list[@]} ; do
+        attempt_count=$(( ${attempts_count[${spot_file}]-0} + 1 ))
+        if [[ ${attempt_count} -ge ${WSPRNET_MAX_UPLOAD_ATTEMPTS} ]]; then
+            exhausted_files_list+=( ${spot_file} )
+            unset "attempts_count[${spot_file}]"
+        else
+            attempts_count[${spot_file}]=${attempt_count}
+        fi
+    done
+
+    : > ${UPLOAD_ATTEMPTS_FILE}
+    for spot_file in "${!attempts_count[@]}" ; do
+        echo "${attempts_count[${spot_file}]} ${spot_file}" >> ${UPLOAD_ATTEMPTS_FILE}
+    done
+
+    echo "${exhausted_files_list[@]-}"
+}
+
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_wsprnet_create_spot_file_list_file()
 {
@@ -331,11 +377,21 @@ function upload_to_wsprnet_daemon() {
                 continue
             fi
 
-             ### Upload all the spots for one CALL_GRID in one curl transaction 
-            wd_logger 1 "Uploading ${call} at ${grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
+            ### wsprnet.org's MEPT endpoint takes a 4 or 6 character Maidenhead locator and rejects the WHOLE
+            ### log with 'invalid grid' when given more.  A GRAPE/PSWS site legitimately runs an 8 or 10
+            ### character REPORTER_GRID -- grape-utils.sh builds the wav-archive path out of it, so shortening
+            ### it in wsprdaemon.conf would move that site's PSWS archive -- so report the first 6 characters
+            ### here and leave the configured grid alone everywhere else.
+            local wsprnet_grid=${grid:0:6}
+            if [[ "${wsprnet_grid}" != "${grid}" ]]; then
+                wd_logger 2 "Reporting the 6 character grid '${wsprnet_grid}' to wsprnet.org, which rejects the ${#grid} character '${grid}' configured for this receiver"
+            fi
+
+             ### Upload all the spots for one CALL_GRID in one curl transaction
+            wd_logger 1 "Uploading ${call} at ${wsprnet_grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
 
             local start_epoch=${EPOCHSECONDS}
-            curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+            curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${wsprnet_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
             local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
             if [[ $ret_code -ne 0 ]]; then
@@ -372,12 +428,26 @@ function upload_to_wsprnet_daemon() {
                 fi
             fi
 
+            local flush_spot_files="yes"        ### Cleared only while spots are still worth retrying
             local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
             if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
                 wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots which we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
             elif [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
-                wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH}) So presume spots were recorded and flush them from our cache"
-            else 
+                ### The server said something this code cannot read, so it did NOT tell us it recorded these
+                ### spots.  Keep them and offer them again, until they have had WSPRNET_MAX_UPLOAD_ATTEMPTS
+                ### goes -- a rejection the operator has to fix, like a bad grid, never clears by itself and
+                ### the files would otherwise accumulate in /dev/shm until MAX_WAV_FILE_AGE_MIN purged them.
+                local exhausted_files_list=( $(wsprnet_bump_upload_attempts ${upload_spots_file_list[@]}) )
+                if [[ ${#exhausted_files_list[@]} -eq 0 ]]; then
+                    flush_spot_files="no"
+                    wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo the ${#upload_spots_file_list[@]} spot files are being kept and will be offered again"
+                else
+                    wd_logger 1 "ERROR: wsprnet.org has not accepted these ${#exhausted_files_list[@]} spot files in ${WSPRNET_MAX_UPLOAD_ATTEMPTS} attempts, so the spots in them are being discarded.  Fix what the server is complaining about:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})"
+                    wd_rm ${exhausted_files_list[@]}
+                    ### Anything still under its attempt limit stays for the next pass
+                    [[ ${#exhausted_files_list[@]} -lt ${#upload_spots_file_list[@]} ]] && flush_spot_files="no"
+                fi
+            else
                 local spots_xfered=${spot_xfer_counts[0]}
                 local spots_offered=${spot_xfer_counts[1]}
                 if ! is_uint ${spots_xfered} || ! is_uint  ${spots_offered} ; then
