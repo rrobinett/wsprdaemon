@@ -2022,9 +2022,15 @@ function build_psk_uploader() {
                     echo ${force_abort}
                 fi
             fi
+            ### On a PEP-668 'externally managed' Python a system wide 'pip install' is refused unless
+            ### '--break-system-packages' is given.  This used to name the releases it knew about, which
+            ### is why Ubuntu 26.04 was missed: it ships /usr/lib/python3.14/EXTERNALLY-MANAGED and would
+            ### have failed here (KI4AFE, 2026-09-14 -- only masked because docopt was already an apt
+            ### package).  Look for the marker the way install_python_package() in config-utils.sh does,
+            ### so the next release after this one needs no edit.  The version tests remain as a fallback.
             local pip3_extra_args=""
-            if [[ "${VERSION_ID}" == "24.04" || "${VERSION_ID}" == "12" ]]; then
-                pip3_extra_args="--break-system-package"
+            if ls /usr/lib/python3*/EXTERNALLY-MANAGED >& /dev/null || [[ ${VERSION_ID} =~ ^1[23]$ || ${VERSION_ID} == "24.04" ]]; then
+                pip3_extra_args="--break-system-packages"
                 wd_logger 1 "Adding extra args to pip: ${pip3_extra_args}"
             fi
             pip3 install docopt ${pip3_extra_args}
@@ -2205,8 +2211,15 @@ function build_psk_uploader() {
     return 0
 }
 
+### These are the 64-bit time_t names, which arrived in Ubuntu 24.04 and Debian 13 and are what every
+### release since those calls them.  Testing for 24.04 alone meant a 26.04 host quietly built onion
+### without them (KI4AFE, 2026-09-14; it linked only because the libraries happened to be installed).
+### Test "that transition or later": a VERSION_ID with a dot is Ubuntu style (24.04, 26.04), one
+### without is Debian (13).  Kept as a string test rather than asking apt, because this runs at source
+### time on every WD command and must stay free.
 declare ONION_LIBS_NEEDED="libgnutls28-dev libgcrypt20-dev cmake"
-if [[ ${VERSION_ID} =~ 24.04 ]]; then
+if awk -v version="${VERSION_ID-0}" 'BEGIN { split(version, field, "."); major = field[1] + 0
+        exit !( (field[2] == "" && major >= 13) || (field[2] != "" && major >= 24) ) }' 2>/dev/null; then
     ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
 
