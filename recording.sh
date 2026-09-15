@@ -715,9 +715,44 @@ COMMENT_OUT_LINES
 }
 
 #############################################################
-declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
-function purge_stale_recordings() 
+### wd-record's '-q pcmrecord-errors.log' diagnostic file (see the pcm_record_cmd_args above) is
+### written for the life of the recorder and nothing ever trims it.  Its content is one per-SSRC
+### clock-skew line per interval -- useful when chasing a timing problem, worthless the rest of the
+### time -- and it lives in ${WSPRDAEMON_TMP_DIR}, which is tmpfs, so every byte is RAM.  At KI4AFE
+### on 2026-09-14 it had reached 582 MB on the WSPR receiver and 210 MB on the WWV one, about 800 MB
+### of a 19 GB machine, growing ~7 MB/hour and bounded only by the next restart.
+###
+### Keep the newest half rather than deleting it: a recorder which IS having timing trouble still has
+### its recent evidence.  The file is rewritten in place (cat over it) rather than replaced with mv,
+### so a recorder holding the path open keeps writing to the same inode.  Checked on KI4AFE: no
+### process holds this file open between writes -- wd-record opens, appends and closes -- so the
+### truncation cannot race a held file offset.
+declare MAX_PCMRECORD_LOG_BYTES=${MAX_PCMRECORD_LOG_BYTES-1000000}
+function purge_oversize_recording_logs()
 {
+    local log_file log_bytes
+    for log_file in $( find ${WSPRDAEMON_TMP_DIR}/recording.d -name 'pcmrecord-*.log' 2> /dev/null ) ; do
+        log_bytes=$( stat -c %s "${log_file}" 2>/dev/null )
+        [[ ${log_bytes} =~ ^[0-9]+$ ]] || continue
+        (( log_bytes <= MAX_PCMRECORD_LOG_BYTES )) && continue
+        local tmp_file="${log_file}.trim"
+        if tail -c $(( MAX_PCMRECORD_LOG_BYTES / 2 )) "${log_file}" > "${tmp_file}" 2>/dev/null && cat "${tmp_file}" > "${log_file}" 2>/dev/null ; then
+            wd_logger 1 "Trimmed ${log_file} from ${log_bytes} to $( stat -c %s "${log_file}" 2>/dev/null ) bytes, since it is in RAM and nothing else trims it"
+        else
+            wd_logger 1 "ERROR: failed to trim ${log_file}, which is ${log_bytes} bytes of RAM"
+        fi
+        wd_rm "${tmp_file}" 2>/dev/null
+    done
+    return 0
+}
+
+#############################################################
+declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
+function purge_stale_recordings()
+{
+    ### Before the early return below: these logs grow whether or not there are stale wav files
+    purge_oversize_recording_logs
+
     local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} 2> find.stderr) )
 
     if [[ ${#old_wav_file_list[@]} -eq 0 ]]; then
