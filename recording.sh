@@ -727,21 +727,87 @@ COMMENT_OUT_LINES
 ### so a recorder holding the path open keeps writing to the same inode.  Checked on KI4AFE: no
 ### process holds this file open between writes -- wd-record opens, appends and closes -- so the
 ### truncation cannot race a held file offset.
+### Trim one text log to the newest half of ${max_bytes}, in place.  Rewriting the file with 'cat'
+### rather than replacing it with 'mv' keeps the inode, so a writer which is holding the path open
+### keeps writing to the same file instead of to an orphan nothing will ever read.
+function wd_trim_log_file()
+{
+    local log_file=$1
+    local max_bytes=$2
+    local log_bytes
+
+    log_bytes=$( stat -c %s "${log_file}" 2>/dev/null )
+    [[ ${log_bytes} =~ ^[0-9]+$ ]] || return 0
+    (( log_bytes <= max_bytes )) && return 0
+
+    ### The scratch copy cannot simply live next to the log: ka9q-radio's /var/lib/ka9q-radio is
+    ### mode 750 and WD is only in its group, so the directory is r-x to us while the log file inside
+    ### it is rw.  Write the scratch copy somewhere we know we can write, and cat it back over the
+    ### log, which needs nothing but the log's own write bit.
+    local tmp_file
+    tmp_file=$( mktemp "${WSPRDAEMON_TMP_DIR:-/tmp}/wd-trim-XXXXXX" 2>/dev/null ) || tmp_file=$( mktemp 2>/dev/null )
+    if [[ -z "${tmp_file}" ]]; then
+        wd_logger 1 "ERROR: can't create a scratch file, so ${log_file} (${log_bytes} bytes) was not trimmed"
+        return 0
+    fi
+    if tail -c $(( max_bytes / 2 )) "${log_file}" > "${tmp_file}" 2>/dev/null && cat "${tmp_file}" > "${log_file}" 2>/dev/null ; then
+        wd_logger 1 "Trimmed ${log_file} from ${log_bytes} to $( stat -c %s "${log_file}" 2>/dev/null ) bytes, since nothing else trims it"
+    else
+        wd_logger 1 "ERROR: failed to trim ${log_file}, which is ${log_bytes} bytes"
+    fi
+    wd_rm "${tmp_file}" 2>/dev/null
+    return 0
+}
+
 declare MAX_PCMRECORD_LOG_BYTES=${MAX_PCMRECORD_LOG_BYTES-1000000}
 function purge_oversize_recording_logs()
 {
-    local log_file log_bytes
+    local log_file
     for log_file in $( find ${WSPRDAEMON_TMP_DIR}/recording.d -name 'pcmrecord-*.log' 2> /dev/null ) ; do
-        log_bytes=$( stat -c %s "${log_file}" 2>/dev/null )
-        [[ ${log_bytes} =~ ^[0-9]+$ ]] || continue
-        (( log_bytes <= MAX_PCMRECORD_LOG_BYTES )) && continue
-        local tmp_file="${log_file}.trim"
-        if tail -c $(( MAX_PCMRECORD_LOG_BYTES / 2 )) "${log_file}" > "${tmp_file}" 2>/dev/null && cat "${tmp_file}" > "${log_file}" 2>/dev/null ; then
-            wd_logger 1 "Trimmed ${log_file} from ${log_bytes} to $( stat -c %s "${log_file}" 2>/dev/null ) bytes, since it is in RAM and nothing else trims it"
-        else
-            wd_logger 1 "ERROR: failed to trim ${log_file}, which is ${log_bytes} bytes of RAM"
+        wd_trim_log_file "${log_file}" ${MAX_PCMRECORD_LOG_BYTES}
+    done
+    return 0
+}
+
+#############################################################
+### ka9q-radio's own working directory needs the same housekeeping: wav files no decoder collected,
+### and .log files with no bound.  ka9q-ft-cleanup.sh has always done this and its header says "run
+### by cron every 10 minutes" -- but KI4AFE (2026-09-15) has no cron installed at all, so there it
+### had never run once.  WD does not require cron, so it should not depend on it for housekeeping,
+### and the watchdog is already making a pass over the recording tree: do it here.
+###
+### That script also hard-codes /dev/shm/ka9q-radio, which is the OLD location.  The FT wav files now
+### go under KA9Q_FT_TMP_ROOT (ka9q-utils.sh:1629), /var/lib/ka9q-radio by default.  At KI4AFE
+### /dev/shm/ka9q-radio does not exist, so even WITH cron that script would have cleaned nothing,
+### while /var/lib/ka9q-radio/fft.log sat at 1.6 MB unbounded.  Cover both paths, old and new.
+declare MAX_KA9Q_RADIO_LOG_BYTES=${MAX_KA9Q_RADIO_LOG_BYTES-1000000}
+declare MAX_KA9Q_RADIO_WAV_AGE_MIN=${MAX_KA9Q_RADIO_WAV_AGE_MIN-30}
+function purge_ka9q_radio_files()
+{
+    ### This tree is ka9q-radio's, not WD's: /var/lib/ka9q-radio is mode 750 radio:radio and WD runs
+    ### as a member of that group, so the top directory is r-x to us while its ft4/ft8 subdirectories
+    ### are group writable and the log files inside are group writable.  Test each file for what the
+    ### operation actually needs -- unlinking a wav needs its PARENT writable, rewriting a log needs
+    ### only the log itself -- rather than gating the whole pass on the top directory.
+    local ka9q_dir
+    for ka9q_dir in "${KA9Q_FT_TMP_ROOT:-/var/lib/ka9q-radio}" /dev/shm/ka9q-radio ; do
+        [[ -d "${ka9q_dir}" ]] || continue
+
+        ### A wav still here this long after it was written is one no decoder ever collected
+        local old_wav_list=() old_wav
+        for old_wav in $( find "${ka9q_dir}" -type f -name '*wav' -mmin +${MAX_KA9Q_RADIO_WAV_AGE_MIN} 2>/dev/null ) ; do
+            [[ -w "${old_wav%/*}" ]] && old_wav_list+=( "${old_wav}" )
+        done
+        if (( ${#old_wav_list[@]} )); then
+            wd_logger 1 "Deleting ${#old_wav_list[@]} wav file(s) under ${ka9q_dir} which no decoder collected within ${MAX_KA9Q_RADIO_WAV_AGE_MIN} minutes"
+            wd_rm ${old_wav_list[@]}
         fi
-        wd_rm "${tmp_file}" 2>/dev/null
+
+        local log_file
+        for log_file in $( find "${ka9q_dir}" -type f -name '*.log' 2>/dev/null ) ; do
+            [[ -w "${log_file}" ]] || continue
+            wd_trim_log_file "${log_file}" ${MAX_KA9Q_RADIO_LOG_BYTES}
+        done
     done
     return 0
 }
@@ -750,8 +816,9 @@ function purge_oversize_recording_logs()
 declare MAX_WAV_FILE_AGE_MIN=${MAX_WAV_FILE_AGE_MIN-35}
 function purge_stale_recordings()
 {
-    ### Before the early return below: these logs grow whether or not there are stale wav files
+    ### Before the early return below: both of these grow whether or not there are stale wav files
     purge_oversize_recording_logs
+    purge_ka9q_radio_files
 
     local old_wav_file_list=( $(find ${WSPRDAEMON_TMP_DIR}/recording.d -name '*.wav' -mmin +${MAX_WAV_FILE_AGE_MIN} 2> find.stderr) )
 
