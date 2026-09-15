@@ -194,16 +194,28 @@ function wd_cpu_tuning_write_plan_conf()
 ### 4.55 GHz with the fan flat out on hardware its owner had deliberately held to 2.6 GHz: WD
 ### disabled his setting and offered nothing in its place.  A cap the operator wrote down is a
 ### decision, not noise, so it survives the migration.
-### The per-core fields are dropped, and only DEFAULT is carried: the planner decides which core
-### does what now, so a list keyed by core number has no meaning once the layout moves.
+### The per-core fields cannot be carried across as core NUMBERS -- the planner decides which core
+### does what now, so a list keyed by core number has no meaning once the layout moves.  They are not
+### noise either: on every layout WD shipped, the cores an operator called out by number were the FAST
+### ones, the cores they kept clear for radiod.  Folding them into one every-core ceiling is how n6gn5
+### ended up running radiod at the decoder's 1.4 GHz (2026-09-14, from
+### CPU_CORE_KHZ="DEFAULT:1400000,0:2800000,1:2800000"): its fft thread burned 105% of a core where an
+### identical 129.6 Msps receiver at 3.0 GHz used 47%.  So DEFAULT becomes WD_CPU_FREQ_OTHER_MHZ and
+### the highest per-core value becomes WD_CPU_FREQ_RADIOD_MHZ, which says what the operator meant
+### without naming a core.  With no exception above DEFAULT there is nothing to split out and the
+### single WD_CPU_FREQ_MAX_MHZ knob is still what gets written.
 function wd_cpu_tuning_migrate_cpu_core_khz()
 {
     local conf=${WSPRDAEMON_CONFIG_FILE}
 
     [[ -f ${conf} ]] || return 0
-    ### Already said in the new form, here or in the file: leave it alone
-    [[ -n "${WD_CPU_FREQ_MAX_MHZ}${WD_CPU_FREQ_RADIOD_MHZ}${WD_CPU_FREQ_OTHER_MHZ}" ]] && return 0
-    grep -qE "^[[:space:]]*WD_CPU_FREQ_(MAX|RADIOD|OTHER)_MHZ=" "${conf}" && return 0
+    ### Already said in the new form, here or in the file: leave it alone, but check first whether an
+    ### earlier run of this function is what said it, having flattened a faster radiod core away.
+    if [[ -n "${WD_CPU_FREQ_MAX_MHZ}${WD_CPU_FREQ_RADIOD_MHZ}${WD_CPU_FREQ_OTHER_MHZ}" ]] \
+        || grep -qE "^[[:space:]]*WD_CPU_FREQ_(MAX|RADIOD|OTHER)_MHZ=" "${conf}" ; then
+        wd_cpu_tuning_warn_flattened_migration "${conf}"
+        return 0
+    fi
 
     local legacy
     legacy=$(grep -E "^[[:space:]]*CPU_CORE_KHZ=" "${conf}" | tail -1)
@@ -220,6 +232,25 @@ function wd_cpu_tuning_migrate_cpu_core_khz()
         wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} has ${legacy}, whose ${mhz} MHz is outside the sane 400..9999 MHz range, so no clock ceiling was carried forward"
         return 0
     fi
+
+    ### The highest '<core>:<khz>' field is the ceiling the operator kept for their hot cores
+    local legacy_value=${legacy#*=}
+    legacy_value=${legacy_value%%#*}
+    legacy_value=${legacy_value//\"/}
+    legacy_value=${legacy_value//\'/}
+    legacy_value=${legacy_value// /}
+    local fast_khz=0 field field_khz
+    for field in ${legacy_value//,/ } ; do
+        [[ ${field} =~ ^[0-9]+:[0-9]+$ ]] || continue
+        field_khz=${field#*:}
+        (( field_khz > fast_khz )) && fast_khz=${field_khz}
+    done
+    local fast_mhz=$(( fast_khz / 1000 ))
+    if (( fast_mhz > 9999 )); then
+        wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} has ${legacy}, whose fastest per-core ${fast_mhz} MHz is above the sane 9999 MHz limit, so only its DEFAULT was carried forward"
+        fast_mhz=0
+    fi
+    (( fast_mhz <= mhz )) && fast_mhz=0      ### nothing was held faster than the default, so there is nothing to split out
     if [[ ! -w ${conf} ]]; then
         wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} caps the clocks at ${mhz} MHz with CPU_CORE_KHZ, which the planner ignores, but the file is not writable so WD_CPU_FREQ_MAX_MHZ=\"${mhz}\" could not be added for you"
         return 0
@@ -230,7 +261,23 @@ function wd_cpu_tuning_migrate_cpu_core_khz()
         wd_cpu_tuning_log 1 "ERROR: CPU tuning: could not back up ${conf}, so CPU_CORE_KHZ was not carried forward"
         return 1
     fi
-    cat >> "${conf}" <<EOF
+    if (( fast_mhz )); then
+        cat >> "${conf}" <<EOF
+
+### Carried forward from CPU_CORE_KHZ by WD CPU tuning ${stamp}.  With WD_CPU_TUNING="yes" the planner
+### owns the clock policy, and these are the knobs that cap it, in MHz.  The old line named cores by
+### number, which the planner no longer honours, so its DEFAULT became the ceiling for the decoder/OS
+### cores and its fastest per-core field -- the cores that had been kept clear for radiod -- became the
+### ceiling for radiod's cores.  Unset, radiod runs at the hardware maximum and the other cores at
+### 1400 MHz.  WD_CPU_FREQ_MAX_MHZ caps both halves at once.  See wd-cpu-tuning.md.
+WD_CPU_FREQ_OTHER_MHZ="${mhz}"
+WD_CPU_FREQ_RADIOD_MHZ="${fast_mhz}"
+EOF
+        WD_CPU_FREQ_OTHER_MHZ=${mhz}            ### take effect on THIS run, not only the next one
+        WD_CPU_FREQ_RADIOD_MHZ=${fast_mhz}
+        wd_cpu_tuning_log 1 "CPU tuning: carried ${legacy_value} forward into WD_CPU_FREQ_OTHER_MHZ=\"${mhz}\" and WD_CPU_FREQ_RADIOD_MHZ=\"${fast_mhz}\" in ${conf} (backup: ${conf}.bak-cpu-tuning-${stamp})"
+    else
+        cat >> "${conf}" <<EOF
 
 ### Carried forward from CPU_CORE_KHZ by WD CPU tuning ${stamp}.  With WD_CPU_TUNING="yes" the
 ### planner owns the clock policy, and this is the knob that caps it: MHz, applied to every core.
@@ -238,8 +285,46 @@ function wd_cpu_tuning_migrate_cpu_core_khz()
 ### unset, radiod runs at the hardware maximum and the other cores at 1400 MHz.  See wd-cpu-tuning.md.
 WD_CPU_FREQ_MAX_MHZ="${mhz}"
 EOF
-    WD_CPU_FREQ_MAX_MHZ=${mhz}      ### take effect on THIS run, not only the next one
-    wd_cpu_tuning_log 1 "CPU tuning: carried the ${mhz} MHz ceiling from CPU_CORE_KHZ forward into WD_CPU_FREQ_MAX_MHZ in ${conf} (backup: ${conf}.bak-cpu-tuning-${stamp})"
+        WD_CPU_FREQ_MAX_MHZ=${mhz}      ### take effect on THIS run, not only the next one
+        wd_cpu_tuning_log 1 "CPU tuning: carried the ${mhz} MHz ceiling from CPU_CORE_KHZ forward into WD_CPU_FREQ_MAX_MHZ in ${conf} (backup: ${conf}.bak-cpu-tuning-${stamp})"
+    fi
+    return 0
+}
+
+### Sites migrated before the per-core fields were understood carry a single WD_CPU_FREQ_MAX_MHZ that
+### clamps radiod to what was only ever meant to be the decoder ceiling.  Their conf cannot be rewritten
+### safely -- the operator may have since chosen that value deliberately -- so say plainly what was lost
+### and what to write instead.  The evidence is in the backup this function took at migration time.
+function wd_cpu_tuning_warn_flattened_migration()
+{
+    local conf=$1
+    local backup legacy legacy_value field field_khz default_khz=0 fast_khz=0
+
+    [[ -n "${WD_CPU_FREQ_RADIOD_MHZ}" ]] && return 0        ### the operator has already said what radiod gets
+    grep -qE "^[[:space:]]*WD_CPU_FREQ_RADIOD_MHZ=" "${conf}" && return 0
+
+    for backup in "${conf}".bak-cpu-tuning-* ; do
+        [[ -f ${backup} ]] || continue
+        legacy=$(grep -E "^[[:space:]]*CPU_CORE_KHZ=" "${backup}" | tail -1)
+        [[ -n ${legacy} ]] && break
+    done
+    [[ -n ${legacy} ]] || return 0
+
+    legacy_value=${legacy#*=}
+    legacy_value=${legacy_value%%#*}
+    legacy_value=${legacy_value//\"/}
+    legacy_value=${legacy_value//\'/}
+    legacy_value=${legacy_value// /}
+    default_khz=${legacy_value#*DEFAULT:}
+    default_khz=${default_khz%%[^0-9]*}
+    for field in ${legacy_value//,/ } ; do
+        [[ ${field} =~ ^[0-9]+:[0-9]+$ ]] || continue
+        field_khz=${field#*:}
+        (( field_khz > fast_khz )) && fast_khz=${field_khz}
+    done
+    (( fast_khz > default_khz )) || return 0
+
+    wd_cpu_tuning_log 1 "WARNING: CPU tuning: ${conf} was migrated from ${legacy_value}, which held some cores at $(( fast_khz / 1000 )) MHz, but only its DEFAULT of $(( default_khz / 1000 )) MHz was carried forward, so radiod is capped at the decoder clock and its fft thread burns roughly $(( fast_khz / default_khz )) times the CPU it needs.  Replace WD_CPU_FREQ_MAX_MHZ with WD_CPU_FREQ_OTHER_MHZ=\"$(( default_khz / 1000 ))\" and WD_CPU_FREQ_RADIOD_MHZ=\"$(( fast_khz / 1000 ))\", then restart WD"
     return 0
 }
 
