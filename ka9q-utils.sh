@@ -1421,63 +1421,94 @@ function build_ka9q_radio() {
          esac
     done
 
-    ### Make sure the wisdomf needed for effecient execution of radiod exists
-    wd_logger 2 "Creating or updating /etc/fftw/wisdom"
-    killall fftwf-wisdom 2> /dev/null
-
-    local fftwf_stdout_file_path=$(mktemp)
-    local tmp_wisdom_file_path="/tmp/wisdom"
-
-    local fft_129_Msps=""   ### Since it takes hours to calculate, by default don't cacluate the optimzations for 129 Msps
+    ### Make sure the wisdom radiod needs exists -- WITHOUT holding up this start while it is computed
+    ###
+    ### rof3240000 is the forward transform radiod runs at 129.6 Msps, and it is the one that takes hours to plan.
+    ### A 64.8 Msps site runs rof1620000 instead and should not pay for the big one.
+    local fft_129_Msps=""
     if [[ ! "${RX888_64_MSPS:-no}" =~ ^[Yy] ]]; then      ### same case-insensitive test; "YES" here cost hours of needless wisdom computation
         fft_129_Msps="rof3240000"
     fi
+    local wisdom_spec_list="rof1620000 cob162000 cob81000 cob40500 cob32400 cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15"
+    [[ -n "${fft_129_Msps}" ]] && wisdom_spec_list="${fft_129_Msps} ${wisdom_spec_list}"
+    local tmp_wisdom_file_path="/tmp/wisdom"
+    local wisdom_marker_file_path="${KA9Q_RADIO_WISDOM_FILE_PATH}.specs"
+    local wisdom_runner_path="/usr/local/sbin/wd-fftw-wisdom.sh"
+    local wisdom_log_file_path="/var/log/wd-fftw-wisdom.log"
+    local wisdom_service_name="wd-fftw-wisdom"
 
-    local ref_wisdom_file_arg=""
-    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]]; then
-        ref_wisdom_file_arg="-w ${KA9Q_RADIO_WISDOM_FILE_PATH}"
-    fi
-    /usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 ${ref_wisdom_file_arg} -o ${tmp_wisdom_file_path} ${fft_129_Msps}  \
-                                rof1620000 cob162000 cob81000 cob40500 cob32400 \
-                                cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 \
-                                cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15 \
-                                >${fftwf_stdout_file_path} 2>&1 &
-    local fftwf_pid=$!
-    local pgid=$(ps -o pgid= "$fftwf_pid" | tr -d ' ')
-
-    ### If the user decides to abort that spawned fftwf-widsom job, kill the spawned job
-    trap "echo 'Aborted. Killing process group $pgid'; kill -TERM -"$pgid" 2>/dev/null; exit 130" INT
-
-    if timeout 5 tail -f --pid=${fftwf_pid} /dev/null; then
-        wd_logger 2 "fftwf-wisdom finished in less than 5 seconds:\n$(<${fftwf_stdout_file_path})\n"
+    ### This used to run fftwf-wisdom in the foreground on every start, print "may take hours", tail its progress,
+    ### and then decide whether to keep the result by comparing file SIZES.  Three things went wrong with that.
+    ### An operator watching their receiver sit there for hours interrupts it.  On a greenfield install the existing
+    ### file is 0 bytes, so a leftover partial /tmp/wisdom is "larger" and gets installed anyway.  And the exit
+    ### status of fftwf-wisdom was never examined at all.
+    ###
+    ### What that leaves is a wisdom file holding the small transforms and no plan for the one transform radiod
+    ### actually runs.  FFTW then falls back to an estimate plan and fft costs about twice what it should, with
+    ### nothing in any log to say so: radiod still prints 'fftwf_import_wisdom_from_filename(...) succeeded',
+    ### which only means the file parsed.  A 2026-09-14 sweep of the 35 RAC hosts running radiod found 11 stuck
+    ### this way at ~154 plans against 400-600 where a run had finished; OE3GBB's /tmp/wisdom had been frozen at
+    ### its thin 14,930 bytes since 2026-09-10 through several WD restarts.  n6gn5 measured fft at 99.8% of a
+    ### 2.93 GHz core with 156 plans and 49.6% with 590, on identical 129.6 Msps work.
+    ###
+    ### So the planning now runs detached, as a nice 19 transient systemd unit OUTSIDE WD's cgroup, and installs
+    ### its own result.  WD does not wait for it, a WD restart in the middle of a multi-hour plan does not kill it,
+    ### and nothing is installed unless the run finished.  The specs it covered are recorded beside the wisdom so
+    ### a healthy site never plans again -- which is what made operators interrupt it in the first place.
+    ### Note there is deliberately no 'killall fftwf-wisdom' here any more: that is what would guarantee the
+    ### background planner never reaches the end.
+    if [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} && -f ${FFTW_SYSTEM_WISDOM_FILE_PATH} && -f ${wisdom_marker_file_path} ]] \
+        && [[ "$(cat ${wisdom_marker_file_path} 2>/dev/null)" == "${wisdom_spec_list}" ]]; then
+        wd_logger 2 "${KA9Q_RADIO_WISDOM_FILE_PATH} already covers '${wisdom_spec_list}', so there is no FFT planning to do"
+    elif systemctl is-active --quiet ${wisdom_service_name}.service 2>/dev/null ; then
+        wd_logger 1 "The FFT planning radiod needs is still running in the background as ${wisdom_service_name}.service, started $(systemctl show ${wisdom_service_name}.service -p ActiveEnterTimestamp --value 2>/dev/null).  Watch it with 'journalctl -u ${wisdom_service_name} -f' or in ${wisdom_log_file_path}"
     else
-        wd_logger 1 "Optimizing the FFT library.  Watching it progess, which may take hours..."
-        tail -f --pid=${fftwf_pid} ${fftwf_stdout_file_path}
+        ### The runner installs the result itself, so that a WD restart part way through a multi-hour plan costs nothing
+        sudo tee ${wisdom_runner_path} > /dev/null <<EOF
+#!/bin/bash
+### Written by WD's build_ka9q_radio().  Plans the FFTs radiod needs, then installs the result.
+exec >> ${wisdom_log_file_path} 2>&1
+echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) planning '${wisdom_spec_list}'"
+declare ref_arg=""
+[[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]] && ref_arg="-w ${KA9Q_RADIO_WISDOM_FILE_PATH}"
+/usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 \${ref_arg} -o ${tmp_wisdom_file_path} ${wisdom_spec_list}
+declare rc=\$?
+if (( rc )); then
+    echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: 'fftwf-wisdom' => \${rc}, so nothing was installed"
+    exit \${rc}
+fi
+declare installed_all="yes" wisdom_file new_size cur_size
+for wisdom_file in ${KA9Q_RADIO_WISDOM_FILE_PATH} ${FFTW_SYSTEM_WISDOM_FILE_PATH} ; do
+    new_size=\$(stat -c %s ${tmp_wisdom_file_path} 2>/dev/null || echo 0)
+    cur_size=0
+    [[ -f \${wisdom_file} ]] && cur_size=\$(stat -c %s \${wisdom_file})
+    if (( new_size < cur_size )); then
+        ### A completed run starts from the existing file, so this should not happen; leave the better file alone
+        echo "WARNING: the \${new_size} byte result is smaller than the \${cur_size} byte \${wisdom_file}, so \${wisdom_file} was left alone"
+        installed_all="no"
+    elif (( new_size > cur_size )); then
+        ### On a greenfield install /etc/fftw doesn't exist (nothing in Debian/Ubuntu creates it), so the 'cp' below would fail
+        mkdir -p \${wisdom_file%/*}
+        cp -p ${tmp_wisdom_file_path} \${wisdom_file}
+        chmod 664 \${wisdom_file}
+        chown --reference=\${wisdom_file%/*} \${wisdom_file}
+        echo "installed the \${new_size} byte result as \${wisdom_file}"
     fi
-    trap - INT     ### Cancel the trap
-
-    ### Ensure that both /etc/fftw/wisdomf and /var/lib/ka9q-radio/wisdom are present and updated to the most complete FFT planning which was just created above
-    for wisdom_file in ${KA9Q_RADIO_WISDOM_FILE_PATH} ${FFTW_SYSTEM_WISDOM_FILE_PATH}; do
-        local current_wisdom_file_size=0
-        if [[ -f ${wisdom_file} ]]; then
-            current_wisdom_file_size=$(stat -c %s ${wisdom_file} );
-        fi
-        local new_wisdom_file_size=0
-        if [[ -f ${tmp_wisdom_file_path} ]]; then
-            new_wisdom_file_size=$(stat -c %s ${tmp_wisdom_file_path});
-        fi
-        if (( new_wisdom_file_size <= current_wisdom_file_size )); then
-            wd_logger 2 "No need to update ${wisdom_file}"
+done
+if [[ \${installed_all} == "yes" ]]; then
+    ### Record what this wisdom covers so no later start re-plans it
+    echo "${wisdom_spec_list}" > ${wisdom_marker_file_path}
+    chmod 664 ${wisdom_marker_file_path}
+    echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) done"
+fi
+EOF
+        sudo chmod 755 ${wisdom_runner_path}
+        if sudo systemd-run --unit=${wisdom_service_name} --description="WD FFT planning for radiod" --nice=19 --collect ${wisdom_runner_path} > /dev/null 2>&1 ; then
+            wd_logger 1 "The FFT planning radiod needs has not been done, so it is now running in the background as ${wisdom_service_name}.service at nice 19.  It can take hours, but WD is not waiting for it and neither should you; until it finishes radiod runs an estimated FFT costing about twice the CPU.  Watch it with 'journalctl -u ${wisdom_service_name} -f'"
         else
-            wd_logger 1 "The ${new_wisdom_file_size} byte file ${tmp_wisdom_file_path} is larger than the ${current_wisdom_file_size} byte ${wisdom_file}, so install it"
-            ### On a greenfield install /etc/fftw doesn't exist (nothing in Debian/Ubuntu creates it), so the 'cp' below would fail
-            sudo mkdir -p ${wisdom_file%/*}
-            sudo cp -p ${tmp_wisdom_file_path} ${wisdom_file}
-            sudo chmod 664 ${wisdom_file}
-            sudo chown --reference=${wisdom_file%/*} ${wisdom_file}
+            wd_logger 1 "ERROR: 'systemd-run ${wisdom_service_name}' failed, so the FFT planning radiod needs has not been done.  Until it is, radiod's fft thread costs about twice the CPU it needs.  Run '${wisdom_runner_path}' by hand"
         fi
-    done
-    rm ${fftwf_stdout_file_path}
+    fi
 
     ### Make sure the udev permissions are set to allow radiod access to the RX888 on the USB bus
     wd_logger 2 "Instructing the udev system to give radiod permissions to access the RX888"
