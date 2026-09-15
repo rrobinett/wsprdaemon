@@ -1164,20 +1164,23 @@ function wd_apply_ka9q_radio_patches() {
     return 0
 }
 
-### Install the reference wisdom for this host's FFTW build string, if we ship one.
+### Install the reference wisdom for this host's FFTW build string and CPU model, if we ship one.
 ###
 ### Planning locally is a bad deal on a receiver: fftw-wisdom defaults to FFTW_PATIENT, which CHOOSES
 ### between candidate plans by timing them, and every one of those timings on a live WD host is taken
-### while radiod's fft thread owns a core and the decoders burst across the rest.  The ranking is then
-### made on numbers that describe the contention as much as the plan.  Running the planner at nice 19
-### to keep it off the receiver makes the measurements noisier still, since trials get descheduled
-### part way through.  Wisdom measured once on a quiet machine avoids the whole question, and it
-### transfers: n6gn5 (5825U) runs a plan measured on n6gn3 (5800H) at 49.6% of a core where its own
-### unplanned FFT cost 99.8%.
+### while radiod's fft thread owns a core and the decoders burst across the rest.  Measured on an idle
+### n6gn5, pinned to radiod's own core inside its CAT partition, a full plan of the list below takes
+### 1:47:51 of a 3.0 GHz core -- which is also why no site should be doing this at every start.
 ###
-### Returns 0 only when a reference file for this exact build string was found and installed.  Anything
-### else -- no radiod to ask, a build string we do not ship, an unreadable file -- returns non-zero so
-### the caller falls back to planning locally in the background.
+### The reference goes in as the SYSTEM wisdom and the site's own file is left alone.  radiod imports
+### /etc/fftw/wisdomf and then /var/lib/ka9q-radio/wisdom, and FFTW accumulates both, so nothing a site
+### has already measured is lost and the reference only fills in what it lacks.  That matters: across
+### 50 fleet wisdom files collected 2026-09-15, EVERY one was missing between 32 and 155 of the
+### reference's 155 entries, including files three times its size.  Bigger is not a superset.
+###
+### Returns 0 only when a reference was found and installed.  Anything else -- no radiod to ask, a
+### build string or CPU we do not ship, an unreadable file -- returns non-zero so the caller falls back
+### to planning locally in the background.
 function wd_fftw_install_reference_wisdom()
 {
     local wisdom_spec_list=$1 wisdom_marker_file_path=$2
@@ -1188,45 +1191,36 @@ function wd_fftw_install_reference_wisdom()
         wd_logger 2 "Could not read radiod's FFTW build string, so no reference wisdom can be chosen"
         return 1
     fi
-    local reference_file="${FFTW_REFERENCE_WISDOM_DIR}/${build_string}.wisdom"
-    if [[ ! -r ${reference_file} ]]; then
-        wd_logger 1 "WD ships no reference wisdom for '${build_string}', so this host has to measure its own FFT plan"
+    ### The plan is chosen for a particular core and cache, so the reference is per CPU model as well as
+    ### per codelet set.  lscpu's model name, lowercased, every run of non-alphanumerics collapsed to '-'.
+    local cpu_slug
+    cpu_slug=$( lscpu 2>/dev/null | grep -m1 "Model name" | sed 's/.*: *//; s/ *$//' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//' )
+    if [[ -z ${cpu_slug} ]]; then
+        wd_logger 2 "Could not read this host's CPU model, so no reference wisdom can be chosen"
         return 1
     fi
-    ### Refuse a reference that is not what it claims: the first line names the codelet set it was measured with
+    local reference_file="${FFTW_REFERENCE_WISDOM_DIR}/${build_string}/${cpu_slug}.wisdom"
+    if [[ ! -r ${reference_file} ]]; then
+        wd_logger 1 "WD ships no reference wisdom for ${build_string} on '${cpu_slug}', so this host has to measure its own FFT plan"
+        return 1
+    fi
+    ### Refuse a reference that is not what it claims
     if ! head -1 "${reference_file}" | grep -q "fftwf_wisdom" ; then
         wd_logger 1 "ERROR: ${reference_file} does not look like fftwf wisdom, so it was not installed"
         return 1
     fi
-
-    local wisdom_file installed_any="no"
-    local reference_size
-    reference_size=$( stat -c %s "${reference_file}" )
-    for wisdom_file in ${KA9Q_RADIO_WISDOM_FILE_PATH} ${FFTW_SYSTEM_WISDOM_FILE_PATH}; do
-        local current_size=0
-        [[ -f ${wisdom_file} ]] && current_size=$( stat -c %s ${wisdom_file} )
-        if (( reference_size <= current_size )); then
-            ### Never trade a bigger local file for the reference: a site that has already measured more than we ship keeps it
-            wd_logger 2 "${wisdom_file} is ${current_size} bytes against the ${reference_size} byte reference, so leave it alone"
-            continue
-        fi
-        wd_logger 1 "Installing the ${reference_size} byte reference wisdom for ${build_string} as ${wisdom_file}, replacing ${current_size} bytes"
-        sudo mkdir -p ${wisdom_file%/*}
-        sudo cp -p "${reference_file}" ${wisdom_file}
-        sudo chmod 664 ${wisdom_file}
-        sudo chown --reference=${wisdom_file%/*} ${wisdom_file}
-        installed_any="yes"
-    done
-
-    if [[ ${installed_any} == "no" ]]; then
-        ### The local files are already larger than what we ship, but "larger" does not prove they COVER these specs --
-        ### that is the assumption which left 11 sites believing a 154-plan file was fine.  Say nothing about coverage and
-        ### let the caller fall through to planning, which establishes it for real.
-        wd_logger 2 "Both wisdom files are already larger than the ${build_string} reference, so nothing was installed"
-        return 1
+    if cmp -s "${reference_file}" "${FFTW_SYSTEM_WISDOM_FILE_PATH}" ; then
+        wd_logger 2 "${FFTW_SYSTEM_WISDOM_FILE_PATH} is already the ${cpu_slug} reference"
+        return 1        ### nothing to do here, and the caller still has to establish coverage
     fi
 
-    ### Record what it covers so no later start re-plans it.  RESTART REQUIRED: radiod reads wisdom only at startup
+    wd_logger 1 "Installing the ${cpu_slug} reference wisdom for ${build_string} as ${FFTW_SYSTEM_WISDOM_FILE_PATH}; ${KA9Q_RADIO_WISDOM_FILE_PATH} is left as this site measured it"
+    sudo mkdir -p ${FFTW_SYSTEM_WISDOM_FILE_PATH%/*}
+    sudo cp -p "${reference_file}" ${FFTW_SYSTEM_WISDOM_FILE_PATH}
+    sudo chmod 664 ${FFTW_SYSTEM_WISDOM_FILE_PATH}
+    sudo chown --reference=${FFTW_SYSTEM_WISDOM_FILE_PATH%/*} ${FFTW_SYSTEM_WISDOM_FILE_PATH}
+
+    ### Record what it covers so no later start re-plans it
     echo "${wisdom_spec_list}" | sudo tee ${wisdom_marker_file_path} > /dev/null
     sudo chmod 664 ${wisdom_marker_file_path}
     wd_logger 1 "RESTART REQUIRED: radiod imports wisdom only at startup, so restart it to pick up the reference plan"
