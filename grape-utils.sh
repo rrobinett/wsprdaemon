@@ -586,11 +586,44 @@ function grape_create_wav_file()
     local rc
 
     local output_10sps_wav_file="${compressed_wav_file_dir}/${GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME}"
+    ### A full day of this file is a fixed size: MINUTES_PER_DAY minutes * 60 s * 10 sps * 2 channels (IQ)
+    ### * 4 bytes per float sample, plus a 58 byte wav header.  284 of the 287 files at KI4AFE were exactly
+    ### that.  The test below is against the SAMPLE bytes alone so a differing header size can never make a
+    ### good file look short.
+    local -r full_day_sample_bytes=$(( MINUTES_PER_DAY * 60 * 10 * 2 * 4 ))
+    local -r partial_output_file="${output_10sps_wav_file}.partial"
+
     wd_logger 2 "Check for the 10 sps wav file ${output_10sps_wav_file} and create it if it doesn't exist"
     if [[ -f ${output_10sps_wav_file} ]]; then
-        wd_logger 2 "The 10 sps wav file ${output_10sps_wav_file} exists, so there is nothing to do in this directory"
-        return 0
+        ### 'it exists' is not the same as 'it is finished'.  sox writes this file progressively, in place,
+        ### over the 5-30 minutes it takes, and it runs inside WD's cgroup -- so a 'systemctl restart
+        ### wsprdaemon' part way through leaves a half written file here.  That file then satisfied the -f
+        ### test below for ever, so the band was never rebuilt and the truncated file was uploaded to PSWS
+        ### as a full day.  It cannot be caught by reading the file either: sox writes the header with the
+        ### INTENDED length before the samples, so 'soxi -D' reports a confident 86400.000000 seconds for a
+        ### file which is half missing.  Only the size on disk tells the truth.
+        ### Found at KI4AFE 2026-09-15: 20260731/WWV_2_5 at 19% and 20260903/WWV_2_5 at 49%, written six
+        ### weeks and twelve days earlier, both long since uploaded, and neither rebuildable because their
+        ### source .wv files had been purged after that upload.
+        local existing_file_bytes
+        existing_file_bytes=$( stat -c %s "${output_10sps_wav_file}" 2>/dev/null || echo 0 )
+        if (( existing_file_bytes >= full_day_sample_bytes )); then
+            wd_logger 2 "The 10 sps wav file ${output_10sps_wav_file} exists and is a full day, so there is nothing to do in this directory"
+            return 0
+        fi
+        ### Only throw the short file away if it can actually be replaced.  Once a day has been uploaded its
+        ### .wv files are purged, so for an old truncation there is nothing left to rebuild from -- deleting
+        ### it then would just leave the band with no file at all and log the same error on every pass for
+        ### ever.  Both of KI4AFE's were in that state.  Say so once per pass and leave the evidence in place.
+        if ! compgen -G "${compressed_wav_file_dir}/*.wv" > /dev/null 2>&1 ; then
+            wd_logger 1 "ERROR: ${output_10sps_wav_file} is only ${existing_file_bytes} of the ${full_day_sample_bytes} bytes a full day holds, so an earlier run was interrupted while writing it -- and its source .wv files have since been purged, so it CANNOT be rebuilt.  That day is incomplete at PSWS and this file is being left in place as the record of it"
+            return 0
+        fi
+        wd_logger 1 "ERROR: ${output_10sps_wav_file} is only ${existing_file_bytes} bytes, short of the ${full_day_sample_bytes} bytes a full day holds, so an earlier run was interrupted part way through writing it.  Deleting it and building it again"
+        wd_rm "${output_10sps_wav_file}"
     fi
+    ### Anything left from a previous interrupted run is worthless; it is rebuilt from the .wv files below
+    [[ -f ${partial_output_file} ]] && wd_rm "${partial_output_file}"
 
     local compressed_wav_file_list=()
     compressed_wav_file_list=( $( find -L ${compressed_wav_file_dir} -name '*.wv' -printf '%p\n' | sort ) )   ### sort the output of find to ensure the array elements are in time order
@@ -634,10 +667,30 @@ function grape_create_wav_file()
     wd_logger 1 "Creating one 24 hour, 10 hz wav file ${output_10sps_wav_file} from ${#compressed_wav_file_list[@]} .wv files..."
     local sox_log_file_name="${compressed_wav_file_dir}/sox.log"
     ulimit -n 2048    ### sox will open 1440+ files, so up the open file limit
-    nice -n 19 sox ${compressed_wav_file_list[@]} --encoding float --bits 32 ${output_10sps_wav_file} rate 10 >& ${sox_log_file_name}
+    ### Write to a temporary name and rename only once sox has succeeded AND produced a full day.  This run
+    ### takes 5-30 minutes inside WD's cgroup, so it WILL be killed part way through by an ordinary
+    ### 'systemctl restart wsprdaemon'; writing straight to the final name is what turned each of those
+    ### kills into a permanently truncated file that nothing ever rebuilt.  The rename is atomic and within
+    ### the same directory, so the final name only ever appears complete.
+    nice -n 19 sox ${compressed_wav_file_list[@]} --encoding float --bits 32 ${partial_output_file} rate 10 >& ${sox_log_file_name}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'sox ...' => ${rc}:\n$(<${sox_log_file_name})"
-         return ${GRAPE_ERROR_SOX_FAILED}
+        wd_rm "${partial_output_file}"
+        return ${GRAPE_ERROR_SOX_FAILED}
+    fi
+    local created_file_bytes
+    created_file_bytes=$( stat -c %s "${partial_output_file}" 2>/dev/null || echo 0 )
+    if (( created_file_bytes < full_day_sample_bytes )); then
+        ### sox returned 0 but did not produce a whole day, so something upstream is short.  Do not publish it.
+        wd_logger 1 "ERROR: 'sox ...' reported success but wrote only ${created_file_bytes} bytes, short of the ${full_day_sample_bytes} bytes a full day holds, so ${output_10sps_wav_file} was NOT created"
+        wd_rm "${partial_output_file}"
+        return ${GRAPE_ERROR_SOX_FAILED}
+    fi
+    mv "${partial_output_file}" "${output_10sps_wav_file}"
+    rc=$? ; if (( rc )); then
+        wd_logger 1 "ERROR: 'mv ${partial_output_file} ${output_10sps_wav_file}' => ${rc}"
+        wd_rm "${partial_output_file}"
+        return ${GRAPE_ERROR_SOX_FAILED}
     fi
     if [[ -z  ${sox_log_file_name} ]]; then
         wd_logger 1 "Created ${output_10sps_wav_file}, but sox reported:\n$(< ${sox_log_file_name})"
