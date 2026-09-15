@@ -1040,8 +1040,20 @@ function wait_until_newest_tmp_file_is_closed()
         ### Since I can't suppress those messages, direct stderr to /dev/null so those messages don't appear in the user's terminal window
         find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \)  >find.log 2>/dev/null
         rc=$?; if (( rc )); then
-            wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1' "
-            echo ${force_abort}
+            ### A failed 'find' here -- or a failed '>find.log' redirect, which reports the same rc without ever running find -- almost always means
+            ### this daemon's own directory has been deleted out from under it.  systemd-logind's RemoveIPC does exactly that to /dev/shm/wsprdaemon
+            ### when the last 'wsprdaemon' login session ends on a host where 'loginctl enable-linger wsprdaemon' has never been run: on n6gn5
+            ### 2026-09-14 every decoding daemon died right here on 'force_abort: unbound variable' and each band lost its cycle.  Return to the
+            ### caller, which recreates the tree and respawns the recorder, instead of killing this daemon.
+            if ! [[ -d "." ]]; then
+                wd_logger 1 "ERROR: this decoding daemon's working directory has been deleted, so return to the caller which will recreate it"
+            elif ! [[ -d "${wav_file_dir_path}" ]]; then
+                wd_logger 1 "ERROR: the wav file directory ${wav_file_dir_path} has been deleted, so return to the caller which will recreate it"
+            else
+                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)' => ${rc}"
+            fi
+            sleep 1
+            return 1
         fi
         newest_tmp_wav_file=$(sort find.log | tail -1 )
         if [[ -n "${newest_tmp_wav_file}" ]]; then
@@ -1125,9 +1137,18 @@ function wait_until_newest_tmp_file_is_closed()
             wd_logger 1 "After that wait look for a '${wav_file_regex}' file in ${wav_file_dir_path}"
             local after_wait_file_list=( $(find  "${wav_file_dir_path}" -maxdepth 1 -type f \( -name "${wav_file_regex}" -o -name "${wav_file_regex}.tmp" \) 2>find.stderr ) )
             rc=$?; if (( rc )); then
-                wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1':\n$(<find.stderr) "
-                echo -e "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)  | sort | tail -1':\n$(<find.stderr) "
-                echo ${force_abort}
+                ### Same failure mode as the 'find' at the top of this loop: usually this daemon's directory or ${wav_file_dir_path} has been
+                ### deleted.  Let the caller recreate it rather than aborting the daemon.  The bare 'echo -e' that used to be here wrote the
+                ### error onto this function's stdout, which no caller reads.
+                if ! [[ -d "." ]]; then
+                    wd_logger 1 "ERROR: this decoding daemon's working directory has been deleted, so return to the caller which will recreate it"
+                elif ! [[ -d "${wav_file_dir_path}" ]]; then
+                    wd_logger 1 "ERROR: the wav file directory ${wav_file_dir_path} has been deleted, so return to the caller which will recreate it"
+                else
+                    wd_logger 1 "ERROR: 'find  ${wav_file_dir_path} -maxdepth 1 -type f \( -name ${wav_file_regex} -o -name ${wav_file_regex}.tmp \)' => ${rc}:\n$(cat find.stderr 2>/dev/null)"
+                fi
+                sleep 1
+                return 1
             fi
             if (( ${#after_wait_file_list[@]} )); then
                 wd_logger 1 "${#after_wait_file_list[@]} wav file(s) appeared after the wait.  So go back and wait for the newest wav file to be closed"
