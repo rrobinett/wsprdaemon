@@ -279,6 +279,109 @@ function wd_decode_health_record_drop()
     return 0
 }
 
+### Is wd-record still writing wav files?
+###
+### Everything below this file is about what happened to a wav file AFTER it was recorded, and all of
+### it goes quiet in the one case it cannot see: the recording stopping.  A band whose audio never
+### arrives runs no decode, so it logs no LATE, no KILLED and no DROPPED -- it simply vanishes from
+### the report, and 'wdb' says all is well.  (KI4AFE, 2026-09-14: the operator's own first guess was
+### that recording had stopped, and there was no way to answer that from here.)
+###
+### This asks the only question that matters for that: for each receiver WD is recording, how old is
+### the newest wav file?  A receiver recording 60 second files should never be more than a cycle or
+### two behind, so anything older than WD_RECORDING_STALE_SECS is reported.  It reads the file tree
+### and 'pgrep' at the moment 'wdb' runs -- no daemon, no state file and no per-cycle cost.
+declare WD_RECORDING_STALE_SECS=${WD_RECORDING_STALE_SECS-180}      ### Three 60 second files: a recorder this far behind has stopped
+
+function wd_recording_health_show()
+{
+    ### The -b report path does not source everything the daemons do, so find the recording tree the
+    ### same way recording.sh builds it (${WSPRDAEMON_TMP_DIR}/recording.d) but tolerate it being unset.
+    local tmp_dir
+    for tmp_dir in "${WSPRDAEMON_TMP_DIR-}" /dev/shm/wsprdaemon /tmp/wsprdaemon /tmp/wspr-captures ; do
+        [[ -n "${tmp_dir}" && -d "${tmp_dir}/recording.d" ]] && break
+        tmp_dir=""
+    done
+    if [[ -z "${tmp_dir}" ]]; then
+        echo "  Recording: no recording.d directory found, so WD is not recording on this host"
+        return 0
+    fi
+
+    local recorder_count
+    recorder_count=$( pgrep -c -f "wd-record|pcmrecord" 2>/dev/null )
+    [[ ${recorder_count} =~ ^[0-9]+$ ]] || recorder_count=0
+
+    ### Which receivers SHOULD be recording?  running.jobs is the authoritative list -- its entries are
+    ### RECEIVER,BAND,MODES -- and using it means a receiver whose directory is missing entirely is
+    ### reported rather than overlooked.  recording.d also holds WD's own working directories
+    ### (active_cpus.d and the like), which are not receivers and must not be mistaken for silent ones.
+    local -a receivers_list=()
+    local running_jobs_file=${WSPRDAEMON_ROOT_DIR:-${HOME}/wsprdaemon}/running.jobs
+    if [[ -f ${running_jobs_file} ]]; then
+        local -a RUNNING_JOBS=()
+        source ${running_jobs_file} 2>/dev/null
+        local job_entry
+        for job_entry in "${RUNNING_JOBS[@]}" ; do
+            receivers_list+=( "${job_entry%%,*}" )
+        done
+        IFS=$'\n' receivers_list=( $( printf '%s\n' "${receivers_list[@]}" | sort -u ) ); unset IFS
+    fi
+    if (( ${#receivers_list[@]} == 0 )); then
+        ### No running.jobs to consult, so fall back to the tree.  Only a directory which HAS wav files
+        ### can be judged here: one with none may simply not be a receiver.
+        local receiver_dir
+        for receiver_dir in "${tmp_dir}"/recording.d/*/ ; do
+            [[ -d "${receiver_dir}" ]] || continue
+            compgen -G "${receiver_dir}/*.wav" > /dev/null 2>&1 || find "${receiver_dir}" -name '*.wav' -print -quit 2>/dev/null | grep -q . || continue
+            local dir_name=${receiver_dir%/}
+            receivers_list+=( "${dir_name##*/}" )
+        done
+    fi
+
+    local now_epoch=${EPOCHSECONDS}
+    local stale_list=() ok_count=0 receiver_name
+    for receiver_name in "${receivers_list[@]}" ; do
+        local receiver_dir="${tmp_dir}/recording.d/${receiver_name}"
+        if [[ ! -d "${receiver_dir}" ]]; then
+            stale_list+=( "${receiver_name}: has no recording directory" )
+            continue
+        fi
+        ### The newest wav anywhere under this receiver: wd-record writes them flat, and the decoders
+        ### move them into per-band subdirectories, so either location counts as "still recording".
+        local newest_epoch
+        newest_epoch=$( find "${receiver_dir}" -name '*.wav' -printf '%T@\n' 2>/dev/null | sort -rn | head -n 1 )
+        newest_epoch=${newest_epoch%.*}
+        if [[ ! ${newest_epoch} =~ ^[0-9]+$ ]]; then
+            stale_list+=( "${receiver_name}: no wav files at all" )
+            continue
+        fi
+        local age_secs=$(( now_epoch - newest_epoch ))
+        if (( age_secs > WD_RECORDING_STALE_SECS )); then
+            stale_list+=( "${receiver_name}: newest wav is ${age_secs} s old" )
+        else
+            (( ++ok_count ))
+        fi
+    done
+
+    if (( ${#stale_list[@]} == 0 )); then
+        echo "  Recording: ${ok_count} receiver(s) writing wav files now, ${recorder_count} recorder process(es) running"
+        return 0
+    fi
+    echo "  Recording: ERROR: these receivers have written no wav file in the last ${WD_RECORDING_STALE_SECS} s:"
+    local stale_entry
+    for stale_entry in "${stale_list[@]}" ; do
+        echo "      ${stale_entry}"
+    done
+    echo "    ${ok_count} other receiver(s) are recording normally, and ${recorder_count} recorder process(es) are running."
+    if (( recorder_count == 0 )); then
+        echo "    No wd-record/pcmrecord process is running at all, so check that radiod is up and publishing:"
+        echo "    'systemctl status radiod@*' and 'wd -s'."
+    else
+        echo "    A recorder is running but its audio has stopped, which is usually radiod or the SDR rather than WD."
+    fi
+    return 0
+}
+
 ### 'wsprdaemon.sh -b' / 'wdb'.  Everything the operator needs to answer "did I lose any cycles?"
 function wd_decode_health_show()
 {
@@ -297,6 +400,10 @@ function wd_decode_health_show()
     echo "    LATE    = one decode started a cycle or more late.  Normal after the :00/:30 F5+F15+F30 wave"
     echo "    CAUGHT_UP = a late run ended by itself, which is the design working"
     echo "    OK        = an hourly heartbeat from a band that is keeping up"
+    echo ""
+    ### Recording first: every status below depends on a wav file having arrived, so if none is
+    ### arriving the rest of this report is silent rather than wrong, and silence reads as health.
+    wd_recording_health_show
     echo ""
     if [[ ! -f "${log_file}" ]]; then
         echo "No decode events have been recorded yet (there is no ${WD_DECODE_HEALTH_LOG})."
