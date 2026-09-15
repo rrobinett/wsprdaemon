@@ -17,7 +17,28 @@
 # core:khz list that knew nothing about which cores run radiod, and whose UNSET DEFAULT capped
 # every core at 3.2 GHz -- hiding 0.86 GHz of headroom on a 5825U at every site that never set it.
 #
-# HOW WELL THE CAP ACTUALLY BITES, measured on a Ryzen 5560U (amd-pstate, 2026-08-31):
+# HOW WELL THE CAP ACTUALLY BITES DEPENDS ON THE KERNEL.  Read both halves of this before
+# changing a clock default: the answer on a 6.x kernel and the answer on a 7.x kernel are opposite,
+# and the defaults below were chosen under the 6.x answer.
+#
+# ON A 7.x KERNEL, amd-pstate ENFORCES scaling_max_freq as a real ceiling.  Measured at KI4AFE
+# (Ryzen 7 7735HS, amd-pstate-epp active, prefcore on, Ubuntu 26.04, kernel 7.0.0-30-generic,
+# 2026-09-15) by stepping the decoder cap and reading what the cores actually ran at while decoding:
+#     cap 1400 MHz -> 1328 MHz,  61.2 C
+#     cap 2200 MHz -> 1988 MHz,  62.0 C
+#     cap 3000 MHz -> 2851 MHz,  64.4 C
+#     uncapped     -> 3670 MHz,  76.0 C
+#   Every step lands just under the number asked for, which is exactly what the 6.x measurements
+#   below say does NOT happen.  So on 7.x the cap means what it says, a site that upgrades gets a
+#   real 1.4 GHz decoder ceiling it never had before, and the number has to be justified on its
+#   merits rather than because it was expected to be ignored.
+#   It was still the right number there: with the same host's decode load, all four settings ran
+#   with zero LATE / BEHIND / KILLED / DROPPED events over 48 minutes, so 1.4 GHz had enough
+#   headroom and the 15 C between it and uncapped bought nothing.  Note the load that made 1.4 GHz
+#   look too slow at that site turned out to be wasted 'sox' decoding, not the clock -- fix what is
+#   consuming the cores before concluding the ceiling is too low.
+#
+# ON A 6.x KERNEL it is advisory.  Measured on a Ryzen 5560U (amd-pstate, 2026-08-31):
 #   setting scaling_max_freq is ADVISORY on amd-pstate, not a hard ceiling.  The cap takes the
 #   core off boost and no further.  Time a fixed workload to check this; do not trust
 #   scaling_cur_freq, which on a 5560U kept reporting 3.2 GHz regardless of the setting.

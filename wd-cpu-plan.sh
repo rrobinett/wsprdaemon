@@ -28,15 +28,31 @@ RADIOD_INSTANCES="${RADIOD_INSTANCES:-}"        # override; else auto-detect
 RADIOD_NAMES="${RADIOD_NAMES:-}"                # override; else auto-detect (sorted)
 RADIOD_L3_FRACTION="${RADIOD_L3_FRACTION:-0.62}" # ~5/8; tune per site
 MIN_DECODER_WAYS="${MIN_DECODER_WAYS:-4}"
-### Clock cap for every cpu that is NOT radiod's.  This is a REQUEST, not a ceiling.  On the
-### amd-pstate parts most WD sites run, any value below the silicon's non-boost ceiling behaves
-### identically: the core settles around 2.7-3.2 GHz, roughly 1.5x slower than uncapped, and never
-### anywhere near this number (measured at KX4AZ-T on a Ryzen 7 5825U, 2026-09-10; see
-### wd-cpu-freq.sh's header for the full measurements).  1.4 GHz is kept as the default precisely
-### BECAUSE it is safely below every part's floor.  Do not "correct" it upward to the ~3.2 GHz the
-### cores actually reach: FREQ_OTHER is clamped to the hardware maximum below, so on a part whose
-### maximum is lower than that the cap would become a no-op and the decoders would get their boost
-### back, which is the opposite of what this setting is for.
+### Clock cap for every cpu that is NOT radiod's.  Whether this is a REQUEST or a real ceiling
+### depends on the kernel, so it means two different things across the fleet today:
+###
+###   On a 6.x kernel it is advisory.  Any value below the silicon's non-boost ceiling behaves
+###   identically: the core settles around 2.7-3.2 GHz, roughly 1.5x slower than uncapped, and
+###   never anywhere near this number (measured at KX4AZ-T on a Ryzen 7 5825U, 2026-09-10).
+###
+###   On a 7.x kernel amd-pstate ENFORCES it.  Measured at KI4AFE on a Ryzen 7 7735HS under
+###   Ubuntu 26.04 / kernel 7.0.0-30 on 2026-09-15: caps of 1400/2200/3000 kHz produced cores
+###   running at 1328/1988/2851 MHz, i.e. the cores really do sit just under whatever is asked for.
+###
+### See wd-cpu-freq.sh's header for both sets of measurements.
+###
+### 1.4 GHz was originally chosen precisely BECAUSE it was safely below every part's floor and so
+### could not bite.  That reasoning no longer holds on 7.x, where it is a genuine 1.4 GHz ceiling
+### and a site upgrading its OS gets one it never had before.  The value is kept anyway, now on its
+### own merits: re-measured at KI4AFE after fixing the wasted 'sox' decoding which had been eating
+### six cores there, 1400/2200/3000/uncapped all ran that site's 17 WSPR bands plus FT8/FT4 plus
+### seven WWV channels with zero LATE, BEHIND, KILLED or DROPPED events, while uncapped cost 15 C
+### more package heat (61.2 C -> 76.0 C).  So the headroom is real at 1.4 GHz and buying more clock
+### bought nothing.  If a site looks starved at this setting, find out what is consuming its cores
+### before raising it -- at KI4AFE that diagnosis was wrong twice before the real cause was found.
+### Still do not "correct" this upward toward the ~3.2 GHz the 6.x cores reach: FREQ_OTHER is
+### clamped to the hardware maximum below, so on a part whose maximum is lower the cap would become
+### a no-op and the decoders would get their boost back, which is the opposite of the intent.
 ### A site sets this from wsprdaemon.conf as WD_CPU_FREQ_OTHER_MHZ (or WD_CPU_FREQ_MAX_MHZ);
 ### wd-cpu-tuning.sh converts it to kHz here so the boot-time wd-cpu-freq.service sees it too.
 FREQ_OTHER_KHZ="${FREQ_OTHER_KHZ:-1400000}"
