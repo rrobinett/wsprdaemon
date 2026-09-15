@@ -770,16 +770,23 @@ function purge_oversize_recording_logs()
 }
 
 #############################################################
-### ka9q-radio's own working directory needs the same housekeeping: wav files no decoder collected,
-### and .log files with no bound.  ka9q-ft-cleanup.sh has always done this and its header says "run
-### by cron every 10 minutes" -- but KI4AFE (2026-09-15) has no cron installed at all, so there it
-### had never run once.  WD does not require cron, so it should not depend on it for housekeeping,
-### and the watchdog is already making a pass over the recording tree: do it here.
+### ka9q-radio's own working directory needs housekeeping too: wav files no decoder collected, and
+### .log files with no bound.  This replaces ka9q-ft-cleanup.sh, deleted in the same commit, which
+### did the same job from cron every 10 minutes and had stopped being able to do it:
 ###
-### That script also hard-codes /dev/shm/ka9q-radio, which is the OLD location.  The FT wav files now
-### go under KA9Q_FT_TMP_ROOT (ka9q-utils.sh:1629), /var/lib/ka9q-radio by default.  At KI4AFE
-### /dev/shm/ka9q-radio does not exist, so even WITH cron that script would have cleaned nothing,
-### while /var/lib/ka9q-radio/fft.log sat at 1.6 MB unbounded.  Cover both paths, old and new.
+###   - it hard-coded /dev/shm/ka9q-radio, which is the OLD location.  The FT wav files now go under
+###     KA9Q_FT_TMP_ROOT (ka9q-utils.sh:1629), /var/lib/ka9q-radio by default.  On KI4AFE the old
+###     path does not exist, so the script would have cleaned nothing even had it been running;
+###   - it needed cron, and WD does not require cron.  KI4AFE has none installed at all, so it had
+###     never run once, and /var/lib/ka9q-radio/fft.log had reached 1.6 MB with nothing bounding it.
+###
+### Both paths are covered below, old and new, so a site still using the old one is not left behind.
+###
+### What this deliberately does NOT try to own: the /dev/shm/wsprdaemon tree and the wav-archive are
+### wd-cleanup.sh's job (wd-setup.sh installs it hourly), and ka9q-radio ships its own
+### /etc/cron.d/ka9q-cleanups which deletes stale ft4/ft8/wspr wav files.  Both are cron-driven, so
+### on a host without cron neither runs -- which is how those logs grew in the first place.  This
+### function is idempotent and cheap, so overlapping with them where they DO run is harmless.
 declare MAX_KA9Q_RADIO_LOG_BYTES=${MAX_KA9Q_RADIO_LOG_BYTES-1000000}
 declare MAX_KA9Q_RADIO_WAV_AGE_MIN=${MAX_KA9Q_RADIO_WAV_AGE_MIN-30}
 function purge_ka9q_radio_files()
