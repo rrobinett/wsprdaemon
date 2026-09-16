@@ -108,6 +108,13 @@ function grape_return_code_is_error() {
 
 declare -r PSWS_SERVER_URL='pswsnetwork.eng.ua.edu'
 declare -r UPLOAD_TO_PSWS_SERVER_COMPLETED_FILE_NAME='pswsnetwork_upload_completed'
+### Written beside the 'completed' marker when a day can NEVER be uploaded, so that it is not retried for
+### ever.  Only for a failure which cannot improve by itself: a band whose 24 hour wav is short AND whose
+### .wv source files have already been purged, so nothing is left to rebuild it from.  A transient failure
+### -- PSWS down, network out, sftp refused -- writes no marker and is retried on the next pass as before.
+declare -r UPLOAD_TO_PSWS_SERVER_IMPOSSIBLE_FILE_NAME='pswsnetwork_upload_impossible'
+### A full day of the 10 sps IQ wav is a fixed size: MINUTES_PER_DAY * 60 s * 10 sps * 2 channels * 4 bytes
+declare -r GRAPE_24_HOUR_WAV_SAMPLE_BYTES=$(( MINUTES_PER_DAY * 60 * 10 * 2 * 4 ))
 declare -r WAV2GRAPE_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/wav2grape.py"
 
 ### '-u ' sub menu
@@ -169,6 +176,12 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 2 "File ${reporter_upload_complete_file_name} exists, so upload of wav files has already been successful"
         return 0
     fi
+    local reporter_upload_impossible_file_name="${reporter_wav_root_dir}/${UPLOAD_TO_PSWS_SERVER_IMPOSSIBLE_FILE_NAME}"
+    if [[ -f ${reporter_upload_impossible_file_name} ]]; then
+        ### Reported once, when the marker was written.  Saying it again every 30 minutes for ever helps nobody.
+        wd_logger 2 "This day cannot be uploaded and was given up on: $(< ${reporter_upload_impossible_file_name})"
+        return 0
+    fi
     wd_logger 1 "File ${reporter_upload_complete_file_name} does not exist, so create the wav files and upload the DRF files"
 
     ### On the WD client the .wv  and 24hour.wav files are cached in the non-volitile  file system which has the format:
@@ -217,10 +230,19 @@ function upload_24hour_wavs_to_grape_drf_server() {
             wd_logger 2 "Checking WWV/CHU/K_BEACON band dir ${band_dir}"
             local band_24hour_wav_file="${band_dir}/24_hour_10sps_iq.wav"
             if [[ -f ${band_24hour_wav_file} ]]; then
-                 if soxi ${band_24hour_wav_file} | grep -q '864000 samples' ; then
+                 ### This check used to ask soxi for the sample count, and soxi cannot answer it: sox writes
+                 ### the wav header with the INTENDED length before it writes the samples, so a file which was
+                 ### truncated when its build was killed still reports a confident
+                 ###     Duration : 24:00:00.00 = 864000 samples
+                 ### Measured at KI4AFE 2026-09-16, soxi gives exactly that line for a 3366912 byte file and
+                 ### for the 6912058 byte good one beside it, so the guard passed every truncated file it was
+                 ### written to catch.  Only the size on disk tells the truth.
+                 local band_wav_bytes
+                 band_wav_bytes=$( stat -c %s "${band_24hour_wav_file}" 2>/dev/null || echo 0 )
+                 if (( band_wav_bytes >= GRAPE_24_HOUR_WAV_SAMPLE_BYTES )) ; then
                      wd_logger 2 "Found a good existing ${band_24hour_wav_file}"
                   else
-                     wd_logger 1 "ERROR: Found wav file ${band_24hour_wav_file} doesn't have the expected 860,000 samples in a 10Hz 24 hour wav file, so deleting it"
+                     wd_logger 1 "ERROR: wav file ${band_24hour_wav_file} is ${band_wav_bytes} bytes, short of the ${GRAPE_24_HOUR_WAV_SAMPLE_BYTES} bytes of samples a 10 Hz 24 hour wav holds, so deleting it"
                      wd_rm ${band_24hour_wav_file}
                  fi
             fi
@@ -242,6 +264,34 @@ function upload_24hour_wavs_to_grape_drf_server() {
                  wd_logger 1 "Neither found nor could create  ${band_24hour_wav_file}"
             fi
         done
+        ### A band which has no good 24 hour wav is only worth waiting for if something could still build one.
+        ### Once a day has been through here its .wv files may already have been purged, and then no number of
+        ### retries will ever produce that band -- but the day had no completed marker, so it was retried on
+        ### every pass for ever: KI4AFE had 20260731 and 20260903 failing this way for six weeks and twelve
+        ### days, 150 logged DRF conversions, each one re-reading seven bands before failing.  Neither day
+        ### ever reached PSWS.  Decide here whether waiting can possibly help.
+        local missing_band_count=$(( ${#band_dir_list[@]} - wav_file_count ))
+        if (( missing_band_count > 0 )); then
+            local rebuildable_band_list=() unrebuildable_band_list=() check_band_dir
+            for check_band_dir in ${band_dir_list[@]} ; do
+                [[ -f "${check_band_dir}/${GRAPE_24_HOUR_10_HZ_WAV_FILE_NAME}" ]] && continue
+                if compgen -G "${check_band_dir}/*.wv" > /dev/null 2>&1 ; then
+                    rebuildable_band_list+=( "${check_band_dir##*/}" )
+                else
+                    unrebuildable_band_list+=( "${check_band_dir##*/}" )
+                fi
+            done
+            if (( ${#rebuildable_band_list[@]} )); then
+                wd_logger 1 "WARNING: ${missing_band_count} of ${#band_dir_list[@]} bands have no 24 hour wav yet, but '${rebuildable_band_list[*]}' still have .wv files to build from, so try again on the next pass"
+                continue
+            fi
+            ### Nothing left to build the missing bands from, so this day can never be completed.  Do not
+            ### upload a partial day -- PSWS would take it as the whole day -- and do not come back to it.
+            local impossible_reason="$(date -u +%Y-%m-%dT%H:%M:%SZ) ${#unrebuildable_band_list[@]} of ${#band_dir_list[@]} bands ('${unrebuildable_band_list[*]}') have no 24 hour wav and no .wv files left to build one from, so this day can never be completed and was never uploaded"
+            echo "${impossible_reason}" > ${reporter_upload_impossible_file_name}
+            wd_logger 1 "ERROR: ${impossible_reason}.  Giving up on it: ${reporter_upload_impossible_file_name} now marks it so it is not retried on every pass.  Delete that file to try again"
+            continue
+        fi
         if (( ! wav_file_count )); then
             wd_logger 1 "WARNING: no wav files found or created for any bands, so skip DRF creation for this receiver/band"
             continue
