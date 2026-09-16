@@ -298,7 +298,13 @@ EOF
 function wd_cpu_tuning_warn_flattened_migration()
 {
     local conf=$1
-    local backup legacy legacy_value field field_khz default_khz=0 fast_khz=0
+    ### 'legacy' MUST start empty.  The loop below only assigns it when a .bak-cpu-tuning-* backup exists,
+    ### and WD runs under 'set -o nounset', so on a site which has never been migrated the test right after
+    ### the loop reads an unset variable and takes the whole daemon down at startup:
+    ###     wd-cpu-tuning.sh: line 311: legacy: unbound variable
+    ### Hit at KI4AFE 2026-09-16 the first time a WD_CPU_FREQ_OTHER_MHZ was set without a
+    ### WD_CPU_FREQ_RADIOD_MHZ beside it, which is what lets execution reach this far.
+    local backup legacy="" legacy_value field field_khz default_khz=0 fast_khz=0
 
     [[ -n "${WD_CPU_FREQ_RADIOD_MHZ}" ]] && return 0        ### the operator has already said what radiod gets
     grep -qE "^[[:space:]]*WD_CPU_FREQ_RADIOD_MHZ=" "${conf}" && return 0
