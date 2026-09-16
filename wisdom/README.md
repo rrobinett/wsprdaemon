@@ -18,13 +18,14 @@ decoders burst across the rest, so the ranking reflects the contention as much a
 
 ## How the reference here was measured
 
-`amd-ryzen-7-5825u-with-radeon-graphics.wisdom`, 2026-09-16, on n6gn5: 95,437 bytes, 985 plans.
+`amd-ryzen-7-5825u-with-radeon-graphics.wisdom`, 2026-09-16, on n6gn5: 97,550 bytes, 1,007 plans,
+covering a 91-spec union.
 
   - wsprdaemon.service and radiod stopped; the machine measured 99.90% idle
   - pinned with `taskset -c 2` to the core radiod's fft thread runs on, so each plan was chosen
     on the same core, at the same 3.0 GHz ceiling, inside the same resctrl/CAT partition
     (the `radiod` group holds `L3:0=03ff`, 10 of 16 ways = 10 MB)
-  - `fftwf-wisdom -v -T 1 -n -w <previous reference> -o ...` over the 86-spec union below.
+  - `fftwf-wisdom -v -T 1 -n -w <previous reference> -o ...` over the union spec list (see below).
     `-n` so it did not read system wisdom; `-w` so the 3,240,000 and 1,620,000 point forward
     transforms were imported from the previous measurement rather than measured again.
   - 15:53.53 elapsed, 953.16 s user, 99% CPU, exit 0
@@ -47,7 +48,13 @@ needs is that log.  WD's hand-written spec list was not that list: it planned `r
 alone.  Every spectrum zoom level in ka9q-web asks for a `cof`/`cob`/`cif` triple at a new bin
 count, and not one of them was covered.
 
-This reference was built from the union of WD's 33 specs and those 56.
+This reference was built from the union of three sources: WD's original 33 specs, the 56 in
+n6gn5's fft.log, and the 40 in the sigmond project's FFT_WISDOM_PROFILES -- which had independently
+found the same class of gap at AC0G-B4 on 2026-08-15 (cif512, cif2400, cob512, cob2400, cof512,
+none of which n6gn5 ever asks for).  91 specs in total.  The five sigmond-only ones were measured
+separately, seeded from the first run, and took 25 seconds.
+
+The same file is used by the sigmond project, whose appliance runs only this CPU.
 
 **Acceptance test.** After installing it and restarting radiod, `fft.log` did not grow by a single
 line -- through steady-state operation and through a walk over every ka9q-web zoom level.  That is

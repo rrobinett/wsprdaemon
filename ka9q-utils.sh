@@ -1510,7 +1510,7 @@ function build_ka9q_radio() {
     if [[ ! "${RX888_64_MSPS:-no}" =~ ^[Yy] ]]; then      ### same case-insensitive test; "YES" here cost hours of needless wisdom computation
         fft_129_Msps="rof3240000"
     fi
-    local wisdom_spec_list="rof1620000 cob162000 cob81000 cob40500 cob32400 cob16200 cob9600 cob8100 cob6930 cob4860 cob4800 cob3240 cob3200 cob1920 cob1620 cob1600 cob1200 cob960 cob810 cob800 cob600 cob480 cob405 cob400 cob320 cob300 cob205 cob200 cob160 cob85 cob45 cob15"
+    local wisdom_spec_list="cif55 cif100 cif175 cif220 cif300 cif350 cif400 cif420 cif512 cif600 cif825 cif1650 cif2048 cif2080 cif2400 cif3250 cif4095 cif4875 cif8125 cob15 cob45 cob55 cob85 cob100 cob160 cob175 cob200 cob205 cob220 cob300 cob320 cob350 cob400 cob405 cob420 cob480 cob512 cob600 cob800 cob810 cob825 cob960 cob1200 cob1600 cob1620 cob1650 cob1920 cob2048 cob2080 cob2400 cob3200 cob3240 cob3250 cob4095 cob4800 cob4860 cob4875 cob6930 cob8100 cob8125 cob9600 cob16200 cob32400 cob40500 cob81000 cob162000 cof512 cof1625 cof1638 cof1650 cof1664 cof1680 cof1750 cof1760 cof2000 cof2048 cof2200 rof3240 rof6480 rof8100 rof12960 rof16200 rof25920 rof32400 rof64800 rof129600 rof162000 rof259200 rof324000 rof1620000"
     [[ -n "${fft_129_Msps}" ]] && wisdom_spec_list="${fft_129_Msps} ${wisdom_spec_list}"
     local tmp_wisdom_file_path="/tmp/wisdom"
     local wisdom_marker_file_path="${KA9Q_RADIO_WISDOM_FILE_PATH}.specs"
