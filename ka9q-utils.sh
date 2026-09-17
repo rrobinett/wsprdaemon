@@ -897,9 +897,18 @@ function ka9q_web_daemon() {
         local i
         for (( i=0; i < ${#ka9q_service_daemons_list[@]}; ++i )); do
             local  ka9q_service_daemon_info="${ka9q_service_daemons_list[i]}"
+            ### Split into exactly three fields, the last of which takes the REST of the line, so a title
+            ### containing spaces arrives whole.  This used to pass ${ka9q_service_daemon_info} UNQUOTED,
+            ### which word-split it: only the first word of the title ever reached $3 and every word after
+            ### it was dropped without a murmur, because the function reads $1..$3 and nothing else.
+            ### That is why KA9Q_WEB_TITLE had to be written with underscores instead of spaces.  It was
+            ### costing real titles: G4ZFQ's '<G4ZFQ>_@<IO90IR>_<Wellgood Loop>' reached ka9q-web as
+            ### '-n <G4ZFQ> @<IO90IR> <Wellgood', with 'Loop>' silently gone.
+            local daemon_status_dns daemon_ip_port daemon_title
+            read -r daemon_status_dns daemon_ip_port daemon_title <<< "${ka9q_service_daemon_info}"
 
             wd_logger 1 "Running 'ka9q_web_service_daemon '${ka9q_service_daemon_info}'"
-            ka9q_web_service_daemon ${ka9q_service_daemon_info}          ### These should be spawned off
+            ka9q_web_service_daemon "${daemon_status_dns}" "${daemon_ip_port}" "${daemon_title}"          ### These should be spawned off
             rc=$?
             wd_logger 1 "ERROR: ka9q_web_service_daemon $ka9q_service_daemon_info => $rc.  Sleep 5 and run it aagain"
             sleep 5
@@ -912,6 +921,11 @@ function ka9q_web_service_daemon() {
     local status_dns_name=$1             ### Where to get the spectrum stream (e.g. hf.local)
     local server_ip_port=$2              ### On what IP port to offer the UI
     local server_description="${3:-}"    ### KA9Q_WEB_TITLE, if defined.
+    ### A title may now be written with spaces in wsprdaemon.conf -- the caller no longer word-splits it.
+    ### The '_' to ' ' conversion stays for the confs that already use the underscore convention, and
+    ### because WD's own default title is still joined with underscores
+    ### ("${WSPRNET_REPORTER_ID}_@${REPORTER_GRID}_${ANTENNA_DESCRIPTION}").  The cost is that a title
+    ### cannot contain a literal underscore; spaces are the way to write one now.
     server_description="${server_description//_/ }" ### Replace all '_' with ' '
 
     while true; do
