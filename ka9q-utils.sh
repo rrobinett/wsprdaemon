@@ -1554,7 +1554,24 @@ exec >> ${wisdom_log_file_path} 2>&1
 echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) planning '${wisdom_spec_list}'"
 declare ref_arg=""
 [[ -f ${KA9Q_RADIO_WISDOM_FILE_PATH} ]] && ref_arg="-w ${KA9Q_RADIO_WISDOM_FILE_PATH}"
-/usr/bin/time stdbuf -oL -eL fftwf-wisdom -v -T 1 \${ref_arg} -o ${tmp_wisdom_file_path} ${wisdom_spec_list}
+### Measure ON the core radiod's fft thread will run on.  fftwf-wisdom defaults to FFTW_PATIENT, which
+### chooses between candidate plans by TIMING them, so a plan ranked on some other core -- at a different
+### clock ceiling, outside the radiod L3/CAT partition -- is ranked for a core that will never run it.
+### That is what wisdom/README.md means by measuring pinned, and this runner did not do it.
+### It cannot land there by accident either: on a CPU-tuned host systemd's own affinity mask excludes the
+### radiod cores, so every transient unit inherits a mask without them (at UCI-Silo PID 1 held
+### 0,2-6,8-11, with CPU1 and CPU7 held out for radiod's fft and proc_rx888).  It has to ask, by name.
+declare fft_cpu="" plan_out=""
+declare -a pin_cmd=()
+plan_out=\$( \${WD_CPU_PLAN:-/usr/local/sbin/wd-cpu-plan.sh} 2>/dev/null ) && eval "\${plan_out}"
+[[ \${WD_PLAN_OK:-no} == "yes" ]] && fft_cpu=\${WD_RADIOD0_FFT_CPU:-}
+if [[ -n \${fft_cpu} ]]; then
+    pin_cmd=( taskset -c \${fft_cpu} )
+    echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) pinning the planner to CPU\${fft_cpu}, the core radiod's fft thread runs on"
+else
+    echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) WARNING: the CPU plan names no fft core, so the planner is NOT pinned and its timings will rank plans for whatever core it happens to land on"
+fi
+/usr/bin/time "\${pin_cmd[@]}" stdbuf -oL -eL fftwf-wisdom -v -T 1 \${ref_arg} -o ${tmp_wisdom_file_path} ${wisdom_spec_list}
 declare rc=\$?
 if (( rc )); then
     echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: 'fftwf-wisdom' => \${rc}, so nothing was installed"
