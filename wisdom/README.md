@@ -10,6 +10,36 @@ codelet set FFTW chose, and wisdom is only meaningful within one of them.  The C
 is `lscpu`'s "Model name" lowercased with every run of non-alphanumeric characters replaced by
 a single `-`.
 
+## The build string comes from the DISTRO, not from the ka9q-radio pin
+
+FFTW is not part of ka9q-radio.  It is a distribution package -- WD apt-installs `libfftw3-dev`
+(`KA9Q_RADIO_LIBS_NEEDED` in ka9q-utils.sh, and wd-setup.sh's own list) and ka9q-radio links
+against whatever the OS ships.  So the build string, and therefore which reference file a host can
+use, tracks the **operating system release** and changes only when the OS is upgraded.  Bumping the
+ka9q-radio pin does not move it.  Two hosts on the identical pinned commit can need two different
+reference files, and a file measured on one is worth nothing to the other.
+
+The fleet on 2026-09-17, every host on pin 6a4fe1bf:
+
+| host | OS | libfftw3 | build string |
+| --- | --- | --- | --- |
+| UCI-Silo-PSWS | ubuntu 22.04 jammy | 3.3.8-2ubuntu8 | `fftw-3.3.8-sse2-avx` |
+| HPi7 (G4ZFQ) | debian 13 trixie | 3.3.10-2+b1 | `fftw-3.3.10-sse2-avx` |
+| KI4AFE | ubuntu 26.04 resolute | 3.3.10-2fakesync1build3 | `fftw-3.3.10-sse2-avx` |
+| wsprdaemon-SER | linuxmint 22.1 xia | 3.3.10-1ubuntu3 | `fftw-3.3.10-sse2-avx` |
+
+jammy is the only release of the four still shipping FFTW 3.3.8, so UCI-Silo can never use any
+`fftw-3.3.10-sse2-avx` reference here no matter whose CPU it was measured on, and anything measured
+on UCI-Silo is useful only to another jammy host.  That is not obvious from the outside: the host
+had been pulled to current WD and current ka9q-radio, and still could not take the reference.  It
+measured its own instead, pinned to its fft core, on 2026-09-17: 181 plans -> 550, and radiod's cold
+start fell from 121 s to 31 s.  The file was not added here, because no other host shares its build
+string; a jammy reference is worth shipping only once a second jammy site turns up.
+
+So when a host will not take a reference, compare `fftwf-wisdom --version` (or the build string
+radiod prints) before looking anywhere else -- and remember that the fix for a host on an old build
+string is an OS upgrade, not a ka9q-radio bump.
+
 ## Why measure on an idle machine
 
 `fftw-wisdom` defaults to FFTW_PATIENT, which chooses between candidate plans by TIMING them.
