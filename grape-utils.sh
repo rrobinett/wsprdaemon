@@ -203,6 +203,11 @@ function upload_24hour_wavs_to_grape_drf_server() {
         wd_logger 1  "There are no receiver dirs under ${reporter_wav_root_dir}"
         return 1
     fi
+    ### Count what actually reaches the server, so that the completion marker at the bottom is only
+    ### written when something really was uploaded.
+    local uploaded_band_count=0
+    local uploaded_receiver_count=0
+    local expected_band_count=0
     for receiver_dir in ${receiver_dir_list[@]} ; do
         local receiver_info="${receiver_dir##*/}"
         local receiver_name="${receiver_info%@*}"
@@ -225,6 +230,7 @@ function upload_24hour_wavs_to_grape_drf_server() {
         ### Cleanup the .wv files  and create 24hour.wavs in all the bands
         local wav_file_count=0
         local band_dir_list=( $( find -L ${receiver_dir} -maxdepth 1 -type d  -regex '.*/\(WWV\|CHU\|K_BEACON\).*' | awk -F_ '{print $(NF-1), $NF, $0}' | sort -k1,1r -k2,2n  | cut -d' ' -f3) )
+        (( expected_band_count += ${#band_dir_list[@]} ))
         local band_dir
         for band_dir in ${band_dir_list[@]} ; do
             wd_logger 2 "Checking WWV/CHU/K_BEACON band dir ${band_dir}"
@@ -346,9 +352,24 @@ function upload_24hour_wavs_to_grape_drf_server() {
             wd_logger 1 "ERROR: 'sftp -l ${SFTP_BW_LIMIT_KBPS-1000} -b ${sftp_cmds_file} ${psws_station_id}@${PSWS_SERVER_URL}' -> ${rc}:\n$(<${sftp_stderr_file})"
             return ${rc}
         fi
+        (( ++uploaded_receiver_count ))
+        (( uploaded_band_count += wav_file_count ))
     done
+
+    ### Only record the day as uploaded if a receiver actually reached the server.  Each 'continue' above --
+    ### a band still rebuildable, a day given up on as impossible, no 24 hour wav at all -- skips the DRF
+    ### creation and the sftp, but still fell through to this touch, so the day was recorded as uploaded when
+    ### nothing had been sent and this function then returned early for ever.  At G4ZFQ 20260915 and 20260916
+    ### were both marked uploaded while holding no 24 hour wav at all, so no later pass would look at them
+    ### again even after the wavs were repaired.  A day whose bands can never be built is already kept from
+    ### being retried by ${UPLOAD_TO_PSWS_SERVER_IMPOSSIBLE_FILE_NAME}, so returning without the completed
+    ### marker here does not bring back the endless retries that marker was added to stop.
+    if (( ! uploaded_receiver_count )); then
+        wd_logger 1 "ERROR: none of the ${#receiver_dir_list[@]} receivers under ${reporter_wav_root_dir} uploaded any of its ${expected_band_count} bands, so '${reporter_upload_complete_file_name}' is NOT created and this day is left to be retried"
+        return 1
+    fi
     touch "${reporter_upload_complete_file_name}"
-    wd_logger 1  "Upload was successful, so create '${reporter_upload_complete_file_name}'"
+    wd_logger 1  "Uploaded ${uploaded_band_count} bands from ${uploaded_receiver_count} of the ${#receiver_dir_list[@]} receivers under ${reporter_wav_root_dir}, so create '${reporter_upload_complete_file_name}'"
 }
 
 function grape_test_auto_login() {
@@ -528,25 +549,90 @@ function grape_repair_band_bad_compressed_files() {
 
     local band_date=${compressed_wav_file_list[0]##*/}
     band_date=${band_date%%T*}
-    local band_freq=${compressed_wav_file_list[0]##*/}
-    band_freq=${band_freq#*_}
-    band_freq=${band_freq/_iq.wv/}
+
+    ### A minute file is named <YYYYMMDD>T<HHMMSS>Z_<freq>_<tail>, where <tail> is whatever ka9q-radio's
+    ### wd-record calls the channel.  Until ka9q-radio db97fdca ("make preset write-only", 2026-09-08) that
+    ### was the preset name, so a WWV IQ minute arrived as '..._10000000_iq.wv'; from that commit on it is
+    ### the demodulator name and the same minute arrives as '..._10000000_linear.wv'.  WD inherited the
+    ### change when its ka9q-radio pin moved to 6a4fe1bf in 674115b.  Hardcoding either spelling makes all
+    ### 1440 expected names wrong for the other: at G4ZFQ that filled six band dirs with bogus
+    ### '..._linear.wv_iq.wv' silence links so no day could ever be assembled, and on 20260915, which
+    ### straddled the rename, it flushed 1672 real recordings as 'not expected in this directory'.
+    ### So learn the tail from the files actually on disk instead of assuming it, and match a minute on its
+    ### timestamp alone.  Silence fillers are symlinks, so only real recordings vote on the tail, and the
+    ### most common tail wins so that a day straddling a rename keeps its majority spelling rather than
+    ### deleting one half of itself.
+    local -A tail_counts=()
+    local found_file
+    local file_tail
+    local tail_count
+    for found_file in "${compressed_wav_file_list[@]}" ; do
+        [[ -L ${found_file} ]] && continue
+        file_tail=${found_file##*/}
+        file_tail=${file_tail#*_}
+        tail_count=${tail_counts[${file_tail}]-0}
+        tail_counts[${file_tail}]=$(( tail_count + 1 ))
+    done
+    local band_freq=""
+    local best_tail_count=0
+    for file_tail in "${!tail_counts[@]}" ; do
+        tail_count=${tail_counts[${file_tail}]}
+        if (( tail_count > best_tail_count )); then
+            best_tail_count=${tail_count}
+            band_freq=${file_tail}
+        fi
+    done
+    if [[ -z ${band_freq} ]]; then
+        wd_logger 1 "ERROR: ${band_dir} holds ${#compressed_wav_file_list[@]} .wv files but not one of them is a real recording, so the minute file name cannot be learned and silence files cannot be named"
+        return 1
+    fi
+    if (( ${#tail_counts[@]} > 1 )); then
+        wd_logger 1 "${band_dir} holds ${#tail_counts[@]} different minute file names, as happens when ka9q-radio renames them part way through a day.  Using the most common one, '${band_freq}', to name any silence files"
+    fi
     wd_logger 1 "Found ${#compressed_wav_file_list[@]} .wv files in ${band_dir}. Check there is a .wv for each minute for this band_date=${band_date},  band_freq=${band_freq}"
 
+    ### Index what is on disk by the minute it covers, so that a minute counts as present whatever its tail
+    ### is, and a real recording always beats a silence link for the same minute.
+    local -A minute_files=()
+    local file_minute
+    local link_tail
+    for found_file in "${compressed_wav_file_list[@]}" ; do
+        if [[ -L ${found_file} ]]; then
+            link_tail=${found_file##*/}
+            link_tail=${link_tail#*_}
+            ### A silence link left under some other spelling -- which is what the old hardcoded '_iq.wv'
+            ### name produced here -- does not count as covering its minute.  Ignoring it now means a
+            ### correctly named link is made for that minute below and this one is flushed as an extra, so
+            ### the archive is left holding canonical names only.
+            if [[ ${link_tail} != ${band_freq} ]]; then
+                continue
+            fi
+        fi
+        file_minute=${found_file##*/}
+        file_minute=${file_minute%%Z_*}
+        if [[ -z ${minute_files[${file_minute}]-} ]]; then
+            minute_files[${file_minute}]=${found_file}
+        elif [[ -L ${minute_files[${file_minute}]} && ! -L ${found_file} ]]; then
+            minute_files[${file_minute}]=${found_file}
+        fi
+    done
+
     local silence_file_list=()
-    local expected_files_list=()
+    local -A keep_files_map=()
     local hour
     for hour in ${HOURS_LIST[@]} ; do
         local minute 
         for minute in ${MINUTES_LIST[@]} ; do
-            local expected_file_name="${band_date}T${hour}${minute}00Z_${band_freq}_iq.wv"
-            local expected_file_path=${band_dir}/${expected_file_name}
-            expected_files_list+=( ${expected_file_path} )
-            if [[ "${compressed_wav_file_list[@]}" =~ ${expected_file_path} ]]; then
-                wd_logger 2 "Found expected IQ file ${expected_file_path}"
+            local expected_minute="${band_date}T${hour}${minute}00"
+            local minute_file=${minute_files[${expected_minute}]-}
+            if [[ -n ${minute_file} ]]; then
+                wd_logger 2 "Found ${minute_file} for minute ${expected_minute}"
+                keep_files_map[${minute_file}]="yes"
             else
-                wd_logger 2 "Can't find expected IQ file ${expected_file_path}, so link the 1 minute of silence file in its place"
+                local expected_file_path="${band_dir}/${expected_minute}Z_${band_freq}"
+                wd_logger 2 "Can't find a .wv for minute ${expected_minute}, so link the 1 minute of silence file in its place"
                 ln -s ${WD_SILENT_WV_FILE_PATH}  ${expected_file_path}
+                keep_files_map[${expected_file_path}]="yes"
                 silence_file_list+=( ${expected_file_path##*/} )
             fi
         done
@@ -567,7 +653,10 @@ function grape_repair_band_bad_compressed_files() {
     wd_logger 1 "Check for extra .wv files and flush them"
     local extra_files_list=()
     for found_file in "${compressed_wav_file_list[@]}"; do
-        if [[ ! " ${expected_files_list[*]} " =~ ${found_file} ]]; then
+        ### An exact keyed lookup.  This test used to be a =~ substring match against the whole expected
+        ### list, which silently spared '..._linear.wv' because it is a substring of '..._linear.wv_iq.wv';
+        ### with any other pair of spellings the same match would have deleted every real recording here.
+        if [[ -z ${keep_files_map[${found_file}]-} ]]; then
             wd_logger 1 "Flushing file ${found_file} which is not expected to be in this directory"
             extra_files_list+=( ${found_file} )
             wd_rm ${found_file}
@@ -698,7 +787,11 @@ function grape_create_wav_file()
         fi
 
         local missing_compressed_wav_file_count=$((  MINUTES_PER_DAY - ${#compressed_wav_file_list[@]} ))
-        wd_logger 1 "${missing_compressed_wav_file_count} .wv files are missing in ${compressed_wav_file_dir}, so add silence files to fill the directory"
+        if (( missing_compressed_wav_file_count > 0 )); then
+            wd_logger 1 "${missing_compressed_wav_file_count} .wv files are missing in ${compressed_wav_file_dir}, so add silence files to fill the directory"
+        else
+            wd_logger 1 "${compressed_wav_file_dir} holds ${#compressed_wav_file_list[@]} .wv files, $(( - missing_compressed_wav_file_count )) more than the ${MINUTES_PER_DAY} minutes in a day, so call the repair to work out which of them belong here"
+        fi
         grape_repair_band_bad_compressed_files ${compressed_wav_file_dir}
         rc=$?
         if (( ! rc )); then
@@ -722,7 +815,10 @@ function grape_create_wav_file()
     ### 'systemctl restart wsprdaemon'; writing straight to the final name is what turned each of those
     ### kills into a permanently truncated file that nothing ever rebuilt.  The rename is atomic and within
     ### the same directory, so the final name only ever appears complete.
-    nice -n 19 sox ${compressed_wav_file_list[@]} --encoding float --bits 32 ${partial_output_file} rate 10 >& ${sox_log_file_name}
+    ### '-t wav' is required because the output is written to a '.partial' name: sox picks the output
+    ### format from the file extension, and without it every run dies instantly with
+    ### "sox FAIL formats: no handler for file extension `partial'", so no 24 hour wav is ever built.
+    nice -n 19 sox ${compressed_wav_file_list[@]} --encoding float --bits 32 -t wav ${partial_output_file} rate 10 >& ${sox_log_file_name}
     rc=$? ; if (( rc )); then
         wd_logger 1 "ERROR: 'sox ...' => ${rc}:\n$(<${sox_log_file_name})"
         wd_rm "${partial_output_file}"
