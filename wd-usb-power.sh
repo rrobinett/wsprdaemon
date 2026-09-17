@@ -43,6 +43,9 @@ declare WD_USB_POWER_LOG_FILE=${WD_USB_POWER_LOG_FILE-${WD_USB_POWER_LOG_DIR}/us
 declare WD_USB_POWER_MAP_FILE=${WD_USB_POWER_MAP_FILE-${WD_USB_POWER_LOG_DIR}/rx888-ports.map}   ### lines: SERIAL HUB PORT SPEED LAST_SEEN
 declare WD_USB_POWER_OFF_SECS=${WD_USB_POWER_OFF_SECS-5}                    ### uhubctl -d: how long the port stays off
 declare WD_USB_POWER_REENUM_SECS=${WD_USB_POWER_REENUM_SECS-25}             ### re-enumeration + firmware load normally take < 10 s
+declare WD_USB_PORT_DISABLE=${WD_USB_PORT_DISABLE-yes}                      ### cut the port through sysfs when the hub offers no uhubctl power switching
+declare WD_USB_BOTH_HALVES_OFF_SECS=${WD_USB_BOTH_HALVES_OFF_SECS-6}        ### how long BOTH halves of a USB 3 jack stay down
+declare WD_USB_OTHER_HALF_WAIT_SECS=${WD_USB_OTHER_HALF_WAIT_SECS-8}        ### how long to watch for the radio re-appearing on the other bus
 declare WD_USB_POWER_CYCLE_MIN_MINUTES=${WD_USB_POWER_CYCLE_MIN_MINUTES-10} ### never cycle one port more often than this
 declare WD_USB_POWER_CHECK_MINUTES=${WD_USB_POWER_CHECK_MINUTES-2}          ### watchdog throttle (the odd-minute pass is every 2 min anyway)
 declare WD_USB_POWER_LAST_CHECK_EPOCH=0
@@ -400,6 +403,121 @@ function wd_usb_power_reenumerate_dev()
 }
 
 ### Is radiod@$1 failing with the wedged-RX888 signature (enumerated, but no samples) rather than for some other reason?
+### The USB 3 / USB 2 duality of an RX888, and why a recovery has to cut BOTH halves of the jack.
+###
+### An RX888 in a USB 3 socket is reachable through two root hubs: the SuperSpeed half (bus 2 on a typical
+### xHCI host) and the High-speed half (bus 1).  They are the same physical jack.  Take down only the
+### SuperSpeed port and the radio does NOT leave the bus -- it re-appears on the OTHER bus at 480 Mb/s with
+### an EMPTY serial, back in bootloader state, and radiod then refuses it outright:
+###     found rx888 ... USB speed: High (480 Mb/s): not at least Super
+###     rx888_usb_init() failed
+### Worse, that 480 Mb/s reading trips the "never cycle a radio on a USB 2 port" rule this file applies
+### elsewhere, so WD would write the radio off as an operator cabling problem when its own recovery is what
+### put it there.  Seen at UCI-Silo on 2026-09-17: its root hub offers no uhubctl power switching at all
+### ("No compatible devices detected"), so the only remote lever was the sysfs port, and cutting just the
+### SuperSpeed half left radiod refusing the radio.  Cutting both halves together and re-enabling gave
+###     usb 2-6: new SuperSpeed USB device number 3 ... SerialNumber: 0009002109C7221C
+### and radiod came up with its full thread set immediately.
+###
+### sysfs path of the PORT a device hangs off, whose 'disable' takes the port down (1) and up (0).
+### Root-hub child '2-6'   -> /sys/bus/usb/devices/2-0:1.0/usb2-port6/disable
+### Behind a hub '2-6.3'   -> /sys/bus/usb/devices/2-6:1.0/usb2-port3/disable
+function wd_usb_power_port_disable_path()
+{
+    local dev=${1##*/} bus parent port
+    dev=${dev%/}
+    [[ -n ${dev} && ${dev} == *-* ]] || return 1
+    bus=${dev%%-*}
+    if [[ ${dev} == *.* ]]; then
+        parent=${dev%.*}; port=${dev##*.}
+    else
+        parent="${bus}-0"; port=${dev#*-}
+    fi
+    local path="/sys/bus/usb/devices/${parent}:1.0/usb${bus}-port${port}/disable"
+    [[ -f ${path} ]] || return 1
+    echo "${path}"
+}
+
+### Every RX888 currently on the bus below SuperSpeed -- i.e. sitting on the USB 2 half of its jack
+function wd_usb_power_rx888_devs_below_superspeed()
+{
+    local d dev
+    for d in /sys/bus/usb/devices/*/ ; do
+        [[ -f ${d}/idVendor && -f ${d}/idProduct ]] || continue
+        [[ $(< ${d}/idVendor) == "04b4" && $(< ${d}/idProduct) == "00f1" ]] || continue
+        (( $(cat ${d}/speed 2>/dev/null || echo 0) < 5000 )) || continue
+        dev=${d%/}; echo "${dev##*/}"
+    done
+}
+
+### Cut both halves of the jack this device sits on, then bring them back.  Returns 0 only if the radio
+### comes back at SuperSpeed carrying ${serial}.
+function wd_usb_power_cut_both_halves()
+{
+    local dev=$1 serial=${2^^} why=${3:-} rc
+    if [[ ${WD_USB_PORT_DISABLE} == "no" ]]; then
+        wd_usb_power_log 1 "WARNING: not cutting the port of usb device ${dev} (${why}): WD_USB_PORT_DISABLE=no"
+        return 2
+    fi
+    local ss_path other_path="" other_dev=""
+    ss_path=$( wd_usb_power_port_disable_path "${dev}" ) || {
+        wd_usb_power_log 1 "ERROR: no sysfs port 'disable' for usb device ${dev}, so its port can not be cut (${why})"
+        return 2
+    }
+    wd_usb_power_log 1 "WARNING: cutting the port of usb device ${dev} through ${ss_path} for ${WD_USB_BOTH_HALVES_OFF_SECS} seconds: ${why}"
+    local before_list after_dev
+    before_list=" $( wd_usb_power_rx888_devs_below_superspeed | tr '\n' ' ' )"
+    if ! echo 1 | timeout 20 sudo tee "${ss_path}" > /dev/null 2>&1 ; then
+        wd_usb_power_log 1 "ERROR: 'echo 1 | sudo tee ${ss_path}' failed, so the port was not cut"
+        return 1
+    fi
+    ### Follow the radio: if it drops onto the USB 2 half of the same jack, that half has to come down too,
+    ### or it will simply stay there at 480 Mb/s where radiod will not have it.
+    local waited=0
+    while (( waited < WD_USB_OTHER_HALF_WAIT_SECS )); do
+        sleep 1; (( ++waited ))
+        for after_dev in $( wd_usb_power_rx888_devs_below_superspeed ); do
+            [[ ${before_list} == *" ${after_dev} "* ]] && continue
+            other_dev=${after_dev}
+            break 2
+        done
+    done
+    if [[ -n ${other_dev} ]]; then
+        if other_path=$( wd_usb_power_port_disable_path "${other_dev}" ) ; then
+            wd_usb_power_log 1 "WARNING: RX888 fell back onto the USB 2 half of its jack as usb ${other_dev} at $(cat /sys/bus/usb/devices/${other_dev}/speed 2>/dev/null) Mb/s, so cutting that half too through ${other_path}"
+            echo 1 | timeout 20 sudo tee "${other_path}" > /dev/null 2>&1 || \
+                wd_usb_power_log 1 "ERROR: 'echo 1 | sudo tee ${other_path}' failed, so only the SuperSpeed half is down"
+        else
+            wd_usb_power_log 1 "ERROR: RX888 fell back to usb ${other_dev} but that port has no sysfs 'disable', so both halves can not be cut"
+        fi
+    fi
+    sleep ${WD_USB_BOTH_HALVES_OFF_SECS}
+    ### SuperSpeed half back first, so the radio negotiates USB 3 rather than settling for USB 2
+    echo 0 | timeout 20 sudo tee "${ss_path}" > /dev/null 2>&1
+    rc=$?
+    if [[ -n ${other_path} ]]; then
+        echo 0 | timeout 20 sudo tee "${other_path}" > /dev/null 2>&1 || \
+            wd_usb_power_log 1 "ERROR: 'echo 0 | sudo tee ${other_path}' failed: the USB 2 half of this jack is still DISABLED.  Re-enable it with 'echo 0 | sudo tee ${other_path}'"
+    fi
+    if (( rc )); then
+        wd_usb_power_log 1 "ERROR: 'echo 0 | sudo tee ${ss_path}' failed: usb port ${dev} is still DISABLED and the radio will stay off the bus.  Re-enable it with 'echo 0 | sudo tee ${ss_path}'"
+        return 1
+    fi
+    if [[ ${serial} != "UNKNOWN" && -n ${serial} ]] && ! wd_usb_power_wait_for_serial "${serial}" ; then
+        wd_usb_power_log 1 "ERROR: RX888 ${serial} did not return within ${WD_USB_POWER_REENUM_SECS} seconds of both halves of its jack being re-enabled"
+        return 1
+    fi
+    local back_dev back_speed=""
+    back_dev=$( wd_usb_power_dev_of_serial "${serial}" 2>/dev/null || true )
+    [[ -n ${back_dev} ]] && back_speed=$(cat /sys/bus/usb/devices/${back_dev}/speed 2>/dev/null)
+    if [[ -n ${back_speed} ]] && (( back_speed < 5000 )); then
+        wd_usb_power_log 1 "ERROR: RX888 ${serial} came back on usb ${back_dev} at only ${back_speed} Mb/s, so radiod will refuse it.  Both halves of its jack were cut, so this is the cable or the socket, not a stuck personality"
+        return 1
+    fi
+    wd_usb_power_log 1 "RX888 ${serial} is back on usb ${back_dev:-?} at ${back_speed:-?} Mb/s after both halves of its jack were cut"
+    return 0
+}
+
 function wd_usb_power_radiod_is_wedged()
 {
     local inst=$1 hits
@@ -482,7 +600,18 @@ function wd_usb_power_recover_wedged_rx888()
     elif (( reenum_rc == 0 )); then
         wd_usb_power_log 1 "ERROR: RX888 ${serial} did not come back within ${WD_USB_POWER_REENUM_SECS} seconds of being re-authorized on ${dev}"
     fi
-    ### Re-enumeration was not enough (or could not be done).  Now really pull the plug, if this radio is on a hub that switches power.
+    ### De-authorizing the device was not enough.  Next strongest lever that does not need a switchable hub:
+    ### take the jack itself down through sysfs -- both halves of it, see wd_usb_power_cut_both_halves().
+    ### This is the only remote option at all on a host whose root hub uhubctl will not drive.
+    if wd_usb_power_cut_both_halves "${dev}" "${serial}" "radiod@${inst} gets no samples from RX888 ${serial} and re-enumerating it did not help" ; then
+        wd_usb_power_learn_ports
+        if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
+            wd_usb_power_record_recovery "${inst}" "${dev}" "${serial}" "cut both halves" "recovered"
+            return 0
+        fi
+        wd_usb_power_log 1 "ERROR: radiod@${inst} still will not start after both halves of RX888 ${serial}'s jack were cut"
+    fi
+    ### Still stuck.  Now really pull the plug, if this radio is on a hub that switches power.
     if [[ ${serial} != "unknown" ]] && wd_usb_power_recover_rx888 "${serial}" hung ; then
         if timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 ; then
             wd_usb_power_record_recovery "${inst}" "${dev}" "${serial}" "power cycle" "recovered"
