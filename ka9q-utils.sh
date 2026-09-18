@@ -1526,7 +1526,20 @@ function build_ka9q_radio() {
     fi
     local wisdom_spec_list="cif55 cif100 cif175 cif220 cif300 cif350 cif400 cif420 cif512 cif600 cif825 cif1650 cif2048 cif2080 cif2400 cif3250 cif4095 cif4875 cif8125 cob15 cob45 cob55 cob85 cob100 cob160 cob175 cob200 cob205 cob220 cob300 cob320 cob350 cob400 cob405 cob420 cob480 cob512 cob600 cob800 cob810 cob825 cob960 cob1200 cob1600 cob1620 cob1650 cob1920 cob2048 cob2080 cob2400 cob3200 cob3240 cob3250 cob4095 cob4800 cob4860 cob4875 cob6930 cob8100 cob8125 cob9600 cob16200 cob32400 cob40500 cob81000 cob162000 cof512 cof1625 cof1638 cof1650 cof1664 cof1680 cof1750 cof1760 cof2000 cof2048 cof2200 rof3240 rof6480 rof8100 rof12960 rof16200 rof25920 rof32400 rof64800 rof129600 rof162000 rof259200 rof324000 rof1620000"
     [[ -n "${fft_129_Msps}" ]] && wisdom_spec_list="${fft_129_Msps} ${wisdom_spec_list}"
-    local tmp_wisdom_file_path="/tmp/wisdom"
+    ### NOT under /tmp.  These hosts run fs.protected_regular=2, which forbids an O_CREAT open of an
+    ### existing regular file in a sticky world-writable directory unless the caller owns the file or the
+    ### directory owner does.  /tmp is root:root 1777, and older WD ran fftwf-wisdom in the foreground as
+    ### the wsprdaemon user, so it left a wsprdaemon-owned /tmp/wisdom behind.  The planner now runs as a
+    ### root systemd unit, and root is refused that file just like anyone else -- so the plan died in
+    ### milliseconds with
+    ###     fftw-wisdom: error creating "/tmp/wisdom" Permission denied
+    ### on every WD start, for ever, while WD cheerfully announced it was "running in the background".
+    ### G4ZFQ reported the message on 2026-09-18; a sweep that day found 27 of 59 RAC hosts with a
+    ### /tmp/wisdom root could not write, 8 of them frozen on the thin 154-plan wisdom, which is exactly
+    ### the population the comment below describes as stuck at ~154 plans.  Writing where WD owns the
+    ### directory removes the whole class, and also the "a leftover partial /tmp/wisdom is bigger, so it
+    ### gets installed" hazard, since this path is now private to the run.
+    local tmp_wisdom_file_path="${KA9Q_RADIO_WISDOM_FILE_PATH}.new"
     local wisdom_marker_file_path="${KA9Q_RADIO_WISDOM_FILE_PATH}.specs"
     local wisdom_runner_path="/usr/local/sbin/wd-fftw-wisdom.sh"
     local wisdom_log_file_path="/var/log/wd-fftw-wisdom.log"
@@ -1585,6 +1598,9 @@ if [[ -n \${fft_cpu} ]]; then
 else
     echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) WARNING: the CPU plan names no fft core, so the planner is NOT pinned and its timings will rank plans for whatever core it happens to land on"
 fi
+### Anything left by an interrupted run is worthless, and removing it first means the open below is a
+### create rather than a truncate of someone else's file
+rm -f ${tmp_wisdom_file_path}
 /usr/bin/time "\${pin_cmd[@]}" stdbuf -oL -eL fftwf-wisdom -v -T 1 \${ref_arg} -o ${tmp_wisdom_file_path} ${wisdom_spec_list}
 declare rc=\$?
 if (( rc )); then
