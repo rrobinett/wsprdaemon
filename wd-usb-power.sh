@@ -420,20 +420,28 @@ function wd_usb_power_reenumerate_dev()
 ### and radiod came up with its full thread set immediately.
 ###
 ### sysfs path of the PORT a device hangs off, whose 'disable' takes the port down (1) and up (0).
-### Root-hub child '2-6'   -> /sys/bus/usb/devices/2-0:1.0/usb2-port6/disable
-### Behind a hub '2-6.3'   -> /sys/bus/usb/devices/2-6:1.0/usb2-port3/disable
+### The port DIRECTORY is named differently depending on whether the port belongs to a root hub or to
+### an external hub, and getting this wrong silently loses the only recovery lever a host without a
+### power-switching hub has:
+### Root-hub child '2-6'   -> /sys/bus/usb/devices/2-0:1.0/usb2-port6/disable    ('usb<bus>-port<n>')
+### Behind a hub '2-6.3'   -> /sys/bus/usb/devices/2-6:1.0/2-6-port3/disable     ('<parent>-port<n>')
+### Only the root hub's ports carry the 'usb' prefix -- the kernel names an external hub's ports after
+### the hub device itself.  Building every path as 'usb<bus>-port<n>' therefore resolved nothing for any
+### RX888 behind a hub, and wd_usb_power_cut_both_halves() gave up on it as if the host had no lever at
+### all.  Found at ON5KQ 2026-09-18, whose two RX888s sit one per kind: rx2 on root-hub port 4-1 (which
+### worked) and rx1 on port 1 of a GenesysLogic USB3.1 hub at 2-1 (which did not).
 function wd_usb_power_port_disable_path()
 {
-    local dev=${1##*/} bus parent port
+    local dev=${1##*/} bus parent port portdir
     dev=${dev%/}
     [[ -n ${dev} && ${dev} == *-* ]] || return 1
     bus=${dev%%-*}
     if [[ ${dev} == *.* ]]; then
-        parent=${dev%.*}; port=${dev##*.}
+        parent=${dev%.*}; port=${dev##*.}; portdir="${parent}-port${port}"
     else
-        parent="${bus}-0"; port=${dev#*-}
+        parent="${bus}-0"; port=${dev#*-}; portdir="usb${bus}-port${port}"
     fi
-    local path="/sys/bus/usb/devices/${parent}:1.0/usb${bus}-port${port}/disable"
+    local path="/sys/bus/usb/devices/${parent}:1.0/${portdir}/disable"
     [[ -f ${path} ]] || return 1
     echo "${path}"
 }
