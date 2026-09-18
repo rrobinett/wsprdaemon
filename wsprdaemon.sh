@@ -135,6 +135,16 @@ cd ${WSPRDAEMON_ROOT_DIR}
 ### Only when the flag is the whole command line: anything else falls through and is handled by the
 ### getopts loop below exactly as before, so 'wd -b' keeps working in every combination.
 if (( $# == 1 )); then
+    ### '-V' prints one string that is already in hand: VERSION is assigned at the top of this file and
+    ### needs neither a site's conf nor any of the sourcing below.  It was left to the getopts loop, so
+    ### it paid the full ~64 s anyway -- measured at ON5KQ 2026-09-18, where a bare 'wdv' also re-pinned
+    ### both running radiods and moved 64 processes between cores.  An operator who asks WD its version
+    ### and watches nothing happen for a minute concludes the machine is wedged and power-cycles it,
+    ### which is exactly what that site was doing to itself.  Same text as the 'V)' case below.
+    if [[ $1 == "-V" ]]; then
+        echo "Version = ${VERSION}"
+        exit 0
+    fi
     declare -A WD_STATUS_REPORTS=(
         ["-b"]="wd-decode-health.sh wd_decode_health_show"
         ["-t"]="wd-time-sync.sh wd_time_sync_show"
