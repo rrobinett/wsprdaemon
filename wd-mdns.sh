@@ -47,11 +47,21 @@ function wd_mdns_unresolved()
 ### Echoes the radiod@ unit whose conf publishes stream $1 (data = or status = line), or nothing
 function wd_mdns_unit_for_stream()
 {
-    local stream=$1 conf
+    local stream=$1 conf unit
+    ### Only a unit this host is actually supposed to run may be named here.  /etc/radio holds ka9q-radio's ~29 stock
+    ### sample confs, and several of them publish the very stream names WD consumes: radiod@airspyhf-generic.conf and
+    ### radiod@kfs1.conf both name wspr-pcm.local, and radiod@kfs1.conf names wwv-iq.local.  Matching on the conf alone
+    ### pointed PE0MJX's remote-only site at radiod@airspyhf-generic.service -- permanently inactive, because it is a
+    ### sample for hardware he does not own -- so spawn_wav_recording_daemon() decided the local radiod was down and
+    ### never spawned a recorder again.  The site went silent with no local fault of any kind.
+    ### An enabled-but-stopped unit is still reported: that is the real case this whole mechanism exists for (KX4AZ-T
+    ### with its dipole RX888 unplugged).  A unit that is neither enabled nor running is not this host's receiver.
     for conf in /etc/radio/radiod@*.conf; do
         [[ -f ${conf} ]] || continue
         if grep -qE "^[[:space:]]*(data|status)[[:space:]]*=[[:space:]]*${stream}([[:space:]#]|$)" "${conf}"; then
-            conf=${conf##*/radiod@}; echo "radiod@${conf%.conf}.service"; return 0
+            conf=${conf##*/radiod@}; unit="radiod@${conf%.conf}.service"
+            systemctl is-enabled "${unit}" >/dev/null 2>&1 || systemctl is-active --quiet "${unit}" || continue
+            echo "${unit}"; return 0
         fi
     done
 }

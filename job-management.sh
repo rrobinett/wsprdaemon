@@ -69,8 +69,12 @@ function check_for_zombies() {
         return 0
     fi
     ### First check if the watchdog and the upload daemons are running
-    local expected_pid_file_list=$( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid' )
-    for pid_file_path in ${pid_file_list[@]}; do
+    ### The loop below iterated ${pid_file_list[@]}, which is never assigned in this file -- the only assignments of that
+    ### name are locals inside functions in wd-utils.sh and show-memory-usage.sh.  Under bash >= 4.4 an unset array
+    ### expands to nothing without tripping 'set -u', so this loop has never run on any site: no watchdog or upload
+    ### daemon pid file has ever been checked, and check_for_zombie_daemon() has never logged a single line.
+    local expected_pid_file_list=( $( find ${WSPRDAEMON_TMP_DIR} ${WSPRDAEMON_ROOT_DIR} -name '*.pid' ) )
+    for pid_file_path in ${expected_pid_file_list[@]}; do
         local daemon_pid=$(check_for_zombie_daemon ${pid_file_path} )
         if [[ -n "${daemon_pid}" ]]; then
             expected_and_running_pids+=( ${daemon_pid} )
