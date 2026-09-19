@@ -995,7 +995,12 @@ function wd_reconcile_radiod_band_list() {
     gawk '
         /^[[:space:]]*\[/ { section=$0 }
         /^[[:space:]]*freq[[:space:]]*=/ {
-            if (section ~ /\[WWV-IQ\]/ && match($0, /"[^"]*"/)) {
+            ### Any section whose name ENDS in WWV-IQ, not just the bare [WWV-IQ].  A multi-receiver host
+            ### names one per receiver, and /\[WWV-IQ\]/ matches none of them because the "[" has to sit
+            ### immediately before the W: KFS-MAIN carries [KFS-NW-WWV-IQ] [KFS-OMNI-WWV-IQ]
+            ### [KFS-SE-WWV-IQ] [KFS-SW-WWV-IQ] alongside [WWV-IQ], all of them enabled, and only the last
+            ### was ever cleaned - so radiod went on producing dead CHU channels for four KFS receivers.
+            if (section ~ /WWV-IQ\][[:space:]]*$/ && match($0, /"[^"]*"/)) {
                 inner = substr($0, RSTART + 1, RLENGTH - 2)
                 n = split(inner, tok, /[[:space:]]+/)
                 out = ""
@@ -1014,7 +1019,7 @@ function wd_reconcile_radiod_band_list() {
         wd_logger 2 "radiod band list in ${conf_file} is already current (no CHU frequencies)"
         return 0
     fi
-    wd_logger 1 "Updating radiod band list in ${conf_file}: removing the obsolete CHU frequencies (3330/7850/14670 kHz) from WWV-IQ"
+    wd_logger 1 "Updating radiod band list in ${conf_file}: removing the obsolete CHU frequencies (3330/7850/14670 kHz) from every WWV-IQ section"
     sudo cp -p "${conf_file}" "${conf_file}.bak.$(date +%Y%m%d-%H%M%S)"
     if sudo cp "${tmp_file}" "${conf_file}"; then
         rm -f "${tmp_file}"
