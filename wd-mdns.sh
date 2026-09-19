@@ -47,7 +47,7 @@ function wd_mdns_unresolved()
 ### Echoes the radiod@ unit whose conf publishes stream $1 (data = or status = line), or nothing
 function wd_mdns_unit_for_stream()
 {
-    local stream=$1 conf unit
+    local stream=$1 conf unit state
     ### Only a unit this host is actually supposed to run may be named here.  /etc/radio holds ka9q-radio's ~29 stock
     ### sample confs, and several of them publish the very stream names WD consumes: radiod@airspyhf-generic.conf and
     ### radiod@kfs1.conf both name wspr-pcm.local, and radiod@kfs1.conf names wwv-iq.local.  Matching on the conf alone
@@ -60,7 +60,14 @@ function wd_mdns_unit_for_stream()
         [[ -f ${conf} ]] || continue
         if grep -qE "^[[:space:]]*(data|status)[[:space:]]*=[[:space:]]*${stream}([[:space:]#]|$)" "${conf}"; then
             conf=${conf##*/radiod@}; unit="radiod@${conf%.conf}.service"
-            systemctl is-enabled "${unit}" >/dev/null 2>&1 || systemctl is-active --quiet "${unit}" || continue
+            ### Skip only a unit that is genuinely unused: not enabled AND sitting inactive.  A unit that is enabled,
+            ### or that is in any live state, is this host's receiver even when it is not currently serving --
+            ### N8UR's radiod@rx888-wsprdaemon is "disabled" yet crash-looping in activating/auto-restart because its
+            ### RX888 is off the USB bus, and that is precisely the case the caller must be told about.
+            state=$( systemctl is-active "${unit}" 2>/dev/null )
+            if ! systemctl is-enabled "${unit}" >/dev/null 2>&1; then
+                [[ -n ${state} && ${state} != "inactive" && ${state} != "unknown" ]] || continue
+            fi
             echo "${unit}"; return 0
         fi
     done
