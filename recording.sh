@@ -447,6 +447,12 @@ declare WD_RECORDER_RADIOD_DOWN_LOG_SECS=${WD_RECORDER_RADIOD_DOWN_LOG_SECS-600}
 function wd_radiod_down_for_stream()
 {
     local stream=$1 unit state
+    ### A site that sets KA9Q_RUNS_ONLY_REMOTELY has no local radiod at all and says so in wsprdaemon.conf.  Honour that
+    ### declaration instead of inferring it from systemd: PE0MJX declared it on line 13 of his conf, but nothing in the
+    ### recorder path read the variable, so the search below ran anyway and matched one of ka9q-radio's stock sample
+    ### confs.  His station recorded nothing for five days while stating plainly that it had no receiver to check.
+    ### Matched as "starts with y", the same way ka9q-utils.sh normalises it, since the raw conf value is read here.
+    [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == [Yy]* ]] && return 1
     [[ ${stream} == *.local ]] || return 1
     declare -F wd_mdns_unit_for_stream > /dev/null || return 1
     unit=$( wd_mdns_unit_for_stream "${stream}" )
