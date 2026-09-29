@@ -471,6 +471,25 @@ function spawn_wav_recording_daemon() {
 
     local recording_dir=$(get_recording_dir_path ${receiver_name} ${receiver_rx_band})
 
+    ### A band being retired at a schedule change has had its recorder stopped ON PURPOSE, and its decoder
+    ### is finishing the wav files already on disk before it too is stopped (kill_decoding_daemon).  The
+    ### decoder calls this function on every pass, so without this check it would immediately respawn the
+    ### recorder that was just stopped: the drain would never converge, and the rotation would end by
+    ### killing the decoder and leaving that recorder behind -- an orphan holding a KiwiSDR channel for a
+    ### band which is no longer scheduled, which is precisely the complaint the drain exists to fix.
+    ### The marker is ignored once stale so a crash mid-rotation cannot silence a band indefinitely, and
+    ### it is only ever written for the per-band (non-KA9Q) recorder model.
+    local wd_retiring_marker="${recording_dir}/${WD_RETIRING_MARKER_FILE:-retiring}"
+    if [[ -f ${wd_retiring_marker} ]]; then
+        local wd_retiring_age=$(( $(printf "%(%s)T") - $(stat -c %Y "${wd_retiring_marker}" 2>/dev/null || echo 0) ))
+        if (( wd_retiring_age < ${WD_RETIRING_MARKER_MAX_SECS:-600} )); then
+            wd_logger 2 "'${receiver_name},${receiver_rx_band}' is being retired and is draining, so not respawning its recorder"
+            return 0
+        fi
+        wd_logger 1 "WARNING: '${wd_retiring_marker}' is ${wd_retiring_age} seconds old, so this band was not retired cleanly; ignoring it and respawning the recorder"
+        rm -f "${wd_retiring_marker}"
+    fi
+
     local receiver_list_index=$(get_receiver_list_index_from_name ${receiver_name})
     if [[ -z "${receiver_list_index}" ]]; then
         wd_logger 1 "ERROR: Found the supplied receiver name '${receiver_name}' is invalid"

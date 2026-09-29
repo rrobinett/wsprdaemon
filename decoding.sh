@@ -2998,6 +2998,59 @@ function kill_decoding_daemon() {
     fi
  
     local decoding_pid=$( < ${decoding_pid_file} )
+
+    ### Retiring a band must not throw away what it has already recorded.  Killing the decoder first --
+    ### which is what this did -- orphans every wav file the band recorded but has not yet decoded: no
+    ### job owns them afterwards, so nothing decodes them and they age out.  That is the whole of the
+    ### twice-daily loss at any site whose schedule rotates.  At ON5KQ on 2026-09-29 the sunset+00:10
+    ### rotation fired at 17:47 and the cycles recorded at 17:44-17:47 on the bands the rotation REMOVED
+    ### were reported dropped 35 minutes later, 69 of them, every one on a KiwiSDR -- because that site's
+    ### two RX888s are in every band of both halves of its schedule, so no band is ever retired from them.
+    ###
+    ### So: stop the recorder, let the decoder finish the queue, and only then kill the decoder.  The
+    ### 'retiring' marker is what makes that possible.  The decoding daemon calls
+    ### spawn_wav_recording_daemon() on EVERY pass, so without it the recorder we just stopped comes
+    ### straight back, the drain never converges, and we end up killing the decoder having left an orphan
+    ### recorder holding a KiwiSDR channel -- the exact "channels hang and are still running although not
+    ### scheduled" this is meant to prevent.  spawn_wav_recording_daemon() ignores the marker once it is
+    ### stale, so a crash mid-rotation cannot silence a band until someone notices.
+    local retiring_marker=""
+    if [[ ! ${receiver_name} =~ KA9Q ]]; then
+        retiring_marker="${decoding_dir}/${WD_RETIRING_MARKER_FILE:-retiring}"
+        touch "${retiring_marker}"
+    fi
+
+    kill_wav_recording_daemon ${receiver_name} ${receiver_band}
+    rc=$? ; if (( rc )); then
+        ### Never return here.  A recorder which would not stop is no reason to leave a decoding daemon
+        ### running for a band that is no longer scheduled, which is what returning used to do.
+        wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band}' => ${rc}; draining and stopping the decoder anyway"
+    fi
+
+    ### Only a per-band recorder can be stopped and drained.  A KA9Q receiver has ONE pcmrecord for all
+    ### of its bands, so kill_wav_recording_daemon() deliberately does nothing for it and there is no
+    ### queue that stopping this band can drain; leave that path exactly as it was.
+    if [[ -n ${retiring_marker} ]]; then
+        ### One deadline for the whole schedule change, set by the caller (job-management.sh).  A per-band
+        ### budget would be wrong: a rotation can retire seventeen bands here, and seventeen sequential
+        ### waits would delay the incoming schedule by far more than the cycles the drain saves.  The
+        ### decoders of every retiring band keep running while the caller walks its list, so they drain
+        ### concurrently and the whole rotation costs about one decode pass.
+        local drain_deadline=${WD_DRAIN_DEADLINE_EPOCH:-$(( ${EPOCHSECONDS} + ${WD_DRAIN_MAX_SECS:-120} ))}
+        local drain_start=${EPOCHSECONDS}
+        local pending
+        pending=$( find ${decoding_dir} -maxdepth 1 -name '*.wav' 2>/dev/null | wc -l )
+        while (( pending > 0 )) && (( ${EPOCHSECONDS} < drain_deadline )); do
+            sleep 2
+            pending=$( find ${decoding_dir} -maxdepth 1 -name '*.wav' 2>/dev/null | wc -l )
+        done
+        if (( pending > 0 )); then
+            wd_logger 1 "WARNING: '${receiver_name},${receiver_band}' still has ${pending} undecoded wav file(s) after $(( ${EPOCHSECONDS} - drain_start )) seconds, so those cycles are lost"
+        else
+            wd_logger 1 "Drained '${receiver_name},${receiver_band}' in $(( ${EPOCHSECONDS} - drain_start )) seconds, so no recorded cycle is lost by retiring it"
+        fi
+    fi
+
     wd_rm ${decoding_pid_file}
     rc=$? ; if (( rc )); then
          cd - > /dev/null
@@ -3010,12 +3063,11 @@ function kill_decoding_daemon() {
         wd_logger 1 "ERROR: 'wd_kill_and_wait_for_death ${decoding_pid}' => ${rc}"
         return 4
     fi
- 
-    kill_wav_recording_daemon ${receiver_name} ${receiver_band}
-    rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${receiver_name} ${receiver_band} => $?"
-        return 5
-    fi
+
+    ### Only now that the decoder is dead is it safe to drop the marker: removing it earlier would let
+    ### that decoder respawn the recorder in the gap.
+    [[ -n ${retiring_marker} ]] && rm -f "${retiring_marker}"
+
     wd_logger 1 "Killed  $receiver_name ${receiver_band} => $?"
     return 0
 }
