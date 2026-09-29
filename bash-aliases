@@ -2008,6 +2008,8 @@ alias wd-usb-cycle='wd -U'   ### wd-usb-cycle SERIAL|HUB:PORT|all  => power cycl
 alias wds='wd -s'
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'
+alias wdc='wd -c'       ### Apply the clock ceilings in wsprdaemon.conf WITHOUT restarting WD or radiod.
+                        ### Editing WD_CPU_FREQ_* alone changes nothing; this is what makes it take effect.
 alias wdv='wd -V'
 alias wdvv='(cd ~/wsprdaemon; echo "$(< wd_version.txt)-$(git rev-list --count HEAD)" )'
 alias wdd='wd -d'       ### Increment the verbosity level of all running daemons in CWD

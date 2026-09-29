@@ -50,6 +50,9 @@ usage:
 
     -i                            => list audio and RTL-SDR devices attached to this computer
     -b                            => show decode health: bands which have fallen permanently Behind, decodes killed by their
+    -c                            => apply the clock ceilings set by WD_CPU_FREQ_* in wsprdaemon.conf.  Editing those
+                                     settings alone does nothing; this rewrites the plan file and restarts wd-cpu-freq,
+                                     leaving radiod and the decoders running.  Must be given on its own.
                                      timeout, and wav files purged before they were decoded.  A decode which simply runs
                                      long is not a fault -- the band catches up by itself ('wdb')
     -t                            => show the clock's Time sync state: chronyc tracking + sources + /var/log/wsprdaemon/time-sync.log ('wdt')

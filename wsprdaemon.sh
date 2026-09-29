@@ -145,6 +145,46 @@ if (( $# == 1 )); then
         echo "Version = ${VERSION}"
         exit 0
     fi
+    ### '-c' applies the clock ceilings in wsprdaemon.conf, and touches nothing else.
+    ### Editing WD_CPU_FREQ_RADIOD_MHZ/_OTHER_MHZ does nothing on its own: the value has to be written
+    ### into ${WD_CPU_PLAN_CONF} and wd-cpu-freq restarted before a core's scaling_max_freq moves.
+    ### Until the '-V' fast path above, EVERY wd command re-ran the whole CPU tuning at source time, so
+    ### 'wdv' applied clock changes by accident and at least one operator's workflow depended on it
+    ### (ON5KQ, 2026-09-29: "after changing the wsprdaemon.conf file just the command wdv doesn't change
+    ### anything").  His fallback was 'wdz' then 'wda', a full stop and start of WD and radiod, which on
+    ### that host means re-seating RX888 cables by hand.  Changing a clock ceiling should never cost
+    ### anyone a radio, so give it its own command: rewrite the plan file, restart the one unit that
+    ### reads it, and leave radiod and the decoders running.
+    if [[ $1 == "-c" ]]; then
+        set +o nounset
+        source ${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf 2>/dev/null
+        ### wd-cpu-tuning.sh logs through wd_logger(), which lives in wd-utils.sh -- and sourcing THAT
+        ### file turns 'nounset' back on and installs an ERR trap, which is precisely what this fast path
+        ### switched off.  Supply the one function it needs instead of dragging in the rest: level 1 is
+        ### what an operator should see (wd_cpu_tuning_log demotes everything that is not an ERROR or a
+        ### WARNING to level 2), and the file log is written by wd_cpu_tuning_log itself either way.
+        function wd_logger() { (( ${1:-2} <= 1 )) && echo -e "${2:-}" ; return 0 ; }
+        source ${WSPRDAEMON_ROOT_DIR}/wd-cpu-tuning.sh
+        if [[ "${WD_CPU_TUNING}" != "yes" ]]; then
+            echo "WD_CPU_TUNING is not \"yes\", so this host's clocks come from CPU_CORE_KHZ in wsprdaemon.conf rather than from WD.  Nothing applied."
+            exit 0
+        fi
+        wd_cpu_tuning_write_plan_conf
+        if ! sudo systemctl restart wd-cpu-freq ; then
+            echo "ERROR: wd-cpu-freq failed to restart; the old ceilings are still in force"
+            sudo systemctl status wd-cpu-freq --no-pager 2>&1 | tail -5
+            exit 1
+        fi
+        echo "Applied the clock policy from wsprdaemon.conf.  radiod and the decoders were left running."
+        echo "Ceilings now in force:"
+        for wd_freq_file in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq ; do
+            [[ -r ${wd_freq_file} ]] || continue
+            wd_freq_cpu=${wd_freq_file#/sys/devices/system/cpu/cpu}
+            printf '%s %s\n' "${wd_freq_cpu%%/*}" "$(( $(< ${wd_freq_file}) / 1000 ))"
+        done | sort -n | awk '{grp[$2]=grp[$2]","$1} END {for (mhz in grp) {sub(/^,/,"",grp[mhz]); printf "  %5s MHz : cpus %s\n", mhz, grp[mhz]}}'
+        echo "A change made only here is temporary in the useful sense: the next WD start rewrites it from wsprdaemon.conf."
+        exit 0
+    fi
     declare -A WD_STATUS_REPORTS=(
         ["-b"]="wd-decode-health.sh wd_decode_health_show"
         ["-t"]="wd-time-sync.sh wd_time_sync_show"
@@ -190,7 +230,7 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAbzZsg:hij:l:pvVw:dDr:tuU: opt ; do
+while getopts :aAbczZsg:hij:l:pvVw:dDr:tuU: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
@@ -256,6 +296,12 @@ while getopts :aAbzZsg:hij:l:pvVw:dDr:tuU: opt ; do
             ;;
         V)
             echo "Version = ${VERSION}"
+            ;;
+        c)
+            ### Handled above, before any sourcing, but only when '-c' is the whole command line.  Reaching
+            ### here means it was combined with something else, and by now the source-time CPU tuning has
+            ### already run -- so say what happened rather than silently doing nothing.
+            echo "'-c' applies the clock policy and must be given on its own: run 'wd -c'." 1>&2
             ;;
         d)
             increment_verbosity
