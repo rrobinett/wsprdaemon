@@ -697,18 +697,33 @@ function wd_usb_power_show()
     if ! wd_usb_power_uhubctl_path > /dev/null ; then
         echo "uhubctl is not installed, so WD can not power cycle any port ('sudo apt install uhubctl')"
     elif [[ -z ${hubs} ]]; then
-        echo "No hub on this host switches power per port, so WD can not power cycle a hung RX888."
+        ### Do not stop at "no switchable hub".  Since 2377c53 WD can also reset a radio by disabling its
+        ### USB port through sysfs, which needs no special hardware, and that is the only lever most hosts
+        ### have.  Saying flatly that WD "can not power cycle a hung RX888" sent ON5KQ's operator to
+        ### re-seat cables by hand for eleven days after the sysfs route started working on his box.
+        echo "No hub on this host switches power per port, so WD can not cut a radio's POWER."
+        if [[ ${WD_USB_PORT_DISABLE} == "yes" ]]; then
+            echo "  It can still reset a wedged RX888 by disabling its USB port through sysfs -- see the 'recovery' column below."
+        else
+            echo "  WD_USB_PORT_DISABLE=no, so the sysfs port reset is switched off too and WD has no way to recover a wedged RX888."
+        fi
         echo "  ${WD_USB_POWER_HUB_HINT}"
     else
         echo "Hubs that switch power per port (uhubctl -l): ${hubs}"
     fi
     echo
-    printf "%-18s %-8s %-6s %-8s %-6s %-12s %s\n" "RX888 serial" "usb dev" "Mb/s" "hub" "port" "switchable" "radiod instance (state)"
+    printf "%-18s %-8s %-6s %-8s %-6s %-12s %s\n" "RX888 serial" "usb dev" "Mb/s" "hub" "port" "recovery" "radiod instance (state)"
     for d in /sys/bus/usb/devices/*/; do
         [[ -f ${d}/idVendor && $(cat ${d}/idVendor) == "${WD_USB_RX888_VENDOR}" ]] || continue
         pid=$( cat ${d}/idProduct ); serial=$( tr -d '\n' < ${d}/serial 2>/dev/null ); speed=$( cat ${d}/speed 2>/dev/null ); d=${d%/}; dev=${d##*/}
         read -r hub port <<< "$( wd_usb_power_hub_port_of "${dev}" )"
-        sw="no"; [[ " ${hubs} " == *" ${hub} "* ]] && sw="yes"
+        ### What could WD actually do to this radio if it wedged: cut its power, cut its port, or nothing.
+        sw=""
+        [[ " ${hubs} " == *" ${hub} "* ]] && sw="power"
+        if [[ ${WD_USB_PORT_DISABLE} == "yes" ]] && wd_usb_power_port_disable_path "${dev}" > /dev/null ; then
+            sw="${sw:+${sw}+}port"
+        fi
+        sw=${sw:-no}
         [[ ${pid} == "${WD_USB_RX888_BOOTLOADER}" ]] && serial="(bootloader 00f3)"
         inst=""
         for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
