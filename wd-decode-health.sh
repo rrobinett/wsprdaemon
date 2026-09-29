@@ -307,8 +307,10 @@ function wd_recording_health_show()
         return 0
     fi
 
+    ### kiwirecorder.py is a recorder too.  Counting only wd-record/pcmrecord told a six-Kiwi site that
+    ### "4 recorder process(es) are running" while 43 of them were, which reads as a broken host.
     local recorder_count
-    recorder_count=$( pgrep -c -f "wd-record|pcmrecord" 2>/dev/null )
+    recorder_count=$( pgrep -c -f "wd-record|pcmrecord|kiwirecorder" 2>/dev/null )
     [[ ${recorder_count} =~ ^[0-9]+$ ]] || recorder_count=0
 
     ### Which receivers SHOULD be recording?  running.jobs is the authoritative list -- its entries are
@@ -320,9 +322,25 @@ function wd_recording_health_show()
     if [[ -f ${running_jobs_file} ]]; then
         local -a RUNNING_JOBS=()
         source ${running_jobs_file} 2>/dev/null
+        ### A job's receiver may be a MERGed (logical) receiver, and NOTHING records under that name:
+        ### the wav files live under the real receivers behind it.  Taking the job's name verbatim made
+        ### every band at a MERG_ site report "has no recording directory" while all eight real
+        ### receivers were writing normally (ON5KQ 2026-09-29, 15 scheduled MERG_ jobs, 15 false
+        ### errors).  Expand through RECEIVER_LIST, exactly as get_list_of_active_real_receivers() does.
         local job_entry
         for job_entry in "${RUNNING_JOBS[@]}" ; do
-            receivers_list+=( "${job_entry%%,*}" )
+            local job_rx=${job_entry%%,*}
+            if [[ ! ${job_rx} =~ MERG ]]; then
+                receivers_list+=( "${job_rx}" )
+                continue
+            fi
+            local merge_line_list=( $(IFS=$'\n'; echo "${RECEIVER_LIST[*]-}" | grep -w "${job_rx}") )
+            local merged_rx
+            for merged_rx in ${merge_line_list[1]//,/ } ; do
+                receivers_list+=( "${merged_rx}" )
+            done
+            ### An unresolvable MERG name means RECEIVER_LIST is not in scope; say nothing rather than
+            ### inventing a silent receiver, and let the tree scan below answer instead.
         done
         IFS=$'\n' receivers_list=( $( printf '%s\n' "${receivers_list[@]}" | sort -u ) ); unset IFS
     fi
