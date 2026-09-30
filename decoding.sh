@@ -2976,6 +2976,110 @@ function spawn_decoding_daemon() {
     return 0
 }
 
+### Drain a band that is about to be retired, BEFORE anything is torn down.
+###
+### Timing is the whole of this.  An earlier attempt drained inside kill_decoding_daemon(), which runs
+### AFTER kill_posting_daemon() has removed the decoder's client directory (posting.sh) -- and a decoding
+### daemon which finds no subdir under decoding_clients.d logs "So stop trying to decode" and stops.  So
+### the drain waited on a decoder that had already been told to stop, the queue never moved, and the
+### budget was simply burned: measured at ON5KQ 2026-09-30, "still has 19 undecoded wav file(s) after 118
+### seconds" and then "after 0 seconds" for every band behind it, with the day's losses unchanged at 60.
+###
+### It has to happen here instead, while the decoder is still running AND its posting daemon is still
+### alive to upload what comes out -- draining after the posting daemon is dead would decode the cycles
+### and then drop the spots on the floor, which is no better.
+###
+### Stopping the recorder is what makes the queue finite, and the 'retiring' marker is what stops the
+### decoder putting the recorder straight back: get_wav_file_list() calls spawn_wav_recording_daemon() on
+### every pass.  Without the marker the drain never converges and the rotation ends with an orphan
+### recorder holding a KiwiSDR channel for a band that is no longer scheduled.
+function wd_drain_retiring_band()
+{
+    local posting_receiver_name=$1
+    local posting_receiver_band=$2
+    local posting_receiver_address=$3
+    local real_receiver_list=() real_receiver_name
+
+    if [[ "${posting_receiver_name}" =~ ^MERG ]]; then
+        real_receiver_list=( ${posting_receiver_address//,/ } )
+    else
+        real_receiver_list=( ${posting_receiver_name} )
+    fi
+
+    local -a draining_dirs=()
+    for real_receiver_name in ${real_receiver_list[@]} ; do
+        ### A KA9Q receiver has ONE pcmrecord for all of its bands, which is why kill_wav_recording_daemon()
+        ### refuses to stop it per band: there is no per-band recorder to stop, so nothing here can drain.
+        [[ ${real_receiver_name} =~ KA9Q ]] && continue
+
+        local decoding_dir=$( get_decoding_dir_path ${real_receiver_name} ${posting_receiver_band} )
+        [[ -d ${decoding_dir} ]] || continue
+
+        ### Only when WE are its last client.  While another posting daemon still reads this decoder the
+        ### band keeps running and must not have its recorder stopped.
+        local other_clients
+        other_clients=$( find ${decoding_dir}/${DECODING_CLIENTS_SUBDIR} -maxdepth 1 -type d -not -name '*mutex.lock' 2>/dev/null | tail -n +2 | grep -v "/${posting_receiver_name}$" | wc -l )
+        if (( other_clients > 0 )); then
+            wd_logger 1 "'${real_receiver_name},${posting_receiver_band}' still has ${other_clients} other posting client(s), so it keeps running and is not drained"
+            continue
+        fi
+
+        touch "${decoding_dir}/${WD_RETIRING_MARKER_FILE:-retiring}"
+        kill_wav_recording_daemon ${real_receiver_name} ${posting_receiver_band}
+        local rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'kill_wav_recording_daemon ${real_receiver_name} ${posting_receiver_band}' => ${rc}; draining anyway"
+        fi
+        draining_dirs+=( "${decoding_dir}" )
+    done
+
+    (( ${#draining_dirs[@]} == 0 )) && return 0
+
+    ### ONE deadline for the whole schedule change, set by job-management.sh.  A per-band budget would be
+    ### wrong: a rotation here retires seventeen bands, and seventeen sequential waits would delay the
+    ### INCOMING schedule by more than the cycles the drain saves.  Every retiring band's decoder keeps
+    ### running while job-management walks its list, so they drain concurrently.
+    local drain_deadline=${WD_DRAIN_DEADLINE_EPOCH:-$(( ${EPOCHSECONDS} + ${WD_DRAIN_MAX_SECS:-120} ))}
+    local drain_start=${EPOCHSECONDS}
+    local pending=0 dir
+    while (( ${EPOCHSECONDS} < drain_deadline )); do
+        pending=0
+        for dir in "${draining_dirs[@]}" ; do
+            pending=$(( pending + $( find ${dir} -maxdepth 1 -name '*.wav' 2>/dev/null | wc -l ) ))
+        done
+        (( pending == 0 )) && break
+        sleep 2
+    done
+    if (( pending > 0 )); then
+        wd_logger 1 "WARNING: '${posting_receiver_name},${posting_receiver_band}' still has ${pending} undecoded wav file(s) after $(( ${EPOCHSECONDS} - drain_start )) seconds, so those cycles are lost"
+    else
+        wd_logger 1 "Drained '${posting_receiver_name},${posting_receiver_band}' in $(( ${EPOCHSECONDS} - drain_start )) seconds, so no recorded cycle is lost by retiring it"
+    fi
+    return 0
+}
+
+### Drop the markers wd_drain_retiring_band() left.  Called at the END of kill_posting_daemon(), once the
+### decoding daemons are dead, because removing one earlier lets that decoder respawn the recorder in the
+### gap.  spawn_wav_recording_daemon() ignores a marker older than WD_RETIRING_MARKER_MAX_SECS anyway, so
+### a marker stranded by an error path cannot silence a band for more than that.
+function wd_drain_clear_markers()
+{
+    local posting_receiver_name=$1
+    local posting_receiver_band=$2
+    local posting_receiver_address=$3
+    local real_receiver_list=() real_receiver_name
+
+    if [[ "${posting_receiver_name}" =~ ^MERG ]]; then
+        real_receiver_list=( ${posting_receiver_address//,/ } )
+    else
+        real_receiver_list=( ${posting_receiver_name} )
+    fi
+    for real_receiver_name in ${real_receiver_list[@]} ; do
+        [[ ${real_receiver_name} =~ KA9Q ]] && continue
+        rm -f "$( get_decoding_dir_path ${real_receiver_name} ${posting_receiver_band} )/${WD_RETIRING_MARKER_FILE:-retiring}"
+    done
+    return 0
+}
+
 function kill_decoding_daemon() {
     local receiver_name=$1
     local receiver_band=$2

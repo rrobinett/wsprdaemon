@@ -637,6 +637,14 @@ function update_running_jobs_to_match_expected_jobs()
     local temp_running_jobs=( ${RUNNING_JOBS[*]-} )
     wd_logger 2 "RUNNING_JOBS=${RUNNING_JOBS[*]-}"
 
+    ### ONE drain deadline for the whole schedule change, not one per band.  Retiring a band now stops its
+    ### recorder and lets its decoder finish the wav files already recorded, instead of discarding them.
+    ### Every retiring band's decoder keeps running while this loop walks the list, so they drain
+    ### concurrently and the rotation costs about one decode pass rather than one per band -- which matters
+    ### where a rotation retires seventeen of them.  Past the deadline the rest are torn down immediately,
+    ### exactly as they always were, so a slow decoder can never delay the incoming schedule indefinitely.
+    export WD_DRAIN_DEADLINE_EPOCH=$(( ${EPOCHSECONDS} + ${WD_DRAIN_MAX_SECS:-120} ))
+
     ### Check that posting jobs which should be running are still running, and terminate any jobs currently running which will no longer be running 
     ### posting_daemon() will ensure that decoding_daemon() and recording_daemon()s are running
     local running_job

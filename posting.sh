@@ -488,6 +488,13 @@ function kill_posting_daemon() {
         wd_logger 1 " No address(es) found for ${receiver_name}"
         return 1
     fi
+    ### Drain this band BEFORE anything below is torn down.  Everything that follows -- killing the
+    ### posting daemon, removing the decoder's client directory, killing the decoder -- makes draining
+    ### impossible: the decoder stops the moment its last client directory goes, and once the posting
+    ### daemon is dead there is nothing left to upload what a drain would produce.  So it happens here,
+    ### while both are still alive, or it does not happen at all.
+    wd_drain_retiring_band "${receiver_name}" "${receiver_band}" "${receiver_address}"
+
     local posting_dir=$(get_posting_dir_path ${receiver_name} ${receiver_band})
     if [[ ! -d "${posting_dir}" ]]; then
         wd_logger 1 "Can't find expected posting daemon dir ${posting_dir}"
@@ -556,6 +563,10 @@ function kill_posting_daemon() {
             fi
        fi
     done
+    ### Only now that the decoding daemons are dead is it safe to drop the 'retiring' markers: removing one
+    ### while its decoder still lived would let that decoder respawn the recorder we stopped to drain it.
+    wd_drain_clear_markers "${receiver_name}" "${receiver_band}" "${receiver_address}"
+
     ### decoding_daemon() will terminate themselves if this posting_daemon is the last to be a client for wspr_spots.txt files
     return 0
 }
