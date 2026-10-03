@@ -802,6 +802,58 @@ function wd_usb_power_show()
     return 0
 }
 
+### 'wd -R': re-train every RX888 which came up on the USB 2 half of its USB 3 jack.
+### The link speed of a USB 3 jack is settled by link training at boot, or at the instant the plug seats,
+### separately for each radio -- and a marginal cable or RF pickup from the station makes that a coin
+### toss.  A radio which loses the toss sits at 480 Mb/s with its firmware loaded and its serial
+### readable, and radiod refuses it outright ("not at least SuperSpeed"), so the operator reboots to
+### re-roll the toss or re-seats cables for a quarter of an hour.  ON5KQ 2026-10-02: 343 such rejections
+### over 30 days, every one of them on one of the two days he rebooted, and BOTH of his radios in them.
+### wd_usb_power_cut_both_halves() already fixes this without anyone touching a cable, but nothing let an
+### operator ASK for it -- 'wd -U' bails the moment it reads 480 Mb/s ("move it to a USB 3 port"), a rule
+### written for a radio genuinely plugged into a black socket, which is the other reason for that speed.
+function wd_usb_power_retrain_cmd()
+{
+    local dev serial speed inst this_inst conf rc=0
+    local -a devs=( $( wd_usb_power_rx888_devs_below_superspeed ) )
+
+    if (( ! ${#devs[@]} )); then
+        echo "Every RX888 on this host is already at SuperSpeed, so there is nothing to re-train.  'wd -u' shows each one's link speed."
+        return 0
+    fi
+    for dev in "${devs[@]}"; do
+        serial=$( tr -d '\n' < /sys/bus/usb/devices/${dev}/serial 2>/dev/null )
+        speed=$( cat /sys/bus/usb/devices/${dev}/speed 2>/dev/null )
+        ### Whoever has the radio open must let go before the jack can be cut underneath it
+        inst=""
+        for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
+            [[ -f ${conf} ]] || continue
+            this_inst=$( basename ${conf#*radiod@} .conf )
+            [[ $( wd_usb_power_serial_of_instance "${this_inst}" ) == "${serial^^}" ]] || continue
+            inst=${this_inst}
+            break
+        done
+        echo "RX888 ${serial:-(no serial)} is on usb ${dev} at ${speed:-?} Mb/s${inst:+, wanted by radiod@${inst}}"
+        if [[ -n ${inst} ]] && systemctl is-active --quiet "radiod@${inst}" ; then
+            echo "  stopping radiod@${inst} so its jack can be cut underneath it"
+            timeout 60 sudo systemctl stop "radiod@${inst}" > /dev/null 2>&1
+        fi
+        if wd_usb_power_cut_both_halves "${dev}" "${serial}" "'wd -R' was asked to re-train RX888 ${serial:-on ${dev}}" ; then
+            echo "  RX888 ${serial} is back at SuperSpeed"
+            wd_usb_power_learn_ports
+        else
+            echo "  RX888 ${serial:-on ${dev}} did NOT come back at SuperSpeed.  Run 'wd -R' again -- each attempt is another"
+            echo "  roll of the same dice -- and if it keeps losing, use a short shielded USB 3 cable, a ferrite, or a powered USB 3 hub."
+            rc=1
+        fi
+        if [[ -n ${inst} ]]; then
+            echo "  starting radiod@${inst}"
+            timeout 60 sudo systemctl start "radiod@${inst}" > /dev/null 2>&1 || { echo "  ERROR: radiod@${inst} did not start"; rc=1; }
+        fi
+    done
+    return ${rc}
+}
+
 ### 'wd -U SERIAL|HUB:PORT|all': cycle by hand, ignoring the per-port throttle
 function wd_usb_power_cycle_cmd()
 {
