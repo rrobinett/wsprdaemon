@@ -590,6 +590,13 @@ function wd_cpu_tuning_apply()
 ### Entry point, called once per WD start.
 function wd_cpu_tuning()
 {
+    ### Set by wsprdaemon.sh when the command is '-Z'.  A shutdown must not re-apply the CPU plan:
+    ### doing so cost ON5KQ ~49 s of every 'wdz' and pushed ExecStop past its 90 s timeout.  See the
+    ### comment at the '-Z' line in wsprdaemon.sh.
+    if [[ "${WD_SKIP_CPU_TUNING:-no}" == "yes" ]]; then
+        return 0
+    fi
+
     ### Make sure the log directory exists and is writable by us, then start a fresh report
     local log_dir=${WD_CPU_TUNING_LOG%/*}
     [[ -d ${log_dir} ]] || sudo mkdir -p "${log_dir}" 2>/dev/null

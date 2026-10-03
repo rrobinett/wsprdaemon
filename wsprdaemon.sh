@@ -190,6 +190,17 @@ if (( $# == 1 )); then
         ["-t"]="wd-time-sync.sh wd_time_sync_show"
         ["-u"]="wd-usb-power.sh wd_usb_power_show"
     )
+    ### '-R' re-trains an RX888 that came up on the USB 2 half of its USB 3 jack.  An operator reaches for
+    ### this when a radio is already missing, so it must not first spend ~49 s re-applying the CPU plan --
+    ### and re-pinning the very radiod it is about to stop.  Same stub-wd_logger trick as '-c' above.
+    if [[ $1 == "-R" ]]; then
+        set +o nounset
+        source ${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf 2>/dev/null
+        function wd_logger() { (( ${1:-2} <= 1 )) && echo -e "${2:-}" ; return 0 ; }
+        source ${WSPRDAEMON_ROOT_DIR}/wd-usb-power.sh
+        LC_ALL=C wd_usb_power_retrain_cmd
+        exit $?
+    fi
     if [[ -n "${WD_STATUS_REPORTS[$1]-}" ]]; then
         declare wd_report_file wd_report_func
         read -r wd_report_file wd_report_func <<< "${WD_STATUS_REPORTS[$1]}"
@@ -202,6 +213,16 @@ if (( $# == 1 )); then
         exit $?
     fi
 fi
+
+### Stopping WD must not re-apply the CPU plan first.  'ExecStop=wsprdaemon.sh -Z' is not one of the
+### fast paths above, so it falls through to the sourcing below, where the bare 'ka9q-setup' in
+### ka9q-utils.sh calls wd_cpu_tuning AT SOURCE TIME.  Measured at ON5KQ 2026-10-02: a 'wdz' spent
+### 05:25:46 -> 05:26:28 enabling the three tuning units, running wd-cpu-apply.sh and re-pinning BOTH
+### still-running radiods before it killed a single daemon, then overran the unit's 90 s
+### TimeoutStopSec and was SIGKILLed -- the same on Sep 29 (x2), Sep 30 and Oct 1.  Re-tuning a host
+### that is shutting down is pointless, and it perturbs the very radiods -Z is about to stop.  The
+### operator sees it as 'wdz takes 2-3 minutes'.  wd_cpu_tuning() returns early when this is set.
+[[ " $* " == *" -Z "* ]] && declare -x WD_SKIP_CPU_TUNING="yes"
 
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh
@@ -230,7 +251,7 @@ source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
 
 [[ -z "$*" ]] && usage
 
-while getopts :aAbczZsg:hij:l:pvVw:dDr:tuU: opt ; do
+while getopts :aAbczZsg:hij:l:pvVw:dDr:RtuU: opt ; do
     case $opt in
         l)
             log_file_viewing  $OPTARG
@@ -273,6 +294,9 @@ while getopts :aAbczZsg:hij:l:pvVw:dDr:tuU: opt ; do
             ;;
         U)
             wd_usb_power_cycle_cmd $OPTARG
+            ;;
+        R)
+            wd_usb_power_retrain_cmd
             ;;
         w)
             watchdog_cmd $OPTARG
