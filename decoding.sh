@@ -2487,6 +2487,7 @@ function decoding_daemon() {
                 ### wsprd get the spotline date/time from the filename, so we can't pass the full filepath to wsprd
                 ln ${decoder_input_wav_filepath} ${decoder_input_wav_filename} 
 
+                wd_decoders_refresh             ### Switch to the ubersdr decoders once their background build has installed them
                 local start_time=${SECONDS}
                 local decode_start_epoch=${EPOCHSECONDS}
                 decode_wspr_wav_file ${decoder_input_wav_filename}  ${wav_file_freq_hz} ${rx_khz_offset} wsprd_stdout.txt "${wsprd_flags}" "${wsprd_spreading_flags}"
@@ -2675,6 +2676,7 @@ function decoding_daemon() {
                 rc=$? ; if (( rc )); then
                     wd_logger 1 "ERROR: 'ln ${decoder_input_wav_filepath} ${decode_dir_path}/${decoder_input_wav_filename}' => ${rc}"   ### This will be logged in the './F_xxx' sub directory
                 else
+                    wd_decoders_refresh
                     ### Don't linger in that F_xxx subdir, since wd_logger ... would get logged there
                     cd ${decode_dir_path}
                     local jt9_timeout_secs=${WSPRD_TIMEOUT_SECS-110}

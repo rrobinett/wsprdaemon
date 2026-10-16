@@ -48,3 +48,9 @@ test.txt
 .bash_aliases
 wd-rac-client/
 wd-rac-client-install.log
+ubersdr_wsprd/
+ubersdr-build.log
+bin/wsprd-ubersdr
+bin/jt9-ubersdr
+bin/ubersdr.stamp
+bin/ubersdr.failed

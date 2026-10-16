@@ -843,6 +843,9 @@ function find_wsjtx_commands()
 
     local bin_file
     for bin_file in ${bin_file_list[@]} ; do
+        if [[ ${bin_file} == *-ubersdr ]]; then
+            continue        ### WD_DECODERS chooses those, in use_ubersdr_decoders(), not the order 'sort' puts them in
+        fi
         wd_logger 2 "Testing ${bin_file}"
         local rc 
         ${bin_file} |& grep -q "Usage" 
@@ -936,6 +939,104 @@ function find_wsjtx_commands()
 #(( ++verbosity ))
 find_wsjtx_commands
 #(( --verbosity ))
+
+### ubersdr_wsprd (github.com/madpsy/ubersdr_wsprd) is WSJT-X's wsprd, and its jt9 for FST4W, rewritten in C++: the same
+### decodes byte for byte at a tenth of the CPU.  At KJ6MKI on 2026-10-16, 32 real two minute wav files on 8 bands gave the
+### identical 104 spots with 13.6 s of CPU against 146.8 s for bin/wsprd-x86-v27, and jt9 FST4W ran 3.7x faster.
+###
+### It is BUILT HERE, never downloaded.  The release binaries need glibc 2.38, so they don't run on Ubuntu 22.04 (2.35) or
+### Debian 12 (2.36), and a -march=native build is tuned to the CPU which runs it.  The build and the repo's own byte for
+### byte checks against WSJT-X's stored outputs take ~5 minutes on a Ryzen, longer on a Pi, and wd-setup.sh is sourced by
+### every wsprdaemon.sh command, so they run detached in a systemd unit, as the FFT planner does.  Until that unit has
+### installed bin/wsprd-ubersdr and bin/jt9-ubersdr the WSJT-X binaries above are used, and the decoders switch on their
+### next cycle once it has.
+###
+### WD_DECODERS="wsjtx" in wsprdaemon.conf goes back to the WSJT-X binaries.  A build which fails or fails its checks is
+### not retried for the same commit and CPU; delete bin/ubersdr.failed to retry it.
+declare WD_DECODERS="${WD_DECODERS-ubersdr}"
+declare UBERSDR_WSPRD_GIT_URL="${UBERSDR_WSPRD_GIT_URL-https://github.com/madpsy/ubersdr_wsprd.git}"
+declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-32bb8ec4c0647e0ee08e1c399a91f35c687d21a1}"
+declare UBERSDR_WSPRD_SRC_DIR="${WSPRDAEMON_ROOT_DIR}/ubersdr_wsprd"
+declare UBERSDR_WSPRD_CMD="${WSPRD_BIN_DIR}/wsprd-ubersdr"
+declare UBERSDR_JT9_CMD="${WSPRD_BIN_DIR}/jt9-ubersdr"
+declare UBERSDR_STAMP_FILE="${WSPRD_BIN_DIR}/ubersdr.stamp"         ### the build key of the installed binaries
+declare UBERSDR_FAILED_FILE="${WSPRD_BIN_DIR}/ubersdr.failed"       ### the build key of a build which failed
+declare UBERSDR_BUILD_LOG="${WSPRDAEMON_ROOT_DIR}/ubersdr-build.log"
+declare UBERSDR_BUILD_UNIT="wd-ubersdr-build"
+declare UBERSDR_BUILD_PACKAGES=( build-essential cmake pkg-config libfftw3-dev git python3 )
+
+### What the binaries were built for.  A new pin, or the disk moved to another CPU (whose -march=native binary may not run
+### here), changes it and so causes a rebuild.
+function ubersdr_build_key() {
+    local cpu_model=$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
+    echo "${UBERSDR_WSPRD_COMMIT} $(uname -m) ${cpu_model// /_}"
+}
+
+### Use the ubersdr binaries if they were built for this pin and CPU and they run.  Returns 1, leaving the commands alone, if not.
+function use_ubersdr_decoders() {
+    [[ -f ${UBERSDR_STAMP_FILE} && "$(< ${UBERSDR_STAMP_FILE})" == "$(ubersdr_build_key)" ]] || return 1
+    local cmd
+    for cmd in ${UBERSDR_WSPRD_CMD} ${UBERSDR_JT9_CMD}; do
+        if ! [[ -x ${cmd} ]] || ! ${cmd} |& grep -q "Usage" ; then
+            wd_logger 1 "ERROR: ${cmd} was built for this server but does not run, so using the WSJT-X decoders"
+            return 1
+        fi
+    done
+    WSPRD_CMD=${UBERSDR_WSPRD_CMD}
+    WSPRD_SPREADING_CMD=${UBERSDR_WSPRD_CMD}        ### its '-n' is no drift plus the spread column, which bin/wsprd.spread-x86-v27 rejects
+    JT9_CMD=${UBERSDR_JT9_CMD}
+    wd_logger 2 "Using the ubersdr decoders: WSPRD_CMD=${WSPRD_CMD}, JT9_CMD=${JT9_CMD}"
+    return 0
+}
+
+### Called before each decode: switch to the ubersdr binaries once the background build has installed them.  Only a
+### string compare and a stat until it has.
+function wd_decoders_refresh() {
+    [[ ${WD_DECODERS} == "ubersdr" && ${WSPRD_CMD} != ${UBERSDR_WSPRD_CMD} && -f ${UBERSDR_STAMP_FILE} ]] || return 0
+    if use_ubersdr_decoders ; then
+        wd_logger 1 "The ubersdr decoders are now installed, so switched to WSPRD_CMD=${WSPRD_CMD} and JT9_CMD=${JT9_CMD}"
+    fi
+}
+
+### Start the background build if these binaries aren't the ones for this pin and CPU
+function start_ubersdr_build() {
+    local build_key="$(ubersdr_build_key)"
+    if [[ -f ${UBERSDR_STAMP_FILE} && "$(< ${UBERSDR_STAMP_FILE})" == "${build_key}" ]]; then
+        return 0
+    fi
+    if [[ -f ${UBERSDR_FAILED_FILE} && "$(< ${UBERSDR_FAILED_FILE})" == "${build_key}" ]]; then
+        wd_logger 1 "The ubersdr decoders failed to build for '${build_key}' (see ${UBERSDR_BUILD_LOG}), so using the WSJT-X decoders.  'rm ${UBERSDR_FAILED_FILE}' to try again"
+        return 1
+    fi
+    if systemctl is-active --quiet ${UBERSDR_BUILD_UNIT}.service 2>/dev/null ; then
+        wd_logger 2 "${UBERSDR_BUILD_UNIT}.service is still building the ubersdr decoders"
+        return 0
+    fi
+    local package
+    for package in ${UBERSDR_BUILD_PACKAGES[@]}; do
+        if ! install_debian_package ${package} ; then
+            wd_logger 1 "ERROR: can't install ${package}, which building the ubersdr decoders needs, so using the WSJT-X decoders"
+            return 1
+        fi
+    done
+    ### Detached and outside WD's cgroup, so a WD stop or restart part way through doesn't kill it.  Run as WD's user, who owns the tree.
+    ### On a CPU-tuned host PID 1's affinity mask keeps the build off the radiod cores.
+    if ! sudo systemd-run --quiet --collect --unit=${UBERSDR_BUILD_UNIT} --description="WD build of the ubersdr wsprd and jt9" \
+            --uid=$(id -u) --gid=$(id -g) --nice=19 --property=Type=exec --setenv=HOME=${HOME} \
+            ${WSPRDAEMON_ROOT_DIR}/ubersdr-build.sh "${UBERSDR_WSPRD_GIT_URL}" "${UBERSDR_WSPRD_COMMIT}" "${UBERSDR_WSPRD_SRC_DIR}" \
+            "${WSPRD_BIN_DIR}" "${build_key}" "${UBERSDR_BUILD_LOG}" ; then
+        wd_logger 1 "ERROR: 'systemd-run ... ubersdr-build.sh' failed, so using the WSJT-X decoders"
+        return 1
+    fi
+    wd_logger 1 "Started building the ubersdr decoders for '${build_key}' in the background as ${UBERSDR_BUILD_UNIT}.service; the WSJT-X decoders run until it is done.  Watch ${UBERSDR_BUILD_LOG}"
+}
+
+if [[ ${WD_DECODERS} == "ubersdr" ]]; then
+    start_ubersdr_build
+    use_ubersdr_decoders
+elif [[ ${WD_DECODERS} != "wsjtx" ]]; then
+    wd_logger 1 "ERROR: WD_DECODERS='${WD_DECODERS}' is not 'ubersdr' or 'wsjtx', so using the WSJT-X decoders"
+fi
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
