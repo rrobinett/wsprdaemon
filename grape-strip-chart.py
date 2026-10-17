@@ -67,8 +67,10 @@ def parse_path(wav):
         date = m.group(1) if date == m.group(1) else date          # keep the odd name for display and paths ...
     date_yyyymmdd = m.group(1) if m else None                       # ... but chart with the real date
     freq_hz = None
-    for f in sorted(glob.glob(os.path.join(band_dir, "*_iq.wv")))[:1]:
-        m = re.search(r"_(\d+)_iq\.wv$", f)
+    # Minute files are <YYYYMMDD>T<HHMMSS>Z_<freq>_<tail>.wv, and ka9q-radio has changed <tail> from 'iq'
+    # to 'linear' to '' (an empty preset gives '..._10000000_.wv'), so key on the frequency field alone
+    for f in sorted(glob.glob(os.path.join(band_dir, "*Z_*.wv")))[:1]:
+        m = re.search(r"Z_(\d+)_[^/]*\.wv$", f)
         if m: freq_hz = int(m.group(1))
     grid = rep.rsplit("_", 1)[1] if "_" in rep else ""
     return dict(date=date, date_yyyymmdd=date_yyyymmdd, reporter=rep, receiver=rcv, band=band, freq_hz=freq_hz, grid=grid)
