@@ -302,7 +302,7 @@ function kiwirecorder_manager_daemon_kill_handler() {
         fi
         if [[ -z "${kiwi_recorder_pid}" ]]; then
             wd_logger 1 "ERROR: ${KIWI_RECORDER_PID_FILE} is empty" 
-        elif !  ps ${kiwi_recorder_pid} > /dev/null ; then
+        elif !  pid_is_running ${kiwi_recorder_pid} ; then
             wd_logger 1 "ERROR: kiwi_recorder_daemon is already dead"
         else
             wd_kill ${kiwi_recorder_pid}
@@ -311,12 +311,12 @@ function kiwirecorder_manager_daemon_kill_handler() {
                 wd_logger 1 "ERROR: 'wd_kill ${kiwi_recorder_pid}' => ${rc}"
             fi
             local timeout=0
-            while [[ ${timeout} < ${KIWIRECORDER_KILL_WAIT_SECS} ]] &&  ps ${kiwi_recorder_pid} > /dev/null; do
+            while [[ ${timeout} < ${KIWIRECORDER_KILL_WAIT_SECS} ]] &&  pid_is_running ${kiwi_recorder_pid}; do
                 wd_logger 1 "Waiting for kiwi_recorder_daemon(0 to die"
                 (( ++timeout ))
                 sleep 1
             done
-            if ps ${kiwi_recorder_pid} > /dev/null; then
+            if pid_is_running ${kiwi_recorder_pid}; then
                 wd_logger 1 "ERROR: kiwi_recorder_pid=${kiwi_recorder_pid} failed to die after waiting for ${KIWIRECORDER_KILL_WAIT_SECS} seconds"
             else
                 wd_logger 1 "kiwi_recorder_daemon() has died after ${timeout} seconds"
@@ -460,9 +460,11 @@ function kiwirecorder_manager_daemon()
             ### Check that the pid specified in the pid file is active and kill any zombies
             file_kiwi_recorder_pid=$( < ${KIWI_RECORDER_PID_FILE})                      ### receiver_ip IP:PORT => IP.*PORT
         fi
-        ps aux > ps.log          ### 9/12/23 Avoid using pipes and see if that helps avoid the 'can't spawn kiwirecorder problem
-        grep "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}" ps.log > ps_kiwi.log
-        local pid_list=( $( awk '{print $2}' ps_kiwi.log)  )
+        ### pgrep matches the same pattern against each process's command line, as 'grep' did against 'ps aux', without
+        ### formatting every process on the host: each Kiwi channel's manager does this every KIWI_POLLING_SLEEP (30) seconds,
+        ### 168 'ps aux' a cycle at ON5KQ-BL's 42 channels.  Still written to a file, not a pipe (see 9/12/23 above).
+        pgrep -f "${KIWI_RECORD_COMMAND}.*${receiver_rx_freq_khz}.*${receiver_ip/:/.*}" > ps_kiwi.log
+        local pid_list=( $( < ps_kiwi.log)  )
         local ps_kiwi_recorder_pid 
         for ps_kiwi_recorder_pid in ${pid_list[@]} ;  do
             if [[ -n "${file_kiwi_recorder_pid}" && ${ps_kiwi_recorder_pid} -eq ${file_kiwi_recorder_pid} ]]; then

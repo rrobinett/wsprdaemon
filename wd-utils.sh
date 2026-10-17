@@ -34,7 +34,14 @@ trap 'rc=$?; echo "Error code ${rc} at line ${LINENO} in file ${BASH_SOURCE[0]} 
 
 ###  Returns 0 if arg is an unsigned integer, else 1
 function is_int()  { if [[ "$1" =~ ^-?[0-9]+$ ]]; then return 0; else return 1; fi } 
-function is_uint() { if [[ "$1" =~   ^[0-9]+$ ]]; then return 0; else return 1; fi } 
+function is_uint() { if [[ "$1" =~   ^[0-9]+$ ]]; then return 0; else return 1; fi }
+
+### Is process PID alive?  This replaces 'ps PID > /dev/null', which forks ps to walk /proc for the same answer: /proc/PID
+### exists exactly when 'ps PID' lists it, zombies included.  The posting daemons asked that about once a second each, and
+### at ON5KQ-BL (96 band jobs) it was 1,047 ps processes and ~30 CPU-s every two minute cycle.  This test forks nothing.
+function pid_is_running() {
+    [[ "${1-}" =~ ^[0-9]+$ && -d /proc/$1 ]]
+}
 
 ###
 function wd_logger_flush_all_logs {
@@ -278,7 +285,7 @@ function signal_verbosity() {
     local file
     for file in ${pid_files} ; do
         local debug_pid=$(cat ${file})
-        if ! ps ${debug_pid} > /dev/null ; then
+        if ! pid_is_running ${debug_pid} ; then
             echo "PID ${debug_pid} from ${file} is not running"
         else
             echo "Signaling verbosity change to PID ${debug_pid} from ${file}"
@@ -639,7 +646,7 @@ function wd_kill()
             (( ++kill_errors ))
             continue
         fi
-        if ! ps ${kill_pid} > /dev/null ; then
+        if ! pid_is_running ${kill_pid} ; then
             wd_logger 2 "ERROR: pid ${kill_pid} is not running"
             (( ++not_running_errors ))
         else
@@ -734,7 +741,7 @@ function get_pid_from_file()
         wd_logger 1 "pid file ${pid_file_name} contains invalid value '${pid_val}'"
         return 2
     fi
-    ps ${pid_val} >& /dev/null
+    pid_is_running ${pid_val}
     local ret_code=$?
     if [[ ${ret_code} -ne 0 ]]; then
         wd_logger 2 "Got pid from ${pid_file_name}. ps ${pid_val} => ${ret_code}, so pid isn't running"
@@ -756,14 +763,14 @@ function wd_kill_and_wait_for_death()
         wd_logger 1 "ERROR: called with invalid pid '${pid_to_kill}'"
         return 1
     fi
-    if ! ps ${pid_to_kill} > /dev/null ; then
+    if ! pid_is_running ${pid_to_kill} ; then
         wd_logger 1 "ERROR: pid ${pid_to_kill} is already dead"
         return 1
     fi
     wd_kill ${pid_to_kill}
     local timeout=0
     while [[ ${timeout} -lt ${KILL_TIMEOUT_MAX_SECS} ]]; do
-        if ! ps ${pid_to_kill} > /dev/null ; then
+        if ! pid_is_running ${pid_to_kill} ; then
             wd_logger 1 "Pid ${pid_to_kill} died after ${timeout} seconds"
             return 0
         fi
@@ -813,7 +820,7 @@ function spawn_daemon()
     wd_logger 2 "Start with args '$1' '$2' => In daemon_root_dir=${daemon_root_dir} spawn daemon_function_name=${daemon_function_name}, daemon_log_file_path=${daemon_log_file_path}, daemon_pid_file_path=${daemon_pid_file_path}"
     if [[ -f ${daemon_pid_file_path} ]]; then
         local daemon_pid=$( < ${daemon_pid_file_path})
-        if $(is_uint "$daemon_pid" ) && ps ${daemon_pid} > /dev/null ; then
+        if $(is_uint "$daemon_pid" ) && pid_is_running ${daemon_pid} ; then
             wd_logger 2 "daemon job for '${daemon_root_dir}' with pid ${daemon_pid} is already running"
             return 0
         else
@@ -850,7 +857,7 @@ function kill_daemon() {
     else
         local daemon_pid=$( < ${daemon_pid_file_path})
         wd_rm ${daemon_pid_file_path}
-        if ! ps ${daemon_pid} > /dev/null ; then
+        if ! pid_is_running ${daemon_pid} ; then
             wd_logger 1 "ERROR: ${daemon_function_name} pid file reported pid ${daemon_pid}, but that isn't running"
             return 3
         else
@@ -891,7 +898,7 @@ function get_status_of_daemon() {
             wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' exists, but the text in it '${daemon_pid}' is not a valid PID"
             return 4
         fi
-        ps ${daemon_pid} > /dev/null
+        pid_is_running ${daemon_pid}
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then 
             wd_logger 1 "Daemon '${daemon_function_name}' pid file '${daemon_pid_file_path}' reported pid ${daemon_pid}, but that isn't running"

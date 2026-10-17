@@ -43,6 +43,14 @@ function run_recording_daemons()
 
     local real_receiver
     for real_receiver  in ${real_receiver_list[@]} ; do
+        ### Every posting daemon comes here every POSTING_DAEMON_POLLING_RATE seconds, and the decoding daemon is nearly always
+        ### alive.  Find that out without forking: the '( spawn_decoding_daemon )' subshell, its $(get_decoding_dir_path), mkdir
+        ### and 'ps' cost four processes a poll, ~1,000 a cycle at ON5KQ-BL.  get_decoding_dir_path() is this one line.
+        local decoding_pid=""
+        local decoding_pid_file="${WSPRDAEMON_TMP_DIR}/recording.d/${real_receiver}/${posting_receiver_band}/${DECODING_DAEMON_PID_FILE}"
+        if [[ -f ${decoding_pid_file} ]] && read -r decoding_pid < ${decoding_pid_file} && pid_is_running "${decoding_pid}"; then
+            continue
+        fi
         (spawn_decoding_daemon ${real_receiver} ${posting_receiver_band} ${posting_receiver_modes})  ### the '()' suppresses the effects of the 'cd' executed by spawn_decoding_daemon()
         local ret_code=$?
         if [[ ${ret_code} -ne 0 ]]; then
@@ -510,7 +518,7 @@ function kill_posting_daemon() {
             return 3
         else
             local posting_pid=$(cat ${posting_daemon_pid_file})
-            if ps ${posting_pid} > /dev/null ; then
+            if pid_is_running ${posting_pid} ; then
                 wd_kill ${posting_pid}
                 local rc=$?
                 if [[ ${rc} -ne 0 ]]; then
@@ -585,7 +593,7 @@ function get_posting_status() {
     fi
 
     local posting_pid=$(< ${pid_file})
-    if ! ps ${posting_pid} > /dev/null ; then
+    if ! pid_is_running ${posting_pid} ; then
         [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid '${posting_pid}' from file, but it is not running"
         return 3
     fi

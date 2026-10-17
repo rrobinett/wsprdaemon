@@ -521,8 +521,8 @@ function spawn_wav_recording_daemon() {
     local pid_file=${recording_dir}/${wav_recording_pid_file}
     if [[ -f ${pid_file}  ]] ; then
         local recording_pid=$(< ${pid_file} )
-        if ps -e -o pid | grep -v grep | grep -q -w ${recording_pid}; then         ## 'ps  ${recording_pid}' would block for many seconds.  This never blocks
-            wd_logger 1 "A recording job in ${recording_dir} with pid ${recording_pid} is already running:\n'ps -e -o pid | grep ${recording_pid}:\n$(ps auxf | grep -v grep | grep -A 4 ${recording_pid})"
+        if pid_is_running ${recording_pid}; then         ## Tests /proc/PID: forks nothing and never blocks, unlike 'ps PID' (which could block) and the 'ps -e' + 'ps auxf' this replaced
+            wd_logger 2 "A recording job in ${recording_dir} with pid ${recording_pid} is already running"
             wd_mutex_unlock ${wav_recording_mutex_name} ${recording_dir}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: failed to unlock mutex '${wav_recording_mutex_name}' in ${recording_dir}"
@@ -664,7 +664,7 @@ function get_recording_status() {
         return 2
     fi
     local rx_pid=$( < ${pid_file})
-    if ! ps ${rx_pid} > /dev/null ; then
+    if ! pid_is_running ${rx_pid} ; then
         [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid ${rx_pid} from file, but it is not running"
         return 3
     fi

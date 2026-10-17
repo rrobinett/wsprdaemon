@@ -855,13 +855,61 @@ COMMENTED_OUT_LINES
     return 0
 } 
 
+### Is the KA9Q recorder (wd-record or pcmrecord) still writing FILE_PATH?  This replaces 'lsof FILE_PATH', which walks the open
+### files of every process on the host to answer a question about one: 0.155 s a call at ON5KQ-BL, 300 calls and ~21 CPU-s a
+### two minute cycle.  The recorder writes its files into its own working directory, so find it there once, remember its pid
+### per directory, and look only through its /proc/PID/fd: '-ef' compares the device and inode each fd link points at, and
+### neither forks.  A recorder restarted since is found again; with no recorder found this falls back to lsof.
+declare -A WD_RECORDER_PID_OF_DIR=()
+declare WD_RECORDER_PID=""
+
+### Sets WD_RECORDER_PID to the wd-record or pcmrecord whose working directory is DIR and returns 0, else returns 1
+function find_recorder_working_in_dir() {
+    local dir=$1
+    WD_RECORDER_PID="${WD_RECORDER_PID_OF_DIR[${dir}]-}"
+    if pid_is_running "${WD_RECORDER_PID}" && [[ /proc/${WD_RECORDER_PID}/cwd -ef ${dir} ]]; then
+        return 0
+    fi
+    WD_RECORDER_PID=""
+    local proc_dir comm
+    for proc_dir in /proc/[0-9]*; do
+        [[ ${proc_dir}/cwd -ef ${dir} ]] || continue
+        read -r comm < ${proc_dir}/comm 2> /dev/null || continue
+        if [[ ${comm} == "wd-record" || ${comm} == "pcmrecord" ]]; then
+            WD_RECORDER_PID=${proc_dir#/proc/}
+            WD_RECORDER_PID_OF_DIR[${dir}]=${WD_RECORDER_PID}
+            wd_logger 2 "The recorder writing in ${dir} is pid ${WD_RECORDER_PID}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+function wav_file_is_open_by_recorder() {
+    local file_path=$1
+    local file_directory="${file_path%/*}"
+    if ! find_recorder_working_in_dir ${file_directory}; then
+        wd_logger 2 "Found no wd-record or pcmrecord working in ${file_directory}, so asking lsof whether ${file_path} is open"
+        lsof ${file_path} >& /dev/null
+        return $?
+    fi
+    local recorder_pid=${WD_RECORDER_PID}
+    local fd_link
+    for fd_link in /proc/${recorder_pid}/fd/*; do
+        if [[ ${fd_link} -ef ${file_path} ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 function file_is_open() {
     local file_path="${1}"
     local kiwirecorder_file_must_be_closed_seconds=${2}  ### If the file is being written by kiwirecorder, then typically wait for it to be 2+ seconds old before report back that the wav file is filled
 
     local file_directory="${file_path%/*}"
     if [[ "${file_directory}" != "${PWD}" ]]; then
-        if lsof ${file_path} >& /dev/null; then
+        if wav_file_is_open_by_recorder ${file_path}; then
              wd_logger 1 "Running in ${PWD}, ${file_path} is open"
              return 0
          else
@@ -933,7 +981,7 @@ function file_is_closed_or_last_write_was_seconds_ago() {
     if [[ "${file_directory}" != "${PWD}" ]]; then
         wd_logger 2 "Checking ${file_path} is not in ${PWD}, so assuming it is being written by pcmrecord and ths wait for it to be closed"
         local start_second=${SECONDS}
-        if ! lsof ${file_path} >& /dev/null; then
+        if ! wav_file_is_open_by_recorder ${file_path}; then
              wd_logger 2 "The file ${file_path} is closed"
              return 0
          else
@@ -1076,7 +1124,10 @@ function wait_until_newest_tmp_file_is_closed()
             ### is an orphan that never gets a close_write, this wait timed out, the caller retried, and the band sat idle
             ### for good while the stale files kept it out of the "no wav files, spawn a recorder" branch (N8GA-6M 2026-09-06).
             local _rec_ip; _rec_ip=$( get_receiver_ip_from_name ${receiver_name} )
-            if [[ ${receiver_name} =~ ^KA9Q ]] && ! ps aux | grep -E "(wd-record|pcmrecord) .*${_rec_ip}" | grep -v grep > /dev/null; then
+            ### A recorder working in the file's own directory answers that without 'ps aux', which lists every process on the host
+            ### and ran for every KA9Q band every minute; only when none is found there does the original search confirm it.
+            if [[ ${receiver_name} =~ ^KA9Q ]] && ! find_recorder_working_in_dir "${newest_tmp_wav_file%/*}" \
+                    && ! ps aux | grep -E "(wd-record|pcmrecord) .*${_rec_ip}" | grep -v grep > /dev/null; then
                 wd_logger 1 "ERROR: no recorder for ${_rec_ip} is running, so ${newest_tmp_wav_file} is an orphan: deleting it and spawning a recorder"
                 rm -f "${newest_tmp_wav_file}"
                 spawn_wav_recording_daemon ${receiver_name} ${receiver_band}
@@ -2971,7 +3022,7 @@ function spawn_decoding_daemon() {
     local decoding_pid
     if [[ -f ${DECODING_DAEMON_PID_FILE} ]] ; then
         local decoding_pid=$(< ${DECODING_DAEMON_PID_FILE})
-        if ps ${decoding_pid} > /dev/null ; then
+        if pid_is_running ${decoding_pid} ; then
             wd_logger 2 "A decode job with pid ${decoding_pid} is already running, so nothing to do"
             return 0
         else
@@ -3047,7 +3098,7 @@ function get_decoding_status() {
         return 2
     fi
     local get_decoding_status_decode_pid=$( < ${get_decoding_status_receiver_decoding_pid_file})
-    if ! ps ${get_decoding_status_decode_pid} > /dev/null ; then
+    if ! pid_is_running ${get_decoding_status_decode_pid} ; then
         [[ $verbosity -ge 0 ]] && echo "ERROR: Got pid '${get_decoding_status_decode_pid}' from file, but it is not running"
         return 3
     fi

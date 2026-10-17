@@ -44,7 +44,7 @@ function check_for_zombie_daemon(){
 
     if [[ -f ${pid_file_path} ]]; then
         local daemon_pid=$(cat ${pid_file_path})
-        if ps ${daemon_pid} > /dev/null ; then
+        if pid_is_running ${daemon_pid} ; then
             wd_logger 1 "Daemon pid ${daemon_pid} from '${pid_file_path} is active" 1>&2
             echo ${daemon_pid}
         else
@@ -115,7 +115,7 @@ function check_for_zombies() {
                     wd_logger 1 "ERROR: pid file ${posting_daemon_pid_file} exists but its contents '${posting_daemon_pid}' is not an integer number, so delete that pid file"
                     rm ${posting_daemon_pid_file}
                 else
-                    ps ${posting_daemon_pid} > /dev/null
+                    pid_is_running ${posting_daemon_pid}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
                         wd_logger 1 "ERROR: pid file ${posting_daemon_pid_file} exists and contains pid '${posting_daemon_pid}', but that pid is not running, so delete that pid file"
@@ -194,7 +194,7 @@ function check_for_zombies() {
                     wd_logger 1 "ERROR: real_rx pid file ${id_val_file} exists but its contents '${pid_val}' is not an integer number, so delete that pid file"
                     rm ${pid_file}
                 else
-                    ps ${pid_val} > /dev/null
+                    pid_is_running ${pid_val}
                     local ret_code=$?
                     if [[ ${ret_code} -ne 0 ]]; then
                         wd_logger 1 "ERROR: real_rx pid file ${pid_file} exists and contains pid '${pid_val}', but that pid is not running, so delete that pid file"
