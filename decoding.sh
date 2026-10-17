@@ -2398,7 +2398,16 @@ function decoding_daemon() {
             ### Replace the '-' with '_' in the print string or wd_logger's echo command gets confused by them
             wd_logger 1 "Creating a single 2 minute wav file with: 'sox __combine concatenate ${wav_files_list[*]} _b 16 _e signed_integer ${decoder_input_wav_filepath} __norm=${sox_normalization_dBFS}  ${sox_effects}'"
 
-            sox --combine concatenate ${wav_files_list[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} --norm=${sox_normalization_dBFS}  ${sox_effects} >& ${SOX_LOG_FILE}
+            ### Each input is labelled 12000 sps, which changes only the header, never a sample.  kiwirecorder writes 11999 into its
+            ### header, and ubersdr's jt9 refuses any rate but 11025 or 12000 ("unsupported WAV sample rate"), as WSJT-X's
+            ### readwav.f90 does, so every Kiwi FST4W decode failed (42 of 42 at ON5KQ-BL on 2026-10-17).  The old jt9 and both
+            ### wsprds never read the rate and decoded these files as 12000 sps anyway.
+            local sox_input_args=()
+            local wav_file
+            for wav_file in ${wav_files_list[@]}; do
+                sox_input_args+=( -r 12000 ${wav_file} )
+            done
+            sox --combine concatenate ${sox_input_args[@]} -b 16 -e signed-integer ${decoder_input_wav_filepath} --norm=${sox_normalization_dBFS}  ${sox_effects} >& ${SOX_LOG_FILE}
             rc=$? ; if (( rc )); then
                 wd_logger 1 "ERROR: 'sox ${wav_files_list[*]} ${decoder_input_wav_filepath}  ${sox_effects} -n stat' => ${rc}:\n$(<  ${SOX_LOG_FILE})"
                 if [[ -f ${decoder_input_wav_filepath} ]]; then
