@@ -260,6 +260,11 @@ while getopts :aAbczZsg:hij:l:pvVw:dDr:RtuU: opt ; do
             spawn_wav_recording ${OPTARG//,/ }
             ;;
         A)
+            ### '-A' is what systemd runs at boot and on 'systemctl start', but the 900 s start limit was only ever written by
+            ### '-a' (start_systemctl_daemon), so a host never started by hand kept systemd's 90 s.  K6FOD 2026-10-17: the first
+            ### start after a reboot was still setting up the ka9q FT services at 90 s and was killed ("Failed to start
+            ### wsprdaemon.service"); systemd's restart then succeeded in 53 s.  Writing it here covers every later start.
+            wd_ensure_service_start_timeout
             if [[ ${WD_STARTUP_DELAY_SECS-0} -gt 0 ]]; then
                 echo "Wsprdaemon is delaying startup for ${WD_STARTUP_DELAY_SECS} seconds"
                 wd_sleep ${WD_STARTUP_DELAY_SECS}
