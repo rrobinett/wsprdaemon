@@ -360,22 +360,33 @@ function post_files()
 ### The appended data gets stored into ${DERIVED_ADDED_FILE} which can be examined. Overwritten each acquisition cycle.
 declare DERIVED_ADDED_FILE="derived_azi.csv"
 declare AZI_PYTHON_CMD="${WSPRDAEMON_ROOT_DIR}/derived_calc.py"
+declare AZI_AWK_FILE="${WSPRDAEMON_ROOT_DIR}/derived_calc.awk"
 declare AZI_CMD_NICE_LEVEL=${AZI_CMD_NICE_LEVEL-19}
+### add_derived() runs once per spot.  derived_calc.py cost ~0.1 s of CPU a run, nearly all of it starting python3 and
+### importing numpy: 1,207 runs and ~139 s of CPU per two minute cycle at ON5KQ-BL.  derived_calc.awk writes the same
+### derived_azi.csv byte for byte in about a millisecond.  WD_DERIVED_CALC="python" goes back to the Python.
+declare WD_DERIVED_CALC="${WD_DERIVED_CALC-awk}"
 
 function add_derived() {
     local spot_grid=$1
     local my_grid=$2
-    local spot_freq=$3    
+    local spot_freq=$3
 
-    if [[ ! -f ${AZI_PYTHON_CMD} ]]; then
-        wd_logger 0 "Can't find '${AZI_PYTHON_CMD}'"
+    local script_file=${AZI_AWK_FILE}
+    local -a derived_cmd=( env LC_ALL=C gawk -v tx_locator=${spot_grid} -v rx_locator=${my_grid} -v frequency=${spot_freq} -f ${AZI_AWK_FILE} )
+    if [[ ${WD_DERIVED_CALC} == "python" ]]; then
+        script_file=${AZI_PYTHON_CMD}
+        derived_cmd=( python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} )
+    fi
+    if [[ ! -f ${script_file} ]]; then
+        wd_logger 0 "Can't find '${script_file}'"
         exit 1
     fi
     local rc
-    timeout ${DERIVED_NAX_RUN_SECS-20} nice -n ${AZI_CMD_NICE_LEVEL} python3 ${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq} 1>add_derived.txt 2> add_derived.log
+    timeout ${DERIVED_NAX_RUN_SECS-20} nice -n ${AZI_CMD_NICE_LEVEL} "${derived_cmd[@]}" 1>add_derived.txt 2> add_derived.log
     rc=$?
     if [[ ${rc} -ne 0 ]]; then
-        wd_logger 1 "ERROR: timeout or error in running "${AZI_PYTHON_CMD} ${spot_grid} ${my_grid} ${spot_freq}" => ${rc}"
+        wd_logger 1 "ERROR: timeout or error in running '${derived_cmd[*]}' => ${rc}"
         return 1
     fi
     return 0
