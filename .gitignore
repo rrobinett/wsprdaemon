@@ -54,3 +54,6 @@ bin/wsprd-ubersdr
 bin/jt9-ubersdr
 bin/ubersdr.stamp
 bin/ubersdr.failed
+bin/wd-noise-tools
+bin/wd-noise-tools.new
+bin/wd-noise-tools.failed

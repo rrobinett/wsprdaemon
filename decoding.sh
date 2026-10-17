@@ -2487,12 +2487,17 @@ function decoding_daemon() {
             ## Get statistics about the max level info directly from the input wav files
             local python_peak_level_linear_float=0
             local python_peak_level_dBFS_float=0
-            python3 ${GET_PEAK_WAV_SAMPLE_CMD} ${wav_files_list[@]} >& ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Dump all output to a log file so it can be printed out if there is an error
+            ### wd-noise-tools prints exactly what get-peak-wav-sample.py prints, without starting python3 and numpy (see wd-setup.sh)
+            local peak_cmd=( python3 ${GET_PEAK_WAV_SAMPLE_CMD} )
+            if [[ ${WD_NOISE_TOOLS-c} == "c" && -x ${WD_NOISE_TOOLS_CMD-} ]]; then
+                peak_cmd=( ${WD_NOISE_TOOLS_CMD} peak )
+            fi
+            "${peak_cmd[@]}" ${wav_files_list[@]} >& ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Dump all output to a log file so it can be printed out if there is an error
             rc=$? ; if (( rc )); then
-                wd_logger 1 "ERROR: 'python3 ${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' => ${rc}:\n$(<${GET_PEAK_WAV_SAMPLE_LOG_FILE})"
+                wd_logger 1 "ERROR: '${peak_cmd[*]##*/} ${wav_files_list[*]##*/}' => ${rc}:\n$(<${GET_PEAK_WAV_SAMPLE_LOG_FILE})"
             else
                 { read python_peak_level_linear_float; read python_peak_level_dBFS_float; } < ${GET_PEAK_WAV_SAMPLE_LOG_FILE}    ### Very efficient way to extract those two lines into variables
-                wd_logger 1 "python3 '${GET_PEAK_WAV_SAMPLE_CMD##*/} ${wav_files_list[*]##*/}' reported python_peak_level_linear_float=${python_peak_level_linear_float}, python_peak_level_dBFS_float=${python_peak_level_dBFS_float}"
+                wd_logger 1 "'${peak_cmd[*]##*/} ${wav_files_list[*]##*/}' reported python_peak_level_linear_float=${python_peak_level_linear_float}, python_peak_level_dBFS_float=${python_peak_level_dBFS_float}"
             fi
 
             ### To mimnimize the amount of Linux process schedule thrashing, limit the number of active decoding jobs to the number of physical CPUs
@@ -2605,9 +2610,14 @@ function decoding_daemon() {
                         return 1
                     fi
                     local c2_fft_noise_level_float
-                    nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
+                    ### wd-noise-tools c2noise prints what c2_noise.py prints, in ~1/30 the CPU (see wd-noise-tools.c and wd-setup.sh)
+                    if [[ ${WD_NOISE_TOOLS-c} == "c" && -x ${WD_NOISE_TOOLS_CMD-} ]]; then
+                        nice -n ${WSPR_CMD_NICE_LEVEL} ${WD_NOISE_TOOLS_CMD} c2noise ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
+                    else
+                        nice -n ${WSPR_CMD_NICE_LEVEL} python3 ${C2_FFT_CMD} ${c2_filename} > ${c2_filename}.out 2> ${c2_filename}.stderr
+                    fi
                     rc=$? ; if (( rc )); then
-                        wd_logger 1 "ERROR: 'python3 ${C2_FFT_CMD} ${c2_filename}' => ${rc}:\n$(< ${c2_filename}.stderr)"
+                        wd_logger 1 "ERROR: the C2 noise measurement of '${c2_filename}' => ${rc}:\n$(< ${c2_filename}.stderr)"
                         c2_fft_noise_level_float="0.0"
                     else
                         c2_fft_noise_level_float=$(< ${c2_filename}.out)

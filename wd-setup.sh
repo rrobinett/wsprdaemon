@@ -1038,6 +1038,27 @@ elif [[ ${WD_DECODERS} != "wsjtx" ]]; then
     wd_logger 1 "ERROR: WD_DECODERS='${WD_DECODERS}' is not 'ubersdr' or 'wsjtx', so using the WSJT-X decoders"
 fi
 
+### wd-noise-tools replaces get-peak-wav-sample.py and c2_noise.py, which WD ran for every band every cycle: ~130 runs
+### and ~45 CPU-s a cycle at ON5KQ-BL, nearly all of it starting python3 and importing numpy and soundfile.  See
+### wd-noise-tools.c.  Built here because it is a few lines of C needing only gcc (which the ubersdr build installs);
+### rebuilt only when missing or older than its source, which this file tests without forking since every wsprdaemon.sh
+### command sources it.  Without a binary decoding.sh runs the Python scripts, and WD_NOISE_TOOLS="python" forces them.
+declare WD_NOISE_TOOLS="${WD_NOISE_TOOLS-c}"
+declare WD_NOISE_TOOLS_SRC="${WSPRDAEMON_ROOT_DIR}/wd-noise-tools.c"
+declare WD_NOISE_TOOLS_CMD="${WSPRD_BIN_DIR}/wd-noise-tools"
+declare WD_NOISE_TOOLS_FAILED="${WSPRD_BIN_DIR}/wd-noise-tools.failed"     ### a failed build is retried only once the source changes
+if [[ ${WD_NOISE_TOOLS} == "c" && -f ${WD_NOISE_TOOLS_SRC} ]] && command -v gcc > /dev/null \
+        && [[ ! -x ${WD_NOISE_TOOLS_CMD} || ${WD_NOISE_TOOLS_SRC} -nt ${WD_NOISE_TOOLS_CMD} ]] \
+        && [[ ! -f ${WD_NOISE_TOOLS_FAILED} || ${WD_NOISE_TOOLS_SRC} -nt ${WD_NOISE_TOOLS_FAILED} ]]; then
+    if gcc -O2 -o ${WD_NOISE_TOOLS_CMD}.new ${WD_NOISE_TOOLS_SRC} -lm >& ${WD_NOISE_TOOLS_FAILED} && mv ${WD_NOISE_TOOLS_CMD}.new ${WD_NOISE_TOOLS_CMD}; then
+        rm -f ${WD_NOISE_TOOLS_FAILED}
+        wd_logger 1 "Built ${WD_NOISE_TOOLS_CMD}"
+    else
+        wd_logger 1 "ERROR: couldn't build ${WD_NOISE_TOOLS_CMD}, so the Python noise scripts will be used:\n$(< ${WD_NOISE_TOOLS_FAILED})"
+        rm -f ${WD_NOISE_TOOLS_CMD}.new
+    fi
+fi
+
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"
     exit 1
