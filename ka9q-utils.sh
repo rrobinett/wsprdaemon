@@ -2335,6 +2335,10 @@ function build_psk_uploader() {
     ### add '--software="${WD_SOFTWARE_VERSION}"' if it is missing.  systemd expands ${WD_SOFTWARE_VERSION} from the
     ### per-instance EnvironmentFile /etc/radio/%i-pskreporter.conf, whose value is managed in the ft_type loop below.
     sed -i '/ExecStart=.*pskreporter-sender/ {/--software/! s|pskreporter-sender|pskreporter-sender --software="${WD_SOFTWARE_VERSION}"|}'  ${tmp_service_file_path}
+    ### add '$WD_PSK_OPTIONS' if it is missing: unbraced, so systemd splits it into words and drops it when empty.  The ft_type
+    ### loop below sets it per instance in /etc/radio/%i-pskreporter.conf: '--snr' while WD_FT_DECODER="jt9" (see
+    ### wd_ft_decoder_setup()), whose ftX.log has WSJT-X's SNR where decode_ft8's has its sync score, else empty.
+    sed -i '/ExecStart=.*pskreporter-sender/ {/WD_PSK_OPTIONS/! s|pskreporter-sender|pskreporter-sender $WD_PSK_OPTIONS|}'  ${tmp_service_file_path}
 
     if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
         wd_logger 2 "The service file has not beeen changed"
@@ -2373,6 +2377,20 @@ function build_psk_uploader() {
             echo "${variable_line}" >> ${psk_conf_file}.tmp
             wd_logger 1 "Added or replaced invalid 'MODE=' line in  ${psk_conf_file} with '${variable_line}'"
             mv  ${psk_conf_file}.tmp  ${psk_conf_file}
+            needs_systemctl_restart="yes"
+        fi
+
+        ### --snr only for an FT log written by WSJT-X's jt9, and only if this pskreporter-sender has the option (the
+        ### fork pinned above; ftlib-pskreporter before it would refuse '--snr' and the service would not start)
+        local psk_options=""
+        if [[ ${ft_type} != "wspr" && ${WD_FT_DECODER} == "jt9" ]] && grep -q -- '--snr' ${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender 2> /dev/null; then
+            psk_options="--snr"
+        fi
+        if ! grep -qx "WD_PSK_OPTIONS=${psk_options}" ${psk_conf_file} ; then
+            grep -v "^WD_PSK_OPTIONS=" ${psk_conf_file} > ${psk_conf_file}.tmp
+            echo "WD_PSK_OPTIONS=${psk_options}" >> ${psk_conf_file}.tmp
+            mv ${psk_conf_file}.tmp ${psk_conf_file}
+            wd_logger 1 "Set 'WD_PSK_OPTIONS=${psk_options}' in ${psk_conf_file}"
             needs_systemctl_restart="yes"
         fi
 
@@ -2556,6 +2574,13 @@ function install_github_project() {
                  wd_logger 2 "Project '${project_subdir}' has been configured to load the latest ${pull_commit_target} branch commit"
             fi
             local project_real_path=$( realpath  ${project_subdir} )
+            ### A pin can move to another repository (ftlib-pskreporter moved from pjsg's to a fork carrying --snr on
+            ### 2026-10-18): pull_commit fetches from 'origin', so point an existing clone's origin at the project's URL
+            local project_origin_url=$( git -C ${project_real_path} remote get-url origin 2> /dev/null )
+            if [[ -n "${project_url}" && "${project_origin_url}" != "${project_url}" ]]; then
+                wd_logger 1 "${project_subdir}'s origin is '${project_origin_url}', not '${project_url}', so pointing it there"
+                git -C ${project_real_path} remote set-url origin ${project_url}
+            fi
             wd_logger 2 "Ensure the correct COMMIT is installed by running 'pull_commit ${project_real_path} ${project_sha}'"
             pull_commit ${project_real_path} ${pull_commit_target}
             rc=$? ; if (( rc == 0 )); then
@@ -2603,7 +2628,7 @@ fi
 declare GITHUB_PROJECTS_LIST=(
     "ka9q-radio                         ${KA9Q_RADIO_COMMIT_CHECK-yes}   ${KA9Q_WEB_ENABLED-yes}     build_ka9q_radio    ${KA9Q_RADIO_LIBS_NEEDED// /,}  ${KA9Q_RADIO_GIT_URL-https://github.com/ka9q/ka9q-radio.git}             ${KA9Q_RADIO_COMMIT-6a4fe1bfb2a1d3d86b793a9bdd8c29671c84122f}"
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
-    "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/pjsg/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-93a7d06f9b74735c3c6108eb1bdbecb481c56d1d}"
+    "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/rrobinett/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9083828a3466c9c2b3832336ea50d5d13dfbf6bc}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
     "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-c1b92bd9d21614e6cbc5ae781794cdcdd0da589a}"
 )
