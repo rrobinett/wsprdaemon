@@ -6,13 +6,18 @@
 ###
 ### Why: at KJ6MKI on 2026-10-18, over 30 minutes and 12 FT8 bands, jt9 -d 2 decoded 14,626 messages where decode_ft8
 ### decoded 8,590 (8,659 against 5,006 that pskreporter-sender uploads), missing only 56 of decode_ft8's, for ~1.3 s of
-### CPU a 15 s file against 48 ms.  And one jt9 per band, fed every period through jt9_decode's file-feed mode (-F),
-### keeps WSJT-X's callsign hash table and a-priori calls from period to period: on 25 periods of 40, 30, 20 and 15 m it
-### decoded 5-8% more than a jt9 per file, and left ~80% fewer hashed calls unresolved as <...>.
+### CPU a 15 s file against 48 ms.  And one jt9 per band, fed every period, keeps WSJT-X's callsign hash table and
+### a-priori calls from period to period: on 25 periods of 40, 30, 20 and 15 m it decoded 5-8% more than a jt9 per file,
+### and left ~80% fewer hashed calls unresolved as <...>.
 ###
 ### pcmrecord writes YYYYMMDDTHHMMSSZ_FREQHZ_..wav.tmp and renames it when the period is complete.  Each band's files
-### go to that band's 'jt9_decode -F' as they appear (and from a scan every WD_FT_SCAN_SECS, for any whose inotify
-### event was missed); its decodes come back followed by '<FileDone> PATH N', and are printed then and the file deleted.
+### go to that band's 'jt9 --feed' as they appear (and from a scan every WD_FT_SCAN_SECS, for any whose inotify event
+### was missed); its decodes come back followed by '<FileDone> PATH N', and are printed then and the file deleted.
+### The files are 32-bit float when WD sets radiod's [FT8]/[FT4] channels as it sets [WSPR]'s (encoding float, agc 0,
+### gain 0; see ka9q-utils.sh), and jt9 decodes them as they are: at KJ6MKI on 2026-10-18, an hour of 12 FT8 bands,
+### raw float decoded 16,477 messages against 16,294 from radiod's AGC'd 16-bit output (+1.1%, SNRs ~1 dB higher), the
+### gain all from turning the AGC off (fixed-gain 16-bit: 16,464).  jt9 --feed came with ubersdr_wsprd PR #2; before it,
+### jt9_decode -F fed a jt9 -s over WSJT-X's 16-bit shared memory (16,318 decodes against --feed's 16,301 on the same files).
 ###
 ### decode_ft8's line: "%4d/%02d/%02d %02d:%02d:%02d %3d %+4.2lf %'.1lf ~ %s" (date and time of the period, its sync
 ### score, DT, dial + audio frequency in Hz, the message).  Here the third field is jt9's SNR in dB, which
@@ -23,7 +28,6 @@ set -u
 declare MODE=${1:?usage: $0 ft8|ft4 DIRECTORY}
 declare DIRECTORY=${2:?usage: $0 ft8|ft4 DIRECTORY}
 declare JT9=${WD_FT_JT9-/usr/local/bin/wd-jt9}
-declare JT9_DECODE=${WD_FT_JT9_DECODE-/usr/local/bin/wd-jt9_decode}
 declare DEPTH=${WD_FT_DEPTH-2}
 declare FREQ_LOW=${WD_FT_FREQ_LOW-100}
 declare FREQ_HIGH=${WD_FT_FREQ_HIGH-4000}
@@ -31,11 +35,11 @@ declare SCAN_SECS=${WD_FT_SCAN_SECS-30}
 declare RUN_DIR=${WD_FT_RUN_DIR-${DIRECTORY}/.wd-ft-decode}
 
 case ${MODE} in
-    ft8) declare JT9_MODE=FT8 ;;
-    ft4) declare JT9_MODE=FT4 ;;
+    ft8) declare JT9_FLAG=-8 ;;
+    ft4) declare JT9_FLAG=-5 ;;
     *)   echo "$0: MODE must be ft8 or ft4, not '${MODE}'" >&2; exit 1 ;;
 esac
-for cmd in ${JT9} ${JT9_DECODE} inotifywait; do
+for cmd in ${JT9} inotifywait; do
     command -v ${cmd} > /dev/null || { echo "$0: can't find ${cmd}" >&2; exit 1; }
 done
 mkdir -p ${RUN_DIR} || exit 1
@@ -69,16 +73,19 @@ convert() {
     '
 }
 
-### Start (or restart) the band's decoder: a 'jt9_decode -F' reading file names from a FIFO the feeder holds open
+### Start (or restart) the band's decoder: a 'jt9 --feed' reading file names from a FIFO the feeder holds open
 declare -A BAND_FD=() BAND_PID=()
 start_band() {
     local hz=$1 fifo=${RUN_DIR}/${hz}.in
     rm -f ${fifo}; mkfifo ${fifo} || return 1
-    ( ${JT9_DECODE} -j ${JT9} -m ${JT9_MODE} -d ${DEPTH} -L ${FREQ_LOW} -H ${FREQ_HIGH} -F < ${fifo} 2> ${RUN_DIR}/${hz}.err | convert ${hz} ) &
+    ### jt9 keeps decoded.txt and jt9_wisdom.dat in its -a and -t directory: one for each band.  '-x b': no "his call";
+    ### "my call" is jt9's K1ABC.  The period's UTC comes from pcmrecord's file name.
+    mkdir -p ${RUN_DIR}/${hz}.d
+    ( cd ${RUN_DIR}/${hz}.d && ${JT9} ${JT9_FLAG} -a . -t . -d ${DEPTH} -L ${FREQ_LOW} -H ${FREQ_HIGH} -x b --feed < ${fifo} 2> ${RUN_DIR}/${hz}.err | convert ${hz} ) &
     BAND_PID[${hz}]=$!
     exec {fd}> ${fifo}
     BAND_FD[${hz}]=${fd}
-    echo "$(date -u +%FT%TZ) started a ${JT9_MODE} decoder for ${hz} Hz (depth ${DEPTH}, ${FREQ_LOW}-${FREQ_HIGH} Hz)" >&2
+    echo "$(date -u +%FT%TZ) started a ${MODE^^} decoder for ${hz} Hz (depth ${DEPTH}, ${FREQ_LOW}-${FREQ_HIGH} Hz)" >&2
 }
 
 declare -A QUEUED=()
@@ -103,7 +110,7 @@ scan() {
         [[ -f ${f} ]] && queue_file ${f}
     done
     (( ${#QUEUED[@]} > 5000 )) && QUEUED=()      ### names are unique per period; forget old ones now and then
-    ### jt9_decode writes ~10 lines a file to its stderr: keep each band's log from growing without end
+    ### keep each band's stderr log from growing without end
     local err
     for err in $(find ${RUN_DIR} -maxdepth 1 -name '*.err' -size +1M 2> /dev/null); do
         : > ${err}

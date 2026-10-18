@@ -1429,6 +1429,27 @@ function build_ka9q_radio() {
             "${ka9q_conf_file_path}  WWV-IQ  encoding float"
         )
 
+    ### [FT8] and [FT4]: for WSJT-X's jt9 (WD_FT_DECODER="jt9", wd_ft_jt9_ready()) as [WSPR]: 32-bit float, unscaled, no AGC.
+    ### radiod's usb preset otherwise runs them 16-bit with its AGC on, hot (KJ6MKI: -17 dBFS, its gain moving up to 20 dB in
+    ### seconds on 40, 17 and 10 m), and at KJ6MKI on 2026-10-18 that cost ~1% of the FT8 decodes and read SNRs ~1 dB low.
+    ### decode_ft8 reads 16-bit files only, so for it the three lines are remarked out, back to the preset's defaults.  Only a
+    ### conf with those sections: a site whose FT channels are elsewhere, or that has none, is left alone.
+    local ft_section ft_value ft_variable ft_jt9=no
+    wd_ft_jt9_ready && ft_jt9=yes
+    local -a ft_conf_files=( ${ka9q_conf_file_path} )
+    [[ -d ${ka9q_conf_file_path}.d ]] && ft_conf_files=( $(find ${ka9q_conf_file_path}.d -type f ! -name '*~') )
+    for ft_section in FT8 FT4; do
+        grep -qiE "^[[:space:]]*\[.*${ft_section}\][[:space:]]*$" ${ft_conf_files[@]} 2> /dev/null || continue
+        for ft_variable in encoding agc gain; do
+            if [[ ${ft_jt9} == yes ]]; then
+                case ${ft_variable} in encoding) ft_value=float ;; *) ft_value=0 ;; esac
+            else
+                ft_value="#"
+            fi
+            init_file_section_variable_value_list+=("${ka9q_conf_file_path}  ${ft_section}  ${ft_variable}  ${ft_value}")
+        done
+    done
+
     ### Case-INSENSITIVE, and "starts with y", matching how KA9Q_RUNS_ONLY_REMOTELY is normalised below.
     ### ON5KQ had RX888_64_MSPS="YES" and both his RX888s at 64.8 Msps.  The old test compared against a
     ### lower-case "yes", so "YES" failed it and WD would have rewritten his conf to 129600000 the moment it
@@ -1799,8 +1820,8 @@ declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
 ### FT8 and FT4 decoding: WD_FT_DECODER="jt9" decodes each band with WSJT-X's decoders (ubersdr_wsprd's jt9, the one WD
-### builds to decode FST4W), one long-running jt9 per band fed through jt9_decode's file-feed mode, in place of
-### ka9q/ft8_lib's decode_ft8.  See wd-ft-decode.sh: at KJ6MKI it decoded ~70% more FT8 messages and gave ~57% more
+### builds to decode FST4W), one long-running 'jt9 --feed' per band, in place of ka9q/ft8_lib's decode_ft8, and has radiod
+### send the FT channels as it sends WSPR's: 32-bit float, unscaled, no AGC (see wd_ft_jt9_ready()).  See wd-ft-decode.sh: at KJ6MKI it decoded ~70% more FT8 messages and gave ~57% more
 ### PSKReporter spots, keeping WSJT-X's hash table so hashed calls resolve, for ~1.3 s of CPU a 15 s period a band at
 ### depth 2 (decode_ft8: 48 ms).  So it is chosen per station: a Raspberry Pi with a dozen FT8 bands may not have it.
 ### Anything else (the default "ft8_lib") leaves the services running decode_ft8 as they always have.
@@ -1808,9 +1829,14 @@ declare WD_FT_DECODER="${WD_FT_DECODER-ft8_lib}"
 declare WD_FT_DEPTH="${WD_FT_DEPTH-2}"                    ### WSJT-X's Decode menu: 1 fast, 2 normal, 3 deep
 declare WD_FT_FREQ_LOW="${WD_FT_FREQ_LOW-100}"           ### audio Hz; ka9q-radio's FT channels pass audio above 3 kHz
 declare WD_FT_FREQ_HIGH="${WD_FT_FREQ_HIGH-4000}"
-declare WD_JT9_DECODE_GIT_URL="${WD_JT9_DECODE_GIT_URL-https://github.com/rrobinett/jt9-decode.git}"   ### madpsy/jt9-decode + -F, offered upstream
-declare WD_JT9_DECODE_COMMIT="${WD_JT9_DECODE_COMMIT-40f4641d338639c708e5baf74c8fdb025045ae6c}"
-declare WD_JT9_DECODE_DIR="${WSPRDAEMON_ROOT_DIR}/jt9-decode"
+
+### 0 when WD_FT_DECODER="jt9" and the ubersdr jt9 WD built can be fed files ('jt9 --feed', ubersdr_wsprd PR #2), so the FT
+### services decode with it and radiod's [FT8]/[FT4] channels send float.  Else neither: decode_ft8 reads 16-bit files only,
+### so the radiod channels and the decoder must change together.  A jt9 from before --feed (the build of an older pin, or
+### a new pin still building in the background) waits for the WD start after its build is installed.
+function wd_ft_jt9_ready() {
+    [[ ${WD_FT_DECODER} == "jt9" && -x ${UBERSDR_JT9_CMD-} ]] && ${UBERSDR_JT9_CMD} -h 2>&1 | grep -q -- '--feed'
+}
 
 ### Copy SRC to /usr/local/bin/NAME when it differs: the ftX-decode services run as user radio, who can't read WD's home
 function wd_install_if_changed() {
@@ -1824,33 +1850,22 @@ function wd_install_if_changed() {
 function wd_ft_decoder_setup() {
     local ft_type=$1 service=$2
     local dropin=/etc/systemd/system/${service}.d/decoder.conf
-    if [[ ${WD_FT_DECODER} != "jt9" ]]; then
+    if ! wd_ft_jt9_ready; then
+        if [[ ${WD_FT_DECODER} == "jt9" ]]; then
+            wd_logger 1 "WD_FT_DECODER='jt9', but ${UBERSDR_JT9_CMD-the ubersdr jt9} isn't built yet or has no --feed, so ${service} decodes with ka9q-radio's decode_ft8 until WD next starts"
+        fi
         [[ -f ${dropin} ]] || return 1
-        wd_logger 1 "WD_FT_DECODER='${WD_FT_DECODER}', so ${service} goes back to ka9q-radio's decode_ft8"
+        wd_logger 1 "${service} goes back to ka9q-radio's decode_ft8"
         sudo rm -f ${dropin}
         sudo systemctl daemon-reload
         return 0
     fi
-    if [[ ! -x ${UBERSDR_JT9_CMD-} ]]; then
-        wd_logger 1 "WD_FT_DECODER='jt9', but ${UBERSDR_JT9_CMD-the ubersdr jt9} isn't built yet, so ${service} keeps decode_ft8 until WD next starts"
-        return 1
-    fi
-    ### jt9_decode: one C++ file, built here from its pinned commit
-    local jt9_decode_bin=${WD_JT9_DECODE_DIR}/jt9_decode
-    if [[ ! -x ${jt9_decode_bin} || "$(git -C ${WD_JT9_DECODE_DIR} rev-parse HEAD 2> /dev/null)" != "${WD_JT9_DECODE_COMMIT}" ]]; then
-        [[ -d ${WD_JT9_DECODE_DIR}/.git ]] || git clone -q ${WD_JT9_DECODE_GIT_URL} ${WD_JT9_DECODE_DIR} \
-            || { wd_logger 1 "ERROR: 'git clone ${WD_JT9_DECODE_GIT_URL}' failed, so ${service} keeps decode_ft8"; return 1; }
-        git -C ${WD_JT9_DECODE_DIR} cat-file -e ${WD_JT9_DECODE_COMMIT}^{commit} 2> /dev/null || git -C ${WD_JT9_DECODE_DIR} fetch -q origin
-        if ! git -C ${WD_JT9_DECODE_DIR} checkout -q --detach ${WD_JT9_DECODE_COMMIT} \
-                || ! g++ -o ${jt9_decode_bin} ${WD_JT9_DECODE_DIR}/jt9_decode.cpp -I${WD_JT9_DECODE_DIR}/wsjtx -std=c++11 -O2 -pthread -lrt >& ${WD_JT9_DECODE_DIR}/build.log; then
-            wd_logger 1 "ERROR: couldn't build jt9_decode ${WD_JT9_DECODE_COMMIT}, so ${service} keeps decode_ft8:\n$(tail -5 ${WD_JT9_DECODE_DIR}/build.log 2> /dev/null)"
-            return 1
-        fi
-    fi
     local changed=1
     wd_install_if_changed ${UBERSDR_JT9_CMD} wd-jt9 && changed=0
-    wd_install_if_changed ${jt9_decode_bin} wd-jt9_decode && changed=0
     wd_install_if_changed ${WSPRDAEMON_ROOT_DIR}/wd-ft-decode.sh wd-ft-decode && changed=0
+    if [[ -f /usr/local/bin/wd-jt9_decode ]]; then
+        sudo rm -f /usr/local/bin/wd-jt9_decode && wd_logger 1 "Removed /usr/local/bin/wd-jt9_decode: jt9 --feed replaced it"
+    fi
     local want
     want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Delete this file to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s"\n' \
                   ${ft_type} ${WD_FT_DEPTH} ${WD_FT_FREQ_LOW} ${WD_FT_FREQ_HIGH})
@@ -2336,8 +2351,8 @@ function build_psk_uploader() {
     ### per-instance EnvironmentFile /etc/radio/%i-pskreporter.conf, whose value is managed in the ft_type loop below.
     sed -i '/ExecStart=.*pskreporter-sender/ {/--software/! s|pskreporter-sender|pskreporter-sender --software="${WD_SOFTWARE_VERSION}"|}'  ${tmp_service_file_path}
     ### add '$WD_PSK_OPTIONS' if it is missing: unbraced, so systemd splits it into words and drops it when empty.  The ft_type
-    ### loop below sets it per instance in /etc/radio/%i-pskreporter.conf: '--snr' while WD_FT_DECODER="jt9" (see
-    ### wd_ft_decoder_setup()), whose ftX.log has WSJT-X's SNR where decode_ft8's has its sync score, else empty.
+    ### loop below sets it per instance in /etc/radio/%i-pskreporter.conf: '--snr' while the services decode with jt9 (see
+    ### wd_ft_jt9_ready()), whose ftX.log has WSJT-X's SNR where decode_ft8's has its sync score, else empty.
     sed -i '/ExecStart=.*pskreporter-sender/ {/WD_PSK_OPTIONS/! s|pskreporter-sender|pskreporter-sender $WD_PSK_OPTIONS|}'  ${tmp_service_file_path}
 
     if diff ${tmp_service_file_path} ${pskreporter_systemd_service_file_path} > /dev/null ; then
@@ -2383,7 +2398,7 @@ function build_psk_uploader() {
         ### --snr only for an FT log written by WSJT-X's jt9, and only if this pskreporter-sender has the option (the
         ### fork pinned above; ftlib-pskreporter before it would refuse '--snr' and the service would not start)
         local psk_options=""
-        if [[ ${ft_type} != "wspr" && ${WD_FT_DECODER} == "jt9" ]] && grep -q -- '--snr' ${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender 2> /dev/null; then
+        if [[ ${ft_type} != "wspr" ]] && wd_ft_jt9_ready && grep -q -- '--snr' ${KA9Q_PSK_REPORTER_DIR}/pskreporter-sender 2> /dev/null; then
             psk_options="--snr"
         fi
         if ! grep -qx "WD_PSK_OPTIONS=${psk_options}" ${psk_conf_file} ; then

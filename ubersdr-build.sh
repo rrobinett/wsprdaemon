@@ -25,6 +25,10 @@ if [[ ! -d ${src_dir}/.git ]]; then
     rm -rf ${src_dir}
     timeout 300 git clone -q ${git_url} ${src_dir} || fail "'git clone ${git_url}' failed"
 fi
+### The pin can move to another repo (a fork while a PR is open, and back): fetch from the one it names
+if [[ "$(git -C ${src_dir} remote get-url origin 2>/dev/null)" != "${git_url}" ]]; then
+    git -C ${src_dir} remote set-url origin ${git_url} || fail "'git remote set-url origin ${git_url}' failed"
+fi
 if ! git -C ${src_dir} cat-file -e ${commit}^{commit} 2>/dev/null ; then
     timeout 300 git -C ${src_dir} fetch -q origin || fail "'git fetch' in ${src_dir} failed"
 fi
