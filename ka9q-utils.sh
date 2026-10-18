@@ -1798,6 +1798,72 @@ declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked 
 declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
+### FT8 and FT4 decoding: WD_FT_DECODER="jt9" decodes each band with WSJT-X's decoders (ubersdr_wsprd's jt9, the one WD
+### builds for WSPR and FST4W), one long-running jt9 per band fed through jt9_decode's file-feed mode, in place of
+### ka9q/ft8_lib's decode_ft8.  See wd-ft-decode.sh: at KJ6MKI it decoded ~70% more FT8 messages and gave ~57% more
+### PSKReporter spots, keeping WSJT-X's hash table so hashed calls resolve, for ~1.3 s of CPU a 15 s period a band at
+### depth 2 (decode_ft8: 48 ms).  So it is chosen per station: a Raspberry Pi with a dozen FT8 bands may not have it.
+### Anything else (the default "ft8_lib") leaves the services running decode_ft8 as they always have.
+declare WD_FT_DECODER="${WD_FT_DECODER-ft8_lib}"
+declare WD_FT_DEPTH="${WD_FT_DEPTH-2}"                    ### WSJT-X's Decode menu: 1 fast, 2 normal, 3 deep
+declare WD_FT_FREQ_LOW="${WD_FT_FREQ_LOW-100}"           ### audio Hz; ka9q-radio's FT channels pass audio above 3 kHz
+declare WD_FT_FREQ_HIGH="${WD_FT_FREQ_HIGH-4000}"
+declare WD_JT9_DECODE_GIT_URL="${WD_JT9_DECODE_GIT_URL-https://github.com/rrobinett/jt9-decode.git}"   ### madpsy/jt9-decode + -F, offered upstream
+declare WD_JT9_DECODE_COMMIT="${WD_JT9_DECODE_COMMIT-40f4641d338639c708e5baf74c8fdb025045ae6c}"
+declare WD_JT9_DECODE_DIR="${WSPRDAEMON_ROOT_DIR}/jt9-decode"
+
+### Copy SRC to /usr/local/bin/NAME when it differs: the ftX-decode services run as user radio, who can't read WD's home
+function wd_install_if_changed() {
+    local src=$1 dst=/usr/local/bin/$2
+    cmp -s ${src} ${dst} && return 1
+    sudo install -m 755 ${src} ${dst} && wd_logger 1 "Installed ${dst}"
+    return 0
+}
+
+### wd_ft_decoder_setup FT_TYPE SERVICE: return 0 if SERVICE's decoder drop-in changed (so it needs a restart), else 1
+function wd_ft_decoder_setup() {
+    local ft_type=$1 service=$2
+    local dropin=/etc/systemd/system/${service}.d/decoder.conf
+    if [[ ${WD_FT_DECODER} != "jt9" ]]; then
+        [[ -f ${dropin} ]] || return 1
+        wd_logger 1 "WD_FT_DECODER='${WD_FT_DECODER}', so ${service} goes back to ka9q-radio's decode_ft8"
+        sudo rm -f ${dropin}
+        sudo systemctl daemon-reload
+        return 0
+    fi
+    if [[ ! -x ${UBERSDR_JT9_CMD-} ]]; then
+        wd_logger 1 "WD_FT_DECODER='jt9', but ${UBERSDR_JT9_CMD-the ubersdr jt9} isn't built yet, so ${service} keeps decode_ft8 until WD next starts"
+        return 1
+    fi
+    ### jt9_decode: one C++ file, built here from its pinned commit
+    local jt9_decode_bin=${WD_JT9_DECODE_DIR}/jt9_decode
+    if [[ ! -x ${jt9_decode_bin} || "$(git -C ${WD_JT9_DECODE_DIR} rev-parse HEAD 2> /dev/null)" != "${WD_JT9_DECODE_COMMIT}" ]]; then
+        [[ -d ${WD_JT9_DECODE_DIR}/.git ]] || git clone -q ${WD_JT9_DECODE_GIT_URL} ${WD_JT9_DECODE_DIR} \
+            || { wd_logger 1 "ERROR: 'git clone ${WD_JT9_DECODE_GIT_URL}' failed, so ${service} keeps decode_ft8"; return 1; }
+        git -C ${WD_JT9_DECODE_DIR} cat-file -e ${WD_JT9_DECODE_COMMIT}^{commit} 2> /dev/null || git -C ${WD_JT9_DECODE_DIR} fetch -q origin
+        if ! git -C ${WD_JT9_DECODE_DIR} checkout -q --detach ${WD_JT9_DECODE_COMMIT} \
+                || ! g++ -o ${jt9_decode_bin} ${WD_JT9_DECODE_DIR}/jt9_decode.cpp -I${WD_JT9_DECODE_DIR}/wsjtx -std=c++11 -O2 -pthread -lrt >& ${WD_JT9_DECODE_DIR}/build.log; then
+            wd_logger 1 "ERROR: couldn't build jt9_decode ${WD_JT9_DECODE_COMMIT}, so ${service} keeps decode_ft8:\n$(tail -5 ${WD_JT9_DECODE_DIR}/build.log 2> /dev/null)"
+            return 1
+        fi
+    fi
+    local changed=1
+    wd_install_if_changed ${UBERSDR_JT9_CMD} wd-jt9 && changed=0
+    wd_install_if_changed ${jt9_decode_bin} wd-jt9_decode && changed=0
+    wd_install_if_changed ${WSPRDAEMON_ROOT_DIR}/wd-ft-decode.sh wd-ft-decode && changed=0
+    local want
+    want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Delete this file to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s"\n' \
+                  ${ft_type} ${WD_FT_DEPTH} ${WD_FT_FREQ_LOW} ${WD_FT_FREQ_HIGH})
+    if [[ "$(cat ${dropin} 2> /dev/null)" != "${want}" ]]; then
+        sudo mkdir -p ${dropin%/*}
+        echo "${want}" | sudo tee ${dropin} > /dev/null
+        sudo systemctl daemon-reload
+        wd_logger 1 "${service} now decodes with WSJT-X's jt9 (depth ${WD_FT_DEPTH}, ${WD_FT_FREQ_LOW}-${WD_FT_FREQ_HIGH} Hz)"
+        changed=0
+    fi
+    return ${changed}
+}
+
 function ka9q-ft-setup() 
 {
     local rc
@@ -1909,6 +1975,11 @@ function ka9q-ft-setup()
         sudo mkdir -p ${ft_decode_dropin_dir}
         printf '[Service]\nEnvironment="LANG=C"\nEnvironment="LC_ALL=C"\n' | sudo tee ${ft_decode_locale_dropin} > /dev/null
         sudo systemctl daemon-reload
+        service_restart_needed="yes"
+    fi
+
+    ### decode_ft8, or WSJT-X's jt9 one per band (WD_FT_DECODER)
+    if wd_ft_decoder_setup ${ft_type} ${ft_decode_service_file_name}; then
         service_restart_needed="yes"
     fi
 

@@ -60,3 +60,4 @@ bin/wd-noise-tools.failed
 bin/wd-wav-stats
 bin/wd-wav-stats.new
 bin/wd-wav-stats.failed
+jt9-decode/
