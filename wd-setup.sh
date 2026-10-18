@@ -1034,8 +1034,10 @@ function start_ubersdr_build() {
 }
 
 if [[ ${WD_DECODERS} == "ubersdr" ]]; then
-    start_ubersdr_build
-    use_ubersdr_decoders
+    ### Both return 1 in ordinary states (the build not installed yet, or failed): '|| true', or wd-utils.sh's ERR trap prints
+    ### "Error code 1 at line ... wd-setup.sh" on every wsprdaemon.sh command until it is (Dick Bingham's wda, 2026-10-18)
+    start_ubersdr_build || true
+    use_ubersdr_decoders || true
 elif [[ ${WD_DECODERS} != "wsjtx" ]]; then
     wd_logger 1 "ERROR: WD_DECODERS='${WD_DECODERS}' is not 'ubersdr' or 'wsjtx', so using the WSJT-X decoders"
 fi
