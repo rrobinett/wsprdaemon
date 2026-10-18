@@ -57,3 +57,6 @@ bin/ubersdr.failed
 bin/wd-noise-tools
 bin/wd-noise-tools.new
 bin/wd-noise-tools.failed
+bin/wd-wav-stats
+bin/wd-wav-stats.new
+bin/wd-wav-stats.failed

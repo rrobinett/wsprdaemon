@@ -1038,26 +1038,38 @@ elif [[ ${WD_DECODERS} != "wsjtx" ]]; then
     wd_logger 1 "ERROR: WD_DECODERS='${WD_DECODERS}' is not 'ubersdr' or 'wsjtx', so using the WSJT-X decoders"
 fi
 
-### wd-noise-tools replaces get-peak-wav-sample.py and c2_noise.py, which WD ran for every band every cycle: ~130 runs
-### and ~45 CPU-s a cycle at ON5KQ-BL, nearly all of it starting python3 and importing numpy and soundfile.  See
-### wd-noise-tools.c.  Built here because it is a few lines of C needing only gcc (which the ubersdr build installs);
-### rebuilt only when missing or older than its source, which this file tests without forking since every wsprdaemon.sh
-### command sources it.  Without a binary decoding.sh runs the Python scripts, and WD_NOISE_TOOLS="python" forces them.
+### WD's small C tools, built here from their sources in this directory because they need nothing but gcc (which the
+### ubersdr build installs).  Each is rebuilt only when missing or older than its source, tested without forking since
+### every wsprdaemon.sh command sources this file; a failed build is logged and not retried until its source changes,
+### and the callers then fall back to what the tool replaced.
+###   wd-noise-tools  get-peak-wav-sample.py and c2_noise.py: ~130 python3 + numpy starts a cycle at ON5KQ-BL, ~45 CPU-s.
+###   wd-wav-stats    the 'sox ... -n stats' level measurements: byte for byte what sox prints on 16-bit files, and on
+###                   float files the levels computed from the samples in double precision, where sox loses most of the
+###                   precision of very quiet radiod files.  One whole-file sox and three 'sox | sox' pipelines a decode
+###                   cost ~58 ms of CPU; this does them in ~17 ms.
+### WD_NOISE_TOOLS="python" and WD_WAV_STATS="sox" go back to what each replaced.
 declare WD_NOISE_TOOLS="${WD_NOISE_TOOLS-c}"
-declare WD_NOISE_TOOLS_SRC="${WSPRDAEMON_ROOT_DIR}/wd-noise-tools.c"
+declare WD_WAV_STATS="${WD_WAV_STATS-c}"
 declare WD_NOISE_TOOLS_CMD="${WSPRD_BIN_DIR}/wd-noise-tools"
-declare WD_NOISE_TOOLS_FAILED="${WSPRD_BIN_DIR}/wd-noise-tools.failed"     ### a failed build is retried only once the source changes
-if [[ ${WD_NOISE_TOOLS} == "c" && -f ${WD_NOISE_TOOLS_SRC} ]] && command -v gcc > /dev/null \
-        && [[ ! -x ${WD_NOISE_TOOLS_CMD} || ${WD_NOISE_TOOLS_SRC} -nt ${WD_NOISE_TOOLS_CMD} ]] \
-        && [[ ! -f ${WD_NOISE_TOOLS_FAILED} || ${WD_NOISE_TOOLS_SRC} -nt ${WD_NOISE_TOOLS_FAILED} ]]; then
-    if gcc -O2 -o ${WD_NOISE_TOOLS_CMD}.new ${WD_NOISE_TOOLS_SRC} -lm >& ${WD_NOISE_TOOLS_FAILED} && mv ${WD_NOISE_TOOLS_CMD}.new ${WD_NOISE_TOOLS_CMD}; then
-        rm -f ${WD_NOISE_TOOLS_FAILED}
-        wd_logger 1 "Built ${WD_NOISE_TOOLS_CMD}"
+declare WD_WAV_STATS_CMD="${WSPRD_BIN_DIR}/wd-wav-stats"
+
+### wd_build_c_tool NAME CFLAGS...: build bin/NAME from NAME.c if it is missing or older than its source
+function wd_build_c_tool() {
+    local name=$1; shift
+    local src="${WSPRDAEMON_ROOT_DIR}/${name}.c" cmd="${WSPRD_BIN_DIR}/${name}" failed="${WSPRD_BIN_DIR}/${name}.failed"
+    [[ -f ${src} ]] && command -v gcc > /dev/null || return 0
+    [[ ! -x ${cmd} || ${src} -nt ${cmd} ]] || return 0
+    [[ ! -f ${failed} || ${src} -nt ${failed} ]] || return 0
+    if gcc "$@" -o ${cmd}.new ${src} -lm >& ${failed} && mv ${cmd}.new ${cmd}; then
+        rm -f ${failed}
+        wd_logger 1 "Built ${cmd}"
     else
-        wd_logger 1 "ERROR: couldn't build ${WD_NOISE_TOOLS_CMD}, so the Python noise scripts will be used:\n$(< ${WD_NOISE_TOOLS_FAILED})"
-        rm -f ${WD_NOISE_TOOLS_CMD}.new
+        wd_logger 1 "ERROR: couldn't build ${cmd}, so what it replaces will be used:\n$(< ${failed})"
+        rm -f ${cmd}.new
     fi
-fi
+}
+[[ ${WD_NOISE_TOOLS} == "c" ]] && wd_build_c_tool wd-noise-tools -O2
+[[ ${WD_WAV_STATS} == "c" ]]   && wd_build_c_tool wd-wav-stats -O2 -ffp-contract=off
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"

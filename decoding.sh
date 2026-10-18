@@ -182,6 +182,19 @@ declare WAV_SAMPLES_LIST=(
 declare WAV_MIN_LEVEL=${WAV_MIN_LEVEL--1.0}
 declare WAV_MAX_LEVEL=${WAV_MAX_LEVEL-1.0}
 
+### wav_stats FILE [START LEN]: what 'sox FILE -n stats' prints, or for START LEN seconds of FILE what
+### 'sox FILE -t wav - trim START LEN | sox - -n stats' prints.  bin/wd-wav-stats (see wd-setup.sh) prints the same, byte
+### for byte on 16-bit files and from the samples in double precision on float ones, in ~1/3 the CPU; without it, sox.
+function wav_stats() {
+    if [[ ${WD_WAV_STATS-c} == "c" && -x ${WD_WAV_STATS_CMD-} ]]; then
+        ${WD_WAV_STATS_CMD} "$@"
+    elif (( $# == 1 )); then
+        sox "$1" -n stats
+    else
+        sox "$1" -t wav - trim "$2" "$3" 2>/dev/null | sox - -n stats
+    fi
+}
+
 function get_wav_levels() 
 {
     local __return_levels_var=$1
@@ -199,7 +212,7 @@ function get_wav_levels()
         ### Field #:  0                 1               2               3               4               5               6               7               8               9               10              11              12              13              14  
         ### Run 'man sox' and search for 'stats' to find a description of those statistic fields
 
-        local full_wav_stats=$(sox ${wav_filename} -n stats 2>&1)                                     ### sox -n stats prints those to stderr
+        local full_wav_stats=$(wav_stats ${wav_filename} 2>&1)                                        ### sox -n stats prints those to stderr
         local full_wav_stats_list=( $(echo "${full_wav_stats}" | awk '{printf "%s\t", $NF }')  )      ### store them in an array
 
         if [[ ${#full_wav_stats_list[@]} -ne ${EXPECTED_SOX_STATS_FIELDS_COUNT-15} ]]; then
@@ -233,7 +246,7 @@ function get_wav_levels()
         fi
     fi
 
-    local wav_levels_list=( $(sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs} 2>/dev/null | sox - -n stats 2>&1 | awk '/dB/{print $(NF)}'))
+    local wav_levels_list=( $(wav_stats ${wav_filename} ${sample_start_sec} ${sample_length_secs} 2>&1 | awk '/dB/{print $(NF)}'))
     if [[ ${#wav_levels_list[@]} -ne 4 ]]; then
         wd_logger 1 "ERROR: found only ${#wav_levels_list[@]} dB lines, not the four expected dB lines from 'sox ${wav_filename} -t wav - trim ${sample_start_sec} ${sample_length_secs}'"
         return 1
@@ -2472,10 +2485,11 @@ function decoding_daemon() {
                 continue
             fi
             wd_logger 1 "sox created ${decoder_input_wav_filepath} from ${#wav_files_list[@]} one minute wav files"
-            wd_logger 2 "     $(sox ${decoder_input_wav_filepath} -n stats 2>&1 )"
 
-            ### Get statistics about the newly created wav file directly from sox
-            sox ${decoder_input_wav_filepath} -n stats >& ${SOX_LOG_FILE}
+            ### Get statistics about the newly created wav file.  (A 'wd_logger 2 "$(sox ... -n stats)"' here used to run a whole
+            ### extra sox pass every cycle, whatever the log level, to log what this computes.)
+            wav_stats ${decoder_input_wav_filepath} >& ${SOX_LOG_FILE}
+            wd_logger 2 "     $(< ${SOX_LOG_FILE})"
             local sox_peak_level_db_float=$(awk '/^Pk lev/{print $NF}' ${SOX_LOG_FILE})
             rc=$( echo "${sox_peak_level_db_float} > ${SOX_MAX_PEAK_LEVEL}" | bc )
             if (( rc == 1 )); then
