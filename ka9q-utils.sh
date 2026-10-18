@@ -1799,7 +1799,7 @@ declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
 ### FT8 and FT4 decoding: WD_FT_DECODER="jt9" decodes each band with WSJT-X's decoders (ubersdr_wsprd's jt9, the one WD
-### builds for WSPR and FST4W), one long-running jt9 per band fed through jt9_decode's file-feed mode, in place of
+### builds to decode FST4W), one long-running jt9 per band fed through jt9_decode's file-feed mode, in place of
 ### ka9q/ft8_lib's decode_ft8.  See wd-ft-decode.sh: at KJ6MKI it decoded ~70% more FT8 messages and gave ~57% more
 ### PSKReporter spots, keeping WSJT-X's hash table so hashed calls resolve, for ~1.3 s of CPU a 15 s period a band at
 ### depth 2 (decode_ft8: 48 ms).  So it is chosen per station: a Raspberry Pi with a dozen FT8 bands may not have it.
