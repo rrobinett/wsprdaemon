@@ -36,11 +36,18 @@ for i in $(seq 0 $(( ${WD_RADIOD_INSTANCES:-0} - 1 ))); do
 done
 [ -n "$idx" ] || { log "instance not present in plan (plan has: ${WD_RADIOD_NAMES:-none}); leaving unmanaged"; exit 0; }
 eval "FFT_CPU=\$WD_RADIOD${idx}_FFT_CPU; RX_CPU=\$WD_RADIOD${idx}_RX888_CPU; OTHER_CPUS=\$WD_RADIOD${idx}_OTHER_CPUS"
+# radiod's 'fft-threads = N' runs N fft worker threads, each transforming every Nth block, and names them all "fft".
+# Pinned to the one fft CPU they would only take turns on it, so they go round the CPUs in WD_RADIODn_FFT_CPUS, else
+# the fft CPU then proc_rx888's (the radiod's own two cores).  One fft thread still gets the fft CPU alone.  W7WKR-1's
+# i5-6500T, 2026-10-19: one fft thread at 129.6 Msps took 95% of its core.
+eval "FFT_CPUS=\${WD_RADIOD${idx}_FFT_CPUS:-}"
+[ -n "$FFT_CPUS" ] || FFT_CPUS="$FFT_CPU $RX_CPU"
+read -r -a fft_cpu_list <<< "${FFT_CPUS//,/ }"
 # The plan carries the full unit name: this same radiod runs as 'ka9q-radio@$inst' when
 # ka9q-radio's udev autostart launched it.  Fall back to radiod@ for an older installed plan.
 eval "unit=\${WD_RADIOD${idx}_UNIT:-}"
 [ -n "$unit" ] || unit="radiod@$inst.service"
-log "plan: fft->CPU$FFT_CPU  proc_rx888->CPU$RX_CPU  others->CPUs $OTHER_CPUS  (${WD_TOPO_SIBLING_STYLE:-?} SMT)"
+log "plan: fft->CPU$FFT_CPU (more fft threads: CPUs ${FFT_CPUS})  proc_rx888->CPU$RX_CPU  others->CPUs $OTHER_CPUS  (${WD_TOPO_SIBLING_STYLE:-?} SMT)"
 
 pid=""
 for _ in $(seq 1 30); do
@@ -59,12 +66,14 @@ if [ -z "$pid" ] || [ "$pid" = "0" ] || [ ! -d "/proc/$pid/task" ]; then
     log "no MainPID; giving up (service unaffected)"; exit 0
 fi
 pin_pass(){
-    local f=0 r=0 o=0 tid nm
-    for t in /proc/"$pid"/task/*; do
+    local f=0 r=0 o=0 tid nm cpu
+    for t in $(ls -d /proc/"$pid"/task/* 2>/dev/null | sort -t/ -k5 -n); do    ### by tid: the same fft thread the same CPU each pass
         [ -d "$t" ] || continue
         tid=$(basename "$t"); nm=$(cat "$t/comm" 2>/dev/null) || continue
         case "$nm" in
-            fft)        run taskset -pc "$FFT_CPU"    "$tid" && f=$((f+1)) ;;
+            fft)        cpu=${fft_cpu_list[$(( f % ${#fft_cpu_list[@]} ))]}
+                        [ $f -eq 0 ] && cpu=$FFT_CPU
+                        run taskset -pc "$cpu" "$tid" && f=$((f+1)) ;;
             proc_rx888) run taskset -pc "$RX_CPU"     "$tid" && r=$((r+1)) ;;
             *)          run taskset -pc "$OTHER_CPUS" "$tid" && o=$((o+1)) ;;
         esac
