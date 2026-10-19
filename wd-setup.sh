@@ -955,9 +955,10 @@ find_wsjtx_commands
 ### not retried for the same commit and CPU; delete bin/ubersdr.failed to retry it.
 declare WD_DECODERS="${WD_DECODERS-ubersdr}"
 ### The pin: madpsy's main (with our float input for wsprd and FST4W, PR #1) plus PR #2, float input for FT8 and FT4 and
-### 'jt9 --feed', which WD_FT_DECODER="jt9" needs (ka9q-utils.sh).  Back to madpsy's repo once PR #2 is merged.
+### 'jt9 --feed', which WD_FT_DECODER="jt9" needs (ka9q-utils.sh), and PR #3, FT8's --fast-subtract and jt9 -w 2
+### (wd-ft-decode.sh).  Back to madpsy's repo once they are merged.
 declare UBERSDR_WSPRD_GIT_URL="${UBERSDR_WSPRD_GIT_URL-https://github.com/rrobinett/ubersdr_wsprd.git}"
-declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-3a4d329908552ca1292243f111f25b7ba3a73ca5}"
+declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-e7cc9a0d9eb215e1bd036dbcef6230b45cbcede7}"
 declare UBERSDR_WSPRD_SRC_DIR="${WSPRDAEMON_ROOT_DIR}/ubersdr_wsprd"
 declare UBERSDR_WSPRD_CMD="${WSPRD_BIN_DIR}/wsprd-ubersdr"
 declare UBERSDR_JT9_CMD="${WSPRD_BIN_DIR}/jt9-ubersdr"

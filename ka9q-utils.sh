@@ -1829,6 +1829,7 @@ declare WD_FT_DECODER="${WD_FT_DECODER-ft8_lib}"
 declare WD_FT_DEPTH="${WD_FT_DEPTH-2}"                    ### WSJT-X's Decode menu: 1 fast, 2 normal, 3 deep
 declare WD_FT_FREQ_LOW="${WD_FT_FREQ_LOW-100}"           ### audio Hz; ka9q-radio's FT channels pass audio above 3 kHz
 declare WD_FT_FREQ_HIGH="${WD_FT_FREQ_HIGH-4000}"
+declare WD_FT_FAST="${WD_FT_FAST-yes}"                   ### jt9 -w 2 and FT8's --fast-subtract: the same decodes, ~40% less CPU (wd-ft-decode.sh)
 
 ### 0 when WD_FT_DECODER="jt9" and the ubersdr jt9 WD built can be fed files ('jt9 --feed', ubersdr_wsprd PR #2), so the FT
 ### services decode with it and radiod's [FT8]/[FT4] channels send float.  Else neither: decode_ft8 reads 16-bit files only,
@@ -1867,8 +1868,8 @@ function wd_ft_decoder_setup() {
         sudo rm -f /usr/local/bin/wd-jt9_decode && wd_logger 1 "Removed /usr/local/bin/wd-jt9_decode: jt9 --feed replaced it"
     fi
     local want
-    want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Delete this file to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s"\n' \
-                  ${ft_type} ${WD_FT_DEPTH} ${WD_FT_FREQ_LOW} ${WD_FT_FREQ_HIGH})
+    want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Delete this file to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s" "WD_FT_FAST=%s"\n' \
+                  ${ft_type} ${WD_FT_DEPTH} ${WD_FT_FREQ_LOW} ${WD_FT_FREQ_HIGH} ${WD_FT_FAST})
     if [[ "$(cat ${dropin} 2> /dev/null)" != "${want}" ]]; then
         sudo mkdir -p ${dropin%/*}
         echo "${want}" | sudo tee ${dropin} > /dev/null

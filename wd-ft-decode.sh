@@ -44,6 +44,34 @@ for cmd in ${JT9} inotifywait; do
 done
 mkdir -p ${RUN_DIR} || exit 1
 
+### When this jt9 has them (ubersdr_wsprd PR #3) and WD_FT_FAST="yes" (the default): measured FFT plans (-w 2) and, for
+### FT8, the decoded signals' subtraction smoothed at 300 S/s (--fast-subtract).  At KJ6MKI on 2026-10-18, 504 periods of
+### 12 FT8 bands: 7,050 decodes against 7,051 for 172 CPU-s against 294 (-41%); on ubersdr's FT8 test recordings, at
+### every depth, WSJT-X's decodes but for one in two runs.  An older jt9 would take --fast-subtract for an unknown
+### option, print its usage and exit, so it is asked first.
+declare -a JT9_OPTS=()
+if [[ ${WD_FT_FAST-yes} == "yes" ]] && ${JT9} -h 2>&1 | grep -q -- '--fast-subtract'; then
+    JT9_OPTS=(-w 2)
+    [[ ${MODE} == ft8 ]] && JT9_OPTS+=(--fast-subtract)
+fi
+### Measured plans take jt9 ~20 s to make, and it saves them (jt9_wisdom.dat) only when it ends normally, which a band's
+### --feed jt9 never does: so they are made once here, by a jt9 decoding the first file to arrive, kept in RUN_DIR, and
+### copied into each band's directory before its jt9 starts.
+declare WISDOM=${RUN_DIR}/jt9_wisdom.dat
+plan_wisdom() {
+    local path=$1 dir=${RUN_DIR}/plan.d
+    rm -rf ${dir}; mkdir -p ${dir}
+    echo "$(date -u +%FT%TZ) making the measured FFT plans (${JT9_OPTS[*]}) on ${path##*/}" >&2
+    ( cd ${dir} && ${JT9} ${JT9_FLAG} -a . -t . -d ${DEPTH} -L ${FREQ_LOW} -H ${FREQ_HIGH} -x b "${JT9_OPTS[@]}" ${path} > /dev/null 2>&1 )
+    if [[ -s ${dir}/jt9_wisdom.dat ]]; then
+        mv ${dir}/jt9_wisdom.dat ${WISDOM}
+        echo "$(date -u +%FT%TZ) made ${WISDOM}" >&2
+    else
+        echo "$(date -u +%FT%TZ) no jt9_wisdom.dat from that run: each band's jt9 makes its own plans" >&2
+    fi
+    rm -rf ${dir}
+}
+
 ### The band decoders' output goes through this into our stdout (the service's /var/log/ftX.log).  A file's decodes
 ### come before its '<FileDone> PATH N', so they are held until then, when PATH gives their date.
 ### jt9 line:  HHMMSS SNR DT AUDIO_HZ ~|+ MESSAGE [a1..a7|?]     (FT8 marks '~', FT4 '+')
@@ -76,16 +104,20 @@ convert() {
 ### Start (or restart) the band's decoder: a 'jt9 --feed' reading file names from a FIFO the feeder holds open
 declare -A BAND_FD=() BAND_PID=()
 start_band() {
-    local hz=$1 fifo=${RUN_DIR}/${hz}.in
+    local hz=$1 path=$2 fifo=${RUN_DIR}/${hz}.in
     rm -f ${fifo}; mkfifo ${fifo} || return 1
     ### jt9 keeps decoded.txt and jt9_wisdom.dat in its -a and -t directory: one for each band.  '-x b': no "his call";
     ### "my call" is jt9's K1ABC.  The period's UTC comes from pcmrecord's file name.
     mkdir -p ${RUN_DIR}/${hz}.d
-    ( cd ${RUN_DIR}/${hz}.d && ${JT9} ${JT9_FLAG} -a . -t . -d ${DEPTH} -L ${FREQ_LOW} -H ${FREQ_HIGH} -x b --feed < ${fifo} 2> ${RUN_DIR}/${hz}.err | convert ${hz} ) &
+    if [[ " ${JT9_OPTS[*]} " == *" -w 2 "* ]]; then
+        [[ -s ${WISDOM} ]] || plan_wisdom ${path}
+        [[ -s ${WISDOM} ]] && cp ${WISDOM} ${RUN_DIR}/${hz}.d/jt9_wisdom.dat
+    fi
+    ( cd ${RUN_DIR}/${hz}.d && ${JT9} ${JT9_FLAG} -a . -t . -d ${DEPTH} -L ${FREQ_LOW} -H ${FREQ_HIGH} -x b "${JT9_OPTS[@]}" --feed < ${fifo} 2> ${RUN_DIR}/${hz}.err | convert ${hz} ) &
     BAND_PID[${hz}]=$!
     exec {fd}> ${fifo}
     BAND_FD[${hz}]=${fd}
-    echo "$(date -u +%FT%TZ) started a ${MODE^^} decoder for ${hz} Hz (depth ${DEPTH}, ${FREQ_LOW}-${FREQ_HIGH} Hz)" >&2
+    echo "$(date -u +%FT%TZ) started a ${MODE^^} decoder for ${hz} Hz (depth ${DEPTH}, ${FREQ_LOW}-${FREQ_HIGH} Hz${JT9_OPTS[*]:+, ${JT9_OPTS[*]}})" >&2
 }
 
 declare -A QUEUED=()
@@ -98,7 +130,7 @@ queue_file() {
     local hz=${BASH_REMATCH[4]}
     if [[ -z ${BAND_PID[${hz}]-} ]] || ! kill -0 ${BAND_PID[${hz}]} 2> /dev/null; then
         [[ -n ${BAND_FD[${hz}]-} ]] && exec {BAND_FD[${hz}]}>&-
-        start_band ${hz} || return 1
+        start_band ${hz} ${path} || return 1
     fi
     echo "${path}" >&${BAND_FD[${hz}]}
 }
