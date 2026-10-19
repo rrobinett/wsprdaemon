@@ -8,6 +8,34 @@ Known to work running both WD and radiod.
 
 ### Intel
 
+#### Core i5-6500T (e.g. Lenovo ThinkCentre M910): WSPR, WWV and decode_ft8 FT8/FT4 at 129.6 Msps, no jt9
+
+A 2015 4-core CPU without hyperthreading or L3 cache allocation, as at W7WKR-1. Measured there on 2026-10-19:
+
+| RX888 at 129.6 Msps | radiod fft |
+|---|---|
+| one fft thread (radiod's default) | 95% of its core: too close to dropping samples |
+| `fft-threads = 2`, wisdom measured on this CPU | 41% + 36%, on two cores |
+
+What WD does on this CPU:
+
+- **Two fft threads.** At 129.6 Msps WD sets `fft-threads = 2` in the `[global]` section of the radiod conf it manages,
+  and `radiod-pin-threads.sh` puts one on each of radiod's two cores (the second shares a core with `proc_rx888`).
+  The CPUs this applies to are listed in `WD_SLOW_FFT_CPU_MODELS` (default `"i5-6500T"`, matched against the model
+  name in `/proc/cpuinfo`); `RADIOD_FFT_THREADS=N` in `wsprdaemon.conf` sets it on any host.
+- **No jt9 for FT8/FT4.** WSJT-X's jt9 (`WD_FT_DECODER="jt9"`) needs about one more core for a dozen FT8 bands, which
+  this CPU does not have beside radiod, so WD refuses it and keeps ka9q-radio's `decode_ft8`, saying so in its log.
+  The list is `WD_FT_JT9_UNSUPPORTED_CPU_MODELS` (default `"i5-6500T"`).
+- **FFTW wisdom measured on the host.** The reference wisdom WD installs was measured on another CPU. On this one,
+  wisdom planned on the host itself (`fftwf-wisdom -n -T 1` on radiod's fft core, with WD and radiod stopped so the
+  machine is quiet) cut radiod's fft work by about a fifth. That planning took 2 h 47 min, and WD now ships the
+  result (`wisdom/fftw-3.3.8-sse2-avx/intel-r-core-tm-i5-6500t-cpu-2-50ghz.wisdom`), so another i5-6500T on the same
+  FFTW build (Ubuntu 22.04) gets it as its system wisdom instead of measuring.  On a newer OS (FFTW 3.3.10) it does
+  not apply, and the host measures its own.
+
+Or run the RX888 at 64.8 Msps (`RX888_64_MSPS="yes"`), which halves the fft work but loses everything above 32.4 MHz
+(6 m and 40.68 MHz).
+
 ### Raspberry Pi (4 or 5)
 Can work in constrained use -- but not supporting the full bandwidth of a RX888 plus WD.
 Known to work with RTL-SDR, funcube dongle, AirspyR2, etc.

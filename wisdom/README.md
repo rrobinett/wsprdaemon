@@ -95,3 +95,18 @@ the check to repeat when adding a reference for another CPU: the log must stop g
 radiod imports `/etc/fftw/wisdomf` and then `/var/lib/ka9q-radio/wisdom`, and FFTW accumulates
 both.  So WD installs a reference as the system file and leaves the site's own file alone.
 Nothing a site has measured is lost, and the reference fills in what it lacks.
+
+`fftw-3.3.8-sse2-avx/intel-r-core-tm-i5-6500t-cpu-2-50ghz.wisdom`, 2026-10-19, on W7WKR-1 (Lenovo ThinkCentre
+M910, Intel Core i5-6500T, 4 cores, no SMT, no L3 cache allocation; Ubuntu 22.04 jammy, so FFTW 3.3.8): 50,644
+bytes, 522 plans, covering WD's 91-spec list (rof3240000 for 129.6 Msps first).
+
+  - WD, radiod and the FT services stopped (`wdz`)
+  - pinned with `taskset -c 1` to the core radiod's fft thread runs on
+  - `fftwf-wisdom -v -n -T 1 -o ... <the 91 specs>`, measured from scratch (no `-w`, no system wisdom):
+    2 h 47 min of CPU1
+  - against the 5825U reference this host had been running, radiod's fft work at 129.6 Msps fell from ~95% of a
+    core to ~77%, which with `fft-threads = 2` (see docs/source/configuration/wsprdaemon.conf.d/computer.md) is
+    41% + 36% on two cores
+
+It is the first jammy (`fftw-3.3.8-sse2-avx`) reference.  It serves only an i5-6500T on that build string: an
+i5-6500T on a newer OS has FFTW 3.3.10 and still measures its own.

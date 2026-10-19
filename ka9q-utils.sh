@@ -1462,6 +1462,16 @@ function build_ka9q_radio() {
         init_file_section_variable_value_list+=("${ka9q_conf_file_path}  rx888   samprate    129600000")
     fi
 
+    ### [global] fft-threads: RADIOD_FFT_THREADS from wsprdaemon.conf if set; else 2 at 129.6 Msps on a CPU in
+    ### WD_SLOW_FFT_CPU_MODELS (radiod-pin-threads.sh puts the two on different cores); else radiod's own setting stays.
+    local radiod_fft_threads=${RADIOD_FFT_THREADS-}
+    if [[ -z ${radiod_fft_threads} && ! "${RX888_64_MSPS:-no}" =~ ^[Yy] ]] && wd_cpu_model_in "${WD_SLOW_FFT_CPU_MODELS}"; then
+        radiod_fft_threads=2
+    fi
+    if [[ -n ${radiod_fft_threads} ]]; then
+        init_file_section_variable_value_list+=("${ka9q_conf_file_path}  global  fft-threads  ${radiod_fft_threads}")
+    fi
+
     if ! [[ -d ${ka9q_conf_file_path}.d ]]; then
         wd_logger 2 "Checking KA9Q configurations in files in old style single file ${ka9q_conf_file_path}"
 
@@ -1831,12 +1841,29 @@ declare WD_FT_FREQ_LOW="${WD_FT_FREQ_LOW-100}"           ### audio Hz; ka9q-radi
 declare WD_FT_FREQ_HIGH="${WD_FT_FREQ_HIGH-4000}"
 declare WD_FT_FAST="${WD_FT_FAST-yes}"                   ### jt9 -w 2 and FT8's --fast-subtract: the same decodes, ~40% less CPU (wd-ft-decode.sh)
 
+### CPUs too slow for what WD would otherwise run on them, matched against /proc/cpuinfo's model name (space separated
+### substrings; set either to "" in wsprdaemon.conf to turn it off).  W7WKR-1, a Lenovo ThinkCentre M910 with an
+### i5-6500T (4 cores, no SMT, no L3 cache allocation), 2026-10-19: at 129.6 Msps radiod's one fft thread took 95% of its
+### core; with fft-threads = 2 (radiod-pin-threads.sh puts them on radiod's two cores) and FFTW wisdom measured on it,
+### 41% + 36%.  That leaves no room for WSJT-X's jt9 for FT8/FT4 (~1 core for a dozen bands), so it keeps decode_ft8.
+declare WD_SLOW_FFT_CPU_MODELS="${WD_SLOW_FFT_CPU_MODELS-i5-6500T}"            ### radiod fft-threads = 2 at 129.6 Msps
+declare WD_FT_JT9_UNSUPPORTED_CPU_MODELS="${WD_FT_JT9_UNSUPPORTED_CPU_MODELS-i5-6500T}"   ### WD_FT_DECODER="jt9" refused
+function wd_cpu_model_in() {
+    local model m
+    model=$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo 2> /dev/null)
+    for m in $1; do
+        [[ ${model} == *"${m}"* ]] && return 0
+    done
+    return 1
+}
+
 ### 0 when WD_FT_DECODER="jt9" and the ubersdr jt9 WD built can be fed files ('jt9 --feed', ubersdr_wsprd PR #2), so the FT
 ### services decode with it and radiod's [FT8]/[FT4] channels send float.  Else neither: decode_ft8 reads 16-bit files only,
 ### so the radiod channels and the decoder must change together.  A jt9 from before --feed (the build of an older pin, or
 ### a new pin still building in the background) waits for the WD start after its build is installed.
 function wd_ft_jt9_ready() {
-    [[ ${WD_FT_DECODER} == "jt9" && -x ${UBERSDR_JT9_CMD-} ]] && ${UBERSDR_JT9_CMD} -h 2>&1 | grep -q -- '--feed'
+    [[ ${WD_FT_DECODER} == "jt9" && -x ${UBERSDR_JT9_CMD-} ]] && ! wd_cpu_model_in "${WD_FT_JT9_UNSUPPORTED_CPU_MODELS}" \
+        && ${UBERSDR_JT9_CMD} -h 2>&1 | grep -q -- '--feed'
 }
 
 ### Copy SRC to /usr/local/bin/NAME when it differs: the ftX-decode services run as user radio, who can't read WD's home
@@ -1852,7 +1879,9 @@ function wd_ft_decoder_setup() {
     local ft_type=$1 service=$2
     local dropin=/etc/systemd/system/${service}.d/decoder.conf
     if ! wd_ft_jt9_ready; then
-        if [[ ${WD_FT_DECODER} == "jt9" ]]; then
+        if [[ ${WD_FT_DECODER} == "jt9" ]] && wd_cpu_model_in "${WD_FT_JT9_UNSUPPORTED_CPU_MODELS}"; then
+            wd_logger 1 "WD_FT_DECODER='jt9', but this CPU ($(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)) is in WD_FT_JT9_UNSUPPORTED_CPU_MODELS: it has no room for jt9 beside radiod, so ${service} decodes with ka9q-radio's decode_ft8"
+        elif [[ ${WD_FT_DECODER} == "jt9" ]]; then
             wd_logger 1 "WD_FT_DECODER='jt9', but ${UBERSDR_JT9_CMD-the ubersdr jt9} isn't built yet or has no --feed, so ${service} decodes with ka9q-radio's decode_ft8 until WD next starts"
         fi
         [[ -f ${dropin} ]] || return 1
