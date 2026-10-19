@@ -223,6 +223,14 @@ fi
 ### that is shutting down is pointless, and it perturbs the very radiods -Z is about to stop.  The
 ### operator sees it as 'wdz takes 2-3 minutes'.  wd_cpu_tuning() returns early when this is set.
 [[ " $* " == *" -Z "* ]] && declare -x WD_SKIP_CPU_TUNING="yes"
+### Nor may it set anything else up.  The sourcing below also runs ka9q-utils.sh's ka9q-setup, which rewrites radiod's conf
+### and restarts radiod when it changed and (re)starts the FT services, and wd-setup.sh's start of an ubersdr build.  At
+### W7WKR-1 on 2026-10-19 a 'git pull' then 'wdz' did both inside the stop: the ubersdr build started, radiod was
+### restarted at 11:10:17 PDT and its RX888 delivered no data from then on (radiod "No rx888 data for 5 seconds" and a
+### libusb abort, every 30 s), and the FT decoders were running again behind the stop.  WD_STOPPING makes both skip.
+if [[ " $* " == *" -Z "* || " $* " == *" -z "* ]]; then
+    declare -x WD_STOPPING="yes" WD_SKIP_CPU_TUNING="yes"
+fi
 
 source ${WSPRDAEMON_ROOT_DIR}/bash-aliases       ### Set up WD aliases for all users
 source ${WSPRDAEMON_ROOT_DIR}/wd-utils.sh

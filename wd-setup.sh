@@ -1036,8 +1036,12 @@ function start_ubersdr_build() {
 
 if [[ ${WD_DECODERS} == "ubersdr" ]]; then
     ### Both return 1 in ordinary states (the build not installed yet, or failed): '|| true', or wd-utils.sh's ERR trap prints
-    ### "Error code 1 at line ... wd-setup.sh" on every wsprdaemon.sh command until it is (Dick Bingham's wda, 2026-10-18)
-    start_ubersdr_build || true
+    ### "Error code 1 at line ... wd-setup.sh" on every wsprdaemon.sh command until it is (Dick Bingham's wda, 2026-10-18).
+    ### A build starts only when WD itself starts (wsprdaemon.service's 'wsprdaemon.sh -A'): never in a stop ('wdz' after a
+    ### 'git pull' started one at W7WKR-1 on 2026-10-19), a status or a version command.
+    if [[ " $* " == *" -A "* && ${WD_STOPPING-no} != "yes" ]]; then
+        start_ubersdr_build || true
+    fi
     use_ubersdr_decoders || true
 elif [[ ${WD_DECODERS} != "wsjtx" ]]; then
     wd_logger 1 "ERROR: WD_DECODERS='${WD_DECODERS}' is not 'ubersdr' or 'wsjtx', so using the WSJT-X decoders"
@@ -1073,8 +1077,10 @@ function wd_build_c_tool() {
         rm -f ${cmd}.new
     fi
 }
-[[ ${WD_NOISE_TOOLS} == "c" ]] && wd_build_c_tool wd-noise-tools -O2
-[[ ${WD_WAV_STATS} == "c" ]]   && wd_build_c_tool wd-wav-stats -O2 -ffp-contract=off
+if [[ ${WD_STOPPING-no} != "yes" ]]; then     ### no compiling while WD stops
+    [[ ${WD_NOISE_TOOLS} == "c" ]] && wd_build_c_tool wd-noise-tools -O2
+    [[ ${WD_WAV_STATS} == "c" ]]   && wd_build_c_tool wd-wav-stats -O2 -ffp-contract=off
+fi
 
 if ! check_for_kiwirecorder_cmd ; then
     wd_logger 1  "ERROR: failed to find or load Kiwi recording utility '${KIWI_RECORD_COMMAND}'"

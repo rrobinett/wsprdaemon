@@ -2880,4 +2880,7 @@ function ka9q-setup() {
 
     return ${rc}
 }
-ka9q-setup
+### Not while WD is stopping (wsprdaemon.sh -Z/-z, WD_STOPPING): see wsprdaemon.sh
+if [[ ${WD_STOPPING-no} != "yes" ]]; then
+    ka9q-setup
+fi

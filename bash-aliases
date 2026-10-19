@@ -1267,7 +1267,8 @@ function wd-killall() {
 
     local verbosity=${verbosity-0}
 
-    ### Stop all services
+    ### Stop all services: the FT decoders and their recorders and uploaders first (below), so nothing is left decoding
+    ### while WD and radiod stop
     local services_list=(  wsprdaemon )
 
     source ${WD_CONF_PATH}
@@ -1294,7 +1295,8 @@ function wd-killall() {
         echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
     else
         local base_name=$(wd-get_ka9q-conf_file-base_name)
-        services_list+=( radiod@${base_name}.service ft4-decode ft4-decode@* ft8-decode ft8-decode@* ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr hfdl )
+        services_list=( ft4-decode ft4-decode@* ft8-decode ft8-decode@* ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr
+                        wsprdaemon radiod@${base_name}.service hfdl )
     fi
 
     local service_name
@@ -1312,6 +1314,15 @@ function wd-killall() {
             fi
         fi
     done
+
+    ### FT decoder processes left behind by their services: WD's wd-ft-decode and its jt9s, and ka9q-radio's decode_ft8
+    if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} != "yes" ]]; then
+        local ft_pid_list=( $(pgrep -f '^(/bin/bash )?/usr/local/bin/wd-ft-decode |^/usr/local/bin/wd-jt9 |^/usr/local/bin/decode_ft8 ') )
+        if (( ${#ft_pid_list[@]} )); then
+            echo "Killing ${#ft_pid_list[@]} FT decoder processes left running: ${ft_pid_list[*]}"
+            sudo kill ${ft_pid_list[@]} 2> /dev/null
+        fi
+    fi
 
     ### Stop all the daemons wpawned by WD/  They store their PID in *.pid files
     local wd_temp_root_dir="${WSPRDAEMON_TMP_DIR-/dev/shm/wsprdaemon}"
