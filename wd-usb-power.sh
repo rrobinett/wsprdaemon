@@ -278,6 +278,71 @@ function wd_usb_power_wait_for_serial()
 
 ### The RX888 with serial $1 is wanted by a radiod but is not on the bus (or is hung while enumerated, when $2 = "hung").
 ### Cycle the port it sits on / was last seen on.  0 = the radio is back and programmed.
+### Is this device's physical jack also wired for SuperSpeed?
+### A USB3 hub presents each jack TWICE -- a SuperSpeed port and a High-speed one -- and sysfs links the two
+### through `peer`.  A card reporting 480 Mb/s on a jack that HAS a SuperSpeed peer is not in a USB 2 socket:
+### it is on the wrong HALF of a USB 3 socket, which is a software state and is recoverable.  A card with no
+### peer really is in a USB 2 socket and only the operator can fix that.
+### Echoes the peer devpath, or nothing.
+function wd_usb_power_ss_peer_of()
+{
+    local dev=${1##*/} hub port peer
+    read -r hub port <<< "$( wd_usb_power_hub_port_of "${dev}" )"
+    [[ -z ${hub} || -z ${port} ]] && return 1
+    [[ ${hub} == [0-9]* && ${hub} != *-* ]] && hub="usb${hub}"
+    ### ⛔ The peer link hangs off the hub's INTERFACE directory, not the hub itself:
+    ###     /sys/bus/usb/devices/2-1/2-1:1.0/2-1-port3/peer -> .../4-1/4-1:1.0/4-1-port3
+    ### and a ROOT hub names that interface differently again (usb4 -> 4-0:1.0), so glob it
+    ### rather than assuming ":1.0".  Getting this path wrong fails SILENTLY -- every jack
+    ### reads as having no peer, so every underspeed card is written off as the operator's
+    ### problem.  That is exactly what the first version of this function did.
+    for peer in /sys/bus/usb/devices/${hub}/*/${hub}-port${port}/peer ; do
+        [[ -e ${peer} ]] || continue
+        peer=$( readlink -f "${peer}" 2>/dev/null )
+        [[ -n ${peer} ]] && { echo "${peer##*/}"; return 0; }
+    done
+    return 1
+}
+
+### Lift an RX888 that came up on the High-speed half of a USB 3 jack onto the SuperSpeed half.
+###
+### The RX888 enumerates first as its FX3 bootloader (04b4:00f3) at high speed, loads firmware, and must then
+### RE-TRAIN the link to SuperSpeed as 04b4:00f1.  Some hubs do not follow that transition and leave the card
+### at 480 Mb/s, where radiod refuses it ("rx888_usb_init() failed") -- on a jack that is perfectly good.
+### Measured on AI6VN 2026-10-21: a Lenovo 17ef:1039 and an RSHTECH 0bda:0411 follow it; a UGREEN 05e3:0626
+### never does, on any of its four ports.
+###
+### ⛔ THE CUT MUST BE SHORT.  WD_USB_POWER_OFF_SECS exists to make the FX3 DROP its firmware and reload --
+### which would put the card straight back into the bootloader at 480 Mb/s, the state we are leaving.  The FX3
+### holds state across a BRIEF drop, so ~2 s brings it back as 00f1 with firmware intact and a fresh link
+### negotiation.  Verified 5 times out of 5 on four different UGREEN jacks.
+###
+### Not needed by an RX888 whose firmware lives in EEPROM (the Tapper variant), which comes up as USB 3 directly.
+declare WD_USB_LINK_BLIP_SECS=${WD_USB_LINK_BLIP_SECS-2}
+
+function wd_usb_power_promote_link()
+{
+    local want=${1^^} hub port dev peer speed waited
+    dev=$( wd_usb_power_dev_of_serial "${want}" || true )
+    [[ -z ${dev} ]] && return 1
+    read -r hub port <<< "$( wd_usb_power_hub_port_of "${dev}" )"
+    wd_usb_power_log 1 "RX888 ${want} is on the High-speed half of usb hub ${hub} port ${port}; blipping its power for ${WD_USB_LINK_BLIP_SECS}s so it re-trains at SuperSpeed (a SHORT cut: a long one would send it back through the bootloader)"
+    WD_USB_POWER_OFF_SECS=${WD_USB_LINK_BLIP_SECS} wd_usb_power_cycle_port "${hub}" "${port}" "RX888 ${want} link promotion" || return 1
+    for (( waited = 0 ; waited < 20 ; waited++ )); do
+        sleep 2
+        dev=$( wd_usb_power_dev_of_serial "${want}" || true )
+        [[ -z ${dev} ]] && continue
+        speed=$( cat "/sys/bus/usb/devices/${dev}/speed" 2>/dev/null )
+        if (( ${speed:-0} >= 5000 )); then
+            wd_usb_power_log 1 "RX888 ${want} link promoted to ${speed} Mb/s at usb ${dev}"
+            wd_usb_power_learn_ports
+            return 0
+        fi
+    done
+    wd_usb_power_log 1 "ERROR: RX888 ${want} is still below SuperSpeed after a link blip; this hub does not follow the bootloader-to-SuperSpeed transition.  Try another port, another cable, or a hub that does"
+    return 1
+}
+
 function wd_usb_power_recover_rx888()
 {
     local want=${1^^} mode=${2:-missing} dev hp hub port speed seen
@@ -294,7 +359,14 @@ function wd_usb_power_recover_rx888()
         return 1
     fi
     if (( ${speed:-5000} < 5000 )); then
-        wd_usb_power_log 1 "ERROR: RX888 ${want} is (was, at ${seen}) on usb hub ${hub} port ${port}, a ${speed} Mb/s USB 2 port where it can never work; move it to a USB 3 port instead of power cycling it"
+        ### ⚠ 480 Mb/s is NOT always the operator's problem.  If this jack has a SuperSpeed peer then the socket
+        ### IS USB 3 and the card merely landed on the wrong half after its firmware load -- recoverable here,
+        ### with a SHORT blip.  Only a jack with no peer is a real USB 2 socket the operator must move it out of.
+        if [[ -n ${dev} ]] && wd_usb_power_ss_peer_of "${dev}" >/dev/null; then
+            wd_usb_power_promote_link "${want}" && return 0
+            return 1
+        fi
+        wd_usb_power_log 1 "ERROR: RX888 ${want} is (was, at ${seen}) on usb hub ${hub} port ${port}, a ${speed} Mb/s USB 2 port with no SuperSpeed half, where it can never work; move it to a USB 3 port instead of power cycling it"
         return 1
     fi
     wd_usb_power_cycle_port "${hub}" "${port}" "RX888 ${want} (${mode}; last seen there ${seen}) is wanted by radiod" || return 1
