@@ -326,6 +326,72 @@ function wd_usb_power_recover_bootloader_stuck()
     ! lsusb -d ${WD_USB_RX888_VENDOR}:${WD_USB_RX888_BOOTLOADER} > /dev/null 2>&1
 }
 
+### Is radiod@$1 a receiver this host is meant to run, rather than one of ka9q-radio's stock sample confs in /etc/radio?  Several of
+### those publish the very stream names WD uses (radiod@airspyhf-generic.conf names wspr-pcm.local) and one silenced PE0MJX for five days.
+### Ours = the KA9Q_CONF_NAME instance, a unit that is enabled or in any state but inactive, or an [rx888] conf whose serial is on the bus.
+function wd_local_radiod_is_ours()
+{
+    local inst=$1 state serial
+    [[ ${inst} == "${KA9Q_CONF_NAME:-rx888-wsprdaemon}" ]] && return 0
+    systemctl is-enabled --quiet "radiod@${inst}" 2>/dev/null && return 0
+    state=$( systemctl is-active "radiod@${inst}" 2>/dev/null )
+    [[ -n ${state} && ${state} != "inactive" && ${state} != "unknown" ]] && return 0
+    serial=$( wd_usb_power_serial_of_instance "${inst}" )
+    [[ -n ${serial} ]] && wd_usb_power_dev_of_serial "${serial}" > /dev/null
+}
+
+### Echoes the radiod@ instances WD must run on this host, one per line, sorted.  A multi-RX888 site runs one radiod per radio, and
+### only the KA9Q_CONF_NAME one used to be started: at KX4AZ-T a 'wdz' then 'wda' brought back radiod@dipole and left the two Beverage
+### radiods down until the next reboot.  So: the KA9Q_CONF_NAME instance (when its conf exists), plus, for every KA9Q receiver in
+### RECEIVER_LIST, the radiod@ conf whose 'data =' or 'status =' line publishes that receiver's stream.  A stream no local conf
+### publishes comes from a radiod on another host, and is none of this host's business.  Nothing at all when KA9Q_RUNS_ONLY_REMOTELY.
+function wd_local_radiod_instances()
+{
+    [[ ${KA9Q_RUNS_ONLY_REMOTELY-no} == [Yy]* ]] && return 0
+    local dir=${KA9Q_RADIOD_CONF_DIR-/etc/radio} main=${KA9Q_CONF_NAME:-rx888-wsprdaemon} entry conf inst
+    local -a fields cands
+    local -A wanted=()
+    [[ -f ${dir}/radiod@${main}.conf ]] && wanted[${main}]=1
+    for entry in "${RECEIVER_LIST[@]}"; do
+        fields=( ${entry} )
+        [[ ${fields[0]} == KA9Q* && -n ${fields[1]-} ]] || continue
+        cands=()
+        for conf in ${dir}/radiod@*.conf ; do
+            [[ -f ${conf} ]] || continue
+            grep -qE "^[[:space:]]*(data|status)[[:space:]]*=[[:space:]]*${fields[1]}([[:space:]#]|$)" "${conf}" || continue
+            inst=${conf##*/radiod@}; inst=${inst%.conf}
+            wd_local_radiod_is_ours "${inst}" && cands+=( "${inst}" )
+        done
+        if (( ${#cands[@]} == 1 )); then
+            wanted[${cands[0]}]=1
+        elif (( ${#cands[@]} > 1 )); then
+            ### Two of this host's radiods both claim to publish the stream: the receiver gets whichever answers first
+            if [[ " ${cands[*]} " == *" ${main} "* ]]; then
+                wanted[${main}]=1
+            else
+                wd_logger 1 "ERROR: receiver ${fields[0]}'s stream ${fields[1]} is published by more than one radiod (${cands[*]}), so WD starts none of them for it.  Give each radiod its own stream names"
+            fi
+        fi
+    done
+    (( ${#wanted[@]} )) && printf '%s\n' "${!wanted[@]}" | sort
+    return 0
+}
+
+### Echoes why radiod@$1 must NOT be started, or nothing.  On a host with more than one local RX888 radiod, an [rx888] conf with no
+### 'serial =' line opens whichever RX888 happens to be free, so a reboot can quietly swap two antennas: their spots then go out under
+### each other's names.  'wd -X identify' writes the serials.
+function wd_local_radiod_refusal()
+{
+    local inst=$1 dir=${KA9Q_RADIOD_CONF_DIR-/etc/radio} other count=0
+    grep -q '^[[:space:]]*\[rx888\]' "${dir}/radiod@${inst}.conf" 2>/dev/null || return 0
+    [[ -n $( wd_usb_power_serial_of_instance "${inst}" ) ]] && return 0
+    for other in $( wd_local_radiod_instances ); do
+        grep -q '^[[:space:]]*\[rx888\]' "${dir}/radiod@${other}.conf" 2>/dev/null && (( ++count ))
+    done
+    (( count > 1 )) && echo "radiod@${inst} has no 'serial =' line in its [rx888] section and this host runs ${count} RX888 radiods, so it would open whichever RX888 is free and a reboot could swap antennas.  Run 'wdz' then 'wd -X identify' to confirm which RX888 is on which antenna"
+    return 0
+}
+
 ### Echoes the upper-case RX888 serial configured in ${KA9Q_RADIOD_CONF_DIR}/radiod@$1.conf, or nothing (also for FILL_IN placeholders)
 function wd_usb_power_serial_of_instance()
 {
@@ -633,7 +699,8 @@ function wd_usb_power_recover_wedged_rx888()
     return 1
 }
 
-### Watchdog: a radiod@ instance that is enabled but not running because its RX888 is missing gets its port cycled and is restarted.
+### Watchdog: an enabled radiod@ instance that is not running gets its RX888 recovered and is restarted: port cycled when the radio is
+### missing, re-enumerated when it is wedged, simply started again when it is on the bus and fine.
 function wd_usb_power_check()
 {
     local now=$(printf "%(%s)T")
@@ -648,13 +715,33 @@ function wd_usb_power_check()
         systemctl is-active --quiet "radiod@${inst}" 2>/dev/null && continue
         systemctl is-enabled --quiet "radiod@${inst}" 2>/dev/null || continue     ### never bring up a receiver the site chose to leave stopped
         serial=$( wd_usb_power_serial_of_instance "${inst}" )
-        ### The radio IS on the bus.  Until 2026-09-14 WD stopped here ("radiod being down is something else") -- but the
-        ### commonest way for a present radio to keep radiod down is the wedge described at the top of this file, and that
-        ### is precisely the case uhubctl can not reach on a root-hub host.  Recover it, and only it: any OTHER reason
-        ### radiod is down is still none of this file's business.
+        ### The radio IS on the bus.  The commonest way for a present radio to keep radiod down is the wedge described at the top
+        ### of this file, which uhubctl can not reach on a root-hub host, so that is recovered first.  Any other enabled radiod
+        ### that is down with its radio present is simply started again: at KX4AZ-T a 'wdz' then 'wda' left both Beverage radiods
+        ### stopped, healthy radios on the bus, and until 2026-10-23 this pass looked straight past them.
         if wd_usb_power_dev_of_instance "${inst}" > /dev/null ; then
             if wd_usb_power_radiod_is_wedged "${inst}" ; then
                 wd_usb_power_recover_wedged_rx888 "${inst}" "${serial}"
+                continue
+            fi
+            local refusal; refusal=$( wd_local_radiod_refusal "${inst}" )
+            if [[ -n ${refusal} ]]; then
+                wd_usb_power_log 1 "ERROR: not restarting radiod@${inst}: ${refusal}"
+                continue
+            fi
+            ### One attempt per instance per WD_USB_POWER_CYCLE_MIN_MINUTES: a radiod that keeps dying needs a person, not a loop
+            local restart_stamp="${WD_USB_POWER_LOG_DIR}/radiod-restart.tried.${inst}"
+            if [[ -f ${restart_stamp} ]] && (( $(printf "%(%s)T") - $(stat -c %Y "${restart_stamp}" 2>/dev/null || echo 0) < WD_USB_POWER_CYCLE_MIN_MINUTES * 60 )); then
+                continue
+            fi
+            wd_usb_power_ensure_dir && touch "${restart_stamp}"
+            ### wd_usb_power_record_recovery logs it ("WD had to leave untouched RX888 ... and restart radiod@...") and counts it, so a
+            ### radiod that keeps dying is reported as the fault it is
+            if timeout 60 sudo systemctl restart "radiod@${inst}" > /dev/null 2>&1 ; then
+                wd_usb_power_record_recovery "${inst}" "$( wd_usb_power_dev_of_instance "${inst}" || echo "-" )" "${serial:--}" "leave untouched" "recovered"
+            else
+                wd_usb_power_log 1 "ERROR: radiod@${inst} is down with its RX888${serial:+ ${serial}} on the bus, and 'systemctl restart' failed: $(systemctl status radiod@${inst} --no-pager -n 2 2>&1 | tail -n 1)"
+                wd_usb_power_record_recovery "${inst}" "$( wd_usb_power_dev_of_instance "${inst}" || echo "-" )" "${serial:--}" "leave untouched" "failed"
             fi
             continue
         fi

@@ -1738,43 +1738,49 @@ EOF
     fi
     wd_logger 2 "Found a programmed RX888 MkII attached to a USB port."
 
+    ### Every radiod this host must run: the KA9Q_CONF_NAME instance plus one per local RX888 that a RECEIVER_LIST stream comes from
+    ### (wd_local_radiod_instances in wd-usb-power.sh).  Only the KA9Q_CONF_NAME one used to be started here, so at KX4AZ-T a 'wdz'
+    ### then 'wda' brought back radiod@dipole and left both Beverage radiods down until the next reboot.
+    local -a local_radiods=( $( wd_local_radiod_instances ) )
+    [[ " ${local_radiods[*]} " == *" ${ka9q_conf_name} "* ]] || local_radiods=( "${ka9q_conf_name}" "${local_radiods[@]}" )
+    local radiod_instance
+    local -a radiod_restart_list=()
     if [[  ${radio_restart_needed} == "no" ]] ; then
-        sudo systemctl is-active radiod@${ka9q_conf_name} > /dev/null
-        rc=$? ; if (( rc == 0 )); then
-            wd_logger 2 "The installiation and configuration checks found no changes were needed and radiod is running, so nothing more to do"
+        ### Nothing was rebuilt, so only START the radiods that are down.  Bouncing a healthy one costs it a decode cycle: when
+        ### radiod@dipole's RX888 was unplugged at KX4AZ-T every wd command used to restart the healthy radiod@ns-bev too.
+        for radiod_instance in "${local_radiods[@]}" ; do
+            sudo systemctl is-active --quiet "radiod@${radiod_instance}" || radiod_restart_list+=( "${radiod_instance}" )
+        done
+        if (( ! ${#radiod_restart_list[@]} )); then
+            wd_logger 2 "The installation and configuration checks found no changes were needed and all ${#local_radiods[@]} local radiods (${local_radiods[*]}) are running, so nothing more to do"
             return 0
         fi
-        wd_logger 2 "The installation and configuration checks found no changes were needed but radiod is not running, so we need to start it"
+        wd_logger 2 "The installation and configuration checks found no changes were needed, but radiod ${radiod_restart_list[*]} is not running, so start it"
     else
         wd_logger 1 "Installation and configuration checks made changes that require radiod to be started/restarted"
-    fi
-    ### Restart the KA9Q_CONF_NAME instance, plus every OTHER radiod instance that is already running.
-    ### A rebuild replaces /usr/local/sbin/radiod, but a running process keeps executing the OLD
-    ### binary until it is restarted.  Only the KA9Q_CONF_NAME instance used to be restarted here, so
-    ### at a multi-RX888 site the other receivers silently kept running the previous build -- observed
-    ### at KX4AZ-T, where after an upgrade radiod@dipole had the new binary and new thread scheduling
-    ### while radiod@ns-bev was still on the old one.
-    ### Other instances are only RESTARTED, never started: do not bring up a receiver the site has
-    ### chosen to leave stopped.
-    local -a radiod_restart_list=( "${ka9q_conf_name}" )
-    ### The OTHER running radiods only need a restart when the radiod binary/config was rebuilt.  When the managed
-    ### instance is merely down (its RX888 unplugged at KX4AZ-T) every wd command used to bounce the healthy
-    ### radiod@ns-bev too, costing it a decode cycle each time.
-    if [[ ${radio_restart_needed} != "no" ]]; then
+        ### A rebuild replaces /usr/local/sbin/radiod, but a running process keeps executing the OLD binary until it is restarted:
+        ### at KX4AZ-T after an upgrade radiod@dipole had the new binary while radiod@ns-bev was still on the old one.  So restart
+        ### every local radiod, plus any OTHER radiod@ that happens to be running.
+        radiod_restart_list=( "${local_radiods[@]}" )
         local other_conf other_inst
         for other_conf in ${KA9Q_RADIOD_CONF_DIR}/radiod@*.conf ; do
             [[ -f ${other_conf} ]] || continue
             other_inst=${other_conf##*/radiod@}
             other_inst=${other_inst%.conf}
-            [[ ${other_inst} == "${ka9q_conf_name}" ]] && continue
+            [[ " ${radiod_restart_list[*]} " == *" ${other_inst} "* ]] && continue
             if sudo systemctl is-active --quiet "radiod@${other_inst}" ; then
                 radiod_restart_list+=( "${other_inst}" )
             fi
         done
     fi
     wd_rx888_usb_report
-    local radiod_instance restart_rc=0
+    local restart_rc=0 refusal
     for radiod_instance in "${radiod_restart_list[@]}" ; do
+        refusal=$( wd_local_radiod_refusal "${radiod_instance}" )
+        if [[ -n ${refusal} ]]; then
+            wd_logger 1 "ERROR: not starting radiod@${radiod_instance}: ${refusal}"
+            continue
+        fi
         ### A radiod whose conf names an RX888 serial that is not on the USB bus exits 66 at once; starting it anyway
         ### only produces a restart loop and blocks here.  Say what is missing and move on to the other radios.
         local _want _have
@@ -1797,6 +1803,13 @@ EOF
         fi
         if timeout 60 sudo systemctl restart "radiod@${radiod_instance}" > /dev/null ; then
             wd_logger 2 "radiod@${radiod_instance} was started"
+            ### Enabled, so that a reboot brings it back before WD starts and the watchdog (wd_usb_power_check) looks after it.  KX4AZ-T
+            ### had radiod@dipole disabled and the two Beverage radiods enabled, so each one came back by a different path, or not at all.
+            if [[ " ${local_radiods[*]} " == *" ${radiod_instance} "* ]] && ! systemctl is-enabled --quiet "radiod@${radiod_instance}" 2>/dev/null ; then
+                sudo systemctl enable "radiod@${radiod_instance}" > /dev/null 2>&1 \
+                    && wd_logger 1 "Enabled radiod@${radiod_instance}, one of this host's ${#local_radiods[@]} local radiods" \
+                    || wd_logger 1 "ERROR: 'sudo systemctl enable radiod@${radiod_instance}' failed"
+            fi
         else
             ### The RX888 is on the bus (checked above) but radiod still will not run.  The usual reason is the wedge
             ### described at the top of wd-usb-power.sh: the radio enumerates and answers control traffic but delivers no
@@ -2799,9 +2812,14 @@ function ka9q-services-setup() {
                     ### with radiod already stopped by wd-killall).
                     wd_logger 1 "ERROR: 'install_github_project ${project_info_list[0]}' failed, so continuing with the radiod already installed ($(ls -l --time-style=long-iso /usr/local/sbin/radiod | awk '{print $6}'))"
                     ### The install path is what normally (re)starts radiod, so do that here or the site stays silent
-                    local _inst _serial
-                    for _inst in ${KA9Q_CONF_NAME:-rx888-wsprdaemon}; do
+                    local _inst _serial _refusal
+                    for _inst in $( wd_local_radiod_instances ); do      ### every local radiod, not just KA9Q_CONF_NAME's
                         systemctl is-active --quiet "radiod@${_inst}" && continue
+                        _refusal=$( wd_local_radiod_refusal "${_inst}" )
+                        if [[ -n ${_refusal} ]]; then
+                            wd_logger 1 "ERROR: not starting radiod@${_inst}: ${_refusal}"
+                            continue
+                        fi
                         ### Not if its RX888 is not on the bus: radiod would exit 66 at once (wd-usb-power.sh already tried a power cycle)
                         _serial=$( wd_usb_power_serial_of_instance "${_inst}" )
                         if [[ -n ${_serial} ]] && ! wd_usb_power_dev_of_serial "${_serial}" > /dev/null ; then
