@@ -58,6 +58,8 @@ usage:
     -t                            => show the clock's Time sync state: chronyc tracking + sources + /var/log/wsprdaemon/time-sync.log ('wdt')
     -u                            => show the RX888s on the USB bus, their hub ports, which ports WD can power cycle, and /var/log/wsprdaemon/usb-power.log ('wdu')
     -U     SERIAL|HUB:PORT|all   => power cycle that RX888 / hub port through uhubctl (needs a hub that switches power per port, see wd-usb-power.md)
+    -X     [identify]            => show which RX888 serial each local radiod@ opens and flag missing/duplicate/unconfirmed ones ('wdx').
+                                     'identify' (with WD stopped by 'wdz') has you unplug each RX888 in turn and writes the confirmed serials
     -v                            => Increase verbosity of diagnotic printouts 
     -d                            => Signal all running processes as found in the *.pid files in the current directory to increment the logging verbosity
                                      This permits changes to logging verbosity without restarting WD

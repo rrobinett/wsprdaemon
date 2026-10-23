@@ -2020,6 +2020,8 @@ alias wdu='wd-usb'
 alias wd-usb-cycle='wd -U'   ### wd-usb-cycle SERIAL|HUB:PORT|all  => power cycle that RX888 / port
 alias wd-usb-retrain='wd -R'   ### An RX888 sitting at 480 Mb/s on a USB 3 jack: cut both halves of the jack and let it train again, no cable touched
 alias wdr='wd-usb-retrain'
+alias wd-rx888-assign='wd -X'   ### Which RX888 serial each radiod@ opens; 'wdx identify' confirms them by unplugging one radio at a time
+alias wdx='wd-rx888-assign'
 alias wds='wd -s'
 alias wdz='wd-killall'  ### Quickly stops all WD-associated services and kills all WD daemons and zombies
 alias wdzz='(cd; rm -r /dev/shm/wsprdaemon/*)'

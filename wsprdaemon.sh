@@ -125,6 +125,18 @@ fi
 
 cd ${WSPRDAEMON_ROOT_DIR}
 
+### '-X [identify]': which RX888 serial each radiod@ opens, and walking the operator through confirming them by unplugging
+### one radio at a time.  It runs with WD stopped, so it must not set anything up or re-pin anything first.
+if [[ ${1-} == "-X" ]] && (( $# <= 2 )); then      ### outside the one-argument fast paths below: it takes an optional word
+    set +o nounset
+    source ${WSPRDAEMON_ROOT_DIR}/wsprdaemon.conf 2>/dev/null       ### RECEIVER_LIST, and any KA9Q_RADIOD_CONF_DIR override
+    function wd_logger() { (( ${1:-2} <= 1 )) && echo -e "${2:-}" ; return 0 ; }
+    source ${WSPRDAEMON_ROOT_DIR}/wd-usb-power.sh
+    source ${WSPRDAEMON_ROOT_DIR}/wd-rx888-assign.sh
+    LC_ALL=C wd_rx888_assign_cmd "${2:-}"
+    exit $?
+fi
+
 ### Read-only status reports, answered before the sourcing below and then gone.
 ### Each of these prints from one file and needs nothing else, but they used to take ~60 s because
 ### sourcing ka9q-utils.sh runs its bare 'ka9q-setup' AT SOURCE TIME, which calls wd_cpu_tuning ->
