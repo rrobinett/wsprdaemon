@@ -1294,9 +1294,11 @@ function wd-killall() {
     if [[  ${KA9Q_RUNS_ONLY_REMOTELY-no} == "yes" ]]; then
         echo "Stop only WD.  Don't stop KA9Q jobs since KA9Q_RUNS_ONLY_REMOTELY='yes'"
     else
-        local base_name=$(wd-get_ka9q-conf_file-base_name)
+        ### Every running radiod, not just KA9Q_CONF_NAME's: a site with several local RX888s runs one radiod@ per radio
+        ### (KX4AZ-T 2026-10-23: 'wdz' stopped radiod@dipole and left radiod@ns-bev and radiod@ew-bev running)
+        local radiod_units_list=( $( systemctl list-units 'radiod@*.service' 'ka9q-radio@*.service' --state=active --no-legend --plain 2>/dev/null | awk '{print $1}' ) )
         services_list=( ft4-decode ft4-decode@* ft8-decode ft8-decode@* ft4-record ft8-record pskreporter@ft4 pskreporter@ft8 pskreporter@wspr
-                        wsprdaemon radiod@${base_name}.service hfdl )
+                        wsprdaemon ${radiod_units_list[@]} hfdl )
     fi
 
     local service_name
