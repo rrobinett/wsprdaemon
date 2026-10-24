@@ -83,6 +83,7 @@ declare WD_USB_REENUM_WEDGE_REGEX="No rx888 data for|usbi_mutex_lock: Assertion"
 declare WD_USB_RECOVERY_HISTORY_FILE=${WD_USB_RECOVERY_HISTORY_FILE-${WD_USB_POWER_LOG_DIR}/rx888-recoveries.log}
 declare WD_USB_RECOVERY_HISTORY_MAX_LINES=${WD_USB_RECOVERY_HISTORY_MAX_LINES-500}
 declare WD_USB_RECOVERY_WARN_PER_DAY=${WD_USB_RECOVERY_WARN_PER_DAY-3}      ### at or above this in 24 h, the WARNING becomes an ERROR
+declare WD_USB_USBMON_SECS=${WD_USB_USBMON_SECS-10}                        ### 'wd -u' watches each RX888's USB traffic this long; 0 skips it
 
 ### Debian 13 installs uhubctl in /usr/sbin, which is not on the wsprdaemon user's PATH (the chronyd trap again), so
 ### never rely on 'command -v uhubctl' alone.  Echoes the binary's path, or nothing.
@@ -776,6 +777,77 @@ function wd_usb_power_setup()
     return 0
 }
 
+### 'wd -u': watch every programmed RX888's bulk-in traffic for WD_USB_USBMON_SECS with the kernel's usbmon, and say how many samples
+### each one actually delivered, whether any transfer failed, and the longest silence between transfers.  This is the one view that
+### separates the two ways an RX888 loses samples.  At KX4AZ-T on 2026-10-24 radiod@ew-bev was 4% short over 11 hours, some of its
+### WAVs as little as 13% full, and the kernel logged nothing: usbmon showed every transfer completing with status 0 and full
+### size, but only 54.0 Msps of them against 64.80 from radiod@ns-bev on the same bus, with 265 pauses over 10 ms a minute (the
+### longest 89 ms, ns-bev's 4 ms).  So the data never left the radio -- not the cable, the port, the xHCI or the driver.  A failing
+### cable or port shows up here instead as transfers completing with an error status (-71 EPROTO, -75 EOVERFLOW, ...).
+function wd_usb_power_usbmon_report()
+{
+    (( ${WD_USB_USBMON_SECS:-0} > 0 )) || return 0
+    local d dev serial bus devnum inst conf rate tmp
+    local -A on_bus=() label=() nominal=()
+    for d in /sys/bus/usb/devices/*/; do
+        [[ -f ${d}/idVendor && $(< ${d}/idVendor) == "${WD_USB_RX888_VENDOR}" && $(< ${d}/idProduct) == "${WD_USB_RX888_PROGRAMMED}" ]] || continue
+        serial=$( tr -d '\n' < ${d}/serial 2>/dev/null ); serial=${serial^^}
+        bus=$(( 10#$(< ${d}/busnum) )); devnum=$(( 10#$(< ${d}/devnum) )); d=${d%/}; dev=${d##*/}
+        inst="" rate=""
+        for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
+            [[ -f ${conf} ]] || continue
+            [[ $( wd_usb_power_serial_of_instance "$( basename ${conf#*radiod@} .conf )" ) == "${serial}" ]] || continue
+            inst=$( basename ${conf#*radiod@} .conf )
+            rate=$( awk '/^[[:space:]]*\[/{f=($0 ~ /^[[:space:]]*\[rx888\]/)} f && /^[[:space:]]*samprate[[:space:]]*=/{v=$0; sub(/^[^=]*=/,"",v); sub(/#.*/,"",v); gsub(/[^0-9]/,"",v); print v; exit}' "${conf}" )
+            break
+        done
+        on_bus[${bus}]+=" ${devnum}"
+        label[${bus}:${devnum}]="${serial} ${dev} ${inst:--}"
+        nominal[${bus}:${devnum}]=${rate:-129600000}
+    done
+    (( ${#on_bus[@]} )) || return 0
+    if ! sudo modprobe usbmon 2>/dev/null ; then
+        echo "Can not watch the RX888s' USB traffic: the usbmon kernel module will not load"
+        echo
+        return 0
+    fi
+    mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug 2>/dev/null
+    echo "USB traffic of each RX888 over ${WD_USB_USBMON_SECS} s (kernel usbmon; WD_USB_USBMON_SECS=0 skips this):"
+    tmp=$( mktemp -d ) || return 0
+    for bus in "${!on_bus[@]}"; do
+        ### One reader per bus, all at once.  Bulk-in completions only: "C Bi:BUS:DEV:EP STATUS LENGTH"
+        sudo timeout ${WD_USB_USBMON_SECS} cat /sys/kernel/debug/usb/usbmon/${bus}u 2>/dev/null \
+            | awk -v devs="${on_bus[${bus}]}" '
+                BEGIN { n = split(devs, a, " "); for (i = 1; i <= n; i++) want[a[i] + 0] = 1 }
+                $3 == "C" { split($4, f, ":"); if (f[1] != "Bi") next; d = f[3] + 0; if (!(d in want)) next
+                            t = $2 / 1e6; xfers[d]++; if ($5 != "0") errs[d]++; if ($6 ~ /^[0-9]+$/) bytes[d] += $6
+                            if (d in last) { g = (t - last[d]) * 1000; if (g > gap[d]) gap[d] = g }; last[d] = t }
+                END { for (d in want) printf "%d %d %d %d %.0f\n", d, xfers[d], errs[d], bytes[d], gap[d] }' > ${tmp}/${bus} &
+    done
+    wait
+    printf "  %-18s %-8s %-14s %-24s %-7s %-12s %s\n" "RX888 serial" "usb dev" "radiod" "delivered (nominal)" "errors" "longest gap" "verdict"
+    local line xfers errs bytes gap msps want_msps verdict
+    for bus in "${!on_bus[@]}"; do
+        while read -r devnum xfers errs bytes gap; do
+            read -r serial dev inst <<< "${label[${bus}:${devnum}]}"
+            msps=$( awk -v b=${bytes} -v s=${WD_USB_USBMON_SECS} 'BEGIN { printf "%.2f", b / 2 / s / 1e6 }' )      ### 16-bit real samples
+            want_msps=$( awk -v r=${nominal[${bus}:${devnum}]} 'BEGIN { printf "%.2f", r / 1e6 }' )
+            if (( xfers == 0 )); then
+                verdict="NO DATA: no radiod reading it, or the radio is hung"
+            elif (( errs > 0 )); then
+                verdict="TRANSFER ERRORS: suspect its cable or USB port"
+            elif awk -v m=${msps} -v w=${want_msps} 'BEGIN { exit !(m < w * 0.98) }'; then
+                verdict="SHORT, every transfer clean: the RX888 itself is not sending"
+            else
+                verdict="ok"
+            fi
+            printf "  %-18s %-8s %-14s %-24s %-7s %-12s %s\n" "${serial}" "${dev}" "${inst}" "${msps} Msps (${want_msps})" "${errs}/${xfers}" "${gap} ms" "${verdict}"
+        done < ${tmp}/${bus}
+    done | sort
+    rm -rf ${tmp}
+    echo
+}
+
 ### 'wd -u': what is on the bus, where, and can WD switch it
 function wd_usb_power_show()
 {
@@ -835,6 +907,7 @@ function wd_usb_power_show()
         printf "%-18s %-8s %-6s %-8s %-6s %-12s %s\n" "${serial}" "${dev}" "${speed}" "${hub}" "${port}" "${sw}" "${inst}"
     done
     echo
+    wd_usb_power_usbmon_report
     echo "Configured radiod instances whose RX888 is NOT on the bus:"
     local any=0
     for conf in ${KA9Q_RADIOD_CONF_DIR-/etc/radio}/radiod@*.conf ; do
