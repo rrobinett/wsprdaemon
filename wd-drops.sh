@@ -172,3 +172,101 @@ function log_radiod_drops()
     done
     return 0
 }
+
+##########################################################################################################################################################
+########## Section which reports an RX888 that delivers fewer samples than it should  ###################################################################
+##########################################################################################################################################################
+###
+### The block-drop counter above counts samples radiod's own filters could not keep up with.  It does NOT see samples that never
+### arrived from the RX888: at KX4AZ-T on 2026-10-23, 22:35-23:22 UTC, radiod@ew-bev's RX888 delivered between 2 and 64 Msps instead
+### of 64.8, its WAV files came out 10-30% short, and drops.log read 0 for all three radios the whole time.
+###
+### Two independent signals, checked every WD_SAMPLE_LOSS_MINUTES from the watchdog:
+###  - radiod's own measurement: every minute it logs "RX888 measured sample rate error: R Hz vs nominal N Hz" when R differs from N
+###    at all, so its journal covers every minute.  A reading more than WD_SAMPLE_LOSS_PCT below nominal is samples lost.  (Readings
+###    within ~2% come and go on a healthy radio: 63.9 and 64.8 Msps were logged with every WAV full size.)
+###  - WD's own recordings: each finished one-minute YYYYMMDDTHHMMSSZ_FREQ_usb.wav must hold 60 s at the byte rate in its own header.
+###    This also covers receivers fed by a radiod on another host, but it sees only the few minutes of files present when it looks.
+###    One short minute is what any radiod restart produces, so a receiver is reported only for two or more.
+declare WD_SAMPLE_LOSS_ENABLED=${WD_SAMPLE_LOSS_ENABLED-yes}
+declare WD_SAMPLE_LOSS_MINUTES=${WD_SAMPLE_LOSS_MINUTES-10}           ### how often to check, and how far back radiod's journal is read
+declare WD_SAMPLE_LOSS_PCT=${WD_SAMPLE_LOSS_PCT-2}                    ### a rate or a WAV this many percent short is a loss
+declare WD_SAMPLE_LOSS_ERROR_MINUTES=${WD_SAMPLE_LOSS_ERROR_MINUTES-3}   ### this many lossy minutes in one check make it an ERROR, not a WARNING
+declare WD_SAMPLE_LOSS_LOG_FILE=${WD_SAMPLE_LOSS_LOG_FILE-${WD_DROPS_LOG_DIR}/sample-loss.log}
+declare WD_SAMPLE_LOSS_LAST_CHECK_EPOCH=0
+
+### Echoes "LOSSY_MINUTES LOWEST_MSPS NOMINAL_MSPS" for radiod@$1 over the last WD_SAMPLE_LOSS_MINUTES, or nothing when it logged no rate line
+function wd_sample_loss_radiod_rates()
+{
+    sudo journalctl -u "radiod@$1" --since "-${WD_SAMPLE_LOSS_MINUTES}min" --no-pager -o cat 2>/dev/null \
+        | awk -v pct="${WD_SAMPLE_LOSS_PCT}" '
+            /measured sample rate error:/ {
+                line = $0; gsub(",", "", line)
+                if (match(line, /error: *[0-9.]+ Hz vs nominal [0-9.]+/)) {
+                    split(substr(line, RSTART, RLENGTH), f, " ")      # f[2] = measured, f[6] = nominal
+                    n++; if (f[2] < f[6] * (100 - pct) / 100) lossy++
+                    if (low == "" || f[2] < low) low = f[2]; nominal = f[6]
+                }
+            }
+            END { if (n) printf "%d %.1f %.1f\n", lossy, low / 1e6, nominal / 1e6 }'
+}
+
+### Echoes "SHORT_MINUTES TOTAL_FILES WORST_PCT" for the finished one-minute WAVs in recording dir $1 (a receiver's directory)
+function wd_sample_loss_wav_check()
+{
+    local dir=$1 now f name start rate size pct short=0 total=0 worst=100
+    local -A short_minutes=()
+    now=$(printf "%(%s)T")
+    for f in ${dir}/*Z_*_usb.wav ; do
+        [[ -f ${f} ]] || continue
+        name=${f##*/}
+        [[ ${name} =~ ^([0-9]{8})T([0-9]{2})([0-9]{2})00Z_ ]] || continue
+        start=$( date -u -d "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}:${BASH_REMATCH[3]}" +%s 2>/dev/null ) || continue
+        (( now - start >= 65 )) || continue                                        ### still being written
+        ### Only this check's window: files of a band no decoder takes linger ~35 min (KX4AZ-T's 136 kHz and 3.5926 MHz), and
+        ### would otherwise put one restart's short minute into several checks
+        (( now - start <= WD_SAMPLE_LOSS_MINUTES * 60 )) || continue
+        rate=$( od -An -t u4 -j 28 -N 4 "${f}" 2>/dev/null | tr -d ' ' )           ### the header's byte rate
+        [[ -n ${rate} ]] && (( rate > 0 )) || continue
+        size=$( stat -c %s "${f}" 2>/dev/null ) || continue
+        pct=$(( size * 100 / (rate * 60) ))
+        (( ++total ))
+        (( pct < worst )) && worst=${pct}
+        (( pct < 100 - WD_SAMPLE_LOSS_PCT )) && short_minutes[${BASH_REMATCH[2]}${BASH_REMATCH[3]}]=1
+    done
+    (( total )) && echo "${#short_minutes[@]} ${total} ${worst}"
+}
+
+### Self-throttling: does nothing until WD_SAMPLE_LOSS_MINUTES have passed since the last check
+function log_radiod_sample_loss()
+{
+    [[ ${WD_SAMPLE_LOSS_ENABLED} != "yes" ]] && return 0
+    local now=$(printf "%(%s)T")
+    (( now - WD_SAMPLE_LOSS_LAST_CHECK_EPOCH < WD_SAMPLE_LOSS_MINUTES * 60 )) && return 0
+    WD_SAMPLE_LOSS_LAST_CHECK_EPOCH=${now}
+    [[ -d ${WD_DROPS_LOG_DIR} && -w ${WD_DROPS_LOG_DIR} ]] || WD_SAMPLE_LOSS_LOG_FILE="${WSPRDAEMON_ROOT_DIR:-.}/sample-loss.log"
+    local utc inst lossy low nominal dir rx short total worst level
+    utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    if declare -F wd_local_radiod_instances > /dev/null ; then
+        for inst in $( wd_local_radiod_instances ); do
+            systemctl is-active --quiet "radiod@${inst}" || continue
+            read -r lossy low nominal <<< "$( wd_sample_loss_radiod_rates "${inst}" )"
+            [[ -n ${lossy} ]] && (( lossy > 0 )) || continue
+            level=WARNING; (( lossy >= WD_SAMPLE_LOSS_ERROR_MINUTES )) && level=ERROR
+            printf "%s\tradiod@%s\t%s lossy minutes, lowest %s of %s Msps\n" "${utc}" "${inst}" "${lossy}" "${low}" "${nominal}" >> "${WD_SAMPLE_LOSS_LOG_FILE}" 2>/dev/null
+            wd_logger 1 "${level}: radiod@${inst}'s RX888 delivered more than ${WD_SAMPLE_LOSS_PCT}% fewer samples than its nominal ${nominal} Msps in ${lossy} of the last ${WD_SAMPLE_LOSS_MINUTES} minutes (lowest ${low} Msps), so its recordings have gaps and its spots are lost.  The block-drop counter does not see this.  Suspect the radio's USB cable, port or power.  History: ${WD_SAMPLE_LOSS_LOG_FILE}"
+        done
+    fi
+
+    for dir in ${WSPRDAEMON_TMP_DIR:-/dev/shm/wsprdaemon}/recording.d/KA9Q_* ; do
+        [[ -d ${dir} ]] || continue
+        rx=${dir##*/}
+        read -r short total worst <<< "$( wd_sample_loss_wav_check "${dir}" )"
+        [[ -n ${short} ]] && (( short >= 2 )) || continue
+        level=WARNING; (( short >= WD_SAMPLE_LOSS_ERROR_MINUTES )) && level=ERROR
+        printf "%s\t%s\t%s short minutes among %s WAVs, worst %s%% of full length\n" "${utc}" "${rx}" "${short}" "${total}" "${worst}" >> "${WD_SAMPLE_LOSS_LOG_FILE}" 2>/dev/null
+        wd_logger 1 "${level}: ${rx}'s one-minute WAV files are short in ${short} minutes (worst ${worst}% of a full minute), so its radiod is not delivering every sample.  History: ${WD_SAMPLE_LOSS_LOG_FILE}"
+    done
+    return 0
+}

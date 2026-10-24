@@ -33,6 +33,7 @@ function watchdog_daemon()
             check_kiwi_gps
             print_new_ov_lines 
             log_radiod_drops           ### Self-throttling; samples every WD_DROPS_LOG_MINUTES
+            log_radiod_sample_loss     ### Self-throttling; reports an RX888 delivering fewer samples than nominal, which the drop counter does not see
             log_decode_backlog         ### Self-throttling; FT8/FT4/WSPR decode backlog
             wd_time_sync_check         ### Self-throttling; logs an ERROR every WD_TIME_SYNC_CHECK_MINUTES while the clock is not synchronised
             wd_mdns_check              ### Self-throttling; repairs a stuck avahi / lost radiod mDNS records every WD_MDNS_CHECK_MINUTES
