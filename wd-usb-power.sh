@@ -593,10 +593,12 @@ function wd_usb_power_cut_both_halves()
     return 0
 }
 
+### With sudo: without it a WD user outside 'adm'/'systemd-journal' reads no radiod lines and no error, so this never found a
+### wedge and the watchdog never re-enumerated a wedged RX888 on such a host (KX4AZ-T's wsprdaemon user, 2026-10-24).
 function wd_usb_power_radiod_is_wedged()
 {
     local inst=$1 hits
-    hits=$( journalctl -u "radiod@${inst}" --since "-${WD_USB_REENUM_LOOKBACK_MINUTES} minutes" --no-pager 2>/dev/null | grep -c -E "${WD_USB_REENUM_WEDGE_REGEX}" )
+    hits=$( sudo journalctl -u "radiod@${inst}" --since "-${WD_USB_REENUM_LOOKBACK_MINUTES} minutes" --no-pager 2>/dev/null | grep -c -E "${WD_USB_REENUM_WEDGE_REGEX}" )
     (( ${hits:-0} >= WD_USB_REENUM_WEDGE_MIN_HITS ))
 }
 

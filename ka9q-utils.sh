@@ -1251,13 +1251,17 @@ function wd_fftw_install_reference_wisdom()
 ### loaded and worked on n6gn5, a different part.  radiod prints the string at every start, and
 ### that is the only place it is stated exactly as FFTW itself computed it, so read it from the
 ### journal rather than trying to derive it from the installed library and the CPU flags.
+### With sudo: a WD user outside the 'adm' and 'systemd-journal' groups sees no radiod lines at all and no error, so this
+### returned nothing and no host like that was ever given its reference (KX4AZ-T, a 5825U with the 5825U reference shipped,
+### ran on its own 531-plan file instead of the reference's 1,007).  Newest first (-r): the build string changes with the OS's
+### FFTW package, and the OLDEST line in a long journal would name the build from before an upgrade.
 function wd_fftw_build_string()
 {
     local unit
     unit=$( systemctl list-units 'radiod@*' --no-legend 2>/dev/null | awk '{print $1}' | head -1 )
     [[ -n ${unit} ]] || return 1
     local line
-    line=$( journalctl -u "${unit}" --no-pager 2>/dev/null | grep -m1 "FFTW version:" )
+    line=$( sudo journalctl -u "${unit}" -r --no-pager 2>/dev/null | grep -m1 "FFTW version:" )
     [[ -n ${line} ]] || return 1
     echo "${line##*FFTW version: }"
     return 0
