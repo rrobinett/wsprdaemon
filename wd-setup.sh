@@ -954,11 +954,12 @@ find_wsjtx_commands
 ### WD_DECODERS="wsjtx" in wsprdaemon.conf goes back to the WSJT-X binaries.  A build which fails or fails its checks is
 ### not retried for the same commit and CPU; delete bin/ubersdr.failed to retry it.
 declare WD_DECODERS="${WD_DECODERS-ubersdr}"
-### The pin: madpsy's main (with our float input for wsprd and FST4W, PR #1) plus PR #2, float input for FT8 and FT4 and
-### 'jt9 --feed', which WD_FT_DECODER="jt9" needs (ka9q-utils.sh), and PR #3, FT8's --fast-subtract and jt9 -w 2
-### (wd-ft-decode.sh).  Back to madpsy's repo once they are merged.
-declare UBERSDR_WSPRD_GIT_URL="${UBERSDR_WSPRD_GIT_URL-https://github.com/rrobinett/ubersdr_wsprd.git}"
-declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-e7cc9a0d9eb215e1bd036dbcef6230b45cbcede7}"
+### The pin: madpsy's main at 529ec5d (2026-10-22).  It has our PRs #1 (float input for wsprd and FST4W), #2 (float input
+### for FT8 and FT4, and 'jt9 --feed', which WD_FT_DECODER="jt9" needs: ka9q-utils.sh) and #3 (--fast-subtract and jt9 -w 2:
+### wd-ft-decode.sh), all merged, and madpsy's own since: --fast-subtract for FT4 and FT2 as well as FT8 (8d6a9b4), and
+### 'jt9 -s' honouring it (abfb991).  Sigmond pins the same commit.
+declare UBERSDR_WSPRD_GIT_URL="${UBERSDR_WSPRD_GIT_URL-https://github.com/madpsy/ubersdr_wsprd.git}"
+declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-529ec5d2530f5ffc2ad4a73a3be6c10c0a8b4027}"
 declare UBERSDR_WSPRD_SRC_DIR="${WSPRDAEMON_ROOT_DIR}/ubersdr_wsprd"
 declare UBERSDR_WSPRD_CMD="${WSPRD_BIN_DIR}/wsprd-ubersdr"
 declare UBERSDR_JT9_CMD="${WSPRD_BIN_DIR}/jt9-ubersdr"

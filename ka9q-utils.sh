@@ -1906,6 +1906,16 @@ function wd_ft_decoder_setup() {
     local changed=1
     wd_install_if_changed ${UBERSDR_JT9_CMD} wd-jt9 && changed=0
     wd_install_if_changed ${WSPRDAEMON_ROOT_DIR}/wd-ft-decode.sh wd-ft-decode && changed=0
+    ### ft8-decode and ft4-decode share those two files, so whichever service is set up second finds them already installed:
+    ### it also needs a restart when it started before they were (KJ6MKI 2026-10-24: after the ubersdr pin moved, the FT4 jt9s
+    ### kept running the old build because only ft8-decode was restarted)
+    local started newest
+    started=$(systemctl show ${service} -p ActiveEnterTimestamp --value 2> /dev/null)
+    newest=$(stat -c %Y /usr/local/bin/wd-jt9 /usr/local/bin/wd-ft-decode 2> /dev/null | sort -n | tail -1)
+    if [[ -n ${started} && -n ${newest} ]] && (( $(date -d "${started}" +%s 2> /dev/null || echo 0) < newest )); then
+        wd_logger 1 "${service} started before the wd-jt9 or wd-ft-decode now installed, so it needs a restart"
+        changed=0
+    fi
     if [[ -f /usr/local/bin/wd-jt9_decode ]]; then
         sudo rm -f /usr/local/bin/wd-jt9_decode && wd_logger 1 "Removed /usr/local/bin/wd-jt9_decode: jt9 --feed replaced it"
     fi

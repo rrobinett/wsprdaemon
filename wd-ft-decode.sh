@@ -44,15 +44,15 @@ for cmd in ${JT9} inotifywait; do
 done
 mkdir -p ${RUN_DIR} || exit 1
 
-### When this jt9 has them (ubersdr_wsprd PR #3) and WD_FT_FAST="yes" (the default): measured FFT plans (-w 2) and, for
-### FT8, the decoded signals' subtraction smoothed at 300 S/s (--fast-subtract).  At KJ6MKI on 2026-10-18, 504 periods of
+### When this jt9 has them (ubersdr_wsprd PR #3) and WD_FT_FAST="yes" (the default): measured FFT plans (-w 2) and the
+### decoded signals' subtraction smoothed at a low rate (--fast-subtract; FT8 from PR #3, FT4 too from madpsy's 8d6a9b4 --
+### an older jt9 takes it for FT4 and ignores it).  At KJ6MKI on 2026-10-18, 504 periods of
 ### 12 FT8 bands: 7,050 decodes against 7,051 for 172 CPU-s against 294 (-41%); on ubersdr's FT8 test recordings, at
 ### every depth, WSJT-X's decodes but for one in two runs.  An older jt9 would take --fast-subtract for an unknown
 ### option, print its usage and exit, so it is asked first.
 declare -a JT9_OPTS=()
 if [[ ${WD_FT_FAST-yes} == "yes" ]] && ${JT9} -h 2>&1 | grep -q -- '--fast-subtract'; then
-    JT9_OPTS=(-w 2)
-    [[ ${MODE} == ft8 ]] && JT9_OPTS+=(--fast-subtract)
+    JT9_OPTS=(-w 2 --fast-subtract)
 fi
 ### Measured plans take jt9 ~20 s to make, and it saves them (jt9_wisdom.dat) only when it ends normally, which a band's
 ### --feed jt9 never does: so they are made once here, by a jt9 decoding the first file to arrive, kept in RUN_DIR, and
