@@ -2550,9 +2550,32 @@ if awk -v version="${VERSION_ID-0}" 'BEGIN { split(version, field, "."); major =
     ONION_LIBS_NEEDED="${ONION_LIBS_NEEDED} libgnutls30t64 libgcrypt20"
 fi
 
+### WD's patch to libonion's onion_websocket_call(): it ignored poll()'s revents and called a callback that left a frame's bytes
+### unread again and again, so one websocket could keep a ka9q-web thread at 100% of a CPU for as long as it ran (KX4AZ-T,
+### 2026-10-27: two such threads, no client connected).  Upstream onion (and ka9q's fork) have the same loop.
+declare ONION_WD_PATCH="${WSPRDAEMON_ROOT_DIR}/patches/onion-websocket-no-spin.patch"
+
 function build_onion() {
     local project_subdir=$1
     local project_logfile="${project_subdir}-build.log"
+
+    ### Applied for the build and taken out again afterwards (below), so the checkout stays clean for pull_commit(): a modified
+    ### websocket.c would make 'git checkout' of a new ONION_COMMIT refuse to run.  Rebuilding the same source gives the same
+    ### library, so the ka9q-web restart below only happens when the installed library really changes.
+    local onion_patched="no"
+    if [[ -f ${ONION_WD_PATCH} ]]; then
+        if ( cd ${project_subdir} && git apply --reverse --check ${ONION_WD_PATCH} ) > /dev/null 2>&1 ; then
+            wd_logger 2 "${ONION_WD_PATCH##*/} is already applied to ${project_subdir}"
+            onion_patched="yes"
+        elif ( cd ${project_subdir} && git apply ${ONION_WD_PATCH} ) > /dev/null 2>&1 ; then
+            wd_logger 2 "Applied ${ONION_WD_PATCH##*/} to ${project_subdir} for this build"
+            onion_patched="yes"
+        else
+            wd_logger 1 "WARNING: ${ONION_WD_PATCH##*/} does not apply to ${project_subdir} at $(cd ${project_subdir} && git rev-parse --short HEAD), so ka9q-web may again spin on a dead websocket.  The patch needs updating for this onion"
+        fi
+    fi
+    ### A running ka9q-web keeps the libonion it started with, so note what is installed now and restart them if it changes
+    local lib_before; lib_before=$( md5sum $(readlink -f /usr/local/lib/libonion.so.0 2>/dev/null) 2>/dev/null | cut -d' ' -f1 )
 
     wd_logger 2 "Building ${project_subdir}"
     (
@@ -2569,10 +2592,20 @@ function build_onion() {
     sudo ldconfig
     )     >& ${project_logfile}
     rc=$?
+    [[ ${onion_patched} == "yes" ]] && ( cd ${project_subdir} && git apply --reverse ${ONION_WD_PATCH} ) > /dev/null 2>&1
     if [[ ${rc} -ne 0 ]]; then
          wd_logger 1 "ERROR: compile of '${project_subdir}' returned ${rc}:\n$( < ${project_logfile} )"
          exit 1
      fi
+    local lib_after; lib_after=$( md5sum $(readlink -f /usr/local/lib/libonion.so.0 2>/dev/null) 2>/dev/null | cut -d' ' -f1 )
+    if [[ -n ${lib_before} && ${lib_after} != "${lib_before}" ]]; then
+        local unit
+        for unit in $( systemctl list-units 'ka9q-web@*.service' --state=active --no-legend --plain 2>/dev/null | awk '{print $1}' ); do
+            sudo systemctl restart "${unit}" && wd_logger 1 "Restarted ${unit} so it loads the new libonion"
+        done
+        ### A ka9q-web WD started itself (KA9Q_WEB_SYSTEMD!=yes) is started again by ka9q_web_service_daemon() in 5 s
+        [[ ${KA9Q_WEB_SYSTEMD-no} == "yes" ]] || pkill -x -u "$(id -un)" ka9q-web
+    fi
      wd_logger 2 "Done"
     return 0
 }

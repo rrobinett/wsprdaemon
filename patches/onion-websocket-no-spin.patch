@@ -1,0 +1,51 @@
+diff --git a/src/onion/websocket.c b/src/onion/websocket.c
+index cf49bef..7bf4f76 100644
+--- a/src/onion/websocket.c
++++ b/src/onion/websocket.c
+@@ -492,6 +492,7 @@ onion_websocket_read_packet_header(onion_websocket * ws) {
+  */
+ onion_connection_status onion_websocket_call(onion_websocket * ws) {
+   onion_connection_status ret = OCS_NEED_MORE_DATA;
++  int stalls = 0;               // passes in a row on which the callback read none of a pending frame
+   while (ret == OCS_NEED_MORE_DATA) {
+     if (ws->req->connection.fd > 0) {
+       struct pollfd pfd;
+@@ -501,6 +502,14 @@ onion_connection_status onion_websocket_call(onion_websocket * ws) {
+       int r = poll(&pfd, 1, -1);
+       if (r == 0)
+         return OCS_INTERNAL_ERROR;
++      if (r < 0) {
++        if (errno == EINTR)
++          continue;
++        return OCS_INTERNAL_ERROR;
++      }
++      // A peer that is gone will never send another byte, and poll() would report it again at once forever.
++      if ((pfd.revents & (POLLERR | POLLNVAL)) || ((pfd.revents & POLLHUP) && !(pfd.revents & POLLIN)))
++        return OCS_CLOSE_CONNECTION;
+       //ONION_DEBUG("waited for data fd %d -- res %d -- events %d", ws->req->fd, r, pfd.events);
+     } else
+       sleep(1);                 // FIXME Worst possible solution. But solution anyway to the problem of not know when new data is available.
+@@ -515,11 +524,22 @@ onion_connection_status onion_websocket_call(onion_websocket * ws) {
+         }
+       }
+ 
+-      size_t last_d_l;
++      size_t last_d_l, before_callback = ws->data_left;
+       do {
+         last_d_l = ws->data_left;
+         ret = ws->callback(ws->user_data, ws, ws->data_left);
+       } while (ws->data_left != 0 && last_d_l != ws->data_left && ws->callback);
++      // A callback that asks for more data but leaves the frame's pending bytes unread is called again at once,
++      // because poll() keeps reporting those bytes: a busy loop at 100% of a CPU for as long as the server runs
++      // (ka9q-web, 2026-10-27, a websocket whose session was gone).  Allow a few such passes for a slow client,
++      // then give up on the connection.
++      if (ret == OCS_NEED_MORE_DATA && ws->callback && ws->data_left != 0 && ws->data_left == before_callback) {
++        if (++stalls > 100) {
++          ONION_ERROR("Websocket callback left %d bytes unread on %d passes in a row, closing the connection", (int)ws->data_left, stalls);
++          return OCS_CLOSE_CONNECTION;
++        }
++      } else
++        stalls = 0;
+     }
+ 
+     if (!ws->callback)          // ws->callback can change ws->callback, so another test, not else.

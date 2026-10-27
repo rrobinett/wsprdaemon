@@ -265,6 +265,7 @@ source ${WSPRDAEMON_ROOT_DIR}/noise-graphs-daemon.sh
 source ${WSPRDAEMON_ROOT_DIR}/wav-archive.sh
 source ${WSPRDAEMON_ROOT_DIR}/grape-utils.sh
 source ${WSPRDAEMON_ROOT_DIR}/wd-drops.sh
+source ${WSPRDAEMON_ROOT_DIR}/wd-ka9q-web-guard.sh   ### Restarts a ka9q-web left spinning by an abandoned browser session
 source ${WSPRDAEMON_ROOT_DIR}/wd-decode-backlog.sh   ### FT8/FT4/WSPR decode backlog monitor
 source ${WSPRDAEMON_ROOT_DIR}/wd-decode-health.sh    ### Records every decode which didn't finish inside its cycle
 source ${WSPRDAEMON_ROOT_DIR}/watchdog.sh         ### Should come last
