@@ -186,6 +186,8 @@ function log_radiod_drops()
 ###    interval it must grow by elapsed time x sample rate.  It misses nothing between checks and needs neither sudo nor the journal
 ###    (KX4AZ-T, 2026-10-24: ns-bev's count matched 11 hours of 64.8 Msps to the second; ew-bev's was 102 billion, 4.1%, short).
 ###    A radiod restart resets the count, so a check that sees a new radiod PID, or a smaller count, only takes a new baseline.
+###    A radiod whose count does not move at all, or that answers no status after logging "No rx888 data", is a zombie: alive to
+###    systemd but getting nothing from its RX888.  It is restarted (once per check) and counted in the RX888 recovery history.
 ###  - WD's own recordings: each finished one-minute YYYYMMDDTHHMMSSZ_FREQ_usb.wav must hold 60 s at the byte rate in its own header.
 ###    This also covers receivers fed by a radiod on another host, but it sees only the few minutes of files present when it looks.
 ###    One short minute is what any radiod restart produces, so a receiver is reported only for two or more.
@@ -237,6 +239,34 @@ function wd_sample_loss_wav_check()
     (( total )) && echo "${#short_minutes[@]} ${total} ${worst}"
 }
 
+### Has the radiod@$1 process now running (pid $2) given up on its RX888?  radiod logs "No rx888 data for 5 seconds, quitting"
+### (or "rx888 has aborted") and then stays alive, active to systemd, answering no status and delivering nothing: a zombie.
+### KX4AZ-T 2026-10-29/30: radiod@dipole sat like that for 20 hours after a reboot and nothing in WD noticed.
+function wd_sample_loss_radiod_gave_up()
+{
+    sudo journalctl _SYSTEMD_UNIT="radiod@$1.service" _PID="$2" --no-pager -o cat 2>/dev/null | grep -qE "No rx888 data|rx888 has aborted"
+}
+
+### Restart zombie radiod@$1 (its RX888 sends nothing), at most once per WD_SAMPLE_LOSS_MINUTES, and count it in the RX888 recovery history
+function wd_sample_loss_restart_zombie()
+{
+    local inst=$1 why=$2 stamp="${WD_DROPS_LOG_DIR}/sample-loss.restart.$1" serial dev
+    if [[ -f ${stamp} ]] && (( $(printf "%(%s)T") - $(stat -c %Y ${stamp} 2>/dev/null || echo 0) < WD_SAMPLE_LOSS_MINUTES * 60 - 30 )); then
+        return 0
+    fi
+    touch ${stamp} 2>/dev/null
+    printf "%s\tradiod@%s\tZOMBIE: %s; restarting it\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${inst}" "${why}" >> "${WD_SAMPLE_LOSS_LOG_FILE}" 2>/dev/null
+    wd_logger 1 "ERROR: radiod@${inst} is running but getting no data from its RX888 (${why}), so restarting it.  If restarts do not bring the data back, an RX888 on a second USB controller may need '[rx888] reqsize=8' and 'queuedepth=8' in radiod@${inst}.conf (KX4AZ-T's bus 4, 2026-10-30); 'wd -u' shows what each RX888 is sending"
+    timeout 60 sudo systemctl restart "radiod@${inst}" > /dev/null 2>&1
+    rm -f "${WD_DROPS_LOG_DIR}/sample-loss.state.${inst}"
+    if declare -F wd_usb_power_record_recovery > /dev/null ; then
+        serial=$( wd_usb_power_serial_of_instance "${inst}" 2>/dev/null )
+        dev=$( wd_usb_power_dev_of_instance "${inst}" 2>/dev/null || echo "-" )
+        wd_usb_power_record_recovery "${inst}" "${dev:--}" "${serial:--}" "get no samples from" \
+            "$(systemctl is-active --quiet radiod@${inst} && echo recovered || echo failed)"
+    fi
+}
+
 ### Self-throttling: does nothing until WD_SAMPLE_LOSS_MINUTES have passed since the last check
 function log_radiod_sample_loss()
 {
@@ -251,10 +281,22 @@ function log_radiod_sample_loss()
     if declare -F wd_local_radiod_instances > /dev/null ; then
         for inst in $( wd_local_radiod_instances ); do
             systemctl is-active --quiet "radiod@${inst}" || continue
-            local pid samples rate when secs state_file prev_pid prev_samples prev_epoch pct
+            local pid samples rate when secs state_file prev_pid prev_samples prev_epoch pct started
             pid=$( systemctl show -p MainPID --value "radiod@${inst}" 2>/dev/null )
+            ### Not in its first 2 minutes: a radiod that is still starting answers no status yet
+            started=$( date -d "$(systemctl show -p ActiveEnterTimestamp --value radiod@${inst} 2>/dev/null)" +%s 2>/dev/null || echo 0 )
+            (( now - started >= 120 )) || continue
             read -r samples rate <<< "$( wd_sample_loss_counter "${inst}" )"
-            [[ -n ${samples} && -n ${rate} ]] || continue
+            if [[ -z ${samples} || -z ${rate} ]]; then
+                ### A radiod that answers no status is either a zombie (its RX888 gave it no data and it gave up) or just not
+                ### reachable by name this minute.  Only the first is certain enough to restart it for.
+                if wd_sample_loss_radiod_gave_up "${inst}" "${pid}" ; then
+                    wd_sample_loss_restart_zombie "${inst}" "it answers no status and logged 'No rx888 data' since it started"
+                else
+                    wd_logger 1 "WARNING: radiod@${inst} is running but answered no status request, so its sample count could not be checked"
+                fi
+                continue
+            fi
             when=$(date +%s.%N)          ### this reading's own time: each radiod's status takes ~1 s to read, one after another
             state_file="${WD_DROPS_LOG_DIR}/sample-loss.state.${inst}"
             prev_pid="" prev_samples="" prev_epoch=""
@@ -264,6 +306,10 @@ function log_radiod_sample_loss()
             [[ ${prev_pid} == "${pid}" && -n ${prev_samples} ]] && (( samples >= prev_samples )) || continue
             secs=$( awk -v a=${prev_epoch} -v b=${when} 'BEGIN { printf "%d", b - a }' )
             (( secs >= 120 )) || continue    ### a reading's timing is good to ~1 s, so a shorter interval could fake a loss near WD_SAMPLE_LOSS_PCT
+            if (( samples == prev_samples )); then
+                wd_sample_loss_restart_zombie "${inst}" "its sample count has not moved in ${secs} s"
+                continue
+            fi
             pct=$( awk -v n=$(( samples - prev_samples )) -v r=${rate} -v a=${prev_epoch} -v b=${when} 'BEGIN { printf "%.1f", 100 * (1 - n / (r * (b - a))) }' )
             awk -v p=${pct} -v l=${WD_SAMPLE_LOSS_PCT} 'BEGIN { exit !(p >= l) }' || continue
             level=WARNING; awk -v p=${pct} -v l=${WD_SAMPLE_LOSS_ERROR_PCT} 'BEGIN { exit !(p >= l) }' && level=ERROR
