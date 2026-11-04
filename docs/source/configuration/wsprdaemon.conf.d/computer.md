@@ -23,7 +23,7 @@ What WD does on this CPU:
   and `radiod-pin-threads.sh` puts one on each of radiod's two cores (the second shares a core with `proc_rx888`).
   The CPUs this applies to are listed in `WD_SLOW_FFT_CPU_MODELS` (default `"i5-6500T"`, matched against the model
   name in `/proc/cpuinfo`); `RADIOD_FFT_THREADS=N` in `wsprdaemon.conf` sets it on any host.
-- **No jt9 for FT8/FT4.** WSJT-X's jt9 (`WD_FT_DECODER="jt9"`) needs about one more core for a dozen FT8 bands, which
+- **No jt9 for FT8/FT4.** WSJT-X's jt9 (`WD_FT_DECODER="jt9"`, WD's default) needs about one more core for a dozen FT8 bands, which
   this CPU does not have beside radiod, so WD refuses it and keeps ka9q-radio's `decode_ft8`, saying so in its log.
   The list is `WD_FT_JT9_UNSUPPORTED_CPU_MODELS` (default `"i5-6500T"`).
 - **FFTW wisdom measured on the host.** The reference wisdom WD installs was measured on another CPU. On this one,

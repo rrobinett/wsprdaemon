@@ -1846,13 +1846,14 @@ declare KA9Q_DECODE_FT_CMD="/usr/local/bin/decode_ft8"               ### hacked 
 declare KA9Q_FT8_LIB_REPO_URL="https://github.com/ka9q/ft8_lib.git" ### Where to get that code
 declare KA9Q_DECODE_FT8_DIR="${WSPRDAEMON_ROOT_DIR}/ft8_lib"        ### Like ka9q-radio, ka9q-web amd onion, build 'decode-ft' in a subdirectory of WD's home
 
-### FT8 and FT4 decoding: WD_FT_DECODER="jt9" decodes each band with WSJT-X's decoders (ubersdr_wsprd's jt9, the one WD
-### builds to decode FST4W), one long-running 'jt9 --feed' per band, in place of ka9q/ft8_lib's decode_ft8, and has radiod
+### FT8 and FT4 decoding: WD_FT_DECODER="jt9" (the default) decodes each band with WSJT-X's decoders (ubersdr_wsprd's jt9,
+### the one WD builds to decode FST4W), one long-running 'jt9 --feed' per band, in place of ka9q/ft8_lib's decode_ft8, and has radiod
 ### send the FT channels as it sends WSPR's: 32-bit float, unscaled, no AGC (see wd_ft_jt9_ready()).  See wd-ft-decode.sh: at KJ6MKI it decoded ~70% more FT8 messages and gave ~57% more
 ### PSKReporter spots, keeping WSJT-X's hash table so hashed calls resolve, for ~1.3 s of CPU a 15 s period a band at
-### depth 2 (decode_ft8: 48 ms).  So it is chosen per station: a Raspberry Pi with a dozen FT8 bands may not have it.
-### Anything else (the default "ft8_lib") leaves the services running decode_ft8 as they always have.
-declare WD_FT_DECODER="${WD_FT_DECODER-ft8_lib}"
+### depth 2 (decode_ft8: 48 ms; WD_FT_FAST cuts jt9's by ~40%).  ON5KQ ran it 24 h: +79% FT8, +31% FT4.  A station without
+### the CPU for it (a Raspberry Pi with a dozen FT8 bands may not have it) sets WD_FT_DECODER="ft8_lib" in wsprdaemon.conf
+### to go back to decode_ft8; CPUs in WD_FT_JT9_UNSUPPORTED_CPU_MODELS, and hosts whose ubersdr jt9 isn't built, keep it anyway.
+declare WD_FT_DECODER="${WD_FT_DECODER-jt9}"
 declare WD_FT_DEPTH="${WD_FT_DEPTH-2}"                    ### WSJT-X's Decode menu: 1 fast, 2 normal, 3 deep
 declare WD_FT_FREQ_LOW="${WD_FT_FREQ_LOW-100}"           ### audio Hz; ka9q-radio's FT channels pass audio above 3 kHz
 declare WD_FT_FREQ_HIGH="${WD_FT_FREQ_HIGH-4000}"
@@ -1898,6 +1899,10 @@ function wd_ft_decoder_setup() {
     if ! wd_ft_jt9_ready; then
         if [[ ${WD_FT_DECODER} == "jt9" ]] && wd_cpu_model_in "${WD_FT_JT9_UNSUPPORTED_CPU_MODELS}"; then
             wd_logger 1 "WD_FT_DECODER='jt9', but this CPU ($(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)) is in WD_FT_JT9_UNSUPPORTED_CPU_MODELS: it has no room for jt9 beside radiod, so ${service} decodes with ka9q-radio's decode_ft8"
+        elif [[ ${WD_FT_DECODER} == "jt9" && ${WD_DECODERS-} == "wsjtx" ]]; then
+            wd_logger 1 "WD_FT_DECODER='jt9', but WD_DECODERS='wsjtx' builds no ubersdr jt9, so ${service} decodes with ka9q-radio's decode_ft8"
+        elif [[ ${WD_FT_DECODER} == "jt9" && -f ${UBERSDR_FAILED_FILE-/nonexistent} ]]; then
+            wd_logger 1 "WD_FT_DECODER='jt9', but the ubersdr build failed (see ${UBERSDR_BUILD_LOG-ubersdr-build.log}), so ${service} decodes with ka9q-radio's decode_ft8"
         elif [[ ${WD_FT_DECODER} == "jt9" ]]; then
             wd_logger 1 "WD_FT_DECODER='jt9', but ${UBERSDR_JT9_CMD-the ubersdr jt9} isn't built yet or has no --feed, so ${service} decodes with ka9q-radio's decode_ft8 until WD next starts"
         fi
@@ -1924,7 +1929,7 @@ function wd_ft_decoder_setup() {
         sudo rm -f /usr/local/bin/wd-jt9_decode && wd_logger 1 "Removed /usr/local/bin/wd-jt9_decode: jt9 --feed replaced it"
     fi
     local want
-    want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Delete this file to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s" "WD_FT_FAST=%s"\n' \
+    want=$(printf '[Service]\n# Written by WD (ka9q-utils.sh wd_ft_decoder_setup): WD_FT_DECODER="jt9".  Set WD_FT_DECODER="ft8_lib" in wsprdaemon.conf to go back to decode_ft8.\nExecStart=\nExecStart=/usr/local/bin/wd-ft-decode %s $DIRECTORY\nEnvironment="WD_FT_DEPTH=%s" "WD_FT_FREQ_LOW=%s" "WD_FT_FREQ_HIGH=%s" "WD_FT_FAST=%s"\n' \
                   ${ft_type} ${WD_FT_DEPTH} ${WD_FT_FREQ_LOW} ${WD_FT_FREQ_HIGH} ${WD_FT_FAST})
     if [[ "$(cat ${dropin} 2> /dev/null)" != "${want}" ]]; then
         sudo mkdir -p ${dropin%/*}
