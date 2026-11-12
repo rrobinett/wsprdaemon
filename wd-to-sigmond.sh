@@ -19,7 +19,8 @@
 #   wd-to-sigmond.sh restore [--check]     put the station back on WsprDaemon from the bundle
 #
 # install options:
-#   --profile NAME     sigmond bring-up profile (default dasi2; hardware-gated parts install dormant)
+#   --profile NAME     sigmond bring-up profile (default wd: radiod, ka9q-web, wspr-recorder, psk-recorder;
+#                      hf-timestd is added only where wsprdaemon.conf recorded WWV)
 #   --reporter ID      default: REPORTER_ID from wsprdaemon.conf
 #   --grid LOCATOR     default: REPORTER_GRID from wsprdaemon.conf
 #   --callsign CALL    default: the reporter id up to the first '/' or '-'
@@ -46,7 +47,7 @@ declare -r GRUB_ISOLATION=/etc/default/grub.d/sigmond-cpu-isolation.cfg
 DRY_RUN=no
 YES=no
 BUNDLE=""
-PROFILE=dasi2
+PROFILE=wd
 REPORTER="" GRID="" CALLSIGN=""
 RC=0
 
@@ -116,6 +117,10 @@ wd_conf_value() {  ### $1 = variable name in wsprdaemon.conf (simple NAME="value
     sed -n "s/^[[:space:]]*$1=[\"']\{0,1\}\([^\"' #]*\).*/\1/p" "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | tail -1
 }
 
+wd_recorded_wwv() {   ### an uncommented WWV/WWVB band in any WSPR_SCHEDULE line
+    grep -vE '^[[:space:]]*#' "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | grep -qE ',(WWVB|WWV_[0-9_]+),'
+}
+
 ### Every WsprDaemon/legacy-ka9q unit present on this host (never wd-remote-access@*)
 legacy_units() {
     systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{print $1}' \
@@ -158,7 +163,7 @@ cmd_check() {
     grep -vE '^[[:space:]]*#' "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | grep -qE 'MERGE_' \
         && warn "MERGE_ receivers in use: sigmond has no MERGE; only the RX888's own spots continue"
     grep -vE '^[[:space:]]*#' "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | grep -qE 'WWV(B|_[0-9])|CHU' \
-        && log "  INFO  WWV/GRAPE recording in use: sigmond's hf-timestd takes it over (dasi2 profile); re-enroll PSWS ids"
+        && log "  INFO  WWV/GRAPE recording in use: install adds hf-timestd to take it over; re-enroll PSWS ids"
 
     ### Things that bit KJ6MKI
     if [[ ${ID}:${VERSION_ID} == ubuntu:22.04 ]] && ! dpkg -s python3.11-dev >/dev/null 2>&1; then
@@ -282,12 +287,8 @@ cmd_prep() {
     local f leg=/etc/radio.legacy-wd
     run sudo -n install -d -m 2775 "${leg}"
     for f in /etc/radio/radiod@*.conf /etc/radio/radiod@*.conf.d; do run sudo -n mv "${f}" "${leg}/"; done
-    ### a radiod@ instance left enabled without a conf crash-loops forever after the next boot (KJ6MKI 2026-11-12)
+    ### sigmond 1256c4e+ treats a radiod@ instance with no conf as orphaned and never enables or starts it
     local u
-    for u in $(systemctl list-unit-files --no-legend 'radiod@*.service' | awk '$1!="radiod@.service"{print $1}'); do
-        run sudo -n systemctl disable "${u}"
-    done
-    for f in /etc/systemd/system/multi-user.target.wants/radiod@*.service; do run sudo -n rm -f "${f}"; done
 
     log "## 2. stop + disable the wd-* tuning oneshots, then undo what they applied"
     for u in wd-cpu-freq wd-resctrl wd-irq-affinity; do
@@ -350,6 +351,11 @@ cmd_install() {
     sg sigmond -c "SIGMOND_NO_RAC=1 ${SMD} $(printf '%q ' "${args[@]}")" 2>&1 | tee -a "${LOG}"
     local rc=${PIPESTATUS[0]}
     [[ ${rc} == 0 ]] || die "smd bringup exited ${rc}: read ${LOG}; rerun is safe (bring-up is idempotent)"
+    ### never --with-optional for a conversion; add GRAPE timing only where WD recorded WWV
+    if wd_recorded_wwv; then
+        log "wsprdaemon.conf recorded WWV: adding hf-timestd"
+        run sg sigmond -c "${SMD} install hf-timestd --yes" || warn "hf-timestd install failed: read ${LOG}"
+    fi
     mark INSTALLED
     log "INSTALL OK — next: $0 post"
 }
@@ -453,14 +459,37 @@ fix_kernel_isolation() {
 }
 
 fix_igmp_querier() {
-    log "## IGMP querier (root listen; smd itself refuses sudo, SIGMOND_ALLOW_SUDO=1 is its sanctioned bypass)"
+    log "## IGMP querier (130 s root listen; smd elevates itself for --listen)"
     local cls
-    cls=$(sudo -n SIGMOND_ALLOW_SUDO=1 "${SMD}" admin diag net --listen 130 2>&1 | strip_ansi | sed -n 's/^ *Classification: *//p')
+    cls=$("${SMD}" admin diag net --listen 130 2>&1 | strip_ansi | sed -n 's/^ *Classification: *//p')
     log "network: ${cls:-unknown}"
     if [[ ${cls} == lan-needs-querier* ]]; then
         run "${SMD}" install igmp-querier --yes
-        run sudo -n SIGMOND_ALLOW_SUDO=1 "${SMD}" admin diag net --listen 130
+        run "${SMD}" admin diag net --listen 130
     fi
+}
+
+fix_upload_routing() {
+    ### Rob 2026-11-12: a converted station uploads ONLY to the WD servers, as it did under WD.  WD30's
+    ### wsprnet-forwarder and the elected pskreporter-forwarder post onward; the station posts nowhere directly.
+    log "## uploads go only to the WD servers, which forward to wsprnet.org and pskreporter.info"
+    local rid; rid=${REPORTER:-$(wd_conf_value REPORTER_ID)}
+    [[ -n ${rid} ]] || { bad "no reporter id: cannot set per-instance upload routing"; return; }
+    run "${SMD}" config reporters --wsprnet-proxy on
+    run "${SMD}" config upload psk-recorder "${rid}" --on --via server-merge
+    systemctl list-units --all --no-legend --plain 'meteor-scatter@*' | grep -q . \
+        && run "${SMD}" config upload meteor-scatter "${rid}" --on --via deposit
+    local u
+    for u in hs-uploader.service $(systemctl list-units --no-legend --plain 'psk-recorder@*' 'meteor-scatter@*' | awk '{print $1}'); do
+        run sudo -n systemctl restart "${u}"
+    done
+    [[ ${DRY_RUN} == yes ]] && return
+    sleep 10
+    ### a hand-written legacy /etc/hs-uploader/pipelines.toml is not re-rendered (KJ6MKI): catch a direct wsprnet leg
+    sudo -n journalctl -u hs-uploader --since -1min --no-pager -o cat | grep -q 'pipeline(s):.*wsprnet' \
+        && bad "hs-uploader still runs a direct wsprnet pipeline: /etc/hs-uploader/pipelines.toml is legacy; set forward_to_wsprnet on the tar transport and drop that pipeline"
+    sudo -n journalctl -u 'psk-recorder@*' --since -1min --no-pager -o cat | grep -q 'direct PSKReporter uploader disabled' \
+        && ok "psk-recorder: server-merge, forward_to_pskreporter=True" || warn "psk-recorder did not confirm server-merge delivery"
 }
 
 cmd_post() {
@@ -474,11 +503,7 @@ cmd_post() {
     fix_kernel_isolation
     fix_igmp_querier
 
-    log "## boot-time FFT wisdom: until sigmond tops up instead of re-planning, keep it from taking radiod down at boot"
-    if "${SMD}" admin wisdom needed >/dev/null 2>&1 && systemctl is-enabled -q sigmond-wisdom.service 2>/dev/null; then
-        warn "smd says wisdom is not current: disabling sigmond-wisdom.service (on KJ6MKI it stopped radiod for a 104-transform fresh plan at boot)"
-        run sudo -n systemctl disable sigmond-wisdom.service
-    fi
+    fix_upload_routing
 
     log "## devices sigmond adopted that no client can read"
     if command -v gpsdo-monitor >/dev/null && systemctl is-enabled -q gpsdo-monitor 2>/dev/null; then
