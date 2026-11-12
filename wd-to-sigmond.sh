@@ -458,6 +458,21 @@ fix_kernel_isolation() {
     done
 }
 
+fix_cpu_freq() {
+    ### replaces the wd-cpu-freq clocks prep removed: radiod's cores pinned min==max, the rest capped (powersave).
+    ### On amd-pstate active the cap floors at the nominal clock (KJ6MKI: 1.4 GHz asked, ~2.42 GHz real).
+    log "## CPU clocks: smd admin diag cpu-freq --apply (smd-cpu-freq.service re-applies at every boot)"
+    run "${SMD}" admin diag cpu-freq --apply
+    [[ ${DRY_RUN} == yes ]] && return
+    systemctl is-enabled -q smd-cpu-freq.service 2>/dev/null && ok "smd-cpu-freq.service enabled" \
+        || bad "smd-cpu-freq.service not enabled: the clock policy will not survive the reboot"
+    local c d
+    for c in $(expand_cpus "$(radiod_cpus)"); do
+        d=/sys/devices/system/cpu/cpu${c}/cpufreq
+        log "cpu${c}: $(cat "${d}/scaling_governor") min $(cat "${d}/scaling_min_freq") max $(cat "${d}/scaling_max_freq") kHz"
+    done
+}
+
 fix_igmp_querier() {
     log "## IGMP querier (130 s root listen; smd elevates itself for --listen)"
     local cls
@@ -501,6 +516,7 @@ cmd_post() {
     fix_ft_ssrc_collisions
     fix_manager_affinity
     fix_kernel_isolation
+    fix_cpu_freq
     fix_igmp_querier
 
     fix_upload_routing
@@ -545,6 +561,14 @@ cmd_verify() {
     [[ ${rcu} == "${rcpus}" ]] && ok "rcu_nocbs=${rcu}" || bad "rcu_nocbs '${rcu}' != '${rcpus}'"
     local pid1; pid1=$(awk '/^Cpus_allowed_list/{print $2}' /proc/1/status)
     [[ ${pid1} == "${other}" ]] && ok "PID 1 on ${pid1}" || bad "PID 1 on ${pid1}, want ${other}"
+
+    ### clocks: smd-cpu-freq pins radiod's cores min==max; a radiod core still floating means the policy is off
+    systemctl is-enabled -q smd-cpu-freq.service 2>/dev/null && ok "smd-cpu-freq.service enabled" || bad "smd-cpu-freq.service not enabled"
+    local c fmin fmax
+    for c in $(expand_cpus "${rcpus}"); do
+        fmin=$(cat /sys/devices/system/cpu/cpu${c}/cpufreq/scaling_min_freq 2>/dev/null); fmax=$(cat /sys/devices/system/cpu/cpu${c}/cpufreq/scaling_max_freq 2>/dev/null)
+        [[ -n ${fmin} && ${fmin} == "${fmax}" ]] && ok "cpu${c} pinned at ${fmax} kHz" || bad "cpu${c} not pinned: min ${fmin:-?} max ${fmax:-?} kHz"
+    done
 
     ### IRQs: nothing movable on radiod's cores except the kernel-managed per-CPU queues
     systemctl is-active -q irqbalance 2>/dev/null && bad "irqbalance running" || ok "irqbalance not running"
