@@ -13,9 +13,11 @@
 #   wd-to-sigmond.sh handover              stop + disable the WsprDaemon stack; the RX888 is then free
 #   wd-to-sigmond.sh prep                  remove WD's host tuning so it cannot fight sigmond
 #   wd-to-sigmond.sh install [opts]        clone + install sigmond, then `smd bringup` (no sigmond-rac)
-#   wd-to-sigmond.sh post                  the fixes KJ6MKI needed after bring-up; stages kernel isolation
+#   wd-to-sigmond.sh post                  the fixes KJ6MKI needed after bring-up; stages kernel isolation,
+#                                          applies sigmond's CPU clock policy, WD-only uploads, PSWS ids + key check
 #   wd-to-sigmond.sh reboot                reboot to activate isolcpus/nohz_full/rcu_nocbs
-#   wd-to-sigmond.sh verify                after the reboot: isolation, IRQs, services, spots
+#   wd-to-sigmond.sh verify                after the reboot: isolation, IRQs, CPU clocks, services, spots,
+#                                          grape-daily.timer and a login-only PSWS test of the GRAPE upload key
 #   wd-to-sigmond.sh restore [--check]     put the station back on WsprDaemon from the bundle
 #
 # install options:
@@ -31,6 +33,8 @@
 # It never touches wd-remote-access@* (the RAC tunnel you arrive over), the WsprDaemon git
 # tree, PostgreSQL or the desktop session.  sigmond-rac is never activated (SIGMOND_NO_RAC=1):
 # installing it beside wd-remote-access could cut the only path in.
+#
+# Full description: WD-TO-SIGMOND.md beside this script.
 
 set -uo pipefail
 shopt -s nullglob
