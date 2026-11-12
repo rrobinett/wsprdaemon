@@ -89,8 +89,14 @@ It warns if hs-uploader still runs a direct wsprnet pipeline.
 > **Caution — `smd sink upload` and `smd admin uploader manifest --write` regenerate
 > `/etc/hs-uploader/pipelines.toml`.** Before sigmond 7df8c7d that rewrite added direct
 > PSKReporter pipelines and swapped the gateway key (KJ6MKI, 2026-11-12). Since 7df8c7d it keeps
-> the WD-only routing and the station's `id_rsa_wsprdaemon` key, and shows a diff first. Run
-> `smd admin uploader manifest` (read-only) before any `--write`, and read the diff.
+> the WD-only routing and the station's `id_rsa_wsprdaemon` key, and shows a diff first; since
+> 74b62a7 it gives `grape-psws` its own PSWS key. Run `smd admin uploader manifest` (read-only)
+> before any `--write`, and read the diff. In scripts, its exit code is 0 when the file is up to
+> date and 1 for drift *or* failure: read stdout ("is up to date", "DRIFT —", "would create" mean a
+> clean read; a line on stderr starting "uploader:" is a failure).
+>
+> A hand-placed `/etc/hs-uploader/pipelines.d/<client>.toml` replaces every rendered pipeline of
+> that client (the render says so). Remove it when you want the render to own that client again.
 
 ## PSWS / GRAPE
 
@@ -101,13 +107,13 @@ line), in other words to stations that uploaded GRAPE under WsprDaemon.
 - Installs `hamsci-physics` first: hf-timestd needs it as a path dependency and fails to install without it.
 - Installs `hf-timestd`.
 - Runs `smd config init` for both. The GRAPE upload pipeline (`grape-psws`) is only generated once hamsci-physics has its config.
+- Since sigmond 6ce1bc5, `smd install` also starts `grape-daily.timer`, which packages each UTC day at about 01:00 UTC. Without it no GRAPE dataset is built and nothing uploads.
 
 **`post`**
 1. Copies WD's ids over: `PSWS_STATION_ID` and `PSWS_DEVICE_ID` from wsprdaemon.conf become
    `smd config psws --station <id> --instrument hf-timestd=<device id>`. The station keeps its
    existing PSWS station and instrument; no new account is needed.
-2. Starts `grape-daily.timer`. It packages each UTC day at about 01:00 UTC; without it no GRAPE dataset is built and nothing uploads. The install links it but has been seen to leave it inactive.
-3. Runs the PSWS key check below. Here a refused key is only a WARN, because the operator may not have registered it yet.
+2. Runs the PSWS key check below. Here a refused key is only a WARN, because the operator may not have registered it yet.
 
 **Operator step (cannot be automated):** log in at <https://pswsnetwork.eng.ua.edu/>, open the
 station and add the public key the script printed. Under Sigmond the uploader uses its own key,
@@ -117,11 +123,12 @@ so the key WD used for GRAPE will not do.
 
 A converted station keeps `id_rsa_wsprdaemon` as hs-uploader's main key, because the WD gateways
 know it. PSWS knows only the key registered at its portal; on KJ6MKI that is `id_ed25519_host`,
-and PSWS refuses `id_rsa_wsprdaemon`. `smd psws verify` tests Sigmond's idea of "the machine's
-PSWS key", which is not always the key the GRAPE pipeline actually uses. It has passed while the
-generated pipeline would have been refused.
+and PSWS refuses `id_rsa_wsprdaemon`. Since sigmond 74b62a7 the render gives `grape-psws` its own
+`ssh_key_file = id_ed25519_host`, and `smd psws enroll/status/verify` name that same key. (Before
+74b62a7, `smd psws verify` could pass while the generated pipeline would have been refused.)
 
-So the script finds the key `grape-psws` really uses (its transport's `ssh_key_file`, else the
+The script keeps its own check as an independent confirmation, and because a hand-placed
+`pipelines.d` drop-in can override the render. It finds the key `grape-psws` really uses (its transport's `ssh_key_file`, else the
 manifest's `[identity]` key, searching `pipelines.toml` and `pipelines.d/*.toml`). It then runs a
 **login-only** SFTP test as the hs-uploader user, with `IdentitiesOnly=yes` so ssh cannot fall
 back to another key. Nothing is uploaded. If PSWS refuses, the script prints the public key to

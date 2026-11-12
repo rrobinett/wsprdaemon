@@ -126,10 +126,11 @@ wd_recorded_wwv() {   ### an uncommented WWV/WWVB band in any WSPR_SCHEDULE line
 }
 
 ### PSWS: the key the GRAPE upload pipeline will really use, and a login-only test with exactly that key.
-### Rob 2026-11-12: a converted station keeps id_rsa_wsprdaemon as hs-uploader's [identity] key (the WD gateways
-### know it), but PSWS knows only the key registered at its portal (KJ6MKI: id_ed25519_host; id_rsa_wsprdaemon
-### is REFUSED).  `smd psws verify` tests sigmond's idea of the host key, which can differ from the key the
-### grape-psws pipeline inherits, so test the pipeline's own key with IdentitiesOnly (no fallback to another key).
+### A converted station keeps id_rsa_wsprdaemon as hs-uploader's [identity] key (the WD gateways know it), while
+### PSWS knows only the key registered at its portal (KJ6MKI: id_ed25519_host; id_rsa_wsprdaemon is REFUSED).
+### Since sigmond 74b62a7 the render gives grape-psws its own ssh_key_file = id_ed25519_host and `smd psws verify`
+### tests that same key.  This stays as an independent check of the key the pipeline really carries
+### (IdentitiesOnly: no fallback to another key), in case a hand-placed pipelines.d drop-in overrides the render.
 psws_station_id() {
     sudo -n python3.11 -c 'import tomllib,sys; d=tomllib.load(open("/etc/sigmond/site-profile.toml","rb")).get("psws",{}); print(d.get("station_id","") if d.get("enabled") else "")' 2>/dev/null
 }
@@ -572,9 +573,6 @@ fix_psws() {
         warn "hf-timestd installed but no PSWS_STATION_ID/PSWS_DEVICE_ID in wsprdaemon.conf: run smd config psws --station Sxxxxxx --instrument hf-timestd=NNN"
         return 0
     fi
-    ### hamsci-physics' daily GRAPE packager is linked by install but was left inactive on KJ6MKI (no dataset, no upload)
-    systemctl list-unit-files --no-legend grape-daily.timer | grep -q . && ! systemctl is-active -q grape-daily.timer \
-        && run sudo -n systemctl enable --now grape-daily.timer
     check_psws_key warn
 }
 
@@ -689,7 +687,8 @@ cmd_verify() {
     [[ ${ft} -gt 0 ]] && ok "${ft} FT cycles batched in 10 min" || bad "no FT cycles in 10 min"
     [[ ${wspr} -gt 0 ]] && ok "${wspr} WSPR cycles in 10 min" || warn "no WSPR cycle in 10 min (wait one 2-min cycle after boot)"
     if systemctl list-unit-files --no-legend grape-daily.timer | grep -q .; then
-        systemctl is-active -q grape-daily.timer && ok "grape-daily.timer active (packages each UTC day for PSWS)" || bad "grape-daily.timer inactive: no GRAPE dataset will be built or uploaded"
+        ### smd install starts it since sigmond 6ce1bc5 (KJ6MKI's install, before that, left it inactive)
+        systemctl is-active -q grape-daily.timer && ok "grape-daily.timer active (packages each UTC day for PSWS)" || bad "grape-daily.timer inactive: no GRAPE dataset will be built or uploaded (sudo systemctl enable --now grape-daily.timer)"
     fi
     check_psws_key bad
     [[ ${RC} == 0 ]] && { log "VERIFY OK"; mark VERIFIED; } || log "VERIFY found problems (above)"
