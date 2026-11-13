@@ -114,7 +114,16 @@ function band_center_mhz_from_spot_freq()
 
 ############
 declare MAX_SPOTS_FILES=1000                                  ### Limit our search for spots to at most these many files, else a very full file tree will cause errors
-declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-999}  ### Limit of number of spots to upload in one curl MEPT upload transaction
+### When wsprnet.org is loaded it takes 1-2 seconds per spot (K9TRV-5, 2026-11-13: 54 spots in 157 s, 123 in 255 s),
+### so a 999 spot upload outlived curl's timeout every time while wsprnet went on recording it.  WD then sent those
+### spots again: if wsprnet was still working through the first request both copies were recorded (the duplicates
+### wspr.rocks' Top Spotters page counts), and if not, wsprnet stopped after 100 duplicates and WD threw away the
+### whole upload.  Keep uploads small enough to finish, give curl longer, and after a failure give wsprnet time to
+### finish what it is doing before offering the same spots again.
+declare MAX_UPLOAD_SPOTS_COUNT=${MAX_UPLOAD_SPOTS_COUNT-250}  ### Limit of number of spots to upload in one curl MEPT upload transaction
+declare WSPRNET_CURL_TIMEOUT_SECS=${UPLOADS_WSPNET_CURL_TIMEOUT-600}
+declare WSPRNET_RETRY_HOLDOFF_SECS=${WSPRNET_RETRY_HOLDOFF_SECS-120}
+declare WSPRNET_REQUEUE_DIR_NAME="WSPRNET_REQUEUE"            ### Under a CALL_GRID dir: spots wsprnet never got to read, waiting to be offered again
 declare UPLOAD_SPOT_FILE_LIST_FILE=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/upload_spot_file_list.txt
 
 ### wsprnet.org can reject an upload with a message this code does not recognize -- an invalid grid is one --
@@ -163,6 +172,46 @@ function wsprnet_bump_upload_attempts()
     echo "${exhausted_files_list[@]-}"
 }
 
+### wsprnet.org reads an MEPT upload line by line and stops at "Upload limit of 1000 spots or 100 dupes reached", reporting
+### "<added> out of <read> spot(s) added".  The lines after the first <read> were never looked at, so they must not be
+### thrown away with the rest.  Save them, one file per WSPR cycle, under CALL_GRID/${WSPRNET_REQUEUE_DIR_NAME}/ where the next
+### pass picks them up like any other spot file, then delete the spot files this upload was built from.
+### Sets WSPRNET_REQUEUED_COUNT, not echoed: wd_logger writes to stdout when WD runs in a terminal.
+declare WSPRNET_REQUEUED_COUNT=0
+function wsprnet_requeue_unread_spots()
+{
+    local spots_txt_file=$1
+    local spots_read=$2
+    local call_grid_dir=$3
+    shift 3
+    local source_files_list=( "$@" )
+
+    local spots_total=$( wc -l < ${spots_txt_file} )
+    local requeue_count=$(( spots_total - spots_read ))
+    if (( requeue_count <= 0 )); then
+        wd_rm ${source_files_list[@]}
+        WSPRNET_REQUEUED_COUNT=0
+        return 0
+    fi
+
+    ### Build the new files aside first: a requeued file from an earlier pass may be among the source files deleted below
+    local requeue_dir=${call_grid_dir}/${WSPRNET_REQUEUE_DIR_NAME}
+    local staging_dir=${UPLOADS_TMP_WSPRNET_ROOT_DIR}/requeue_staging
+    rm -rf ${staging_dir}
+    mkdir -p ${staging_dir} ${requeue_dir}
+    tail -n +$(( spots_read + 1 )) ${spots_txt_file} | awk -v dir="${staging_dir}" '{ print >> (dir "/" $1 "_" $2 "_spots.txt") }'
+
+    wd_rm ${source_files_list[@]}
+
+    local staged_file
+    for staged_file in ${staging_dir}/*_spots.txt ; do
+        [[ -f ${staged_file} ]] || continue
+        cat ${staged_file} >> ${requeue_dir}/${staged_file##*/}
+    done
+    rm -rf ${staging_dir}
+    WSPRNET_REQUEUED_COUNT=${requeue_count}
+}
+
 ### Creates a file containing a list of all the spot files to be the sources of spots in the next MEPT upload
 function upload_wsprnet_create_spot_file_list_file()
 {
@@ -189,7 +238,7 @@ function upload_wsprnet_create_spot_file_list_file()
 
         local cycle_spots_count=$( cat ${cycle_files_list[@]} |  wc -l )
         local new_count=$(( ${upload_spots_count} + ${cycle_spots_count} ))
-        if [[ ${new_count} -le ${MAX_UPLOAD_SPOTS_COUNT} ]]; then
+        if [[ ${new_count} -le ${MAX_UPLOAD_SPOTS_COUNT} || ${#upload_file_list[@]} -eq 0 ]]; then    ### Always take the oldest cycle, however big, or a cycle with more spots than the limit would never be uploaded
             wd_logger 2 "Adding the ${cycle_spots_count} spots in cycle ${cycle} will increase upload to ${new_count} spot which is less than the max ${MAX_UPLOAD_SPOTS_COUNT} spots for an MEPT upload"
             upload_file_list+=( ${cycle_files_list[@]})
             upload_spots_count=${new_count}
@@ -391,11 +440,15 @@ function upload_to_wsprnet_daemon() {
             wd_logger 1 "Uploading ${call} at ${wsprnet_grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
 
             local start_epoch=${EPOCHSECONDS}
-            curl -m ${UPLOADS_WSPNET_CURL_TIMEOUT-300} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${wsprnet_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+            curl -m ${WSPRNET_CURL_TIMEOUT_SECS} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${wsprnet_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
             local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
             if [[ $ret_code -ne 0 ]]; then
-                wd_logger 1 "After ${curl_exec_seconds} seconds, curl returned error code => ${ret_code} and logged:\n$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo leave spot files for next loop iteration"
+                ### A timeout (28) does not stop wsprnet: it goes on recording the spots it was sent.  Offering them again at
+                ### once got them recorded twice whenever the two requests overlapped, so wait for it to finish first; any it
+                ### did record then come back as duplicates, which it refuses.
+                wd_logger 1 "After ${curl_exec_seconds} seconds, curl returned error code => ${ret_code} and logged:\n$( tail -n 5 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo keep the spot files, and wait ${WSPRNET_RETRY_HOLDOFF_SECS} seconds for wsprnet to finish with this upload before offering them again"
+                wd_sleep ${WSPRNET_RETRY_HOLDOFF_SECS}
                 continue
             fi
 
@@ -429,24 +482,31 @@ function upload_to_wsprnet_daemon() {
             fi
 
             local flush_spot_files="yes"        ### Cleared only while spots are still worth retrying
-            local spot_xfer_counts=( $(awk '/spot.* added/{print $1 " " $4}' ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} ) )
-            if grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
-                wd_logger 1 "WARNING: wsprnet.org rejected upload and returned this message. So flush the files which contain the spots which we attempted to upload:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
+            ### wsprnet answers "<added> out of <read> spot(s) added", on a line of its own or after an "Upload limit" message
+            local spot_xfer_counts=()
+            if [[ "$( < ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} )" =~ ([0-9]+)\ out\ of\ ([0-9]+)\ spot ]]; then
+                spot_xfer_counts=( ${BASH_REMATCH[1]} ${BASH_REMATCH[2]} )
+            fi
+            if [[ ${#spot_xfer_counts[@]} -eq 2 ]] && grep "Upload limit.*reached" ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} > ${UPLOADS_GREP_LOG_FILE} ; then
+                ### wsprnet stopped reading part way through.  The spots it read are done with (recorded, or duplicates of
+                ### ones it already has); the rest it never saw, so they go back in the queue instead of being thrown away.
+                wsprnet_requeue_unread_spots ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} ${spot_xfer_counts[1]} ${call_grid_dir} ${upload_spots_file_list[@]}
+                flush_spot_files="no"           ### wsprnet_requeue_unread_spots() has already deleted them
+                wd_logger 1 "WARNING: wsprnet.org added ${spot_xfer_counts[0]} and stopped reading after ${spot_xfer_counts[1]} of the ${spots_to_xfer} spots offered, so the other ${WSPRNET_REQUEUED_COUNT} spots will be offered again. It said:\n$(< ${UPLOADS_GREP_LOG_FILE} )"
             elif [[ ${#spot_xfer_counts[@]} -ne 2 ]]; then
                 ### The server said something this code cannot read, so it did NOT tell us it recorded these
                 ### spots.  Keep them and offer them again, until they have had WSPRNET_MAX_UPLOAD_ATTEMPTS
                 ### goes -- a rejection the operator has to fix, like a bad grid, never clears by itself and
                 ### the files would otherwise accumulate in /dev/shm until MAX_WAV_FILE_AGE_MIN purged them.
                 local exhausted_files_list=( $(wsprnet_bump_upload_attempts ${upload_spots_file_list[@]}) )
+                flush_spot_files="no"           ### Only the exhausted files, deleted just below, are given up on
                 if [[ ${#exhausted_files_list[@]} -eq 0 ]]; then
-                    flush_spot_files="no"
-                    wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo the ${#upload_spots_file_list[@]} spot files are being kept and will be offered again"
+                    wd_logger 1 "WARNING: Couldn't extract 'spots added' from the end of the server's response:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})\nSo the ${#upload_spots_file_list[@]} spot files are being kept and will be offered again in ${WSPRNET_RETRY_HOLDOFF_SECS} seconds"
                 else
                     wd_logger 1 "ERROR: wsprnet.org has not accepted these ${#exhausted_files_list[@]} spot files in ${WSPRNET_MAX_UPLOAD_ATTEMPTS} attempts, so the spots in them are being discarded.  Fix what the server is complaining about:\n$( tail -n 10 ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH})"
                     wd_rm ${exhausted_files_list[@]}
-                    ### Anything still under its attempt limit stays for the next pass
-                    [[ ${#exhausted_files_list[@]} -lt ${#upload_spots_file_list[@]} ]] && flush_spot_files="no"
                 fi
+                wd_sleep ${WSPRNET_RETRY_HOLDOFF_SECS}   ### An unreadable answer may still mean wsprnet is recording them, as after a timeout
             else
                 local spots_xfered=${spot_xfer_counts[0]}
                 local spots_offered=${spot_xfer_counts[1]}
@@ -475,7 +535,12 @@ function upload_to_wsprnet_daemon() {
                     wd_logger 2 "\n${upload_spots_file_list[*]}"
                 fi
             fi
-            wd_rm ${upload_spots_file_list[@]}
+            ### Until 2026-11-13 this wd_rm ran unconditionally, so files logged as "kept and will be offered again" were deleted
+            ### anyway: K9TRV-5 lost whole WSPR cycles to it (13:34-13:42 UTC that day) while wsprnet.org was slow.
+            if [[ ${flush_spot_files} == "yes" ]]; then
+                wd_rm ${upload_spots_file_list[@]}
+            fi
+            find ${call_grid_dir} -mindepth 1 -maxdepth 1 -type d -name ${WSPRNET_REQUEUE_DIR_NAME} -empty -delete
         done
    done
 }
