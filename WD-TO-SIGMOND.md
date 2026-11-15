@@ -9,9 +9,11 @@ Run it **on the station, as the WsprDaemon user** (passwordless sudo). Never run
 `smd` refuses that. Each phase leaves a marker in the bundle directory, and the next phase refuses
 to run until it finds one.
 
-It never touches `wd-remote-access@*` (the RAC tunnel you arrive over), the WsprDaemon git tree,
-PostgreSQL or the desktop session. `sigmond-rac` is never activated, because running it beside
-`wd-remote-access` could cut the only way in.
+Until the optional `rac` phase, it never touches `wd-remote-access@*` (the RAC tunnel you arrive
+over), the WsprDaemon git tree, PostgreSQL or the desktop session. `sigmond-rac` is never
+activated, because running it beside `wd-remote-access` could cut the only way in. Once Sigmond's
+own tunnel has been set up and works, `rac` retires the WD tunnel (see
+[Moving RAC to Sigmond's tunnel](#moving-rac-to-sigmonds-tunnel)).
 
 ## Phases
 
@@ -24,8 +26,9 @@ PostgreSQL or the desktop session. `sigmond-rac` is never activated, because run
 | `install` | Clones and installs Sigmond, then `smd bringup wd`. If wsprdaemon.conf recorded WWV, it also installs hamsci-physics and hf-timestd (see [PSWS / GRAPE](#psws--grape)). |
 | `post` | The fixes KJ6MKI needed after bring-up (listed below). Stages kernel isolation. Carries the station's own radiod channels into Sigmond's radiod conf. |
 | `reboot` | Reboots to activate isolcpus, nohz_full and rcu_nocbs. |
-| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE, the station's own radiod channels and any ignored `conf.d` fragment, hs-uploader's key ownership, the WD gateway SFTP login and the PSWS key. |
-| `restore [--check]` | Puts the station back on WsprDaemon from the bundle. |
+| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE, the station's own radiod channels and any ignored `conf.d` fragment, hs-uploader's key ownership, the RAC login the gateway dashboard shows (and a warning while two tunnels run), the WD gateway SFTP login and the PSWS key. |
+| `rac` | Optional, once Sigmond's RAC tunnel is set up. Corrects the ssh login it advertises to the gateway dashboard, then, from a session over that tunnel, stops and disables `wd-remote-access`. |
+| `restore [--check]` | Puts the station back on WsprDaemon from the bundle. Re-enables a WD tunnel that `rac` retired before it stops anything, and leaves Sigmond's tunnel running. |
 
 Typical run:
 
@@ -195,7 +198,31 @@ While uploads are held, Sigmond keeps WSPR spots for 24 hours but FT8 spots for 
 so make the account promptly, run `verify`, then `smd sink upload`.
 
 `smd remote` cannot restore access on a converted station: there is no `sigmond-rac` there, and
-the station's RAC is still WsprDaemon's tunnel.
+the station's RAC is still WsprDaemon's tunnel, unless `rac` has moved it to Sigmond's.
+
+## Moving RAC to Sigmond's tunnel
+
+The conversion keeps the station's WsprDaemon RAC tunnel. If Sigmond's RAC tunnel
+(`sigmond-rac-host@<gw>`) is set up later, both run side by side, on two RAC numbers. VK5ARG ran
+RAC 137 (WD) and RAC 532 (Sigmond) that way until 2026-11-15. `rac` finishes the move:
+
+1. **Dashboard login.** The gateway dashboard copies `ssh -p <port> <user>@<gw>` from the user that
+   the tunnel's `-vm-ssh` proxy advertises. Sigmond's wizard defaults that user to `hamsci`, the
+   account on a Proxmox appliance VM. A bare-metal station has no such account, so the copied
+   command fails. If the advertised user is not an account on the station, `rac` sets it to the
+   WsprDaemon user, keeps a backup of the frpc config, and restarts the tunnel. If you are logged in
+   over that same tunnel, the restart is detached and your session drops: log in again the same way
+   and rerun `rac`.
+2. **Retire the WD tunnel.** `rac` checks which tunnel carries your ssh session. It refuses while
+   you are on the WD tunnel, so it can never cut the session it runs in. Log in over Sigmond's
+   tunnel (gateway port `35800 + RAC`, same user as before) and rerun. Once frpc reports the ssh
+   proxy running and you are in over it, `rac` asks, then stops and disables `wd-remote-access`.
+   It records what it disabled in the bundle (`rac-legacy-disabled.txt`).
+
+`restore` re-enables and starts those units first, before it stops anything. It leaves Sigmond's
+tunnel running and prints the command to stop it once you are back in over the WD one.
+
+Since sigmond 5887f1a, the wizard keeps the login already in the station's frpc config, and otherwise picks the station's own user rather than `hamsci`, so a rerun no longer undoes this. Stations set up with an older wizard still need `rac`, and `verify` flags them.
 
 ## After the conversion
 
