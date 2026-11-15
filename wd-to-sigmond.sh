@@ -20,8 +20,10 @@
 #   wd-to-sigmond.sh reboot                reboot to activate isolcpus/nohz_full/rcu_nocbs
 #   wd-to-sigmond.sh verify                after the reboot: isolation, IRQs, CPU clocks, services, spots,
 #                                          grape-daily.timer, station radiod channels + ignored conf.d fragments,
-#                                          hs-uploader key ownership, and login-only tests
+#                                          hs-uploader key ownership, RAC dashboard login + double tunnels, and login-only tests
 #                                          of the WD gateway SFTP account and the PSWS GRAPE key
+#   wd-to-sigmond.sh rac                   once sigmond's RAC tunnel is set up: fix the ssh login it advertises to
+#                                          the gateway dashboard, then (from a session over it) retire wd-remote-access
 #   wd-to-sigmond.sh restore [--check]     put the station back on WsprDaemon from the bundle
 #
 # install options:
@@ -34,9 +36,10 @@
 #
 # Global options:  --bundle DIR (default: newest ~/wd-to-sigmond/bundle-*)   --dry-run   --yes
 #
-# It never touches wd-remote-access@* (the RAC tunnel you arrive over), the WsprDaemon git
+# Until `rac`, it never touches wd-remote-access@* (the RAC tunnel you arrive over), the WsprDaemon git
 # tree, PostgreSQL or the desktop session.  sigmond-rac is never activated (SIGMOND_NO_RAC=1):
-# installing it beside wd-remote-access could cut the only path in.
+# installing it beside wd-remote-access could cut the only path in.  `rac` retires wd-remote-access
+# only after sigmond's tunnel is proven, and restore brings it back.
 #
 # Full description: WD-TO-SIGMOND.md beside this script.
 
@@ -432,6 +435,151 @@ legacy_units() {
     ### instantiated template units only appear among loaded units
     systemctl list-units --all --no-legend --no-pager --plain 2>/dev/null | awk '{print $1}' \
       | grep -E '^(radiod|pskreporter|ka9q-web|ft[248]-(decode|record))@.+\.service$'
+}
+
+### ---------------------------------------------------------------- RAC: sigmond's tunnel replaces wd-remote-access
+### wd-to-sigmond never starts sigmond-rac itself (see the header).  Once sigmond's tunnel has been set up
+### and proven, `rac` retires the WD tunnel.  VK5ARG ran both (RAC 137 + 532) until it was done by hand, and
+### sigmond's wizard advertised the ssh login "hamsci" (the Proxmox VM's account) to the gateway dashboard,
+### which on bare metal has no such user.
+declare -r RAC_LEGACY_LIST=rac-legacy-disabled.txt     ### in the bundle: what `rac` disabled, for restore
+
+sigmond_rac_units() {   ### running sigmond tunnels (bare metal: sigmond-rac-host@<gw>; VM: sigmond-rac@<gw>)
+    systemctl list-units --no-legend --plain 'sigmond-rac@*' 'sigmond-rac-host@*' | awk '$4=="running"{print $1}'
+}
+legacy_rac_units() {   ### wd-remote-access units that are enabled or running (legacy untemplated one included)
+    local u
+    for u in $(systemctl list-units --all --no-legend --plain 'wd-remote-access@*' 'wd-remote-access.service' | awk '{print $1}'); do
+        systemctl is-enabled -q "${u}" 2>/dev/null || systemctl is-active -q "${u}" && echo "${u}"
+    done
+}
+rac_toml() {   ### $1 = sigmond-rac unit; prints the frpc config it runs
+    systemctl show -p ExecStart --value "$1" | grep -oE ' -c [^ ;]+' | head -1 | awk '{print $2}'
+}
+rac_ssh_meta() {   ### $1 = frpc toml; prints "<remotePort> <advertised user or ->" of the -vm-ssh proxy
+    sudo -n awk '
+        /^\[\[proxies\]\]/ { if (ssh) exit; inmeta=0; next }
+        /^\[proxies\.metadatas\]/ { inmeta=1; next }
+        /^\[/ { inmeta=0; next }
+        /^name *=/ && /-vm-ssh"/ { ssh=1; next }
+        ssh && /^remotePort *=/ { gsub(/[^0-9]/, ""); port=$0; next }
+        ssh && inmeta && /^user *=/ { split($0, a, "\""); user=a[2] }
+        END { if (ssh) print port, (user == "" ? "-" : user) }' "$1"
+}
+rac_set_ssh_user() {   ### $1 = frpc toml, $2 = login: set (or add) the -vm-ssh proxy's metadatas user
+    local tmp; tmp=$(mktemp)
+    sudo -n awk -v login="$2" '
+        function flush_meta() { if (ssh && !done) { if (!sawmeta) print "[proxies.metadatas]"; print "user = \"" login "\""; done=1 } }
+        /^\[\[proxies\]\]/ { flush_meta(); ssh=0; inmeta=0; sawmeta=0; print; next }
+        /^name *=/ && /-vm-ssh"/ { ssh=1 }
+        ssh && /^\[proxies\.metadatas\]/ { inmeta=1; sawmeta=1; print; next }
+        ssh && inmeta && /^user *=/ { print "user = \"" login "\""; done=1; next }
+        ssh && inmeta && /^\[/ { flush_meta(); inmeta=0 }
+        { print }
+        END { flush_meta() }' "$1" > "${tmp}" || { rm -f "${tmp}"; return 1; }
+    sudo -n /usr/local/sbin/frpc verify -c "${tmp}" >/dev/null 2>&1 || { rm -f "${tmp}"; warn "frpc rejects the edited $1; left unchanged"; return 1; }
+    run sudo -n cp -p "$1" "$1.wd-to-sigmond-$(date -u +%Y%m%dT%H%M%SZ)"
+    run sudo -n cp "${tmp}" "$1"; rm -f "${tmp}"
+}
+rac_proxy_running() {   ### $1 = frpc toml: does frpc's own admin API report the -vm-ssh proxy running?
+    local addr port
+    addr=$(sudo -n awk -F'"' '/^\[webServer\]/{w=1;next} /^\[/{w=0} w && /^addr/{print $2}' "$1")
+    port=$(sudo -n awk '/^\[webServer\]/{w=1;next} /^\[/{w=0} w && /^port/{gsub(/[^0-9]/,""); print}' "$1")
+    [[ -n ${port} ]] || return 2
+    curl -s -m 5 "http://${addr:-127.0.0.1}:${port}/api/status" | grep -qE '"name":"[^"]*-vm-ssh","type":"tcp","status":"running"'
+}
+arrival_unit() {   ### the systemd unit whose process carries this ssh session (frpc of a tunnel), or "direct"/"unknown"
+    local cport pid
+    [[ -n ${SSH_CONNECTION:-} ]] || { echo unknown; return; }
+    [[ ${SSH_CONNECTION%% *} == 127.0.0.1 || ${SSH_CONNECTION%% *} == ::1 ]] || { echo direct; return; }
+    cport=$(awk '{print $2}' <<< "${SSH_CONNECTION}")
+    pid=$(sudo -n ss -tnpH state established "( sport = :${cport} )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+    [[ -n ${pid} ]] && ps -o unit= -p "${pid}" | tr -d ' ' || echo unknown
+}
+
+cmd_rac() {
+    [[ -n ${BUNDLE} ]] || BUNDLE=$(newest_bundle)
+    if [[ -d ${BUNDLE} ]]; then LOG=${BUNDLE}/rac-$(date -u +%Y%m%dT%H%M%SZ).log; else LOG=/dev/null; fi
+    log "### rac — retire the WD tunnel once sigmond's RAC is proven"
+    local login; login=$(id -un)
+    local units; units=$(sigmond_rac_units)
+    [[ -n ${units} ]] || die "no sigmond-rac tunnel is running.  Set one up first (sigmond's RAC wizard); the WD tunnel stays."
+    local legacy; legacy=$(legacy_rac_units)
+    log "sigmond tunnels: $(echo ${units})   WD tunnels: $(echo ${legacy:-none})"
+    local arrived; arrived=$(arrival_unit)
+    log "this session arrives over: ${arrived}"
+
+    ### 1. the gateway dashboard copies "ssh -p <port> <user>@gw" from the vm-ssh proxy's metadata
+    local u toml meta port user restart=()
+    for u in ${units}; do
+        toml=$(rac_toml "${u}")
+        [[ -n ${toml} ]] && sudo -n test -f "${toml}" || { warn "${u}: cannot find its frpc config"; continue; }
+        meta=$(rac_ssh_meta "${toml}")
+        [[ -n ${meta} ]] || { warn "${u}: ${toml} has no -vm-ssh proxy"; continue; }
+        read -r port user <<< "${meta}"
+        if [[ ${user} == "${login}" ]] || { [[ ${user} != - ]] && id -u "${user}" >/dev/null 2>&1; }; then
+            ok "${u}: ssh on gateway port ${port}, dashboard login ${user}"
+        else
+            warn "${u}: dashboard login is '${user}', which is no account here; setting it to ${login}"
+            rac_set_ssh_user "${toml}" "${login}" && restart+=("${u}")
+        fi
+    done
+    if [[ ${#restart[@]} -gt 0 ]]; then
+        if [[ " ${restart[*]} " == *" ${arrived} "* ]]; then
+            ### restarting the tunnel this session rides on kills the session: detach it, then come back
+            run sudo -n systemd-run --quiet --on-active=3 systemctl restart "${restart[@]}"
+            log "restarting ${restart[*]} in 3 s: this session will drop.  Reconnect the same way and run '$0 rac' again."
+            return 0
+        fi
+        run sudo -n systemctl restart "${restart[@]}"; sleep 8
+    fi
+
+    ### 2. retire the WD tunnel, but only from a session that does not depend on it
+    [[ -n ${legacy} ]] || { ok "no WD tunnel left to retire"; return ${RC}; }
+    local proven=no
+    for u in ${units}; do
+        toml=$(rac_toml "${u}"); rac_proxy_running "${toml}"; case $? in
+            0) ok "${u}: frpc reports the ssh proxy running"; proven=yes ;;
+            2) warn "${u}: frpc has no admin API to ask" ;;
+            *) bad "${u}: frpc does not report the ssh proxy running" ;;
+        esac
+    done
+    if [[ ${arrived} =~ ^sigmond-rac ]]; then
+        ok "you are logged in over ${arrived}: sigmond's tunnel works end to end"; proven=yes
+    elif grep -qxF "${arrived}" <<< "${legacy}"; then
+        die "this session rides on ${arrived}.  Log in over sigmond's tunnel (gateway port ${port:-?}) and rerun."
+    else
+        [[ ${arrived} == direct ]] && log "this session is not over any tunnel; sigmond's tunnel is proven only by frpc's report"
+        [[ ${arrived} == unknown ]] && warn "cannot tell which tunnel carries this session (tmux/screen?)"
+    fi
+    [[ ${proven} == yes && ${RC} == 0 ]] || die "sigmond's tunnel is not proven; the WD tunnel stays"
+    confirm "Stop and disable $(echo ${legacy}) (the WD tunnel) on $(hostname)?" || die "not confirmed"
+    for u in ${legacy}; do
+        run sudo -n systemctl disable --now "${u}"
+        [[ -d ${BUNDLE} && ${DRY_RUN} != yes ]] && echo "${u}" >> "${BUNDLE}/${RAC_LEGACY_LIST}"
+    done
+    [[ -z $(legacy_rac_units) || ${DRY_RUN} == yes ]] && ok "WD tunnel retired; restore re-enables it" || bad "a WD tunnel is still enabled or running"
+    [[ -d ${BUNDLE} ]] || warn "no bundle here, so restore will not know to re-enable: $(echo ${legacy})"
+    [[ ${RC} == 0 ]] && mark RAC_CUTOVER
+    return ${RC}
+}
+
+check_rac() {   ### verify: the dashboard's login exists here; one tunnel, not two
+    local units u toml meta port user
+    units=$(sigmond_rac_units)
+    if [[ -z ${units} ]]; then
+        [[ -n $(legacy_rac_units) ]] && ok "remote access over the WD tunnel ($(echo $(legacy_rac_units)))" \
+            || warn "no RAC tunnel running: no remote way in"
+        return 0
+    fi
+    for u in ${units}; do
+        toml=$(rac_toml "${u}"); meta=$(rac_ssh_meta "${toml}"); read -r port user <<< "${meta}"
+        if [[ -n ${user} && ${user} != - ]] && id -u "${user}" >/dev/null 2>&1; then
+            ok "${u}: dashboard login ${user}@gw port ${port}"
+        else bad "${u}: dashboard login '${user:-}' is no account here ($0 rac fixes it)"; fi
+    done
+    [[ -n $(legacy_rac_units) ]] && warn "both sigmond's and the WD tunnel run ($(echo $(legacy_rac_units))): '$0 rac' retires the WD one"
+    return 0
 }
 
 ### ================================================================= check
@@ -958,6 +1106,7 @@ cmd_verify() {
         systemctl is-active -q grape-daily.timer && ok "grape-daily.timer active (packages each UTC day for PSWS)" || bad "grape-daily.timer inactive: no GRAPE dataset will be built or uploaded (sudo systemctl enable --now grape-daily.timer)"
     fi
     check_custom_channels
+    check_rac
     uploader_keys check
     check_wd_sftp bad || { [[ ${DRY_RUN} == yes ]] || hold_uploads_if_released; }
     check_psws_key bad
@@ -978,8 +1127,14 @@ cmd_restore() {
     sig=$(systemctl list-unit-files --no-legend --no-pager | awk '{print $1}' \
           | grep -E '^(sigmond|smd|hf-timestd|timestd|psk-recorder|wspr-recorder|meteor|hs-uploader|mag-recorder|station-web|gpsdo-monitor|igmp-querier|ka9q-web|grape|hamsci)' | grep -v '@\.')
     sig+=$'\n'$(systemctl list-units --all --no-legend --plain 'radiod@*' 'psk-recorder@*' 'wspr-recorder@*' | awk '{print $1}')
+    ### sigmond's RAC tunnel may be the session restore runs in: leave every RAC/link unit running
+    sig=$(echo "${sig}" | grep -vE '^sigmond-(rac|link)')
+    local legacy_rac=""
+    [[ -f ${BUNDLE}/${RAC_LEGACY_LIST} ]] && legacy_rac=$(sort -u "${BUNDLE}/${RAC_LEGACY_LIST}")
     if [[ ${check} == yes ]]; then
         log "sigmond-side units that restore would stop:"; echo "${sig}" | sort -u | grep . | sed 's/^/    /'
+        [[ -n ${legacy_rac} ]] && log "WD tunnel(s) '$0 rac' retired, which restore re-enables first: $(echo ${legacy_rac})"
+        [[ -n $(sigmond_rac_units) ]] && log "sigmond tunnel(s) left running: $(echo $(sigmond_rac_units))"
         local t
         for t in etc-radio etc-systemd-system usr-local; do
             [[ -f ${BUNDLE}/${t}.tar ]] || continue
@@ -988,6 +1143,11 @@ cmd_restore() {
         return 0
     fi
     confirm "Stop sigmond and put $(hostname) back on WsprDaemon?" || die "not confirmed"
+    ### the WD tunnel comes back before anything stops, so a way in survives whatever follows
+    for u in ${legacy_rac}; do
+        run sudo -n systemctl enable --now "${u}"
+        systemctl is-active -q "${u}" && ok "${u} re-enabled" || bad "${u} did not start"
+    done
     local u pre=${BUNDLE}/pre-restore-$(date -u +%Y%m%dT%H%M%SZ)
     mkdir -p "${pre}"; echo "${sig}" | sort -u > "${pre}/sigmond-units.txt"
     [[ -d /etc/sigmond ]] && sudo -n tar -cpf "${pre}/etc-sigmond.tar" -C / etc/sigmond
@@ -1018,6 +1178,7 @@ cmd_restore() {
         systemctl is-active -q "${u}" && ok "${u}" || bad "${u} $(systemctl is-active "${u}")"
     done
     log "a reboot drops sigmond's isolcpus from the kernel command line; WD's tuning oneshots were re-enabled above"
+    [[ -n $(sigmond_rac_units) ]] && log "sigmond's RAC tunnel still runs ($(echo $(sigmond_rac_units))); once you are in over the WD one: sudo systemctl disable --now $(echo $(sigmond_rac_units))"
     [[ ${RC} == 0 ]] && { log "RESTORE OK"; mark RESTORED; } || log "RESTORE INCOMPLETE"
     return ${RC}
 }
@@ -1048,6 +1209,7 @@ case ${CMD} in
     post)     cmd_post ;;
     reboot)   cmd_reboot ;;
     verify)   cmd_verify ;;
+    rac)      cmd_rac ;;
     restore)  cmd_restore "${RESTORE_CHECK:-}" ;;
-    *) sed -n '2,32p' "$0"; exit 2 ;;
+    *) sed -n '2,36p' "$0"; exit 2 ;;
 esac
