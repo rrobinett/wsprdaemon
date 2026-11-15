@@ -502,6 +502,32 @@ declare WSPRD_ARM_SPREADING_CMD=${WSPRD_BIN_DIR}/wsprd.spread_nodrift.arm
 declare AWK_FIND_BEST_SPOT_LINES=${WSPRDAEMON_ROOT_DIR}/best_spots.awk
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
+
+### FST4W fine frequency (2026-11): ubersdr's jt9 --fine-freq writes fst4_decodes.dat's fsig as fsig plus the measured
+### power midpoint of the decoded signal, to 0.001 Hz (f9.3 for WSJT-X's f7.1), which on synthetic signals is within
+### ~0.3 mHz RMS of the true frequency at every T/R period.  Only ubersdr builds that have the option accept it, so ask
+### the jt9 in use once (per JT9_CMD and its mtime) and pass it when it is there.  WD_FST4W_FINE_FREQ="no" turns it off.
+### Sets JT9_FINE_FREQ_FLAG, so call it in the decoding shell itself, not in $( ).
+declare WD_FST4W_FINE_FREQ=${WD_FST4W_FINE_FREQ-yes}
+declare JT9_FINE_FREQ_CHECKED_CMD=""
+declare JT9_FINE_FREQ_FLAG=""
+function jt9_fine_freq_flag() {
+    if [[ "${WD_FST4W_FINE_FREQ}" != "yes" ]]; then
+        JT9_FINE_FREQ_FLAG=""
+        JT9_FINE_FREQ_CHECKED_CMD=""
+        return 0
+    fi
+    local cmd_id="${JT9_CMD}:$(stat -c %Y "${JT9_CMD}" 2>/dev/null)"
+    if [[ "${JT9_FINE_FREQ_CHECKED_CMD}" != "${cmd_id}" ]]; then
+        JT9_FINE_FREQ_CHECKED_CMD="${cmd_id}"
+        if timeout 10 ${JT9_CMD} --help 2>&1 | grep -q -- '--fine-freq' ; then
+            JT9_FINE_FREQ_FLAG="--fine-freq"
+        else
+            JT9_FINE_FREQ_FLAG=""
+        fi
+        wd_logger 1 "JT9_CMD=${JT9_CMD} FST4W fine frequency flag: '${JT9_FINE_FREQ_FLAG}'"
+    fi
+}
 ### WSPRD_TIMEOUT_SECS (110) is the right wall-clock kill for a 2 minute packet.  It is the WRONG one for
 ### an F5/F15/F30 packet: those have their own 5, 15 and 30 minute cycles, they all come due together at
 ### :00 and :30, and killing a jt9 at 110 seconds throws away a decode that had minutes of headroom --
@@ -1725,7 +1751,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
         done
 
         if [[ ${freq_adj_mhz} != "0" ]]; then
-            local adj_spot_freq=$( echo "scale=7; ${spot_freq} + ${freq_adj_mhz} " | bc )
+            local adj_spot_freq=$( echo "scale=9; ${spot_freq} + ${freq_adj_mhz} " | bc )
             wd_logger 2 "Adjusting spot freqency by ${freq_adj_mhz} MHz from ${spot_freq} to ${adj_spot_freq}"
             spot_freq=${adj_spot_freq}
         else
@@ -1782,7 +1808,7 @@ function create_enhanced_spots_file_and_queue_to_posting_daemon () {
                                           km rx_az  rx_lat  rx_lon tx_az tx_lat tx_lon v_lat v_lon wspr_cycle_kiwi_overloads_count proxy_upload_this_spot)
          local output_field_name_list_count=${#output_field_name_list[@]}
 
-         local output_field_format_string="%6s %4s %5.2f %6.2f %5.2f %12.7f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d"
+         local output_field_format_string="%6s %4s %5.2f %6.2f %5.2f %14.9f %-14s %-6s %2d %2d %4d %4d %4d %4d %2d %3d %3d %2d %6.1f %6.1f %4d %6s %12s %5d %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %4d %4d"
          local output_field_format_string_list=( ${output_field_format_string} )
          local output_field_format_string_list_count=${#output_field_format_string_list[@]}
 
@@ -2775,7 +2801,9 @@ function decoding_daemon() {
                 local decode_dir_path=$(realpath ${decode_dir})
                 mkdir -p ${decode_dir_path}
                 rm -f ${decode_dir_path}/decoded.txt
-                wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} -a ${decode_dir_path} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
+                jt9_fine_freq_flag
+                local jt9_fine_freq="${JT9_FINE_FREQ_FLAG}"
+                wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} -a ${decode_dir_path} --fst4w ${jt9_fine_freq} -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
 
                 touch ${decode_dir_path}/plotspec ${decode_dir_path}/decdata        ### Instructs jt9 to output spectral width information to jt9_output.txt and append extended resolution spot lines to fst4_decodes.dat 
                 local old_fst4_decodes_dat_last_spot
@@ -2798,7 +2826,7 @@ function decoding_daemon() {
                     cd ${decode_dir_path}
                     local jt9_timeout_secs=${WSPRD_TIMEOUT_SECS-110}
                     (( returned_seconds > 120 )) && jt9_timeout_secs=${WD_LONG_DECODE_TIMEOUT_SECS}     ### An F5/F15/F30 packet is not racing a 2 minute cycle
-                    timeout ${jt9_timeout_secs} nice -n ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w  -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
+                    timeout ${jt9_timeout_secs} nice -n ${JT9_CMD_NICE_LEVEL} ${JT9_CMD} -a ${decode_dir_path} -p ${returned_seconds} --fst4w ${jt9_fine_freq} -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename} >& jt9_output.txt
                     rc=$?
                     cd - >& /dev/null
                     ### Out of the subdir
@@ -2913,7 +2941,7 @@ function decoding_daemon() {
                             ###  fprintf(fall_wspr,    "%6s    %4s    %3.0f    %5.2f    %11.7f    %-22s            %2d    %5.2f     %2d        %2d     %4d        %2d        %3d        %5u    %5d \n",
                             ###                         date,   time,  snr,     dt,      freq,     message, (int)drift,    sync, ipass+1, blocksize, jitter, decodetype, nhardmin, cycles/81, metric);
                             awk -v spot_date=${spot_date} -v spot_time=${spot_time} -v wav_file_freq_hz=${wav_file_freq_hz}  -v pkt_mode=${pkt_mode} \
-                                    'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %12.7f %-22s 0 %2d     0   0   0   0   %2d   0   0 %6.3f %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, $19, pkt_mode}' \
+                                    'NF == 21 || NF == 22 {printf "%6s %4s %5.1f %5.2f %14.9f %-22s 0 %2d     0   0   0   0   %2d   0   0 %6.3f %s\n", spot_date, spot_time, $16, $17, (wav_file_freq_hz + $18) / 1000000, $20 " " $21 " " $22, $10, $11, $19, pkt_mode}' \
                                     ${decode_dir_path}/new_fst4w_decodes.dat > ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt
                             if [[ -s ${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt ]]; then
                                 wd_logger  2 "Reformatted high resolution FST4W type 1 and/or type 3 spots to:\n$(<${decode_dir_path}/hi_res_fst4w_type1_and_type3_spots.txt)"
