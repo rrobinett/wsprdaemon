@@ -19,14 +19,14 @@ own tunnel has been set up and works, `rac` retires the WD tunnel (see
 
 | Phase | What it does |
 |---|---|
-| `check` | Read-only. Is this station a candidate, and what will not carry over (MERG_ receivers, WWV/GRAPE, missing python3.11-dev), and lists the station's own radiod channels that `post` will carry over. Finds the RAC tunnel in either form, `wd-remote-access@gw*` or the legacy `wd-remote-access.service`. |
+| `check` | Read-only. Is this station a candidate, and what will not carry over (MERG_ receivers, WWV/GRAPE, missing python3.11-dev), and lists the station's own radiod channels that `post` will carry over. Warns about station scripts that still poll radiod as `hf.local` (see [Station scripts that use hf.local](#station-scripts-that-use-hflocal)). Finds the RAC tunnel in either form, `wd-remote-access@gw*` or the legacy `wd-remote-access.service`. |
 | `bundle` | Captures the revert bundle under `~/wd-to-sigmond/bundle-*`. Read-only for the running stack. |
 | `handover` | Stops and disables the WsprDaemon stack, which frees the RX888. |
 | `prep` | Moves legacy radiod confs out of Sigmond's way, removes WD's host tuning (wd-cpu-freq, wd-resctrl, wd-irq-affinity) and resets the CPU clock limits to the hardware range, handles WD's systemd manager CPUAffinity, and installs python3.11-dev on Ubuntu 22.04. |
 | `install` | Clones and installs Sigmond, then `smd bringup wd`. If wsprdaemon.conf recorded WWV, it also installs hamsci-physics and hf-timestd (see [PSWS / GRAPE](#psws--grape)). |
 | `post` | The fixes KJ6MKI needed after bring-up (listed below). Stages kernel isolation. Carries the station's own radiod channels into Sigmond's radiod conf. |
 | `reboot` | Reboots to activate isolcpus, nohz_full and rcu_nocbs. |
-| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE, the station's own radiod channels and any ignored `conf.d` fragment, hs-uploader's key ownership, the RAC login the gateway dashboard shows (and a warning while two tunnels run), the WD gateway SFTP login and the PSWS key. |
+| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE, the station's own radiod channels and any ignored `conf.d` fragment, hs-uploader's key ownership, the RAC login the gateway dashboard shows (and a warning while two tunnels run), station scripts still naming `hf.local`, the WD gateway SFTP login and the PSWS key. |
 | `rac` | Optional, once Sigmond's RAC tunnel is set up. Corrects the ssh login it advertises to the gateway dashboard, then, from a session over that tunnel, stops and disables `wd-remote-access`. |
 | `restore [--check]` | Puts the station back on WsprDaemon from the bundle. Re-enables a WD tunnel that `rac` retired before it stops anything, and leaves Sigmond's tunnel running. |
 
@@ -199,6 +199,34 @@ so make the account promptly, run `verify`, then `smd sink upload`.
 
 `smd remote` cannot restore access on a converted station: there is no `sigmond-rac` there, and
 the station's RAC is still WsprDaemon's tunnel, unless `rac` has moved it to Sigmond's.
+
+## Station scripts that use hf.local
+
+WsprDaemon's radiod publishes its status and control stream as `hf.local`. Sigmond's radiod names
+it after its instance, `<instance>-status.local` (normally the host name), so after the conversion
+nothing answers `hf.local`. `metadump` and `control` retry a name that doesn't resolve forever. A
+cron job that polls it therefore never exits, and the runs pile up.
+
+On VK5ARG (2026-11-15), the operator's 2-minute InfluxDB stats job left 520 stuck runs. They filled
+12 GB of RAM and 4 GB of swap, and the out-of-memory killer then restarted radiod 60 times and the
+recorders about 100 times.
+
+`check` and `verify` search the station's home directories, crontabs and systemd units for
+`hf.local`. They skip WsprDaemon's own trees, venvs, logs, backups, docs, C source and comment-only
+lines.
+- **Warned:** hits in a file that cron or systemd runs, or in the same directory as one (its helper
+  or library). A function default that the cron line overrides is harmless, but it is listed so
+  you can tell.
+- **Listed as INFO:** everything else.
+
+The fix is to repoint the script at the new name and wrap each cron run so a hang can't pile up:
+
+```bash
+exec flock -n /tmp/<job>.lock timeout -k 10 60 <command>
+```
+
+`timeout` kills the whole process group, `metadump` included, and `flock` skips a run while the
+last one is still going.
 
 ## Moving RAC to Sigmond's tunnel
 

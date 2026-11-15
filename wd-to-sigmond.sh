@@ -9,6 +9,7 @@
 # smd refuses that.  Each phase refuses to run until the one before it has left its marker.
 #
 #   wd-to-sigmond.sh check                 read-only: is this station a candidate, and what will not carry over
+#                                          (incl. station scripts and cron jobs that poll WD's radiod as hf.local)
 #   wd-to-sigmond.sh bundle                capture the revert bundle (read-only for the running stack)
 #   wd-to-sigmond.sh handover              stop + disable the WsprDaemon stack; the RX888 is then free
 #   wd-to-sigmond.sh prep                  remove WD's host tuning so it cannot fight sigmond
@@ -20,7 +21,8 @@
 #   wd-to-sigmond.sh reboot                reboot to activate isolcpus/nohz_full/rcu_nocbs
 #   wd-to-sigmond.sh verify                after the reboot: isolation, IRQs, CPU clocks, services, spots,
 #                                          grape-daily.timer, station radiod channels + ignored conf.d fragments,
-#                                          hs-uploader key ownership, RAC dashboard login + double tunnels, and login-only tests
+#                                          hs-uploader key ownership, RAC dashboard login + double tunnels, scripts still
+#                                          naming hf.local, and login-only tests
 #                                          of the WD gateway SFTP account and the PSWS GRAPE key
 #   wd-to-sigmond.sh rac                   once sigmond's RAC tunnel is set up: fix the ssh login it advertises to
 #                                          the gateway dashboard, then (from a session over it) retire wd-remote-access
@@ -427,6 +429,61 @@ check_custom_channels() {   ### verify: every carried channel still configured; 
     done
 }
 
+### ---------------------------------------------------------------- station scripts that poll WD's radiod by name
+### WD's radiod published its status/control stream as hf.local.  Sigmond names it after its radiod instance
+### (<instance>-status.local, normally the host name), so nothing answers hf.local after the conversion.
+### metadump/control retry a name that does not resolve forever, so a cron job that polls it never exits and
+### the runs pile up.  VK5ARG (2026-11-15): the operator's 2-minute InfluxDB stats job left 520 stuck runs,
+### filled 12 GB RAM + 4 GB swap, and the OOM killer restarted radiod 60 times.
+declare -r WD_STATUS_RE='(^|[^A-Za-z0-9_.-])hf\.local([^A-Za-z0-9_.-]|$)'
+
+wd_name_users() {   ### prints "<file>:<line>:<text>" for station files (homes, cron, systemd) that name hf.local
+    local homes=() u uid h
+    while IFS=: read -r u _ uid _ _ h _; do
+        [[ ${uid} -ge 1000 && ${uid} -lt 60000 && -d ${h} ]] && homes+=("${h}")
+    done < /etc/passwd
+    ### skipped: WD's own trees (~/wsprdaemon, old copies beside it), the bundle, venvs and caches, logs, backups, docs, C source
+    sudo -n find "${homes[@]}" /etc/crontab /etc/cron.d /var/spool/cron/crontabs /etc/systemd/system -maxdepth 4 \
+        \( -path "$(dirname "${WD_HOME}")/wsprdaemon*" -o -path "${WORK_ROOT}" -o -name .git -o -name venv -o -name .venv \
+           -o -name node_modules -o -name .cache -o -name .local -o -name site-packages -o -name __pycache__ \) -prune \
+        -o -type f -size -1024k ! -name '*.log*' ! -name '*.bak*' ! -name '*_history' ! -name '*.wd-to-sigmond-*' \
+           ! -name '*.md' ! -name '*.txt' ! -name '*.rst' ! -name 'README*' ! -name '*.[ch]' -print0 2>/dev/null \
+      | sudo -n xargs -0 -r grep -IHnE "${WD_STATUS_RE}" 2>/dev/null \
+      | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(#|//|;)' | cut -c1-200     ### comment-only lines name it harmlessly
+}
+scheduled_text() {   ### every crontab line and systemd ExecStart on the host: what actually runs unattended
+    ### root expands the globs: the per-user crontabs directory is not readable by the WD user
+    sudo -n sh -c 'cat /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null' | grep -vE '^[[:space:]]*(#|$)'
+    sudo -n sh -c 'grep -hsE "^ExecStart" /etc/systemd/system/*.service /home/*/.config/systemd/user/*.service 2>/dev/null'
+}
+check_wd_name_users() {   ### $1 = the status name sigmond publishes (or a description of it)
+    local hits; hits=$(wd_name_users)
+    [[ -z ${hits} ]] && { ok "no station script names hf.local (WD's radiod status name)"; return 0; }
+    local sched; sched=$(scheduled_text)
+    local l f run="" other=""
+    while IFS= read -r l; do
+        f=${l%%:*}
+        ### run unattended: cron/systemd names the file, or a script in its directory (its helper/library).
+        ### Match the directory by name: crontabs often write $HOME/<dir>/... rather than the full path.
+        local d; d=$(dirname "${f}"); d=${d##*/}
+        if grep -qF -- "${f##*/}" <<< "${sched}" || grep -qF -- "/${d}/" <<< "${sched}"; then run+="${l}"$'\n'
+        else other+="${l}"$'\n'; fi
+    done <<< "${hits}"
+    if [[ -n ${run} ]]; then
+        warn "cron/systemd runs code that names hf.local, WD's radiod status name.  Under sigmond it is $1,"
+        warn "and nothing answers hf.local: metadump/control retry it forever, so each run hangs and the runs pile up"
+        warn "until memory is gone (VK5ARG 2026-11-15: 520 stuck runs, 12 GB RAM + 4 GB swap, radiod OOM-restarted 60 times):"
+        printf '%s' "${run}" | while IFS= read -r l; do log "        ${l}"; done
+        log "        Repoint them (a default overridden by an argument is harmless), and wrap each cron run in"
+        log "        'flock -n <lockfile> timeout -k 10 60 <command>' so a hang cannot pile up."
+    else
+        ok "nothing cron/systemd runs names hf.local"
+    fi
+    [[ -n ${other} ]] && { log "  INFO  other station files name hf.local (not run unattended; repoint before use):"
+        printf '%s' "${other}" | while IFS= read -r l; do log "        ${l}"; done; }
+    return 0
+}
+
 ### Every WsprDaemon/legacy-ka9q unit present on this host (never wd-remote-access@*)
 legacy_units() {
     systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{print $1}' \
@@ -639,6 +696,7 @@ cmd_check() {
     log "        all ports (RAC tunnel too).  post tests the login and holds uploads until it passes."
     ### channels the operator added to WD's radiod conf (HF APRS, SSTV, ...): sigmond's fresh conf has none of them
     if [[ -d ${LEGACY_RADIO} ]]; then report_custom_channels "${LEGACY_RADIO}"; else report_custom_channels /etc/radio; fi
+    check_wd_name_users "$(hostname)-status.local (sigmond names it after its radiod instance, normally the host name)"
     [[ -d ${SIGMOND_BASE}/sigmond ]] && log "  INFO  sigmond already present at ${SIGMOND_BASE}/sigmond"
     log "legacy units found:"; legacy_units | sort -u | sed 's/^/    /'
     [[ ${RC} == 0 ]] && log "CHECK: no blockers" || log "CHECK: blockers above"
@@ -1106,6 +1164,8 @@ cmd_verify() {
         systemctl is-active -q grape-daily.timer && ok "grape-daily.timer active (packages each UTC day for PSWS)" || bad "grape-daily.timer inactive: no GRAPE dataset will be built or uploaded (sudo systemctl enable --now grape-daily.timer)"
     fi
     check_custom_channels
+    local inst; inst=$(sigmond_radiod_instances | head -1)
+    check_wd_name_users "${inst:-<instance>}-status.local"
     check_rac
     uploader_keys check
     check_wd_sftp bad || { [[ ${DRY_RUN} == yes ]] || hold_uploads_if_released; }
@@ -1211,5 +1271,5 @@ case ${CMD} in
     verify)   cmd_verify ;;
     rac)      cmd_rac ;;
     restore)  cmd_restore "${RESTORE_CHECK:-}" ;;
-    *) sed -n '2,36p' "$0"; exit 2 ;;
+    *) sed -n '2,/^# Full description/p' "$0"; exit 2 ;;
 esac
