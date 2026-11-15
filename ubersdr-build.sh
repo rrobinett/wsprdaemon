@@ -32,7 +32,22 @@ fi
 if ! git -C ${src_dir} cat-file -e ${commit}^{commit} 2>/dev/null ; then
     timeout 300 git -C ${src_dir} fetch -q origin || fail "'git fetch' in ${src_dir} failed"
 fi
+### Undo the change below from an earlier build, so the checkout of another commit isn't refused for a locally changed file
+git -C ${src_dir} checkout -q -- src/fst4w_simd.h 2>/dev/null
 git -C ${src_dir} checkout -q --detach ${commit} || fail "'git checkout ${commit}' failed"
+
+### aarch64 with glibc older than 2.38 (the build key ends "fst4w-scalar": ubersdr_needs_fst4w_scalar() in wd-setup.sh) has no
+### libmvec, so jt9 can't link FST4W's vector maths: build its scalar maths instead, as madpsy/ubersdr_wsprd PR #5 does.  Once
+### the pinned commit has that fix, this line isn't there and nothing is changed.
+declare libmvec_old='#if defined(__GLIBC__) && (defined(__x86_64__) || defined(__aarch64__))'
+declare libmvec_new='#if defined(__GLIBC__) \&\& (defined(__x86_64__) || (defined(__aarch64__) \&\& __GLIBC_PREREQ(2, 38)))'
+if [[ "${build_key}" == *" fst4w-scalar" ]] && grep -qxF "${libmvec_old}" ${src_dir}/src/fst4w_simd.h ; then
+    ### In sed's basic regex '&', '(' and '|' are plain characters; only the replacement's '&' needs its backslash
+    sed -i "s/^${libmvec_old}\$/${libmvec_new}/" ${src_dir}/src/fst4w_simd.h \
+        && grep -q "__GLIBC_PREREQ(2, 38)" ${src_dir}/src/fst4w_simd.h \
+        || fail "can't change src/fst4w_simd.h for $(getconf GNU_LIBC_VERSION)"
+    log "$(getconf GNU_LIBC_VERSION) has no aarch64 libmvec, so building FST4W's scalar maths (madpsy/ubersdr_wsprd PR #5)"
+fi
 
 ### x86: -march=native.  The vector code is under #if __AVX2__, so a CPU without AVX2 gets the plain code, which decodes the
 ### same, only slower.  WSPRD_X86_ARCH is ignored on ARM, where NEON is always there (and a 32 bit Pi builds the plain code).
@@ -40,7 +55,13 @@ declare build_dir=${src_dir}/build-wd
 rm -rf ${build_dir}
 cmake -S ${src_dir} -B ${build_dir} -DCMAKE_BUILD_TYPE=Release -DWSPRD_X86_ARCH=native > ${build_dir}.cmake.log 2>&1 \
     || fail "cmake failed:\n$(tail -20 ${build_dir}.cmake.log)"
-/usr/bin/time -f "%e s" cmake --build ${build_dir} -j $(nproc) > ${build_dir}.make.log 2>&1 \
+### The build and the checks run at nice 19, as WD's own decoders do, so they get no priority over this host's decodes: on a
+### Pi 4 the checks' default of one case per core took the load to 16 and starved the live decoders (GM5JET, 2026-11-15).
+### At most half the cores, and the checks one case at a time on four cores or fewer.
+declare cpus=$(nproc)
+declare make_jobs=$(( cpus > 2 ? cpus / 2 : 1 ))
+declare check_jobs=$(( cpus > 4 ? cpus / 2 : 1 ))
+/usr/bin/time -f "%e s" cmake --build ${build_dir} -j ${make_jobs} > ${build_dir}.make.log 2>&1 \
     || fail "the build failed:\n$(tail -20 ${build_dir}.make.log)"
 log "built in $(tail -1 ${build_dir}.make.log): $(${build_dir}/wsprd --version)"
 
@@ -48,10 +69,10 @@ log "built in $(tail -1 ${build_dir}.make.log): $(${build_dir}/wsprd --version)"
 ### if any case differs.  On arm64 jt9's known FFTW NEON rounding differences are listed in the repo and pass as "accepted".
 declare work_dir=$(mktemp -d)
 trap "rm -rf ${work_dir}" EXIT
-${src_dir}/scripts/wsprd-stored-check.sh ${build_dir}/wsprd ${work_dir}/wsprd > ${work_dir}/wsprd-check.log 2>&1 \
+WSPRD_STORED_JOBS=${check_jobs} ${src_dir}/scripts/wsprd-stored-check.sh ${build_dir}/wsprd ${work_dir}/wsprd > ${work_dir}/wsprd-check.log 2>&1 \
     || fail "wsprd failed its checks:\n$(tail -20 ${work_dir}/wsprd-check.log)"
 log "$(tail -1 ${work_dir}/wsprd-check.log)"
-${src_dir}/scripts/jt9-wine-check.sh ${build_dir}/jt9 ${work_dir}/jt9 > ${work_dir}/jt9-check.log 2>&1 \
+JT9_WINE_JOBS=${check_jobs} ${src_dir}/scripts/jt9-wine-check.sh ${build_dir}/jt9 ${work_dir}/jt9 > ${work_dir}/jt9-check.log 2>&1 \
     || fail "jt9 failed its checks:\n$(tail -20 ${work_dir}/jt9-check.log)"
 log "$(tail -1 ${work_dir}/jt9-check.log)"
 

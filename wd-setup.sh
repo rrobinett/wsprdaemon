@@ -971,9 +971,25 @@ declare UBERSDR_BUILD_PACKAGES=( build-essential cmake pkg-config libfftw3-dev g
 
 ### What the binaries were built for.  A new pin, or the disk moved to another CPU (whose -march=native binary may not run
 ### here), changes it and so causes a rebuild.
+### " fst4w-scalar" on the end: ubersdr-build.sh is to build FST4W's scalar maths (see ubersdr_needs_fst4w_scalar()).  It also
+### makes every Pi whose build failed before that fix retry once, since its bin/ubersdr.failed holds the key without it.
 function ubersdr_build_key() {
     local cpu_model=$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
-    echo "${UBERSDR_WSPRD_COMMIT} $(uname -m) ${cpu_model// /_}"
+    local suffix=""
+    ubersdr_needs_fst4w_scalar && suffix=" fst4w-scalar"
+    echo "${UBERSDR_WSPRD_COMMIT} $(uname -m) ${cpu_model// /_}${suffix}"
+}
+
+### ubersdr's src/fst4w_simd.h calls glibc's aarch64 vector maths (libmvec) under any glibc, but glibc only has it from 2.38: on
+### Debian 12 / Raspberry Pi OS bookworm (2.36) and Ubuntu 22.04 (2.35) jt9 doesn't link (undefined _ZGVnN4v_cosf), the build
+### fails and WD keeps the WSJT-X decoders for both (GM5JET, 2026-11-15).  Fixed by madpsy/ubersdr_wsprd PR #5; until the pin
+### has it, ubersdr-build.sh makes the same one line change itself.  Returns 0 on aarch64 with glibc older than 2.38.
+function ubersdr_needs_fst4w_scalar() {
+    [[ $(uname -m) == "aarch64" ]] || return 1
+    local glibc_version=$(getconf GNU_LIBC_VERSION 2>/dev/null)
+    glibc_version=${glibc_version#glibc }
+    [[ -n "${glibc_version}" ]] || return 1
+    [[ "$(printf '%s\n' 2.38 "${glibc_version}" | sort -V | head -1)" != "2.38" ]]
 }
 
 ### Use the ubersdr binaries if they were built for this pin and CPU and they run.  Returns 1, leaving the commands alone, if not.
