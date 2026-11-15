@@ -14,10 +14,14 @@
 #   wd-to-sigmond.sh prep                  remove WD's host tuning so it cannot fight sigmond
 #   wd-to-sigmond.sh install [opts]        clone + install sigmond, then `smd bringup` (no sigmond-rac)
 #   wd-to-sigmond.sh post                  the fixes KJ6MKI needed after bring-up; stages kernel isolation,
-#                                          applies sigmond's CPU clock policy, WD-only uploads, PSWS ids + key check
+#                                          applies sigmond's CPU clock policy, WD-only uploads, PSWS ids + key check,
+#                                          carries the station's own radiod channels (HF APRS, SSTV...) into sigmond's conf;
+#                                          releases uploads only once gw1+gw2 accept hs-uploader's SFTP login
 #   wd-to-sigmond.sh reboot                reboot to activate isolcpus/nohz_full/rcu_nocbs
 #   wd-to-sigmond.sh verify                after the reboot: isolation, IRQs, CPU clocks, services, spots,
-#                                          grape-daily.timer and a login-only PSWS test of the GRAPE upload key
+#                                          grape-daily.timer, station radiod channels + ignored conf.d fragments,
+#                                          hs-uploader key ownership, and login-only tests
+#                                          of the WD gateway SFTP account and the PSWS GRAPE key
 #   wd-to-sigmond.sh restore [--check]     put the station back on WsprDaemon from the bundle
 #
 # install options:
@@ -172,6 +176,254 @@ check_psws_key() {   ### $1 = report level for a refused key: bad (verify) or wa
     fi
 }
 
+### WD gateways: hs-uploader's wsprdaemon_tar pipeline logs in to gw1/gw2 over SFTP as its sender.
+### VK5ARG (2026-11-14/15) broke two ways, and both stayed silent for hours:
+###  - The sender had no SFTP account on the gateways.  WD <= 3.3 stations uploaded by FTP (noisegraphs) and
+###    never needed one.  Each failed upload is an sshd "Invalid user <sender>", and the gateways' fail2ban jail
+###    sshd-invalidusers bans the station's IP after 5 of them in 24 h, for 10 years, on ALL ports.  That ban also
+###    refuses frpc on 35735, so the RAC tunnel you are working through dies with the uploads.
+###  - The key hs-uploader uses was owned by wsprdaemon (mode 600) while hs-uploader runs as hsupload:
+###    'Load key "/etc/hs-uploader/keys/id_ed25519": Permission denied'.
+### Every login test below costs one fail2ban strike per gateway when the account is missing, so each phase
+### tests once, and post holds uploads (smd sink fill) rather than release them into a ban.
+uploader_user() {
+    local u; u=$(systemctl show -p User --value hs-uploader.service 2>/dev/null)
+    echo "${u:-hsupload}"
+}
+wd_tar_uploads() {   ### one line per wsprdaemon_tar transport: "<key> <sender> <server> [<server>...]"
+    sudo -n python3.11 - <<'EOF' 2>/dev/null
+import glob, tomllib
+main = "/etc/hs-uploader/pipelines.toml"
+try:
+    m = tomllib.load(open(main, "rb"))
+except OSError:
+    m = {}
+idn = m.get("identity", {})
+ident = idn.get("ssh_key_file", "/etc/hs-uploader/keys/id_ed25519")
+for f in [main] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
+    try:
+        d = tomllib.load(open(f, "rb"))
+    except (OSError, tomllib.TOMLDecodeError):
+        continue
+    for p in d.get("pipeline", []):
+        t = p.get("transport", {})
+        if t.get("type") == "wsprdaemon_tar":
+            sender = t.get("sender") or idn.get("call", "")
+            print(t.get("ssh_key_file") or ident, sender, *t.get("servers", []))
+EOF
+}
+uploader_key_files() {   ### every private key a pipeline names, plus the [identity] key
+    sudo -n python3.11 - <<'EOF' 2>/dev/null | sort -u
+import glob, tomllib
+for f in ["/etc/hs-uploader/pipelines.toml"] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
+    try:
+        d = tomllib.load(open(f, "rb"))
+    except (OSError, tomllib.TOMLDecodeError):
+        continue
+    k = d.get("identity", {}).get("ssh_key_file")
+    if k:
+        print(k)
+    for p in d.get("pipeline", []):
+        k = p.get("transport", {}).get("ssh_key_file")
+        if k:
+            print(k)
+EOF
+}
+uploader_keys() {   ### $1 = fix (post) or check (verify): hs-uploader's user must be able to read every key it names
+    local mode=${1:-check} user key owner
+    user=$(uploader_user)
+    for key in $(uploader_key_files); do
+        sudo -n test -f "${key}" || { bad "hs-uploader key ${key} does not exist"; continue; }
+        if sudo -n -u "${user}" test -r "${key}"; then
+            ok "hs-uploader (${user}) can read ${key##*/}"
+            continue
+        fi
+        owner=$(sudo -n stat -c %U:%G "${key}")
+        if [[ ${mode} == fix ]]; then
+            run sudo -n chown "${user}:$(sudo -n stat -c %G "${key}")" "${key}"
+            sudo -n test -f "${key}.pub" && run sudo -n chown "${user}:$(sudo -n stat -c %G "${key}.pub")" "${key}.pub"
+            run sudo -n chmod 600 "${key}"
+            [[ ${DRY_RUN} == yes ]] || sudo -n -u "${user}" test -r "${key}" \
+                && ok "${key##*/} was ${owner}: now owned by ${user}" || bad "${user} still cannot read ${key}"
+        else
+            bad "hs-uploader runs as ${user} but cannot read ${key} (owner ${owner}): sudo chown ${user} ${key} ${key}.pub"
+        fi
+    done
+}
+check_wd_sftp() {   ### $1 = report level for a refused login; returns 1 if any gateway refused
+    local level=${1:-bad} user line key sender servers srv refused=() failed=0
+    user=$(uploader_user)
+    line=$(wd_tar_uploads | head -1)
+    [[ -n ${line} ]] || { log "no wsprdaemon_tar pipeline in hs-uploader: no WD gateway login to check"; return 0; }
+    read -r key sender servers <<< "${line}"
+    for srv in ${servers}; do
+        if echo bye | sudo -n -u "${user}" sftp -q -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+                -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                -i "${key}" "${sender}@${srv}" >/dev/null 2>&1; then
+            ok "WD gateway ${srv} accepts ${sender} with ${key##*/} (login only, nothing uploaded)"
+        else
+            refused+=("${srv}"); failed=1
+        fi
+    done
+    [[ ${failed} == 0 ]] && return 0
+    ${level} "WD gateway(s) ${refused[*]} refuse SFTP login as ${sender} with ${key}"
+    log "        Each failed upload is an sshd 'Invalid user ${sender}'; 5 in 24 h get this IP banned on ALL ports for"
+    log "        10 years, the RAC tunnel (frpc to 35735) included.  Keep uploads held (smd sink fill) until fixed."
+    log "        On each refusing gateway, as root:"
+    log "          useradd -m -s /bin/false -G sftponly ${sender}; chown root:root /home/${sender}; chmod 755 /home/${sender}"
+    log "          install -d -o ${sender} -g ${sender} -m 700 /home/${sender}/.ssh"
+    log "          install -d -o ${sender} -g ${sender} -m 755 /home/${sender}/uploads"
+    log "          echo '<key below>' > /home/${sender}/.ssh/authorized_keys"
+    log "          chown ${sender}:${sender} /home/${sender}/.ssh/authorized_keys; chmod 600 /home/${sender}/.ssh/authorized_keys"
+    log "          fail2ban-client banned <this station's public IP>   (unbanip it in every jail that lists it)"
+    sudo -n cat "${key}.pub" 2>/dev/null | sed 's/^/        /' | tee -a "${LOG:-/dev/null}"
+    return 1
+}
+hold_uploads_if_released() {   ### a released sink keeps the uploader failing logins, i.e. walking toward the ban
+    "${SMD}" sink status 2>&1 | strip_ansi | grep -q 'site sink: upload' || return 0
+    warn "uploads are released: holding them (smd sink fill) so the uploader cannot get this IP banned"
+    run "${SMD}" sink fill --reason "WD gateway refuses the SFTP login (wd-to-sigmond)"
+}
+
+### ---------------------------------------------------------------- the station's own radiod channels
+### VK5ARG 2026-11-15: the operator had added [HFAPRS], [SSTV_USB] and [SSTV_LSB] to WD's radiod conf.  prep moved
+### that conf to /etc/radio.legacy-wd and sigmond wrote a fresh minimal one, so the channels silently vanished.
+### The operator then put them in radiod@<inst>.conf.d/, which radiod NEVER reads while radiod@<inst>.conf exists
+### (ka9q radio.c loadconfig: the file OR the directory, not both) — despite the generated header advising conf.d.
+### So: carry every enabled section sigmond does not replace into the new radiod@<inst>.conf, and flag stranded
+### conf.d fragments.
+declare -r LEGACY_RADIO=/etc/radio.legacy-wd
+legacy_radiod_text() {   ### $1 = dir holding radiod@<inst>.conf[.d]; prints "#@instance <inst>" then that instance's text, as radiod reads it
+    local dir=$1 f inst seen=""
+    for f in "${dir}"/radiod@*.conf "${dir}"/radiod@*.conf.d; do
+        inst=${f##*/radiod@}; inst=${inst%.d}; inst=${inst%.conf}
+        [[ " ${seen} " == *" ${inst} "* ]] && continue; seen+=" ${inst}"
+        echo "#@instance ${inst}"
+        if [[ -f ${dir}/radiod@${inst}.conf ]]; then cat "${dir}/radiod@${inst}.conf"
+        elif [[ -d ${dir}/radiod@${inst}.conf.d ]]; then cat "${dir}/radiod@${inst}.conf.d"/*.conf 2>/dev/null; fi
+        echo
+    done
+}
+custom_channels() {   ### stdin: legacy_radiod_text; $1 = list (one "keep|skip <inst> <section> <reason>" line each) or text <inst>
+    python3 -c '
+import re, sys
+mode = sys.argv[1]; want = sys.argv[2] if len(sys.argv) > 2 else None
+# What sigmond replaces: hardware/global sections, and every channel its own clients (wspr-recorder,
+# psk-recorder, hf-timestd, hfdl-recorder, ka9q-web) create dynamically.
+WD_NAME = re.compile(r"^(wspr|wspr-iq|ft8|ft4|ft8-.*|ft4-.*|wwv.*|chu.*|hf manual|hfdl.*)$", re.I)
+WD_DATA = re.compile(r"^(wspr|ft8|ft4|wwv|chu|hfdl|hf-pcm|hf-data|dynamic)", re.I)
+inst, sec, out = None, None, []
+def flush():
+    if sec is None: return
+    name, lines = sec
+    kv = {}
+    for l in lines:
+        m = re.match(r"\s*([A-Za-z0-9_-]+)\s*=\s*(.*)", l.split("#")[0])
+        if m: kv[m.group(1).lower()] = m.group(2).strip().strip("\"")
+    if name.lower() == "global" or "device" in kv or "hardware" in kv: return
+    if kv.get("disable", "no").lower() in ("yes", "true", "1", "on"): return
+    if WD_NAME.match(name): verdict, why = "skip", "sigmond-replaces"
+    elif WD_DATA.match(kv.get("data", "")): verdict, why = "skip", "sigmond-replaces:" + kv["data"]
+    else:
+        verdict = "keep"
+        why = kv.get("data", "NO-data-key") + ":" + str(len(kv.get("freq", "").split())) + "-freqs"
+    out.append((inst, name, verdict, why, lines))
+for line in sys.stdin.read().split("\n"):
+    m = re.match(r"#@instance (\S+)", line)
+    if m: flush(); sec = None; inst = m.group(1); continue
+    m = re.match(r"\s*\[([^\]]+)\]", line)
+    if m: flush(); sec = (m.group(1).strip(), [line]); continue
+    if sec is not None: sec[1].append(line)
+flush()
+for i, name, verdict, why, lines in out:
+    if mode == "list": print(verdict, i, name.replace(" ", "%20"), why)
+    elif verdict == "keep" and i == want:
+        while lines and not lines[-1].strip(): lines.pop()
+        print("\n".join(lines) + "\n")
+' "$@"
+}
+sigmond_radiod_instances() {   ### instances sigmond configured (a regular radiod@<inst>.conf in /etc/radio)
+    local f; for f in /etc/radio/radiod@*.conf; do [[ -f ${f} ]] && { f=${f##*/radiod@}; echo "${f%.conf}"; }; done
+}
+section_present() {   ### $1 = conf file, $2 = section name
+    grep -qiE "^[[:space:]]*\[[[:space:]]*$(printf '%s' "$2" | sed 's/[][\.*^$/]/\\&/g')[[:space:]]*\]" "$1"
+}
+report_custom_channels() {   ### $1 = dir with the WD radiod conf(s); check's preview
+    local v inst name why n=0
+    while read -r v inst name why; do
+        [[ ${v} == keep ]] || continue; n=$((n+1))
+        log "  INFO  radiod [${name//%20/ }] (${why}) is the station's own channel: post carries it into sigmond's radiod conf"
+    done < <(legacy_radiod_text "$1" | custom_channels list)
+    [[ ${n} == 0 ]] && ok "no station-specific radiod channels to carry over"
+}
+fix_custom_channels() {   ### post: append the station's own enabled channel sections to sigmond's radiod conf
+    log "## the station's own radiod channels (not WSPR/FT/WWV/HFDL) into sigmond's radiod conf"
+    [[ -d ${LEGACY_RADIO} ]] || { warn "no ${LEGACY_RADIO}: nothing to carry over (prep moves WD's radiod conf there)"; return; }
+    local -a old new; local inst conf v name why added=0 restart=""
+    mapfile -t old < <(legacy_radiod_text "${LEGACY_RADIO}" | sed -n 's/^#@instance //p')
+    mapfile -t new < <(sigmond_radiod_instances)
+    local listing; listing=$(legacy_radiod_text "${LEGACY_RADIO}" | custom_channels list)
+    grep -q '^keep ' <<< "${listing}" || { ok "no station-specific radiod channels to carry over"; return; }
+    for inst in "${old[@]}"; do
+        grep -q "^keep ${inst} " <<< "${listing}" || continue
+        local target=""
+        if [[ -f /etc/radio/radiod@${inst}.conf ]]; then target=${inst}
+        elif [[ ${#old[@]} == 1 && ${#new[@]} == 1 ]]; then target=${new[0]}; fi
+        if [[ -z ${target} ]]; then
+            warn "cannot tell which sigmond radiod gets WD instance '${inst}''s channels (WD: ${old[*]}; sigmond: ${new[*]:-none}); add them by hand:"
+            grep "^keep ${inst} " <<< "${listing}" | while read -r v _ name why; do warn "    [${name//%20/ }] ${why}  from ${LEGACY_RADIO}/radiod@${inst}.conf"; done
+            continue
+        fi
+        conf=/etc/radio/radiod@${target}.conf
+        local text="" sec
+        while read -r v _ name why; do
+            sec=${name//%20/ }
+            if section_present "${conf}" "${sec}"; then ok "[${sec}] already in ${conf}"; continue; fi
+            text+=$(legacy_radiod_text "${LEGACY_RADIO}" | custom_channels text "${inst}" | awk -v s="${sec}" '
+                /^[[:space:]]*\[/ { h=$0; sub(/^[[:space:]]*\[[[:space:]]*/,"",h); sub(/[[:space:]]*\].*/,"",h); on=(h==s) } on')$'\n\n'
+            log "+ carry [${sec}] (${why}) into ${conf}"
+            added=$((added+1))
+            [[ ${why} == NO-data-key* ]] && warn "[${sec}] has no data= line: under WD it streamed to the global data group, sigmond's conf may have none"
+        done < <(grep "^keep ${inst} " <<< "${listing}")
+        [[ -n ${text} ]] || continue
+        if [[ ${DRY_RUN} != yes ]]; then
+            sudo -n cp -p "${conf}" "${conf}.wd-to-sigmond-$(date -u +%Y%m%dT%H%M%SZ)"
+            { printf '\n# --- Station channels carried over from WsprDaemon (%s) by wd-to-sigmond.sh %s.\n' "${LEGACY_RADIO}/radiod@${inst}.conf" "$(date -u +%Y-%m-%d)"
+              printf '# Station channels live in THIS file: radiod reads radiod@<instance>.conf OR the .conf.d directory,\n'
+              printf '# never both, so fragments in radiod@%s.conf.d/ are ignored while this file exists.\n\n' "${target}"
+              printf '%s' "${text}"; } | sudo -n tee -a "${conf}" >/dev/null
+        fi
+        restart+=" radiod@${target}.service"
+    done
+    local u t0
+    for u in ${restart}; do
+        t0=$(date -u '+%Y-%m-%d %H:%M:%S')
+        run sudo -n systemctl restart "${u}" || { bad "${u} did not restart after the channel carry-over (backup beside the conf)"; continue; }
+        [[ ${DRY_RUN} == yes ]] && continue
+        local i=0; until sudo -n journalctl -u "${u}" --since "${t0}" --no-pager -o cat | grep -q 'channels started' || [[ $((i++)) -ge 20 ]]; do sleep 1; done
+        sudo -n journalctl -u "${u}" --since "${t0}" --no-pager -o cat | grep 'channels started' | sed 's/^/        /' | tee -a "${LOG}"
+    done
+    [[ ${added} -gt 0 ]] && log "carried ${added} channel section(s); the operator's decoders for them must be restarted on their side"
+}
+check_custom_channels() {   ### verify: every carried channel still configured; no conf.d fragment stranded beside a conf file
+    local inst v name why conf d f
+    if [[ -d ${LEGACY_RADIO} ]]; then
+        local -a new; mapfile -t new < <(sigmond_radiod_instances)
+        while read -r v inst name why; do
+            [[ ${v} == keep ]] || continue
+            conf=/etc/radio/radiod@${inst}.conf; [[ -f ${conf} ]] || conf=/etc/radio/radiod@${new[0]:-?}.conf
+            section_present "${conf}" "${name//%20/ }" && ok "station channel [${name//%20/ }] in ${conf##*/}" \
+                || bad "station channel [${name//%20/ }] from WD (${why}) is in no sigmond radiod conf: $0 post carries it over"
+        done < <(legacy_radiod_text "${LEGACY_RADIO}" | custom_channels list)
+    fi
+    for inst in $(sigmond_radiod_instances); do
+        d=/etc/radio/radiod@${inst}.conf.d
+        for f in "${d}"/*.conf; do
+            [[ -f ${f} ]] && bad "${f} is IGNORED: radiod reads radiod@${inst}.conf, not the .conf.d directory, while the file exists; move its sections into radiod@${inst}.conf"
+        done
+    done
+}
+
 ### Every WsprDaemon/legacy-ka9q unit present on this host (never wd-remote-access@*)
 legacy_units() {
     systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{print $1}' \
@@ -230,8 +482,15 @@ cmd_check() {
         && warn "a public IPv4 address is on this host: smd bringup refuses until /etc/sigmond/allow-public-ip exists"
     local free_gb; free_gb=$(df -BG --output=avail /opt | tail -1 | tr -dc 0-9)
     [[ ${free_gb} -ge 20 ]] && ok "${free_gb} GB free under /opt" || bad "${free_gb} GB free under /opt: want 20+"
-    local tunnels; tunnels=$(systemctl list-units --no-legend --plain 'wd-remote-access@*' | awk '$4=="running"{print $1}' | tr '\n' ' ')
+    ### legacy-RAC hosts (WD <= 3.4.5, e.g. VK5ARG) run the untemplated wd-remote-access.service, not wd-remote-access@gw*
+    local tunnels; tunnels=$(systemctl list-units --no-legend --plain 'wd-remote-access@*' 'wd-remote-access.service' | awk '$4=="running"{print $1}' | tr '\n' ' ')
     [[ -n ${tunnels} ]] && ok "RAC tunnels running (kept throughout): ${tunnels}" || warn "no wd-remote-access tunnel running: you may lose remote access"
+    ### Sigmond's hs-uploader sends WSPR/FT spots to gw1/gw2 by SFTP as the reporter; WD <= 3.3 used FTP and has no account
+    log "  INFO  after install, hs-uploader logs in to gw1+gw2 by SFTP as '${rid:-<reporter>}' with a key made at install:"
+    log "        that account + key must exist on both gateways BEFORE uploads are released, or fail2ban bans this IP on"
+    log "        all ports (RAC tunnel too).  post tests the login and holds uploads until it passes."
+    ### channels the operator added to WD's radiod conf (HF APRS, SSTV, ...): sigmond's fresh conf has none of them
+    if [[ -d ${LEGACY_RADIO} ]]; then report_custom_channels "${LEGACY_RADIO}"; else report_custom_channels /etc/radio; fi
     [[ -d ${SIGMOND_BASE}/sigmond ]] && log "  INFO  sigmond already present at ${SIGMOND_BASE}/sigmond"
     log "legacy units found:"; legacy_units | sort -u | sed 's/^/    /'
     [[ ${RC} == 0 ]] && log "CHECK: no blockers" || log "CHECK: blockers above"
@@ -587,6 +846,7 @@ cmd_post() {
     fix_kernel_isolation
     fix_cpu_freq
     fix_igmp_querier
+    fix_custom_channels
 
     fix_upload_routing
     fix_psws
@@ -596,8 +856,15 @@ cmd_post() {
         gpsdo-monitor detect 2>&1 | grep -qi 'no leo bodnar\|not supported' && warn "gpsdo-monitor cannot read this GPSDO model; it stays installed (decide per station)"
     fi
 
+    log "## uploads: hs-uploader must read its keys, and the WD gateways must accept its login, before release"
+    uploader_keys fix
     log "## uploads: a repo install holds every upload until released"
-    if confirm "Release this station's uploads now (smd sink upload)?"; then run "${SMD}" sink upload; else warn "uploads still held: run 'smd sink upload'"; fi
+    if ! check_wd_sftp warn; then
+        warn "uploads NOT released: a gateway refuses the login (above).  While held, sigmond keeps WSPR spots 24 h but"
+        warn "FT8 only 1 h: get the accounts made, re-test with '$0 verify' (one login per gateway), then: smd sink upload"
+        hold_uploads_if_released
+    elif confirm "Release this station's uploads now (smd sink upload)?"; then run "${SMD}" sink upload
+    else warn "uploads still held: run 'smd sink upload'"; fi
 
     log "## status"
     "${SMD}" status 2>&1 | strip_ansi | grep -E '✓|✗|⚠' | tee -a "${LOG}"
@@ -690,6 +957,9 @@ cmd_verify() {
         ### smd install starts it since sigmond 6ce1bc5 (KJ6MKI's install, before that, left it inactive)
         systemctl is-active -q grape-daily.timer && ok "grape-daily.timer active (packages each UTC day for PSWS)" || bad "grape-daily.timer inactive: no GRAPE dataset will be built or uploaded (sudo systemctl enable --now grape-daily.timer)"
     fi
+    check_custom_channels
+    uploader_keys check
+    check_wd_sftp bad || { [[ ${DRY_RUN} == yes ]] || hold_uploads_if_released; }
     check_psws_key bad
     [[ ${RC} == 0 ]] && { log "VERIFY OK"; mark VERIFIED; } || log "VERIFY found problems (above)"
     return ${RC}
