@@ -17,14 +17,14 @@ PostgreSQL or the desktop session. `sigmond-rac` is never activated, because run
 
 | Phase | What it does |
 |---|---|
-| `check` | Read-only. Is this station a candidate, and what will not carry over (MERG_ receivers, WWV/GRAPE, missing python3.11-dev). |
+| `check` | Read-only. Is this station a candidate, and what will not carry over (MERG_ receivers, WWV/GRAPE, missing python3.11-dev), and lists the station's own radiod channels that `post` will carry over. Finds the RAC tunnel in either form, `wd-remote-access@gw*` or the legacy `wd-remote-access.service`. |
 | `bundle` | Captures the revert bundle under `~/wd-to-sigmond/bundle-*`. Read-only for the running stack. |
 | `handover` | Stops and disables the WsprDaemon stack, which frees the RX888. |
 | `prep` | Moves legacy radiod confs out of Sigmond's way, removes WD's host tuning (wd-cpu-freq, wd-resctrl, wd-irq-affinity) and resets the CPU clock limits to the hardware range, handles WD's systemd manager CPUAffinity, and installs python3.11-dev on Ubuntu 22.04. |
 | `install` | Clones and installs Sigmond, then `smd bringup wd`. If wsprdaemon.conf recorded WWV, it also installs hamsci-physics and hf-timestd (see [PSWS / GRAPE](#psws--grape)). |
-| `post` | The fixes KJ6MKI needed after bring-up (listed below). Stages kernel isolation. |
+| `post` | The fixes KJ6MKI needed after bring-up (listed below). Stages kernel isolation. Carries the station's own radiod channels into Sigmond's radiod conf. |
 | `reboot` | Reboots to activate isolcpus, nohz_full and rcu_nocbs. |
-| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE and the PSWS key. |
+| `verify` | After the reboot: isolation, IRQs, CPU clocks, RX888 at 5 Gbps, services, decoders, spots, GRAPE, the station's own radiod channels and any ignored `conf.d` fragment, hs-uploader's key ownership, the WD gateway SFTP login and the PSWS key. |
 | `restore [--check]` | Puts the station back on WsprDaemon from the bundle. |
 
 Typical run:
@@ -52,9 +52,24 @@ Typical run:
 5. **Kernel isolation.** Sets `write_kernel_isolation = true`, runs `smd admin diag cpu-affinity --apply` (isolcpus, nohz_full and rcu_nocbs on radiod's cores, the FFT core included), masks irqbalance and enables `sigmond-guest-irq-affinity`, which moves every movable IRQ to the first non-radiod core pair.
 6. **CPU clocks.** See [CPU clock policy](#cpu-clock-policy).
 7. **IGMP querier.** A 130 s root listen. Installs `igmp-querier` if the LAN has no querier.
-8. **Upload routing.** See [Uploads](#uploads-wd-servers-only).
-9. **PSWS / GRAPE.** See [PSWS / GRAPE](#psws--grape).
-10. **Releases uploads** (`smd sink upload`) after a prompt, then prints `smd status`.
+8. **The station's own radiod channels.** See [Station radiod channels](#station-radiod-channels).
+9. **Upload routing.** See [Uploads](#uploads-wd-servers-only).
+10. **PSWS / GRAPE.** See [PSWS / GRAPE](#psws--grape).
+11. **hs-uploader's keys.** hs-uploader runs as `hsupload`; any key it names that `hsupload` cannot read is chowned to it (VK5ARG: `id_ed25519` was left `wsprdaemon`-owned, mode 600).
+12. **Releases uploads** (`smd sink upload`) after a prompt, **only if gw1 and gw2 accept the uploader's SFTP login** (see [The WD gateway SFTP account](#the-wd-gateway-sftp-account)); then prints `smd status`.
+
+## Station radiod channels
+
+Operators add their own channels to WD's radiod conf: VK5ARG had `[HFAPRS]`, `[SSTV_USB]` and `[SSTV_LSB]` (9 channels) for HF APRS and SSTV decoders. `prep` moves WD's conf to `/etc/radio.legacy-wd/` and Sigmond writes a fresh minimal `radiod@<instance>.conf` with no channels at all, because its own clients (wspr-recorder, psk-recorder, hf-timestd, hfdl-recorder, ka9q-web) create theirs dynamically. Before this step existed, the operator's channels just disappeared.
+
+`post` reads the legacy conf exactly as radiod would have and appends every **enabled** section to the new conf, except:
+
+- `[global]` and hardware sections (any with `device =` or `hardware =`);
+- what Sigmond replaces: `[WSPR]`, `[WSPR-IQ]`, `[FT8]`, `[FT4]`, `[ft8-*]`, `[WWV*]`, `[CHU*]`, `[HF MANUAL]`, `[HFDL*]`, and anything whose `data =` group is a WSPR/FT/WWV/CHU/HFDL/hf-pcm/dynamic one.
+
+It keeps a dated backup beside the conf, skips sections already present (so it is safe to re-run), restarts radiod and prints its `[name] N channels started` lines. If WD had several radiod instances and Sigmond's names don't match them, it doesn't guess: it lists the sections to move by hand. The operator's own decoders for those streams have to be restarted on their side.
+
+**Do not put channels in `radiod@<instance>.conf.d/`.** radiod reads `radiod@<instance>.conf` **or** the `.conf.d` directory, never both (ka9q-radio `radio.c` `loadconfig`). While the `.conf` file exists, which it always does under Sigmond, every fragment in the directory is silently ignored. Sigmond's generated header currently says the opposite; that is a Sigmond bug. VK5ARG's operator followed that header and his restart picked up nothing. `verify` FAILs on any `*.conf` file in a `.conf.d` that sits beside a `.conf`, and on any carried-over channel that is missing from the new conf.
 
 ## CPU clock policy
 
@@ -142,6 +157,45 @@ To check by hand on any Sigmond station:
 smd psws status      # offline: station id, instrument ids, key path, last verified
 smd psws verify      # live login as the station id (no upload)
 ```
+
+## The WD gateway SFTP account
+
+hs-uploader's `wspr-wsprdaemon` pipeline sends each cycle's WSPR and FT spots as a tar to
+`gw1.wsprdaemon.org` and `gw2.wsprdaemon.org` by SFTP, logging in as its `sender` (the reporter)
+with the `[identity]` key Sigmond made at install. That account must exist on **both** gateways,
+in the `sftponly` group, with that key, before uploads are released. WsprDaemon 3.3 and older
+uploaded by FTP (`noisegraphs`), so such a station may never have had one.
+
+What happens without it (VK5ARG, 2026-11-14/15): every upload is an sshd `Invalid user <sender>`.
+The gateways' fail2ban jail `sshd-invalidusers` bans the station's IP after 5 of those in 24 hours,
+**for 10 years, on all ports**. That includes frpc's port 35735, so the RAC tunnel goes down along
+with the uploads. The station still shows `wd-remote-access` as running, and frps logs a clean
+`client exit success`, so it looks like the problem is on the station. It isn't: the spots
+queue locally and nothing reaches wsprnet.
+
+`post` and `verify` each test one login per gateway (login only, nothing uploaded; each failed
+test costs one fail2ban strike). If a gateway refuses the login:
+
+- `post` does not release uploads, and holds them with `smd sink fill` if they were already
+  released. `verify` fails and holds them the same way.
+- Both print the account recipe and the public key to install:
+
+  ```bash
+  # as root on each gateway that refuses
+  useradd -m -s /bin/false -G sftponly <SENDER>
+  chown root:root /home/<SENDER>; chmod 755 /home/<SENDER>        # chroot needs a root-owned home
+  install -d -o <SENDER> -g <SENDER> -m 700 /home/<SENDER>/.ssh
+  install -d -o <SENDER> -g <SENDER> -m 755 /home/<SENDER>/uploads
+  echo '<the printed key>' > /home/<SENDER>/.ssh/authorized_keys
+  chown <SENDER>:<SENDER> /home/<SENDER>/.ssh/authorized_keys; chmod 600 /home/<SENDER>/.ssh/authorized_keys
+  fail2ban-client banned <station public IP>    # then unbanip it in each jail that lists it
+  ```
+
+While uploads are held, Sigmond keeps WSPR spots for 24 hours but FT8 spots for only one hour,
+so make the account promptly, run `verify`, then `smd sink upload`.
+
+`smd remote` cannot restore access on a converted station: there is no `sigmond-rac` there, and
+the station's RAC is still WsprDaemon's tunnel.
 
 ## After the conversion
 
