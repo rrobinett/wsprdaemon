@@ -451,9 +451,11 @@ function decode_wspr_wav_file() {
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > ALL_WSPR.TXT.save
     cp -p ALL_WSPR.TXT.save ALL_WSPR.TXT
 
-    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
+    decoder_fine_freq_flag "${WSPRD_CMD}" "" "^ *-F fine" "-F"
+    local wsprd_fine_freq="${DECODER_FINE_FREQ_FLAG}"
+    timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} ${wsprd_fine_freq} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}
     rc=$? ; if (( rc )); then
-        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${rc}"
+        wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_CMD} -c ${wsprd_cmd_flags} ${wsprd_fine_freq} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}' returned error ${rc}"
         return ${rc}
     fi  
     sort -k 1,2 -k 5,5 ALL_WSPR.TXT > sort.tmp
@@ -473,7 +475,9 @@ function decode_wspr_wav_file() {
         wd_logger 2 "Skipping wsprd second pass because WSPRD_TWO_PASS == 'no'"
         >  ${stdout_file}.spreading
     else
-        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
+        decoder_fine_freq_flag "${WSPRD_SPREADING_CMD}" "" "^ *-F fine" "-F"
+        local wsprd_spreading_fine_freq="${DECODER_FINE_FREQ_FLAG}"
+        timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} ${n_arg} -c ${wsprd_spreading_cmd_flags} ${wsprd_spreading_fine_freq} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading
         rc=$? ; if (( rc )); then
             wd_logger 1 "ERROR: Command 'timeout ${WSPRD_TIMEOUT_SECS-110} nice -n ${WSPR_CMD_NICE_LEVEL} ${WSPRD_SPREADING_CMD} -n -c ${wsprd_spreading_cmd_flags} -f ${wspr_decode_capture_freq_mhz} ${wav_file_name} > ${stdout_file}.spreading' returned error ${rc}"
             # return ${rc}
@@ -503,30 +507,32 @@ declare AWK_FIND_BEST_SPOT_LINES=${WSPRDAEMON_ROOT_DIR}/best_spots.awk
 declare WSPR_CMD_NICE_LEVEL="${WSPR_CMD_NICE_LEVEL-19}"
 declare JT9_CMD_NICE_LEVEL="${JT9_CMD_NICE_LEVEL-19}"
 
-### FST4W fine frequency (2026-11): ubersdr's jt9 --fine-freq writes fst4_decodes.dat's fsig as fsig plus the measured
-### power midpoint of the decoded signal, to 0.001 Hz (f9.3 for WSJT-X's f7.1), which on synthetic signals is within
-### ~0.3 mHz RMS of the true frequency at every T/R period.  Only ubersdr builds that have the option accept it, so ask
-### the jt9 in use once (per JT9_CMD and its mtime) and pass it when it is there.  WD_FST4W_FINE_FREQ="no" turns it off.
-### Sets JT9_FINE_FREQ_FLAG, so call it in the decoding shell itself, not in $( ).
-declare WD_FST4W_FINE_FREQ=${WD_FST4W_FINE_FREQ-yes}
-declare JT9_FINE_FREQ_CHECKED_CMD=""
-declare JT9_FINE_FREQ_FLAG=""
-function jt9_fine_freq_flag() {
-    if [[ "${WD_FST4W_FINE_FREQ}" != "yes" ]]; then
-        JT9_FINE_FREQ_FLAG=""
-        JT9_FINE_FREQ_CHECKED_CMD=""
-        return 0
-    fi
-    local cmd_id="${JT9_CMD}:$(stat -c %Y "${JT9_CMD}" 2>/dev/null)"
-    if [[ "${JT9_FINE_FREQ_CHECKED_CMD}" != "${cmd_id}" ]]; then
-        JT9_FINE_FREQ_CHECKED_CMD="${cmd_id}"
-        if timeout 10 ${JT9_CMD} --help 2>&1 | grep -q -- '--fine-freq' ; then
-            JT9_FINE_FREQ_FLAG="--fine-freq"
+### Fine frequency (2026-11): ubersdr's jt9 --fine-freq (FST4W) and wsprd -F (WSPR) report each decode's frequency
+### to 0.001 Hz: the decoder's own estimate plus the measured half-power point of the decoded signal.  On synthetic
+### signals at known frequencies both are within about 0.3-0.5 mHz RMS of the truth, where the 0.1 Hz values they
+### print without it are about 30 mHz RMS.  Only ubersdr builds that have the option accept it, so ask each decoder
+### binary once (per path and mtime) and pass the option only when its help text lists it.
+### WD_FINE_FREQ="no" turns it off for both.
+declare WD_FINE_FREQ=${WD_FINE_FREQ-yes}
+declare -A DECODER_FINE_FREQ_FLAGS=()
+declare DECODER_FINE_FREQ_FLAG=""
+### decoder_fine_freq_flag CMD HELP_ARGS GREP_PATTERN FLAG: sets DECODER_FINE_FREQ_FLAG to FLAG when 'CMD HELP_ARGS'
+### prints a line matching GREP_PATTERN, else to "".  Call it in the decoding shell itself, not in $( ), so the
+### answer is cached.
+function decoder_fine_freq_flag() {
+    local cmd=$1 help_args=$2 pattern=$3 flag=$4
+    DECODER_FINE_FREQ_FLAG=""
+    [[ "${WD_FINE_FREQ}" != "yes" ]] && return 0
+    local key="${cmd}:$(stat -c %Y "${cmd}" 2>/dev/null)"
+    if [[ -z "${DECODER_FINE_FREQ_FLAGS[${key}]+set}" ]]; then
+        if timeout 10 ${cmd} ${help_args} < /dev/null 2>&1 | grep -q -- "${pattern}" ; then
+            DECODER_FINE_FREQ_FLAGS[${key}]="${flag}"
         else
-            JT9_FINE_FREQ_FLAG=""
+            DECODER_FINE_FREQ_FLAGS[${key}]=""
         fi
-        wd_logger 1 "JT9_CMD=${JT9_CMD} FST4W fine frequency flag: '${JT9_FINE_FREQ_FLAG}'"
+        wd_logger 1 "Decoder ${cmd} fine frequency flag: '${DECODER_FINE_FREQ_FLAGS[${key}]}'"
     fi
+    DECODER_FINE_FREQ_FLAG="${DECODER_FINE_FREQ_FLAGS[${key}]}"
 }
 ### WSPRD_TIMEOUT_SECS (110) is the right wall-clock kill for a 2 minute packet.  It is the WRONG one for
 ### an F5/F15/F30 packet: those have their own 5, 15 and 30 minute cycles, they all come due together at
@@ -2801,8 +2807,8 @@ function decoding_daemon() {
                 local decode_dir_path=$(realpath ${decode_dir})
                 mkdir -p ${decode_dir_path}
                 rm -f ${decode_dir_path}/decoded.txt
-                jt9_fine_freq_flag
-                local jt9_fine_freq="${JT9_FINE_FREQ_FLAG}"
+                decoder_fine_freq_flag "${JT9_CMD}" "--help" "--fine-freq" "--fine-freq"
+                local jt9_fine_freq="${DECODER_FINE_FREQ_FLAG}"
                 wd_logger 1 "FST4W decode a ${returned_seconds} second wav file by running cmd: '${JT9_CMD} -a ${decode_dir_path} --fst4w ${jt9_fine_freq} -p ${returned_seconds} -f 1500 -F 100 ${decoder_input_wav_filename}  >& jt9_output.txt'"
 
                 touch ${decode_dir_path}/plotspec ${decode_dir_path}/decdata        ### Instructs jt9 to output spectral width information to jt9_output.txt and append extended resolution spot lines to fst4_decodes.dat 
