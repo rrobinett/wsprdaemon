@@ -127,7 +127,11 @@ other_cpus() {
 }
 
 wd_conf_value() {  ### $1 = variable name in wsprdaemon.conf (simple NAME="value" lines only)
-    sed -n "s/^[[:space:]]*$1=[\"']\{0,1\}\([^\"' #]*\).*/\1/p" "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | tail -1
+    ### the last literal value: a template line such as REPORTER_GRID="${REPORTER_GRID-<NOT_DEFINED>}" (WWV-2) is not one
+    sed -n "s/^[[:space:]]*$1=[\"']\{0,1\}\([^\"' #]*\).*/\1/p" "${WD_HOME}/wsprdaemon.conf" 2>/dev/null | grep -v '^\$' | tail -1
+}
+wd_reporter_id() {   ### REPORTER_ID, else WSPRNET_REPORTER_ID (the name most confs use)
+    local r; r=$(wd_conf_value REPORTER_ID); [[ -n ${r} ]] || r=$(wd_conf_value WSPRNET_REPORTER_ID); echo "${r}"
 }
 
 wd_recorded_wwv() {   ### an uncommented WWV/WWVB band in any WSPR_SCHEDULE line
@@ -141,10 +145,10 @@ wd_recorded_wwv() {   ### an uncommented WWV/WWVB band in any WSPR_SCHEDULE line
 ### tests that same key.  This stays as an independent check of the key the pipeline really carries
 ### (IdentitiesOnly: no fallback to another key), in case a hand-placed pipelines.d drop-in overrides the render.
 psws_station_id() {
-    sudo -n python3.11 -c 'import tomllib,sys; d=tomllib.load(open("/etc/sigmond/site-profile.toml","rb")).get("psws",{}); print(d.get("station_id","") if d.get("enabled") else "")' 2>/dev/null
+    sudo -n "$(py311)" -c 'import tomllib,sys; d=tomllib.load(open("/etc/sigmond/site-profile.toml","rb")).get("psws",{}); print(d.get("station_id","") if d.get("enabled") else "")' 2>/dev/null
 }
 grape_upload_key() {   ### prints the ssh key grape-psws will use, or nothing when no grape-psws pipeline exists
-    sudo -n python3.11 - <<'EOF' 2>/dev/null
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null
 import glob, tomllib
 main = "/etc/hs-uploader/pipelines.toml"
 try:
@@ -195,8 +199,13 @@ uploader_user() {
     local u; u=$(systemctl show -p User --value hs-uploader.service 2>/dev/null)
     echo "${u:-hsupload}"
 }
+py311() {   ### a python with tomllib (3.11+): python3.11 on Ubuntu 22.04, python3 (3.13) on Debian 13 (WWV-2)
+    local p; for p in python3.11 python3; do
+        command -v "${p}" >/dev/null && "${p}" -c 'import tomllib' 2>/dev/null && { echo "${p}"; return; }
+    done; echo python3
+}
 wd_tar_uploads() {   ### one line per wsprdaemon_tar transport: "<key> <sender> <server> [<server>...]"
-    sudo -n python3.11 - <<'EOF' 2>/dev/null
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null
 import glob, tomllib
 main = "/etc/hs-uploader/pipelines.toml"
 try:
@@ -218,7 +227,7 @@ for f in [main] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
 EOF
 }
 uploader_key_files() {   ### every private key a pipeline names, plus the [identity] key
-    sudo -n python3.11 - <<'EOF' 2>/dev/null | sort -u
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null | sort -u
 import glob, tomllib
 for f in ["/etc/hs-uploader/pipelines.toml"] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
     try:
@@ -487,12 +496,17 @@ check_wd_name_users() {   ### $1 = the status name sigmond publishes (or a descr
 ### Every WsprDaemon/legacy-ka9q unit present on this host (never wd-remote-access@*)
 legacy_units() {
     systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{print $1}' \
-      | grep -E '^(wsprdaemon|wd-cpu-freq|wd-resctrl|wd-irq-affinity|wd-fftw-wisdom|wd-radiod-watchdog|wd-disk-monitor|dropmon|ft[248]-(decode|record)|pskreporter|wspr-decoded|ka9q-web|radiod)(@.*)?\.(service|timer)$' \
+      | grep -E '^(wsprdaemon|wd-cpu-freq|wd-resctrl|wd-irq-affinity|wd-fftw-wisdom|wd-radiod-watchdog|wd-disk-monitor|dropmon|ft[248]-(decode|record)|pskreporter|wspr-decoded|ka9q-web|radiod|hfdl)(@.*)?\.(service|timer)$' \
       | grep -vE "${KEEP_RE}" | grep -v '@\.\(service\|timer\)$'
     ### instantiated template units only appear among loaded units
     systemctl list-units --all --no-legend --no-pager --plain 2>/dev/null | awk '{print $1}' \
-      | grep -E '^(radiod|pskreporter|ka9q-web|ft[248]-(decode|record))@.+\.service$'
+      | grep -E '^(radiod|ka9q-radio|pskreporter|ka9q-web|ft[248]-(decode|record))@.+\.service$'
 }
+### A radiod unit: WD's radiod@<inst>, or the ka9q-radio Debian package's ka9q-radio@<vid>-<pid>-<serial> (WWV-2, Phil's)
+declare -r RADIOD_UNIT_RE='^(radiod|ka9q-radio)@'
+### The package starts ka9q-radio@<device> from udev only while this file exists; handover sets it aside, restore
+### puts it back (it is in etc-radio.tar)
+declare -r KA9Q_AUTOSTART=/etc/radio/enable-udev-autostart
 
 ### ---------------------------------------------------------------- RAC: sigmond's tunnel replaces wd-remote-access
 ### wd-to-sigmond never starts sigmond-rac itself (see the header).  Once sigmond's tunnel has been set up
@@ -653,7 +667,7 @@ cmd_check() {
 
     [[ -f ${WD_HOME}/wsprdaemon.conf ]] && ok "wsprdaemon.conf at ${WD_HOME}" || bad "no ${WD_HOME}/wsprdaemon.conf"
     local rid grid
-    rid=$(wd_conf_value REPORTER_ID); grid=$(wd_conf_value REPORTER_GRID)
+    rid=$(wd_reporter_id); grid=$(wd_conf_value REPORTER_GRID)
     log "reporter from wsprdaemon.conf: '${rid:-?}' grid '${grid:-?}' (override with install --reporter/--grid)"
 
     local rx; rx=$(lsusb | grep -cE '04b4:00f[13]')
@@ -698,6 +712,12 @@ cmd_check() {
     if [[ -d ${LEGACY_RADIO} ]]; then report_custom_channels "${LEGACY_RADIO}"; else report_custom_channels /etc/radio; fi
     check_wd_name_users "$(hostname)-status.local (sigmond names it after its radiod instance, normally the host name)"
     [[ -d ${SIGMOND_BASE}/sigmond ]] && log "  INFO  sigmond already present at ${SIGMOND_BASE}/sigmond"
+    if dpkg-query -W ka9q-radio >/dev/null 2>&1; then
+        log "  INFO  radiod is the ka9q-radio Debian package ($(dpkg-query -W -f='${Version}' ka9q-radio)), run by ka9q-radio@<device>"
+        log "        $( [[ -e ${KA9Q_AUTOSTART} ]] && echo "with udev autostart on: handover sets ${KA9Q_AUTOSTART} aside" || echo "udev autostart off")"
+        log "        sigmond then runs radiod@<inst> from its own checkout; the package stays installed (restore uses it)"
+    fi
+    systemctl list-unit-files --no-legend hfdl.service | grep -q . && log "  INFO  dumphfdl (hfdl.service): install adds hfdl-recorder"
     log "legacy units found:"; legacy_units | sort -u | sed 's/^/    /'
     [[ ${RC} == 0 ]] && log "CHECK: no blockers" || log "CHECK: blockers above"
     return ${RC}
@@ -737,6 +757,8 @@ cmd_bundle() {
         echo "## os"; . /etc/os-release; echo "${PRETTY_NAME} $(uname -r)"; cat /proc/cmdline
         echo "## wsprdaemon tree"; git -C "${WD_HOME}" log -1 --format='%H %cd %s' 2>&1; git -C "${WD_HOME}" remote get-url origin 2>&1
         echo "## radiod binary"; ls -la /usr/local/sbin/radiod 2>&1; sha256sum /usr/local/sbin/radiod 2>&1
+        echo "## packaged radiod"; dpkg-query -W ka9q-radio 2>&1; ls -la /usr/sbin/radiod 2>&1
+        echo "## ka9q-radio udev autostart"; ls -la "${KA9Q_AUTOSTART}" 2>&1
         echo "## lsusb"; lsusb
         echo "## crontab $(id -un)"; crontab -l 2>&1
         echo "## crontab root"; sudo -n crontab -l 2>&1
@@ -752,8 +774,8 @@ cmd_bundle() {
         printf '%-44s enabled=%-10s active=%s\n' "${u}" "$(systemctl is-enabled "${u}" 2>&1)" "$(systemctl is-active "${u}" 2>&1)" >> unit-state.txt
     done
     ### start order for restore: tuning oneshots, radiod, the WD supervisor, then the rest
-    { grep -E '^wd-(cpu-freq|resctrl|irq-affinity)' unit-state.txt; grep -E '^radiod@' unit-state.txt
-      grep -E '^wsprdaemon\.' unit-state.txt; grep -vE '^(wd-(cpu-freq|resctrl|irq-affinity)|radiod@|wsprdaemon\.)' unit-state.txt; } \
+    { grep -E '^wd-(cpu-freq|resctrl|irq-affinity)' unit-state.txt; grep -E "${RADIOD_UNIT_RE}" unit-state.txt
+      grep -E '^wsprdaemon\.' unit-state.txt; grep -vE '^(wd-(cpu-freq|resctrl|irq-affinity)|radiod@|ka9q-radio@|wsprdaemon\.)' unit-state.txt; } \
         | awk '{print $1}' > legacy-order.txt
     sudo -n sha256sum ./*.tar state.txt unit-files.txt units-all.txt unit-state.txt legacy-order.txt > SHA256SUMS
     sudo -n chown -R "$(id -un)": "${BUNDLE}"; chmod -R go-rwx "${BUNDLE}"
@@ -769,8 +791,13 @@ cmd_handover() {
     confirm "Stop and disable WsprDaemon on $(hostname)? Spots stop until sigmond is up." || die "not confirmed"
     local u
     ### supervisor first (its ExecStop kills its own children), radiod last
-    for u in wsprdaemon.service $(awk '{print $1}' "${BUNDLE}/unit-state.txt" | grep -vE '^(wsprdaemon\.service|radiod@)') \
-             $(awk '{print $1}' "${BUNDLE}/unit-state.txt" | grep '^radiod@'); do
+    ### the ka9q-radio package's udev rule would restart its radiod at the next USB event: take its switch away first
+    if [[ -e ${KA9Q_AUTOSTART} ]]; then
+        run sudo -n mv "${KA9Q_AUTOSTART}" "${BUNDLE}/"
+        log "set aside ${KA9Q_AUTOSTART} (restore puts it back from etc-radio.tar)"
+    fi
+    for u in wsprdaemon.service $(awk '{print $1}' "${BUNDLE}/unit-state.txt" | grep -vE "^wsprdaemon\.service|${RADIOD_UNIT_RE}") \
+             $(awk '{print $1}' "${BUNDLE}/unit-state.txt" | grep -E "${RADIOD_UNIT_RE}"); do
         [[ ${u} =~ ${KEEP_RE} ]] && continue
         [[ ${u} == wd-cpu-freq.service || ${u} == wd-resctrl.service || ${u} == wd-irq-affinity.service ]] && continue   ### prep handles these
         systemctl is-active -q "${u}" && run timeout 300 sudo -n systemctl stop "${u}"
@@ -784,7 +811,7 @@ cmd_handover() {
     fi
     sleep 3
     local stray
-    stray=$( { pgrep -a -x 'radiod|wd-record|pcmrecord|ka9q-web|wd-jt9|pskreporter-sender'
+    stray=$( { pgrep -a -x 'radiod|wd-record|pcmrecord|ka9q-web|wd-jt9|pskreporter-sender|decode_ft8|dumphfdl'
                pgrep -af 'wsprdaemon\.sh -A|wd-ft-decode|http\.server 8088'; } 2>/dev/null | grep -vE 'pgrep|wd-to-sigmond|bash -c' )
     [[ -z ${stray} ]] || { log "stray processes:"; echo "${stray}" | tee -a "${LOG}"; RC=4; }
     log "RX888 on USB: $(lsusb | grep -c '04b4:00f')   tunnels: $(systemctl list-units --no-legend --plain 'wd-remote-access@*' | awk '{print $1"="$4}' | tr '\n' ' ')"
@@ -846,7 +873,7 @@ cmd_prep() {
 ### ================================================================= install
 cmd_install() {
     need_bundle; need_marker PREPPED; LOG=${BUNDLE}/install.log
-    REPORTER=${REPORTER:-$(wd_conf_value REPORTER_ID)}
+    REPORTER=${REPORTER:-$(wd_reporter_id)}
     GRID=${GRID:-$(wd_conf_value REPORTER_GRID)}
     CALLSIGN=${CALLSIGN:-$(echo "${REPORTER}" | sed 's|[/-].*||')}
     [[ -n ${REPORTER} && -n ${GRID} ]] || die "reporter/grid unknown: pass --reporter and --grid"
@@ -875,6 +902,12 @@ cmd_install() {
         run sg sigmond -c "${SMD} install hf-timestd --yes" || warn "hf-timestd install failed: read ${LOG}"
         run sg sigmond -c "${SMD} config init hf-timestd --non-interactive" || warn "hf-timestd config init failed"
         run sg sigmond -c "${SMD} config init hamsci-physics --non-interactive" || warn "hamsci-physics config init failed (grape-psws stays unrendered without it)"
+    fi
+    if grep -q '^hfdl\.service ' "${BUNDLE}/unit-state.txt"; then
+        log "the station ran dumphfdl (hfdl.service): adding hfdl-recorder, instance ${REPORTER}"
+        run sg sigmond -c "${SMD} install hfdl-recorder --yes" || warn "hfdl-recorder install failed: read ${LOG}"
+        run sg sigmond -c "${SMD} config init hfdl-recorder --non-interactive" || warn "hfdl-recorder config init failed"
+        log "  hfdl-recorder's instance must be the reporter (${REPORTER}); remove a placeholder hfdl-recorder@default (KJ6MKI)"
     fi
     mark INSTALLED
     log "INSTALL OK — next: $0 post"
@@ -1008,7 +1041,7 @@ fix_upload_routing() {
     ### Rob 2026-11-12: a converted station uploads ONLY to the WD servers, as it did under WD.  WD30's
     ### wsprnet-forwarder and the elected pskreporter-forwarder post onward; the station posts nowhere directly.
     log "## uploads go only to the WD servers, which forward to wsprnet.org and pskreporter.info"
-    local rid; rid=${REPORTER:-$(wd_conf_value REPORTER_ID)}
+    local rid; rid=${REPORTER:-$(wd_reporter_id)}
     [[ -n ${rid} ]] || { bad "no reporter id: cannot set per-instance upload routing"; return; }
     run "${SMD}" config reporters --wsprnet-proxy on
     run "${SMD}" config upload psk-recorder "${rid}" --on --via server-merge
@@ -1151,7 +1184,15 @@ cmd_verify() {
     done
     local st; st=$("${SMD}" status 2>&1 | strip_ansi)
     echo "${st}" | grep -E '✗|⚠' | while read -r l; do warn "smd status: ${l}"; done
-    echo "${st}" | grep -q 'no contention' && ok "smd: CPU plan applied, no contention" || bad "smd reports CPU contention"
+    ### smd prints "no contention" only when its CPU section has no warning at all, so a governor or foreign drop-in
+    ### warning hid it (WWV-2: false FAIL).  Contention is a pinned process on radiod's cores or an unenforced radiod unit.
+    if echo "${st}" | grep -qE 'overlap radiod cores|radiod unit\(s\) unenforced'; then
+        bad "smd reports CPU contention: $(echo "${st}" | grep -oE '[0-9]+ (pinned process\(es\) overlap radiod cores|radiod unit\(s\) unenforced)' | paste -sd ';' -)"
+    elif echo "${st}" | grep -q 'radiod cores:'; then
+        ok "smd: CPU plan applied, no contention"
+    else
+        warn "smd status shows no CPU affinity section"
+    fi
     echo "${st}" | grep -qE 'lan-capable|single-host-safe' && ok "network: $(echo "${st}" | grep -oE 'lan-capable|single-host-safe' | head -1)"
     ### spots: the recorders log a line per cycle; want some within the last 10 minutes
     local ft wspr
@@ -1225,14 +1266,18 @@ cmd_restore() {
     done
     run tar --unlink-first -xpf "${BUNDLE}/home-config.tar" -C "$(dirname "${WD_HOME}")"
     [[ -f ${BUNDLE}/crontab.$(id -un).txt ]] && run crontab "${BUNDLE}/crontab.$(id -un).txt"
-    live_sha=$(sha256sum /usr/local/sbin/radiod | awk '{print $1}')
-    [[ ${live_sha} == "${bundled_sha}" ]] || die "restored radiod ${live_sha} != bundled ${bundled_sha}"
+    if [[ -n ${bundled_sha} ]]; then
+        live_sha=$(sha256sum /usr/local/sbin/radiod | awk '{print $1}')
+        [[ ${live_sha} == "${bundled_sha}" ]] || die "restored radiod ${live_sha} != bundled ${bundled_sha}"
+    else
+        log "the bundle had no /usr/local/sbin/radiod (a packaged radiod, e.g. /usr/sbin/radiod): not compared"
+    fi
     run sudo -n systemctl daemon-reload; run sudo -n udevadm control --reload-rules; run sudo -n update-grub
     for u in $(awk '$2=="enabled=enabled"{print $1}' "${BUNDLE}/unit-state.txt"); do run sudo -n systemctl enable "${u}"; done
     for u in $(cat "${BUNDLE}/legacy-order.txt"); do
         grep -q "^${u} .*active=active" "${BUNDLE}/unit-state.txt" || continue
         run timeout 900 sudo -n systemctl start "${u}"
-        [[ ${u} == radiod@* ]] && sleep 5
+        [[ ${u} =~ ${RADIOD_UNIT_RE} ]] && sleep 5
     done
     for u in $(awk '$3=="active=active"{print $1}' "${BUNDLE}/unit-state.txt"); do
         systemctl is-active -q "${u}" && ok "${u}" || bad "${u} $(systemctl is-active "${u}")"
