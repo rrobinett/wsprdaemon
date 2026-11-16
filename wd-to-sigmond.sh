@@ -145,10 +145,10 @@ wd_recorded_wwv() {   ### an uncommented WWV/WWVB band in any WSPR_SCHEDULE line
 ### tests that same key.  This stays as an independent check of the key the pipeline really carries
 ### (IdentitiesOnly: no fallback to another key), in case a hand-placed pipelines.d drop-in overrides the render.
 psws_station_id() {
-    sudo -n python3.11 -c 'import tomllib,sys; d=tomllib.load(open("/etc/sigmond/site-profile.toml","rb")).get("psws",{}); print(d.get("station_id","") if d.get("enabled") else "")' 2>/dev/null
+    sudo -n "$(py311)" -c 'import tomllib,sys; d=tomllib.load(open("/etc/sigmond/site-profile.toml","rb")).get("psws",{}); print(d.get("station_id","") if d.get("enabled") else "")' 2>/dev/null
 }
 grape_upload_key() {   ### prints the ssh key grape-psws will use, or nothing when no grape-psws pipeline exists
-    sudo -n python3.11 - <<'EOF' 2>/dev/null
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null
 import glob, tomllib
 main = "/etc/hs-uploader/pipelines.toml"
 try:
@@ -199,8 +199,13 @@ uploader_user() {
     local u; u=$(systemctl show -p User --value hs-uploader.service 2>/dev/null)
     echo "${u:-hsupload}"
 }
+py311() {   ### a python with tomllib (3.11+): python3.11 on Ubuntu 22.04, python3 (3.13) on Debian 13 (WWV-2)
+    local p; for p in python3.11 python3; do
+        command -v "${p}" >/dev/null && "${p}" -c 'import tomllib' 2>/dev/null && { echo "${p}"; return; }
+    done; echo python3
+}
 wd_tar_uploads() {   ### one line per wsprdaemon_tar transport: "<key> <sender> <server> [<server>...]"
-    sudo -n python3.11 - <<'EOF' 2>/dev/null
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null
 import glob, tomllib
 main = "/etc/hs-uploader/pipelines.toml"
 try:
@@ -222,7 +227,7 @@ for f in [main] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
 EOF
 }
 uploader_key_files() {   ### every private key a pipeline names, plus the [identity] key
-    sudo -n python3.11 - <<'EOF' 2>/dev/null | sort -u
+    sudo -n "$(py311)" - <<'EOF' 2>/dev/null | sort -u
 import glob, tomllib
 for f in ["/etc/hs-uploader/pipelines.toml"] + sorted(glob.glob("/etc/hs-uploader/pipelines.d/*.toml")):
     try:
@@ -1036,7 +1041,7 @@ fix_upload_routing() {
     ### Rob 2026-11-12: a converted station uploads ONLY to the WD servers, as it did under WD.  WD30's
     ### wsprnet-forwarder and the elected pskreporter-forwarder post onward; the station posts nowhere directly.
     log "## uploads go only to the WD servers, which forward to wsprnet.org and pskreporter.info"
-    local rid; rid=${REPORTER:-$(wd_conf_value REPORTER_ID)}
+    local rid; rid=${REPORTER:-$(wd_reporter_id)}
     [[ -n ${rid} ]] || { bad "no reporter id: cannot set per-instance upload routing"; return; }
     run "${SMD}" config reporters --wsprnet-proxy on
     run "${SMD}" config upload psk-recorder "${rid}" --on --via server-merge
@@ -1179,7 +1184,15 @@ cmd_verify() {
     done
     local st; st=$("${SMD}" status 2>&1 | strip_ansi)
     echo "${st}" | grep -E '✗|⚠' | while read -r l; do warn "smd status: ${l}"; done
-    echo "${st}" | grep -q 'no contention' && ok "smd: CPU plan applied, no contention" || bad "smd reports CPU contention"
+    ### smd prints "no contention" only when its CPU section has no warning at all, so a governor or foreign drop-in
+    ### warning hid it (WWV-2: false FAIL).  Contention is a pinned process on radiod's cores or an unenforced radiod unit.
+    if echo "${st}" | grep -qE 'overlap radiod cores|radiod unit\(s\) unenforced'; then
+        bad "smd reports CPU contention: $(echo "${st}" | grep -oE '[0-9]+ (pinned process\(es\) overlap radiod cores|radiod unit\(s\) unenforced)' | paste -sd ';' -)"
+    elif echo "${st}" | grep -q 'radiod cores:'; then
+        ok "smd: CPU plan applied, no contention"
+    else
+        warn "smd status shows no CPU affinity section"
+    fi
     echo "${st}" | grep -qE 'lan-capable|single-host-safe' && ok "network: $(echo "${st}" | grep -oE 'lan-capable|single-host-safe' | head -1)"
     ### spots: the recorders log a line per cycle; want some within the last 10 minutes
     local ft wspr
