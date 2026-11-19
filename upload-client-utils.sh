@@ -440,7 +440,7 @@ function upload_to_wsprnet_daemon() {
             wd_logger 1 "Uploading ${call} at ${wsprnet_grid} spots file ${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} with ${spots_to_xfer} spots in it"
 
             local start_epoch=${EPOCHSECONDS}
-            curl -m ${WSPRNET_CURL_TIMEOUT_SECS} -F version=WD_${VERSION} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${wsprnet_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
+            curl -m ${WSPRNET_CURL_TIMEOUT_SECS} -F version=WD_${VERSION%%-*} -F allmept=@${UPLOADS_TMP_WSPRNET_SPOTS_TXT_FILE} -F call=${call} -F grid=${wsprnet_grid} http://wsprnet.org/meptspots.php > ${UPLOADS_TMP_WSPRNET_CURL_LOGFILE_PATH} 2>&1
             local ret_code=$?
             local curl_exec_seconds=$(( ${EPOCHSECONDS} - ${start_epoch} ))
             if [[ $ret_code -ne 0 ]]; then
