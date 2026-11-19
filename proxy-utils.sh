@@ -194,7 +194,13 @@ function proxy_connection_manager() {
             fi
         fi
 
-        wd_logger 0 "Creating ${FRPC_INI_FILE}"
+        ### The account an admin SSHes into on THIS client. frpc reports it to
+        ### the gateway as proxy metadata (meta_user), so the rac-dashboard can
+        ### show/serve the real login account without an admin-maintained table.
+        ### Defaults to the user that set up remote access (the one you log in
+        ### as); override with REMOTE_ACCESS_LOGIN_ACCOUNT in wsprdaemon.conf.
+        local frpc_login_account="${REMOTE_ACCESS_LOGIN_ACCOUNT:-${SUDO_USER:-$(id -un)}}"
+        wd_logger 0 "Creating ${FRPC_INI_FILE} (reporting login account '${frpc_login_account}' to the gateway)"
         cat > ${FRPC_INI_FILE} <<EOF
 [common]
 admin_addr = 127.0.0.1
@@ -207,6 +213,7 @@ type = tcp
 local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
+meta_user = ${frpc_login_account}
 EOF
         wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
     fi
