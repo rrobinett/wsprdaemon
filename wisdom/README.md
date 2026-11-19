@@ -110,3 +110,22 @@ bytes, 522 plans, covering WD's 91-spec list (rof3240000 for 129.6 Msps first).
 
 It is the first jammy (`fftw-3.3.8-sse2-avx`) reference.  It serves only an i5-6500T on that build string: an
 i5-6500T on a newer OS has FFTW 3.3.10 and still measures its own.
+
+`fftw-3.3.10-sse2-avx/amd-ryzen-7-6800u-with-radeon-graphics.wisdom`, 2026-11-19, on G3ZIL's gwyn-EQ (RAC 142;
+Ryzen 7 6800U, Zen 3+ family 25 model 68, 8 cores / 16 threads, 16 MiB L3 with CAT; Ubuntu 24.04, FFTW 3.3.10):
+81,637 bytes, 842 plans, covering 156 specs -- the union of sigmond's FFT_WISDOM_PROFILES, WD's spec list and
+gwyn-EQ's own fft.log, both RX888 rates (rof1620000, rof3240000) included.
+
+Measured in sigmond's radiod layout, so the same file serves both projects:
+
+  - wsprdaemon.service stopped (no radiod was running: the RX888 was unplugged)
+  - radiod's core = the top physical core, CPUs 14-15; `taskset -c 14`, the lowest CPU of the pair, where
+    sigmond puts radiod's fft thread
+  - clocks: CPUs 14-15 capped at 3200 MHz, every other CPU at 1400 MHz (sigmond's [cpu_freq] defaults; the
+    6800U is not the Zen 3 model 80 that gets 2000/1600)
+  - resctrl: `radiod` group = CPUs 14-15 with `L3:0=3ff` (10 of 16 ways, sigmond's 0.62 share), `decoders` =
+    0-13; xhci IRQs moved to 0-13; load 0.27 when planning started
+  - `fftwf-wisdom -v -T 1 -n -o ... <the 156 specs>`, measured from scratch: 2:06:35 elapsed, 99% CPU, exit 0
+
+Not yet acceptance-tested: no radiod has run against it, because gwyn-EQ has no RX888 plugged in.  The fft.log
+check above is still to do on the first 6800U that runs radiod.
