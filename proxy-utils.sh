@@ -199,8 +199,16 @@ function proxy_connection_manager() {
         ### show/serve the real login account without an admin-maintained table.
         ### Defaults to the user that set up remote access (the one you log in
         ### as); override with REMOTE_ACCESS_LOGIN_ACCOUNT in wsprdaemon.conf.
+        ### Like sigmond-rac's install.sh, never report root or a name that isn't a valid Linux
+        ### login: leave meta_user out and the dashboard falls back to its rac-creds table / default.
         local frpc_login_account="${REMOTE_ACCESS_LOGIN_ACCOUNT:-${SUDO_USER:-$(id -un)}}"
-        wd_logger 0 "Creating ${FRPC_INI_FILE} (reporting login account '${frpc_login_account}' to the gateway)"
+        local frpc_meta_user_line=""
+        if [[ ${frpc_login_account} =~ ^[a-z_][a-z0-9_-]{0,31}$ && ${frpc_login_account} != "root" ]]; then
+            frpc_meta_user_line="meta_user = ${frpc_login_account}"
+            wd_logger 0 "Creating ${FRPC_INI_FILE} (reporting login account '${frpc_login_account}' to the gateway)"
+        else
+            wd_logger 0 "Creating ${FRPC_INI_FILE} (not reporting login account '${frpc_login_account}' to the gateway: root or not a valid login name; set REMOTE_ACCESS_LOGIN_ACCOUNT in wsprdaemon.conf)"
+        fi
         cat > ${FRPC_INI_FILE} <<EOF
 [common]
 admin_addr = 127.0.0.1
@@ -213,7 +221,7 @@ type = tcp
 local_ip = 127.0.0.1
 local_port = ${local_ssh_server_port}
 remote_port = ${frpc_remote_port}
-meta_user = ${frpc_login_account}
+${frpc_meta_user_line}
 EOF
         wd_logger 1 "Created frpc.ini which specifies connecting to ${WD_FRPS_URL}:${WD_FRPS_PORT} and sharing this client's remote_access_id=${remote_access_id} and ssh port on port ${frpc_remote_port} of that server"
     fi
