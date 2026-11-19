@@ -1116,6 +1116,13 @@ function wd_boot_unprogrammed_rx888s() {
         wd_logger 2 "There are no RX888s in FX3 bootloader mode on the USB bus"
         return 0
     fi
+    if [[ ! -f ${KA9Q_RADIO_ROOT_DIR}/rules/70-rx888-boot.rules ]]; then
+        ### ka9q-radio older than 2026-04-23 (e.g. a KA9Q_RADIO_COMMIT pin to d39fea8e in wsprdaemon.conf) has no rx888_boot:
+        ### its radiod loads the firmware when it opens the RX888, so a bootloader-mode RX888 is expected here and not an error
+        ### (G3ZIL's HPI5, 2026-11-19: WD stopped here with 'rx888_boot: command not found')
+        wd_logger 2 "Found ${unprogrammed_count} RX888(s) in FX3 bootloader mode, but this ka9q-radio's radiod loads the firmware itself when it starts"
+        return 0
+    fi
     wd_logger 1 "Found ${unprogrammed_count} RX888(s) still in FX3 bootloader mode (USB ID ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID}), so replay the udev 'add' event which starts rx888_boot.service"
     sudo udevadm trigger --action=add --subsystem-match=usb --attr-match=idVendor=${RX888_USB_VENDOR_ID} --attr-match=idProduct=${RX888_UNPROGRAMMED_PRODUCT_ID}
     local rc=$?
@@ -1338,7 +1345,10 @@ function build_ka9q_radio() {
         ### finished (G3ZIL's HPI5, 2026-11-19: no /usr/local/sbin/rx888_boot, so the RX888 stayed in FX3 bootloader mode).
         ### Every later run then skipped the install forever.  So also install whenever a program we depend on is missing.
         local -a installed_progs=( /usr/local/sbin/radiod )
-        [[ -f ${project_subdir}/src/rx888_boot.c && " ${make_args[*]} " != *" ENABLE_RX888=0 "* ]] && installed_progs+=( /usr/local/sbin/rx888_boot )
+        ### Only ka9q-radio from 2026-04-23 on (it has rules/70-rx888-boot.rules) installs rx888_boot.  Older code, e.g.
+        ### d39fea8e which G3ZIL pins with KA9Q_RADIO_COMMIT, has rx888_boot.c but never installs it: its radiod loads
+        ### the firmware itself.  Expecting it there would re-run 'make install' on every WD start.
+        [[ -f ${project_subdir}/rules/70-rx888-boot.rules && " ${make_args[*]} " != *" ENABLE_RX888=0 "* ]] && installed_progs+=( /usr/local/sbin/rx888_boot )
         local prog
         for prog in "${installed_progs[@]}"; do
             if [[ ! -x ${prog} ]]; then
