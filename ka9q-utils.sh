@@ -1131,6 +1131,10 @@ function wd_boot_unprogrammed_rx888s() {
     if lsusb -d ${RX888_USB_VENDOR_ID}:${RX888_UNPROGRAMMED_PRODUCT_ID} > /dev/null 2>&1 ; then
         ### The udev rule didn't get it done (e.g. rx888_boot.service or ${KA9Q_RADIOD_CONF_DIR}/rx888_bootfile.conf is missing), so run the loader ourselves
         wd_logger 1 "After ${timeout} seconds a RX888 is still in FX3 bootloader mode. rx888_boot.service reported:\n$(sudo journalctl -u rx888_boot.service --no-pager -n 5 2>/dev/null)\nSo run the firmware loader directly"
+        if [[ ! -x /usr/local/sbin/rx888_boot ]]; then
+            wd_logger 1 "ERROR: the firmware loader /usr/local/sbin/rx888_boot is not installed, so 'sudo make install' in ~/wsprdaemon/ka9q-radio didn't complete. Run it by hand and check its output"
+            return 1
+        fi
         local firmware_file=$( sed -n 's/^FIRMWARE=//p' ${KA9Q_RADIOD_CONF_DIR}/rx888_bootfile.conf 2>/dev/null )
         sudo /usr/local/sbin/rx888_boot ${firmware_file}
         rc=$?
@@ -1311,17 +1315,48 @@ function build_ka9q_radio() {
         return 3
     fi
     diff before_make.txt after_make.txt > diff.log
-    rc=$? ; case ${rc} in
+    rc=$?
+    local need_install="no"
+    local install_failed_marker="${project_subdir}.make_install_failed"
+    case ${rc} in
         0)
-            wd_logger 2 "No new files were created, so no need for a 'sudo make install"
+            wd_logger 2 "No new files were created by 'make'"
             ;;
         1)
-            ( cd  ${project_subdir}; sudo make -f ${makefile_name} "${make_args[@]}" install ) >& ${project_logfile}
+            need_install="yes"
             ;;
         *)
             wd_logger 1 "ERROR: 'diff before_make.txt after_make.txt' => ${rc}:\n$(< diff.log)"
             exit 1
     esac
+    if [[ ${need_install} == "no" && -f ${install_failed_marker} ]]; then
+        wd_logger 1 "The last 'sudo make install' of '${project_subdir}' failed, so run it again"
+        need_install="yes"
+    fi
+    if [[ ${need_install} == "no" && ${project_subdir} == "ka9q-radio" ]]; then
+        ### 'make' built nothing new, but a previous 'sudo make install' may have failed or been interrupted after the build
+        ### finished (G3ZIL's HPI5, 2026-11-19: no /usr/local/sbin/rx888_boot, so the RX888 stayed in FX3 bootloader mode).
+        ### Every later run then skipped the install forever.  So also install whenever a program we depend on is missing.
+        local -a installed_progs=( /usr/local/sbin/radiod )
+        [[ -f ${project_subdir}/src/rx888_boot.c && " ${make_args[*]} " != *" ENABLE_RX888=0 "* ]] && installed_progs+=( /usr/local/sbin/rx888_boot )
+        local prog
+        for prog in "${installed_progs[@]}"; do
+            if [[ ! -x ${prog} ]]; then
+                wd_logger 1 "'make' built nothing new, but ${prog} is not installed, so run 'sudo make install'"
+                need_install="yes"
+                break
+            fi
+        done
+    fi
+    if [[ ${need_install} == "yes" ]]; then
+        ( cd  ${project_subdir}; sudo make -f ${makefile_name} "${make_args[@]}" install ) >& ${project_logfile}
+        rc=$? ; if (( rc )); then
+            wd_logger 1 "ERROR: 'sudo make install' of '${project_subdir}' returned ${rc}:\n$(tail -n 30 ${project_logfile})"
+            touch ${install_failed_marker}      ### so the next run retries the install even if 'make' then has nothing to build
+            return 4
+        fi
+        rm -f ${install_failed_marker}
+    fi
 
     shopt -s nullglob
     local -a conf_files=( /etc/radio/radiod@*.conf )

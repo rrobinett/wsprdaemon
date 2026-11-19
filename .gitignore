@@ -23,6 +23,7 @@ suntimes.txt
 
 after_make.txt
 before_make.txt
+*.make_install_failed
 *.log
 wav-archive/
 uploads/
