@@ -59,7 +59,7 @@ Typical run:
 9. **Upload routing.** See [Uploads](#uploads-wd-servers-only).
 10. **PSWS / GRAPE.** See [PSWS / GRAPE](#psws--grape).
 11. **hs-uploader's keys.** hs-uploader runs as `hsupload`; any key it names that `hsupload` cannot read is chowned to it (VK5ARG: `id_ed25519` was left `wsprdaemon`-owned, mode 600).
-12. **Releases uploads** (`smd sink upload`) after a prompt, **only if gw1 and gw2 accept the uploader's SFTP login** (see [The WD gateway SFTP account](#the-wd-gateway-sftp-account)); then prints `smd status`.
+12. **Releases uploads** (`smd sink upload`, no prompt: a migrated station always ends uploading) **once gw1 and gw2 accept the uploader's SFTP login**; if a gateway refuses it, uploads stay held and `verify` releases them after the account is fixed (see [The WD gateway SFTP account](#the-wd-gateway-sftp-account)); then prints `smd status`.
 
 ## Station radiod channels
 
@@ -195,7 +195,7 @@ test costs one fail2ban strike). If a gateway refuses the login:
   ```
 
 While uploads are held, Sigmond keeps WSPR spots for 24 hours but FT8 spots for only one hour,
-so make the account promptly, run `verify`, then `smd sink upload`.
+so make the account promptly, then run `verify`, which releases the uploads.
 
 `smd remote` cannot restore access on a converted station: there is no `sigmond-rac` there, and
 the station's RAC is still WsprDaemon's tunnel, unless `rac` has moved it to Sigmond's.
