@@ -733,6 +733,7 @@ declare MIN_ACCEPTED_GAP=${MIN_ACCEPTED_GAP-50}       ## pcmrecord uses wall clo
 declare MAX_ACCEPTED_GAP=${MAX_ACCEPTED_GAP-70}
 declare FILE_NAME_REJECT_SECONDS_MIN=$(( 60 - MIN_ACCEPTED_GAP ))                 ### Filenames outside the range of 50-59 an 0-10 will be rejected
 declare FILE_NAME_REJECT_SECONDS_MAX=$(( 60 - FILE_NAME_REJECT_SECONDS_MIN ))
+declare WAV_FILE_NAME_MAX_SECONDS_OFFSET=${WAV_FILE_NAME_MAX_SECONDS_OFFSET-3}    ### get_wav_file_list() flushes a wav file named more than this many seconds from a minute boundary, i.e. the partial first file written by a recorder started mid-minute
 
 function adjust_file_named_59_seconds_to_nearest_minute() {
     local __return_new_file_path=$1
@@ -1381,6 +1382,20 @@ function get_wav_file_list() {
                 checking_file_name="${adjusted_file_name}"
             fi
 
+            ### A recorder (re)started part way through a minute, e.g. kiwirecorder after a WD restart, writes a short first file named for that second, e.g. 20261119T182507Z_10138700_usb.wav
+            ### Such a partial file must not join a 2/5/15/30 minute window: the windows then start on the wrong minute and WSPR decodes return no spots. So treat it like a gap
+            local checking_file_base_name=${checking_file_name##*/}
+            local checking_file_seconds_offset=$(( 10#${checking_file_base_name:13:2} ))
+            if (( checking_file_seconds_offset > 30 )); then
+                checking_file_seconds_offset=$(( 60 - checking_file_seconds_offset ))
+            fi
+            if (( checking_file_seconds_offset > WAV_FILE_NAME_MAX_SECONDS_OFFSET )); then
+                local flush_files_list=( ${find_files_list[@]:index} )
+                wd_logger 1 "Flushing the partial wav file ${checking_file_name##*/}, which is named ${checking_file_seconds_offset} seconds away from a minute boundary, and the ${#flush_files_list[@]} files which are older than it: ${flush_files_list[*]##*/}"
+                wd_rm ${flush_files_list[@]}
+                break
+            fi
+
             wd_logger 2 "Checking that index=${index} with file ${checking_file_name##*/} is one minute older than ${last_file_name##*/}"
             
             ### Checking the write times of the wav files differ by between 59 and 61 seconds
@@ -1439,6 +1454,7 @@ function get_wav_file_list() {
 
        ### For each 2/5/15/30 minute wav file we have been asked to return, serach for earliest run of one minute wav files which satisfy the needed run of needed minute wav files
        local epoch_of_oldest_checked_file=$( epoch_from_filename ${checked_files_list[0]} ) ## instead of stat --format=%Y  ${checked_files_list[0]} )
+       epoch_of_oldest_checked_file=$(( (epoch_of_oldest_checked_file + 30) / 60 * 60 ))     ### A file named for second 59 or 01 belongs to the nearest minute.  Unrounded, the '/ 60' index math below can land a window on the wrong minute
        local minute_of_oldest_checked_file
        minute_of_oldest_checked_file=${checked_files_list[0]##*/}
        minute_of_oldest_checked_file=${minute_of_oldest_checked_file:11:2}
@@ -1470,6 +1486,7 @@ function get_wav_file_list() {
                    wd_rm ${wav_checked_pkt_sec_list[@]:1}
                fi
                epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
+               epoch_of_previously_reported_wspr_pkt=$(( (epoch_of_previously_reported_wspr_pkt + 30) / 60 * 60 ))
                epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
                if (( epoch_of_previously_reported_wspr_pkt < epoch_of_oldest_checked_file )); then
                    wd_logger 1 "ERROR: Flushing wav_checked_pkt_sec_list[0]=${wav_checked_pkt_sec_list[0]##*/} since it is older than the oldest checked_files_list[-1]=${checked_files_list[-1]##*/}"
@@ -1506,6 +1523,17 @@ function get_wav_file_list() {
            index_of_last_minute_of_wspr_pkt=$(( index_of_first_minute_of_wspr_pkt + minutes_in_wspr_pkt - 1 ))                            ### even if that index is valid, this one may not
            if (( index_of_last_minute_of_wspr_pkt >= ${#checked_files_list[@]} )); then
                wd_logger 2 "First minute of this ${minutes_in_wspr_pkt} minute wspr pkt is in checked_files_list[${index_of_first_minute_of_wspr_pkt}], but the last wanted element [${index_of_last_minute_of_wspr_pkt}] is beyond the last element [$(( ${#checked_files_list[@]} - 1 ))]"
+               continue
+           fi
+           ### WSPR and FST4W packets start on a minute which is a multiple of the packet length, i.e. an even minute for W2/F2.  Never return a window which starts on any other minute
+           local epoch_of_first_minute_of_wspr_pkt=$( epoch_from_filename ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]} )
+           epoch_of_first_minute_of_wspr_pkt=$(( (epoch_of_first_minute_of_wspr_pkt + 30) / 60 * 60 ))
+           if (( epoch_of_first_minute_of_wspr_pkt % seconds_in_wspr_pkt )); then
+               wd_logger 1 "ERROR: rejecting the ${minutes_in_wspr_pkt} minute window which would start with ${checked_files_list[${index_of_first_minute_of_wspr_pkt}]##*/}, since that is not on a minute which is a multiple of ${minutes_in_wspr_pkt}"
+               if (( ${#wav_checked_pkt_sec_list[@]} > 0 )); then
+                   wd_logger 1 "ERROR: flushing the misaligned 'pkt has been returned' file ${wav_checked_pkt_sec_list[0]##*/} so the next search starts on an aligned minute"
+                   wd_rm ${wav_checked_pkt_sec_list[0]}
+               fi
                continue
            fi
            wd_logger 2 "In checked_files_list[${#checked_files_list[@]}] we Found a complete ${minutes_in_wspr_pkt} minute wspr packet which starts at checked_files_list[${index_of_first_minute_of_wspr_pkt}] and ends at checked_files_list[${index_of_last_minute_of_wspr_pkt}]"
