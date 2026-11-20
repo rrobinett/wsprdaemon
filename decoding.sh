@@ -1488,6 +1488,11 @@ function get_wav_file_list() {
                epoch_of_previously_reported_wspr_pkt=$( epoch_from_filename ${wav_checked_pkt_sec_list[0]} )
                epoch_of_previously_reported_wspr_pkt=$(( (epoch_of_previously_reported_wspr_pkt + 30) / 60 * 60 ))
                epoch_of_pkt_we_want=$(( epoch_of_previously_reported_wspr_pkt + seconds_in_wspr_pkt ))
+               if (( epoch_of_pkt_we_want % seconds_in_wspr_pkt )); then
+                   ### A misaligned marker left by an older WD.  Move on to the next aligned packet rather than flushing the marker, which would re-decode every older window still on disk
+                   epoch_of_pkt_we_want=$(( (epoch_of_pkt_we_want / seconds_in_wspr_pkt + 1) * seconds_in_wspr_pkt ))
+                   wd_logger 1 "ERROR: the 'pkt has been returned' file ${wav_checked_pkt_sec_list[0]##*/} is not on a minute which is a multiple of ${minutes_in_wspr_pkt}, so the next ${minutes_in_wspr_pkt} minute packet will start at the aligned $(TZ=UTC printf "%(%H:%MZ)T" ${epoch_of_pkt_we_want})"
+               fi
                if (( epoch_of_previously_reported_wspr_pkt < epoch_of_oldest_checked_file )); then
                    wd_logger 1 "ERROR: Flushing wav_checked_pkt_sec_list[0]=${wav_checked_pkt_sec_list[0]##*/} since it is older than the oldest checked_files_list[-1]=${checked_files_list[-1]##*/}"
                    wd_rm ${wav_checked_pkt_sec_list[0]}
