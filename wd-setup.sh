@@ -954,12 +954,14 @@ find_wsjtx_commands
 ### WD_DECODERS="wsjtx" in wsprdaemon.conf goes back to the WSJT-X binaries.  A build which fails or fails its checks is
 ### not retried for the same commit and CPU; delete bin/ubersdr.failed to retry it.
 declare WD_DECODERS="${WD_DECODERS-ubersdr}"
-### The pin: madpsy's main at 529ec5d (2026-10-22).  It has our PRs #1 (float input for wsprd and FST4W), #2 (float input
-### for FT8 and FT4, and 'jt9 --feed', which WD_FT_DECODER="jt9" needs: ka9q-utils.sh) and #3 (--fast-subtract and jt9 -w 2:
-### wd-ft-decode.sh), all merged, and madpsy's own since: --fast-subtract for FT4 and FT2 as well as FT8 (8d6a9b4), and
-### 'jt9 -s' honouring it (abfb991).  Sigmond pins the same commit.
+### The pin: madpsy's main at 5eeeb53 (2026-11-17).  It has our PRs #1 (float input for wsprd and FST4W), #2 (float input
+### for FT8 and FT4, and 'jt9 --feed', which WD_FT_DECODER="jt9" needs: ka9q-utils.sh), #3 (--fast-subtract and jt9 -w 2:
+### wd-ft-decode.sh), #4 (MSK144), #5 (FST4W's scalar maths on aarch64 with an old glibc) and #6 (jt9 --fine-freq and
+### wsprd -F, which WD_FINE_FREQ uses: decoding.sh), and madpsy's own since 529ec5d: the aarch64 libmvec test moved to
+### glibc 2.39 (c257362), and jt9 --nn, an optional FT8 demodulator WD does not ask for.  Without -F/--fine-freq every
+### decode is still WSJT-X's.  Since c257362 ubersdr-build.sh's own fst4w-scalar change finds nothing to change.
 declare UBERSDR_WSPRD_GIT_URL="${UBERSDR_WSPRD_GIT_URL-https://github.com/madpsy/ubersdr_wsprd.git}"
-declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-529ec5d2530f5ffc2ad4a73a3be6c10c0a8b4027}"
+declare UBERSDR_WSPRD_COMMIT="${UBERSDR_WSPRD_COMMIT-5eeeb53576d8d3f9c73de8b8fa9a3d9a39175395}"
 declare UBERSDR_WSPRD_SRC_DIR="${WSPRDAEMON_ROOT_DIR}/ubersdr_wsprd"
 declare UBERSDR_WSPRD_CMD="${WSPRD_BIN_DIR}/wsprd-ubersdr"
 declare UBERSDR_JT9_CMD="${WSPRD_BIN_DIR}/jt9-ubersdr"
