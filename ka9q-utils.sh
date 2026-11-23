@@ -2778,10 +2778,6 @@ if [[ ${N6GN_WEB_MODE-no} == "yes" ]] ; then
     KA9Q_WEB_GIT_URL="https://github.com/wa2n-code/ka9q-web1"
 fi
 
-### ka9q-web comes from Michael's fork (mijahauan/ka9q-web 4084060a) until wa2n-code/ka9q-web#12 merges: ka9q-radio 9c2e3ce9
-### (2026-08-07) dropped radiod's default data group, so a radiod.conf with no 'data =' in [global] gave ka9q-web's audio
-### channel no destination and browsers heard silence (ON5KQ, 2026-11-23).  4084060a names the group itself.  Flip the URL
-### back to wa2n-code once #12 is merged; install_github_project() re-clones a ka9q-web whose origin differs from the URL listed here.
 ### The GITHUB_PROJECTS_LIST[] entries define additional Linux services which may be installed and started by WD.  Each line has the form:
 ### "~/wsprdaemon/<SUBDIR> check_git_commit[yes/no]  start_service_after_installation[yes/no] service_specific_bash_installation_function_name  linux_libraries_needed_list(comma-seperated)   git_url   git_commit_wanted   
 declare GITHUB_PROJECTS_LIST=(
@@ -2789,7 +2785,7 @@ declare GITHUB_PROJECTS_LIST=(
     "ft8_lib                            ${KA9Q_FT8_COMMIT_CHECK-yes}     ${KA9Q_FT8_ENABLED-yes}     build_ka9q_ft8      NONE                            ${KA9Q_FT8_GIT_URL-https://github.com/ka9q/ft8_lib.git}                    ${KA9Q_FT8_COMMIT-6069815dcccac8f8446b0d55f5a27d6fb388cb70}"
     "ftlib-pskreporter                  ${PSK_UPLOADER_COMMIT_CHECK-yes} ${PSK_UPLOADER_ENABLED-yes} build_psk_uploader  NONE                            ${PSK_UPLOADER_GIT_URL-https://github.com/rrobinett/ftlib-pskreporter.git}  ${PSK_UPLOADER_COMMIT-9083828a3466c9c2b3832336ea50d5d13dfbf6bc}"
     "onion                              ${ONION_COMMIT_CHECK-yes}        ${ONION_ENABLED-yes}        build_onion         ${ONION_LIBS_NEEDED// /,}       ${ONION_GIT_URL-https://github.com/davidmoreno/onion}                         ${ONION_COMMIT-de8ea938342b36c28024fd8393ebc27b8442a161}"
-    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/mijahauan/ka9q-web}                  ${KA9Q_WEB_COMMIT-4084060a3129ada042c5b13ddc231feded12fb2f}"
+    "${KA9Q_WEB_PROJECT_NAME-ka9q-web}  ${KA9Q_WEB_COMMIT_CHECK-yes}     ${KA9Q_WEB_ENABLED-yes}     build_ka9q_web      NONE                            ${KA9Q_WEB_GIT_URL-https://github.com/wa2n-code/ka9q-web}                  ${KA9Q_WEB_COMMIT-c1b92bd9d21614e6cbc5ae781794cdcdd0da589a}"
 )
 ###
 ### A site that runs radiod outside WD's control (KA9Q_RUNS_ONLY_REMOTELY=yes) skips the ka9q-radio build, but WD's
