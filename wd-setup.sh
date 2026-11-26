@@ -68,11 +68,12 @@ if ! grep -q "Raspbian.*buster\|Focal Fossa" /etc/os-release; then
     PACKAGE_NEEDED_LIST+=( btop )
 fi
 
-if grep -q "Debian.*12" /etc/os-release; then
+### Match on the codename too: Armbian (and other Debian derivatives) say e.g. "Armbian 26.8.1 trixie", not "Debian ... 13"
+if grep -q "Debian.*12" /etc/os-release || [[ "${VERSION_CODENAME-}" == "bookworm" ]]; then
     PACKAGE_NEEDED_LIST+=(  linux-cpupower )
 fi
 
-if grep -q "Debian.*13" /etc/os-release; then
+if grep -q "Debian.*13" /etc/os-release || [[ "${VERSION_CODENAME-}" == "trixie" ]]; then
     wd_logger 2 "Running on a Debian 13 server"
     PACKAGE_NEEDED_LIST+=(  libqt5core5t64 linux-cpupower )
 else
