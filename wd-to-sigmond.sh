@@ -1097,13 +1097,16 @@ cmd_post() {
 
     log "## uploads: hs-uploader must read its keys, and the WD gateways must accept its login, before release"
     uploader_keys fix
-    log "## uploads: a repo install holds every upload until released"
+    log "## uploads: a repo install holds every upload until released; a migration always ends with them released"
     if ! check_wd_sftp warn; then
+        ### The one case that stays held: an SFTP login the gateways refuse walks the site IP into fail2ban's
+        ### 10-year ban, RAC tunnel included.  Fix the gateway account/key, then '$0 verify' releases them.
         warn "uploads NOT released: a gateway refuses the login (above).  While held, sigmond keeps WSPR spots 24 h but"
-        warn "FT8 only 1 h: get the accounts made, re-test with '$0 verify' (one login per gateway), then: smd sink upload"
+        warn "FT8 only 1 h: get the accounts made, then re-run '$0 verify' (one login per gateway), which releases them"
         hold_uploads_if_released
-    elif confirm "Release this station's uploads now (smd sink upload)?"; then run "${SMD}" sink upload
-    else warn "uploads still held: run 'smd sink upload'"; fi
+    else
+        run "${SMD}" sink upload
+    fi
 
     log "## status"
     "${SMD}" status 2>&1 | strip_ansi | grep -E '✓|✗|⚠' | tee -a "${LOG}"
@@ -1209,7 +1212,14 @@ cmd_verify() {
     check_wd_name_users "${inst:-<instance>}-status.local"
     check_rac
     uploader_keys check
-    check_wd_sftp bad || { [[ ${DRY_RUN} == yes ]] || hold_uploads_if_released; }
+    if check_wd_sftp bad; then
+        ### gateways accept the login: a migrated station always ends with its uploads released
+        if ! "${SMD}" sink status 2>/dev/null | grep -q 'site sink: upload'; then
+            [[ ${DRY_RUN} == yes ]] && log "would release uploads (smd sink upload)" || run "${SMD}" sink upload
+        fi
+    else
+        [[ ${DRY_RUN} == yes ]] || hold_uploads_if_released
+    fi
     check_psws_key bad
     [[ ${RC} == 0 ]] && { log "VERIFY OK"; mark VERIFIED; } || log "VERIFY found problems (above)"
     return ${RC}
