@@ -420,6 +420,144 @@ function get_kiwirecorder_ov_count()
 
 declare KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR=${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR-10}    ### Wait 10 seconds after detecting an error before trying to spawn a new KWR
 
+### Per-receiver Kiwi AGC.  By default WD records every Kiwi with AGC off and a fixed 60 dB gain, which the Kiwi noise calibration assumes.
+### At a site with strong impulse noise (CU8/NU6F 630 m, 2026-11-26) that fixed gain drives the audio to full scale on every burst, and WD
+### decoded half the spots WSJT-X did, ~12 dB weaker, from the same Kiwi.  With the Kiwi AGC set as in that browser the two matched spot for spot.
+### An entry in the optional KIWI_AGC_LIST[] in wsprdaemon.conf turns the Kiwi's AGC on for one receiver:
+###     "KIWI_0   yes"                                                  => the Kiwi's default AGC (on, hang off, -100 dBm threshold, slope 6 dB, decay 1000 ms, gain 50 dB)
+###     "KIWI_1   hang=yes thresh=-100 slope=6 decay=1000 gain=50"      => AGC on with these settings, as named in the Kiwi browser's AGC panel
+###     "KIWI_2   no"                                                   => fixed 60 dB gain, the same as having no entry
+### Noise levels reported from a receiver with AGC on are not calibrated, since the Kiwi changes its gain.  Restart WD after changing KIWI_AGC_LIST[].
+declare KIWI_FIXED_GAIN_ARGS="--agc-gain=60"
+declare KIWI_AGC_YAML_FILE="kiwi_agc.yaml"
+
+### Returns in the variable named by $1 the kiwirecorder.py gain arguments for receiver $2.  With custom AGC settings, writes ${KIWI_AGC_YAML_FILE} in $PWD
+function get_kiwi_gain_args()
+{
+    local __return_args_var=$1
+    local receiver_name=$2
+    local agc_settings=""
+    local agc_entry
+
+    for agc_entry in "${KIWI_AGC_LIST[@]-}"; do
+        local agc_fields=( ${agc_entry} )
+        if [[ ${#agc_fields[@]} -ge 2 && "${agc_fields[0]}" == "${receiver_name}" ]]; then
+            agc_settings="${agc_fields[*]:1}"
+        fi
+    done
+
+    case "${agc_settings,,}" in
+        ""|no|off)
+            eval ${__return_args_var}=\${KIWI_FIXED_GAIN_ARGS}
+            return 0
+            ;;
+        yes|on)
+            wd_logger 1 "KIWI_AGC_LIST: receiver ${receiver_name} uses the Kiwi's default AGC"
+            eval ${__return_args_var}=\"\"                   ### kiwirecorder.py turns AGC on with the Kiwi's defaults when given neither --agc-gain nor --agc-yaml
+            return 0
+            ;;
+    esac
+
+    local -A agc_values=( [hang]=0 [thresh]=-100 [slope]=6 [decay]=1000 [gain]=50 )
+    local setting
+    for setting in ${agc_settings}; do
+        local key=${setting%%=*}
+        local value=${setting#*=}
+        key=${key,,}
+        if [[ "${key}" == "hang" ]]; then
+            case "${value,,}" in
+                yes|on|1|true)  value=1 ;;
+                no|off|0|false) value=0 ;;
+                *) value="bad" ;;
+            esac
+        fi
+        if [[ "${setting}" != *=* || ! "${key}" =~ ^[a-z]+$ || -z "${agc_values[${key}]+set}" || ! "${value}" =~ ^-?[0-9]+$ ]]; then
+            wd_logger 1 "ERROR: KIWI_AGC_LIST entry for ${receiver_name} has invalid setting '${setting}', so recording with fixed gain '${KIWI_FIXED_GAIN_ARGS}'.  Valid settings are hang=yes|no thresh=DBM slope=DB decay=MSEC gain=DB"
+            eval ${__return_args_var}=\${KIWI_FIXED_GAIN_ARGS}
+            return 1
+        fi
+        agc_values[${key}]=${value}
+    done
+
+    if ! python3 -c "import yaml" 2> /dev/null; then
+        wd_logger 1 "ERROR: python3 can't import yaml, which kiwirecorder.py needs to read custom AGC settings, so recording ${receiver_name} with the Kiwi's default AGC.  Run 'sudo apt install python3-yaml'"
+        eval ${__return_args_var}=\"\"
+        return 1
+    fi
+
+    ### Quote the keys: YAML 1.1 reads a bare 'on' key as the boolean true, which kiwirecorder.py rejects
+    cat > ${KIWI_AGC_YAML_FILE} <<EOF
+AGC:
+  'on': true
+  'hang': $(( agc_values[hang] ? 1 : 0 ))
+  'thresh': ${agc_values[thresh]}
+  'slope': ${agc_values[slope]}
+  'decay': ${agc_values[decay]}
+  'gain': ${agc_values[gain]}
+EOF
+    wd_logger 1 "KIWI_AGC_LIST: receiver ${receiver_name} uses AGC with hang=${agc_values[hang]} thresh=${agc_values[thresh]} slope=${agc_values[slope]} decay=${agc_values[decay]} gain=${agc_values[gain]}"
+    eval ${__return_args_var}=\"--agc-yaml=\${PWD}/\${KIWI_AGC_YAML_FILE}\"
+    return 0
+}
+
+### Per-receiver Kiwi noise blanker, the "std" blanker of the Kiwi browser's Noise panel.  Off unless the receiver has an entry in the optional KIWI_NB_LIST[]:
+###     "KIWI_0   yes"                     => blanker on with the Kiwi's defaults (gate 100 usec, threshold 50%)
+###     "KIWI_1   gate=200 thresh=40"      => blanker on with these settings (gate 100 to 5000 usec, threshold 0 to 100%)
+###     "KIWI_2   no"                      => blanker off, the same as having no entry
+### Restart WD after changing KIWI_NB_LIST[].
+### Returns in the variable named by $1 the kiwirecorder.py noise blanker arguments for receiver $2
+function get_kiwi_nb_args()
+{
+    local __return_args_var=$1
+    local receiver_name=$2
+    local nb_settings=""
+    local nb_entry
+
+    for nb_entry in "${KIWI_NB_LIST[@]-}"; do
+        local nb_fields=( ${nb_entry} )
+        if [[ ${#nb_fields[@]} -ge 2 && "${nb_fields[0]}" == "${receiver_name}" ]]; then
+            nb_settings="${nb_fields[*]:1}"
+        fi
+    done
+
+    case "${nb_settings,,}" in
+        ""|no|off)
+            eval ${__return_args_var}=\"\"
+            return 0
+            ;;
+        yes|on)
+            wd_logger 1 "KIWI_NB_LIST: receiver ${receiver_name} uses the Kiwi's noise blanker with its default settings"
+            eval ${__return_args_var}=\"--nb\"
+            return 0
+            ;;
+    esac
+
+    local -A nb_values=( [gate]=100 [thresh]=50 )
+    local setting
+    for setting in ${nb_settings}; do
+        local key=${setting%%=*}
+        local value=${setting#*=}
+        key=${key,,}
+        local valid="yes"
+        if [[ "${setting}" != *=* || ! "${key}" =~ ^[a-z]+$ || -z "${nb_values[${key}]+set}" || ! "${value}" =~ ^[0-9]+$ ]]; then
+            valid="no"
+        elif [[ ${key} == "gate" ]] && (( value < 100 || value > 5000 )); then
+            valid="no"
+        elif [[ ${key} == "thresh" ]] && (( value > 100 )); then
+            valid="no"
+        fi
+        if [[ ${valid} == "no" ]]; then
+            wd_logger 1 "ERROR: KIWI_NB_LIST entry for ${receiver_name} has invalid setting '${setting}', so recording with the noise blanker off.  Valid settings are gate=100..5000 thresh=0..100"
+            eval ${__return_args_var}=\"\"
+            return 1
+        fi
+        nb_values[${key}]=${value}
+    done
+    wd_logger 1 "KIWI_NB_LIST: receiver ${receiver_name} uses the Kiwi's noise blanker with gate=${nb_values[gate]} thresh=${nb_values[thresh]}"
+    eval ${__return_args_var}=\"--nb --nb-gate=\${nb_values[gate]} --nb-th=\${nb_values[thresh]}\"
+    return 0
+}
+
 function kiwirecorder_manager_daemon()
 {
     local receiver_name=$1
@@ -450,6 +588,11 @@ function kiwirecorder_manager_daemon()
         wd_logger 1 "ERROR: (not really), but this kiwi at ${receiver_ip} is running an old version of SW which doesn't output OV on its status page, so we have to enabled the output of 'ADC OV' lines to the kiwirecord's log"
         kiwirecorder_ov_flag="--OV"
     fi
+
+    local kiwi_gain_args
+    get_kiwi_gain_args kiwi_gain_args ${receiver_name}
+    local kiwi_nb_args
+    get_kiwi_nb_args kiwi_nb_args ${receiver_name}
 
     while true ; do
 
@@ -485,7 +628,7 @@ function kiwirecorder_manager_daemon()
             python3 -u ${KIWI_RECORD_COMMAND} \
                     --freq=${receiver_rx_freq_khz} --server-host=${receiver_ip/:*} --server-port=${receiver_ip#*:} \
                     ${kiwirecorder_ov_flag} --user=${recording_client_name}  --password=${my_receiver_password} \
-                    --agc-gain=60 --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
+                    ${kiwi_gain_args} ${kiwi_nb_args} --quiet --no_compression --modulation=usb --lp-cutoff=${LP_CUTOFF-1340} --hp-cutoff=${HP_CUTOFF-1660} --dt-sec=60 ${KIWI_TIMEOUT_DISABLE_COMMAND_ARG-} > ${KIWI_RECORDER_LOG_FILE} 2>&1 &
             rc=$?
             if [[ ${rc} -ne 0 ]]; then
                 wd_logger 1 "ERROR: rc=${rc}. Failed to spawn kiwirecorder.py job.  Sleep ${KIWI_RECORDER_SLEEP_SECS_AFTER_ERROR} seconds and retry spawning"
